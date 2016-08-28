@@ -415,13 +415,113 @@ abline(v=observed_dif,col=&quot;green&quot;,lwd=3)</code></pre>
   p_value &lt;- higher_anomaly/reps   # probability of getting a value with anomaly as or more extreme than observed, given null hypothesis is true...
   p_value</code></pre>
 <pre><code>## [1] 0.359</code></pre>
-<p>Now, what about if we wanted to relax the assumptions – allow for unequal sample sizes, or unequal variances, for example…</p>
-<p>or non-normal distributions?</p>
+</div>
+<div id="exercise-intermediate" class="section level3">
+<h3>Exercise (intermediate)</h3>
+<p>Repeat the same exercise, but using a different underlying distribution- say, the binomial or the Poisson. Compare with a standard t-test. Which test do you trust more?</p>
+</div>
+<div id="exercise-intermediate-1" class="section level3">
+<h3>Exercise (intermediate)</h3>
+<p>Modify the above algorithm to allow for unequal sample sizes. Compare with a standard t-test. Can you identify any cases where the t-test results differ substantially from your algorithmic results?</p>
+</div>
+<div id="exercise-advanced" class="section level3">
+<h3>Exercise (advanced)</h3>
+<p>Now, what about if we wanted to relax the assumption of equal variances? How would you modify the above algorithm to do this?</p>
+</div>
+<div id="take-home-message" class="section level3">
+<h3>Take-home message</h3>
 <p>The value of the algorithmic, brute-force approach to statistics is the flexibility! We have to be aware of assumptions in all of our analyses, but when we have some computational tools at hand, we can readily relax these assumptions.</p>
+<hr />
 </div>
 </div>
 <div id="bootstrapping-a-confidence-interval" class="section level2">
 <h2>Bootstrapping a confidence interval</h2>
+<p>(NOTE: some materials borrowed from <a href="http://people.tamu.edu/~alawing/materials/ESSM689/Btutorial.pdf">link</a>)</p>
+<p>Let’s imagine we want to compare different predictor variables in terms of how strong the relationship is with a response variable. In this case, we will use the coefficient of determination (<span class="math inline">\(R^2\)</span>) as a measure of how good a predictor is. However, we want to be able to say that one predictor is definatively <em>better</em> than another one – for that, we would like a confidence interval around the <span class="math inline">\(R^2\)</span> value.</p>
+<p>Let’s use the “trees” dataset provided in base R:</p>
+<pre class="r"><code>head(trees)   # use help(trees) for more information</code></pre>
+<pre><code>##   Girth Height Volume
+## 1   8.3     70   10.3
+## 2   8.6     65   10.3
+## 3   8.8     63   10.2
+## 4  10.5     72   16.4
+## 5  10.7     81   18.8
+## 6  10.8     83   19.7</code></pre>
+<p>Let’s say that tree volume is our response variable. We want to see if girth or height are better predictors of volume.</p>
+<p>Let’s first do some basic data explorations:</p>
+<pre class="r"><code>plot(trees$Volume~trees$Height, main = &#39;Black Cherry Tree Height/Volume Relationship&#39;, xlab = &#39;Height&#39;, ylab = &#39;Volume&#39;, pch = 16, col =&#39;blue&#39;)</code></pre>
+<p><img src="LECTURE1_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<pre class="r"><code>plot(trees$Volume~trees$Girth, main = &#39;Black Cherry Tree Girth/Volume Relationship&#39;, xlab = &#39;Girth&#39;, ylab = &#39;Volume&#39;, pch = 16, col =&#39;red&#39;)</code></pre>
+<p><img src="LECTURE1_files/figure-html/unnamed-chunk-9-2.png" width="672" /></p>
+<p>Let’s write a simple function that generates coefficients of determination given a response and some predictor variables:</p>
+<pre class="r"><code>Rsquared &lt;- function(df,responsevar=&quot;Volume&quot;){    # interactions not yet implemented
+  response &lt;- df[,responsevar]
+  names &lt;- names(df)
+  rsq &lt;- numeric(length(names))
+  names(rsq) &lt;- names(df)
+  rsq &lt;- rsq[names(rsq)!=responsevar]
+  for(i in names(rsq)){         # loop through predictors
+      predictor &lt;- df[,i]
+      model &lt;- lm(response~predictor)  
+      rsq[i] &lt;- summary(model)$r.square 
+  }
+  return(rsq)
+}</code></pre>
+<p>Let’s first compute the Rsquared values for all predictor variables:</p>
+<pre class="r"><code>stat &lt;- Rsquared(trees,&quot;Volume&quot;)
+stat</code></pre>
+<pre><code>##     Girth    Height 
+## 0.9353199 0.3579026</code></pre>
+<p>Now we can use “bootstrapping” to generate a confidence interval around these values…</p>
+<p>Let’s first write a function to generate bootstrap samples from a dataset:</p>
+<pre class="r"><code>boot_sample &lt;- function(df,statfunc,n_samples,n_stats){
+  indices &lt;- c(1:nrow(df))
+  output &lt;- matrix(NA,nrow=n_samples,ncol=n_stats)
+  for(i in 1:n_samples){
+    boot_rows &lt;- sample(indices,size=nrow(df),replace=T)
+    newdf &lt;- df[boot_rows,]
+    output[i,] &lt;- statfunc(newdf)
+  }
+  return(output)
+}</code></pre>
+<p>Now we can generate a bunch of “bootstrapped” statistics to compare with the ones calculated from the full dataset:</p>
+<pre class="r"><code>boot &lt;- boot_sample(trees,Rsquared,10,length(stat))
+colnames(boot) &lt;- names(stat)
+
+boot</code></pre>
+<pre><code>##           Girth    Height
+##  [1,] 0.8907946 0.4220556
+##  [2,] 0.9244052 0.1396206
+##  [3,] 0.9275111 0.3286349
+##  [4,] 0.9026292 0.2141572
+##  [5,] 0.9122221 0.2007018
+##  [6,] 0.9454548 0.5823018
+##  [7,] 0.9577630 0.2906166
+##  [8,] 0.9236486 0.4176459
+##  [9,] 0.9203199 0.3284528
+## [10,] 0.9279637 0.3366069</code></pre>
+<pre class="r"><code>stat</code></pre>
+<pre><code>##     Girth    Height 
+## 0.9353199 0.3579026</code></pre>
+<p>Finally, we can use the quantiles of the bootstrap samples to generate bootstrap confidence intervals.</p>
+<pre class="r"><code>boot &lt;- boot_sample(trees,Rsquared,1000,length(stat))   # 1000 bootstrap samples
+confint &lt;- apply(boot,2,function(t)  quantile(t,c(0.025,0.5,0.975)))
+colnames(confint) &lt;- names(stat)
+t(confint)</code></pre>
+<pre><code>##             2.5%       50%     97.5%
+## Girth  0.8968323 0.9381660 0.9647272
+## Height 0.1448487 0.3541173 0.5990071</code></pre>
+<pre class="r"><code>quantile(boot,c(0.025,0.975))</code></pre>
+<pre><code>##      2.5%     97.5% 
+## 0.1706357 0.9604687</code></pre>
+<div id="exercise-intermediate-2" class="section level3">
+<h3>Exercise (intermediate):</h3>
+<p>Generate bootstrap confidence intervals around the regression parameters. Compare with the standard confidence intervals given by R in the “lm” package.</p>
+</div>
+<div id="exercise-advanced-1" class="section level3">
+<h3>Exercise (advanced):</h3>
+<p>Modify the algorithm above to select the top model from among all possible models (including interaction terms)</p>
+</div>
 </div>
 
 
