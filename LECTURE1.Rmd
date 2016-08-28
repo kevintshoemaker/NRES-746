@@ -1,5 +1,5 @@
 ---
-title: "First Lecture"
+title: "Lecture #1"
 author: "NRES 746"
 date: "August 23, 2016"
 output: 
@@ -116,13 +116,19 @@ Now, all we need to do is compare this more quantitatively with the observed amo
 ```
 
 
-Now, what about if we wanted to relax the assumptions -- allow for unequal sample sizes, or unequal variances, for example... 
+### Exercise (intermediate)
+Repeat the same exercise, but using a different underlying distribution- say, the binomial or the Poisson. Compare with a standard t-test. Which test do you trust more?
 
-or non-normal distributions?
+### Exercise (intermediate)
+Modify the above algorithm to allow for unequal sample sizes. Compare with a standard t-test. Can you identify any cases where the t-test results differ substantially from your algorithmic results? 
 
+### Exercise (advanced)
+Now, what about if we wanted to relax the assumption of equal variances? How would you modify the above algorithm to do this?  
+
+### Take-home message
 The value of the algorithmic, brute-force approach to statistics is the flexibility! We have to be aware of assumptions in all of our analyses, but when we have some computational tools at hand, we can readily relax these assumptions. 
 
-
+--------------------------------
 ## Bootstrapping a confidence interval
 
 (NOTE: some materials borrowed from [link](http://people.tamu.edu/~alawing/materials/ESSM689/Btutorial.pdf))
@@ -132,7 +138,6 @@ Let's imagine we want to compare different predictor variables in terms of how s
 Let's use the "trees" dataset provided in base R:
 
 ```{r}
-
 head(trees)   # use help(trees) for more information
 
 ```
@@ -142,44 +147,91 @@ Let's say that tree volume is our response variable. We want to see if girth or 
 Let's first do some basic data explorations:
 
 ```{r}
-plot(trees$Volume~trees$Height, main = 'Black Cherry Tree Volume Relationship', xlab = 'Height', ylab = 'Volume', pch = 16, col ='blue')
-plot(trees$Volume~trees$Girth, main = 'Black Cherry Tree Volume Relationship', xlab = 'Girth', ylab = 'Volume', pch = 16, col ='red')
+plot(trees$Volume~trees$Height, main = 'Black Cherry Tree Height/Volume Relationship', xlab = 'Height', ylab = 'Volume', pch = 16, col ='blue')
+plot(trees$Volume~trees$Girth, main = 'Black Cherry Tree Girth/Volume Relationship', xlab = 'Girth', ylab = 'Volume', pch = 16, col ='red')
 ```
 
 
-Let's write a simple function that generates a coefficient of determination given a response and predictor variable:
+Let's write a simple function that generates coefficients of determination given a response and some predictor variables:
 
 ```{r}
 
-Rsquared <- function(response, predictor){
-  model <- lm(response~predictor)
-  rsq <- summary(model)$r.square
+Rsquared <- function(df,responsevar="Volume"){    # interactions not yet implemented
+  response <- df[,responsevar]
+  names <- names(df)
+  rsq <- numeric(length(names))
+  names(rsq) <- names(df)
+  rsq <- rsq[names(rsq)!=responsevar]
+  for(i in names(rsq)){         # loop through predictors
+      predictor <- df[,i]
+      model <- lm(response~predictor)  
+      rsq[i] <- summary(model)$r.square 
+  }
   return(rsq)
 }
 
 ```
 
 
-Let's first compute the Rsquared values for the two predictor variables:
+Let's first compute the Rsquared values for all predictor variables:
 
 ```{r}
-Rsquared(trees$Volume,trees$Girth)
-Rsquared(trees$Volume,trees$Height)
+stat <- Rsquared(trees,"Volume")
+stat
 
 ```
 
 
 Now we can use "bootstrapping" to generate a confidence interval around these values...
 
-Let's first develop a function to develop a single bootstrap sample from a dataset:
+Let's first write a function to generate bootstrap samples from a dataset:
 
 ```{r}
 
-boot_sample <- function()
+boot_sample <- function(df,statfunc,n_samples,n_stats){
+  indices <- c(1:nrow(df))
+  output <- matrix(NA,nrow=n_samples,ncol=n_stats)
+  for(i in 1:n_samples){
+    boot_rows <- sample(indices,size=nrow(df),replace=T)
+    newdf <- df[boot_rows,]
+    output[i,] <- statfunc(newdf)
+  }
+  return(output)
+}
+
+```
+
+Now we can generate a bunch of "bootstrapped" statistics to compare with the ones calculated from the full dataset:
+
+```{r}
+boot <- boot_sample(trees,Rsquared,10,length(stat))
+colnames(boot) <- names(stat)
+
+boot
+stat
+
+```
+
+Finally, we can use the quantiles of the bootstrap samples to generate bootstrap confidence intervals.
+
+```{r}
+boot <- boot_sample(trees,Rsquared,1000,length(stat))   # 1000 bootstrap samples
+confint <- apply(boot,2,function(t)  quantile(t,c(0.025,0.5,0.975)))
+colnames(confint) <- names(stat)
+t(confint)
+quantile(boot,c(0.025,0.975))
 
 ```
 
 
+
+
+### Exercise (intermediate):
+Generate bootstrap confidence intervals around the regression parameters. Compare with the standard confidence intervals given by R in the "lm" package.
+
+
+### Exercise (advanced):
+Modify the algorithm above to select the top model from among all possible models (including interaction terms)
 
 
 
