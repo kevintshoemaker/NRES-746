@@ -1,5 +1,5 @@
 ---
-title: "Lecture #1"
+title: "Why focus on algorithms?"
 author: "NRES 746"
 date: "August 23, 2016"
 output: 
@@ -20,31 +20,31 @@ library(tidyr)
 
 ## Algorithmic vs standard statistics: a brief demonstration
 
-### standard t test
+### Standard t-test
 
 First, let's go through a very basic review.   
 
-Here is a made-up data set. Let's imagine we are interested in seeing if the average height of study organisms in Group A are different from those in Group B.  
+Here is a made-up data set. Let's imagine we are interested in seeing if the average mass of study organisms in Group A are different from those in Group B.  
 
 ```{r}
 
-data <- data.frame(
+df <- data.frame(
   GroupA = c(175, 168, 168, 190, 156, 181, 182, 175, 174, 179),
   GroupB = c(185, 169, 173, 173, 188, 186, 175, 174, 179, 180) 
 )
 
-summary(data)
+summary(df)
 
-sample.size <- length(data$GroupA)
-
-reshape_data <- data.frame(
+sample.size <- length(df$GroupA)
+reshape_df <- data.frame(
   Group = rep(c("A","B"),each=sample.size),
-  Height = c(data$GroupA,data$GroupB)
+  Mass = c(df$GroupA,df$GroupB)
 )
+plot(Mass~Group, data=reshape_df)
 
-plot(Height~Group, data=reshape_data)
+# boxplot(df$GroupA,df$GroupB,names=c("GroupA","GroupB"))  # (alternative method!)
 
-observed_dif <- mean(data$GroupA) - mean(data$GroupB)
+observed_dif <- mean(df$GroupA) - mean(df$GroupB)
 observed_dif
 
 ```
@@ -52,7 +52,7 @@ observed_dif
 You probably recognize the standard t-test below. For now, we are assuming that the samples come from normally distributed populations with equal variances. 
 
 ```{r}
-t.test(data$GroupA,data$GroupB, var.equal=TRUE, paired=FALSE)
+t.test(df$GroupA,df$GroupB, var.equal=TRUE, paired=FALSE)
 
 ```
 
@@ -71,8 +71,8 @@ Let's start by simulating a data population under the null hypothesis.
 ```{r}
 lots <- 1000000  # large number approximating infinity in this example!
 
-popMean_null <- mean(reshape_data$Height)        # assume groups A and B come from a population with common mean 
-popSD_null <- sd(reshape_data$Height)
+popMean_null <- mean(reshape_df$Mass)        # assume groups A and B come from a population with common mean 
+popSD_null <- sd(reshape_df$Mass)
 popData_null <- rnorm(n=lots,mean=popMean_null,sd=popSD_null)    # the statistical "population" of interest (under null model)
 
 ```
@@ -83,8 +83,9 @@ Then we can sample from that data population:
 sampleA <- sample(popData_null,size=sample.size)   
 sampleB <- sample(popData_null,size=sample.size)
 
-sampleA
+round(sampleA)
 difference <- mean(sampleA)-mean(sampleB)   # difference between sample means
+difference
 
 ```
 
@@ -109,9 +110,9 @@ abline(v=observed_dif,col="green",lwd=3)
 Now, all we need to do is compare this more quantitatively with the observed among-group difference...
 
 ```{r}
-  ordered_difs <- sort(abs(null_difs))   # first order the distribution of null results in terms of absolute magnitude of difference
+  ordered_difs <- sort(abs(null_difs))   
   higher_anomaly <- length(which(ordered_difs>=abs(observed_dif)))
-  p_value <- higher_anomaly/reps   # probability of getting a value with anomaly as or more extreme than observed, given null hypothesis is true...
+  p_value <- higher_anomaly/reps  
   p_value
 
 ```
@@ -128,6 +129,49 @@ Now, what about if we wanted to relax the assumption of equal variances? How wou
 #### Take-home message
 The value of the algorithmic, brute-force approach to statistics is the flexibility! We have to be aware of assumptions in all of our analyses, but when we have some computational tools at hand, we can readily relax these assumptions. 
 
+
+### A non-parametric alternative: permutation test algorithm
+
+What if we don't want to make any assumptions about the process that generated the data. The normal distribution can arise in many different ways, but many data-generating processes **don't** result in a normal distribution!
+
+We might be able to intuit which of the many alternative distributions makes the most sense for our data. But many times we can't do this with any level of certainty. What can we do in this case? A permutation test provides one answer.
+
+Let's build this algorithm together. 
+
+Here is some pseudocode:
+
+1. Define the number of permutations to run
+2. Start loop through permutations
+    1. randomize the data indices with respect to group
+    2. compute the difference between the group means after randomizing the data indices
+    3. store this value for later analysis
+3. Plot a histogram of differences between group A and group B under the null hypothesis
+4. Add a vertical line to indicate the observed difference
+
+
+```{r echo=FALSE}
+reps <- 5000
+null_difs <- numeric(reps)
+for (i in 1:reps){					
+	newindices <- sample(c(1:nrow(reshape_df)))   			
+  newGroup <- reshape_df$Group[newindices]			
+	dif <- mean(reshape_df$Mass[newGroup=="A"])	- mean(reshape_df$Mass[newGroup=="B"])	
+	null_difs[i] <- dif	
+}
+hist(null_difs)
+abline(v=observed_dif,col="green",lwd=3)
+
+
+```
+
+Now we can compute a p-value, just as we did before:
+
+```{r}
+higher_anomaly <- length(which(abs(null_difs)>=abs(observed_dif)))
+p_value <- higher_anomaly/reps  
+p_value
+
+```
 
 
 ## Bootstrapping a confidence interval
