@@ -43,18 +43,19 @@ Subsequent arguments: parameters of the distribution
 * Generate 1000 numbers from $Poisson(50)$
 * Generate 10 numbers from $Beta(0.1,0.1)$
 
-
 ## The model
 
-For our purposes, the model is the process from which the samples generated. 
+For our purposes, the model is the data-generating process. 
 
 The model could be as simple as the random numbers you were just generating. That is we might assume that the sample data were generated from a Poisson process with mean equal to the sample mean. 
 
 **Q**: What is the "model" for the t-test??
 
-**A**: Well, it depends on what flavor of t-test. The simplest model could be something like this: The data from sample A are drawn from a normally distributed data population with mean equal to the sample mean. The data from sample B are drawn from a normally distributed data population with a lower mean than sample A, but with the same variance. [this is a one-sided, two sample t-test with equal variance].
+**A**: Well, it depends on what flavor of t-test. The simplest model could be something like this: The data from sample A and sample B are drawn from the same normally distributed data population (same mean and same variance). [this is a one-sided, two sample t-test with equal variance].
 
-In general, the models we will consider are composed of **deterministic** and **stochastic** components. For example, ordinary linear regression consists of a determistic component ($y = ax + b$) and a stochastic component (residuals are normally distributed). 
+In general, the models we will consider are composed of **deterministic** and **stochastic** components.   
+
+For example, ordinary linear regression consists of a determistic component ($y = ax + b$) and a stochastic component (residuals are normally distributed). 
 
 ### decomposing ordinary linear regression:
 
@@ -71,7 +72,7 @@ deterministic_component <- function(x,a,b){
 expected_vals <- deterministic_component(xvals,175,-1.5)
 expected_vals
 
-plot(xvals,exp_vals)
+plot(xvals,expected_vals)
 
 ```
 
@@ -85,45 +86,63 @@ stochastic_component <- function(x,variance){
   return(stochvals)
 }
 
-sim_vals <- stochastic_component(expected_vals,variance=100)
+sim_vals <- stochastic_component(expected_vals,variance=500)
 
 plot(xvals,sim_vals)
 
-plot(xvals,stochastic_component(deterministic_component(xvals,10,4),1000))
-
 # ALTERNATIVELY:
 
-sim_vals <- rnorm(deterministic_component(xvals,10,4),sqrt(1000))
+sim_vals <- stochastic_component(deterministic_component(xvals,175,-1.5),500)
 
 ```
 
+You can think of the deterministic component as the **"signal"** and the stochastic component as the **"noise"**. Most data comprise signal and noise.
 
 ------------
 ## Replication!! 
-Wherever there is randomness, we can get different results every time (that's what it means to be random!). So... if our model results can be random, we often want to run multiple replicates. No single result by itself has any great meaning.  *The 'cloud' of replicates becomes the real result!*
+Wherever there is randomness, we can get different results every time (that's what it means to be random!). In such cases, a single output of the data generating model by itself has no great meaning. However, we can extract a good deal of meaning if we run lots of replicates *The distribution ('cloud') of replicates becomes the real result!* 
 
 
-One common way to do replications is to use for loops. For example:
+### Goodness-of-fit
+
+For example, let's run a goodness of fit test. Here are our real data:
+
 ```{r}
- #### initialize:
-reps <- 50
-samplesize <- length(xvals)
-results <- array(0,dim=c(samplesize,reps))
-for(i in 1:reps){
-  exp_vals <- deterministic_component(xvals,a=10,b=4)
-  sim_vals <-  stochastic_component(exp_vals,1000)
-  results[,i] <- sim_vals
-  if(i==1){
-    plot(xvals,results[,i],ylab="simulated values")
-  }else{
-    points(xvals,results[,i])
-  }
-}
-
+realdata <- c(125,50,90,110,80,75,100,400,350,290,350)
+plot(xvals,realdata)
 ```
 
 
-### e.g., generate *sampling distributions* (i.e., the distribution of test statistcs for many many independent samples)
+Is this linear regression model (a=10,b=4,var=1000) a good fit to the data?
+
+```{r}
+ #### initialize:
+reps <- 1000    # number of replicate datasets to generate
+samplesize <- length(xvals)
+results <- array(0,dim=c(samplesize,reps))   # storage array for results
+for(i in 1:reps){
+  exp_vals <- deterministic_component(xvals,a=10,b=4)
+  sim_vals <- stochastic_component(exp_vals,1000)
+  results[,i] <- sim_vals
+}
+
+
+    # now make a boxplot of the results
+boxplot(lapply(1:nrow(results), function(i) results[i,])) 
+
+```
+
+Now let's overlay the real data.
+
+```{r}
+boxplot(lapply(1:nrow(results), function(i) results[i,]),xaxt="n")
+axis(1,at=c(1:length(xvals)),labels=xvals)
+points(c(1:length(xvals)),realdata,pch=20,cex=3,col="red",xaxt="n")
+```
+
+How well does this model fit the data? Is this model likely to produce these data? (we will revisit this concept more quantitatively when we get to likelihood-based model fitting!)
+
+### Generating *sampling distributions* (i.e., the distribution of test statistcs for many many independent samples)
 
 For example, the 'brute force' t-test from the first lecture:
 
@@ -144,7 +163,7 @@ abline(v=observed_dif,col="green",lwd=3)
 
 **NOTE**: the results of frequentist analyses, e.g., the t-test, are often based on a single replicate from a theoretically infinite number of possibilites. However, the interpretation of the results is implicitly based on replication ("if the null hypothesis were true, and the experiment were *replicated* lots and lots of times, results as or more extreme as the observed results could be expected from x% of replicates")
 
-## Power analysis!!
+### Power analysis!!
 
 When designing experiments or field monitoring protocols, we often ask questions like:
 * What sample size do I need to be able to address my research questions?
