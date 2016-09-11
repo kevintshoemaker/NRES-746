@@ -20,7 +20,7 @@ NOTE: some of this demo borrows from Hadley wickham's presentation: [Simuation](
 * Formalize your understanding of how sampling methods and uncertainty potentially affect information recovery
     * Power Analysis!
     * Sampling design!
-* Test whether statistical tests do what you think they should (e.g., estimate parameters correctly)! (test for bias, precision, etc.)
+* Test whether model fitting algorithms and statistical tests do what you think they should (e.g., estimate parameters correctly)! (test for bias, precision, etc.)
 
 We have simulated data already!
 
@@ -59,7 +59,7 @@ For example, ordinary linear regression consists of a determistic component ($y 
 
 ### decomposing ordinary linear regression:
 
-First, let's look at the deterministic component:
+First, let's look at the **deterministic component**:
 ```{r}
 
 xvals = seq(0,100,10)  # simulated x values define parameter space
@@ -76,7 +76,7 @@ plot(xvals,expected_vals)
 
 ```
 
-Now, let's look at the stochastic component:
+Now, let's look at the **stochastic component**:
 
 ```{r}
 
@@ -103,15 +103,14 @@ You can think of the deterministic component as the **"signal"** and the stochas
 Wherever there is randomness, we can get different results every time (that's what it means to be random!). In such cases, a single output of the data generating model by itself has no great meaning. However, we can extract a good deal of meaning if we run lots of replicates *The distribution ('cloud') of replicates becomes the real result!* 
 
 
-### Goodness-of-fit
+### Goodness-of-fit (can this model plausibly generate the observed data?)
 
-For example, let's run a goodness of fit test. Here are our real data:
+For example, let's run a goodness-of-fit test. Here are our real data:
 
 ```{r}
 realdata <- c(125,50,90,110,80,75,100,400,350,290,350)
 plot(xvals,realdata)
 ```
-
 
 Is this linear regression model (a=10,b=4,var=1000) a good fit to the data?
 
@@ -126,7 +125,6 @@ for(i in 1:reps){
   results[,i] <- sim_vals
 }
 
-
     # now make a boxplot of the results
 boxplot(lapply(1:nrow(results), function(i) results[i,])) 
 
@@ -140,7 +138,7 @@ axis(1,at=c(1:length(xvals)),labels=xvals)
 points(c(1:length(xvals)),realdata,pch=20,cex=3,col="red",xaxt="n")
 ```
 
-How well does this model fit the data? Is this model likely to produce these data? (we will revisit this concept more quantitatively when we get to likelihood-based model fitting!)
+How well does this model fit the data? Is this particular model likely to produce these data? (we will revisit this concept more quantitatively when we get to likelihood-based model fitting!)
 
 ### Generating *sampling distributions* (i.e., the distribution of test statistcs for many many independent samples)
 
@@ -160,29 +158,27 @@ hist(null_difs)           # plot out the sampling distribution
 abline(v=observed_dif,col="green",lwd=3)
 ```
 
+**NOTE**: Frequentist statistical tests are based on a data sample that is inherently a single replicate from a theoretically infinite number of possibilites. However, the interpretation of the results is implicitly based on the idea of replication ("if the null hypothesis were true, and the experiment were *replicated* lots and lots of times, results as or more extreme as the observed results could be expected from x% of replicates")
 
-**NOTE**: the results of frequentist analyses, e.g., the t-test, are often based on a single replicate from a theoretically infinite number of possibilites. However, the interpretation of the results is implicitly based on replication ("if the null hypothesis were true, and the experiment were *replicated* lots and lots of times, results as or more extreme as the observed results could be expected from x% of replicates")
-
-### Power analysis!!
+### Power analysis!! (can my sampling design detect the "signal")
 
 When designing experiments or field monitoring protocols, we often ask questions like:
 * What sample size do I need to be able to address my research questions?
 * What is the smallest effect size I can reliably detect with my sampling design?
 * What sources of sampling or measurement error should I make the greatest effort to minimize?
 
-In such cases, probably the most straightforward way to address these questions is to simulate data under various sampling designs and error structures, and see how well you can recover the information you want!
+In such cases, probably the most straightforward way to address these questions is to simulate data under various sampling strategies and error structures, and see how well we can recover the "true" signal through the noise!
 
 ### Power analysis, example
 
-Imagine we are designing a monitoring program for a population of an at-risk species, and we want to have at least a 75% chance of detecting a decline of 25% or more over a 10 year period. Let's assume that we are using visual counts, and that the probability of encountering each individual visually is 2% per person-day. The most recent population estimate was 1000.   
+Imagine we are designing a monitoring program for a population of an at-risk species, and we want to have at least a 75% chance of detecting a decline of 25% or more over a 10 year period. Let's assume that we are using visual counts, and that the probability of encountering each organism visually is 2% per person-day. The most recent population estimate was 1000.   
 
 What we know:
 * A single person has a 2% chance of detecting each animal in the population in a day of surveying
 * The initial abundance is 1000
-* We want to be able to detect a decline as small as 25% over 10 years with at least 75% probability.
+* We need to detect a decline as small as 25% over 10 years with at least 75% probability.
 
-
-First, let's set the groundwork by making some helpful functions:
+First, let's set the groundwork by making some helper functions (break the problem into smaller chunks):
 
 This function takes the true number in the population and returns the observed number:
 
@@ -192,7 +188,9 @@ NumObserved <- function(TrueN=1000,surveyors=1,days=3){
   probPerDay <- 1-(1-probPerPersonDay)^surveyors
   probPerSurvey <- 1-(1-probPerDay)^days
   nobs <- rbinom(1,size=TrueN,prob=probPerSurvey)
+  return(nobs)
 }
+NumObserved(TrueN=500,surveyors=2,days=7)
 ```
 
 This function gives us the current-year abundance using last years abundance and trend information
@@ -200,58 +198,104 @@ This function gives us the current-year abundance using last years abundance and
 ```{r}
 ThisYearAbund <- function(LastYearAbund=1000,trend=-0.03){
   CurAbund <- LastYearAbund + trend*LastYearAbund
+  CurAbund <- floor(CurAbund)  # can't have fractional individuals!
   return(CurAbund)
 }
+ThisYearAbund(LastYearAbund=500,trend=-0.03)
 
 ```
 
-This function will simulate a single dataset!
+This function will simulate a single dataset (time series of observations over a given number of years)!
+
 ```{r}
-SimulateMonitoringData <- function(InitAbund=1000,trend=-0.03,years=25,observers=1,days=3){
-  prevabund <- InitAbund
-  detected <- numeric(years)
+SimulateMonitoringData <- function(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2){
+  prevabund <- initabund
+  detected <- numeric(years)     # set up storate variable
   for(y in 1:years){
-    thisAbund <- ThisYearAbund(prevabund,trend)
-    detected[y] = NumObserved(thisAbund,observers,days)
+    thisAbund <- ThisYearAbund(prevabund,trend)             # compute the current abundance on the basis of the trend
+    detected[y] <- NumObserved(thisAbund,observers,days)     # sample the current population using this monitoring scheme
+    prevabund <- thisAbund   # this years abundance becomes the previous years abundance
   }
+  surveyed <- c(1:years)%%survint==0    # which years were surveys actually performed?
+  detected[!surveyed] <- NA
   return(detected)
 }
 
-SimulateMonitoringData()
+SimulateMonitoringData(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2)
 
 ```
 
-
-
+Now we can develop a function for determining if a decline was in fact detected by the method:
 
 ```{r}
-possible.ns <- seq(from=100, to=2000, by=50)     # The sample sizes we'll be considering
-powers <- rep(NA, length(possible.ns))           # Empty object to collect simulation estimates
-alpha <- 0.05                                    # Standard significance level
-sims <- 500                                      # Number of simulations to conduct for each N
+IsDecline <- function(monitoringData,alpha=0.05){
+  time <- 1:length(monitoringData)
+  model <- lm(monitoringData~time)    # for now, let's use ordinary linear regression
+  p_value <- summary(model)$coefficients["time","Pr(>|t|)"]
+  isdecline <- ifelse(summary(model)$coefficients["time","Estimate"]<0,TRUE,FALSE)
+  sig_decline <- ifelse((p_value<=alpha)&(isdecline),TRUE,FALSE)    # if declining and significant trend
+  return(sig_decline)
+}
 
-#### Outer loop to vary the number of subjects ####
-for (j in 1:length(possible.ns)){
-  N <- possible.ns[j]                              # Pick the jth value for N
-  
-  significant.experiments <- rep(NA, sims)         # Empty object to count significant experiments
-  
-  #### Inner loop to conduct experiments "sims" times over for each N ####
-  for (i in 1:sims){
-    Y0 <-  rnorm(n=N, mean=60, sd=20)              # control potential outcome
-    tau <- 5                                       # Hypothesize treatment effect
-    Y1 <- Y0 + tau                                 # treatment potential outcome
-    Z.sim <- rbinom(n=N, size=1, prob=.5)          # Do a random assignment
-    Y.sim <- Y1*Z.sim + Y0*(1-Z.sim)               # Reveal outcomes according to assignment
-    fit.sim <- lm(Y.sim ~ Z.sim)                   # Do analysis (Simple regression)
-    p.value <- summary(fit.sim)$coefficients[2,4]  # Extract p-values
-    significant.experiments[i] <- (p.value <= alpha) # Determine significance according to p <= 0.05
+IsDecline(monitoringData=c(10,20,NA,15,1),alpha=0.05)
+
+```
+
+
+Now we can develop a "power" function that gives us the statistical power for given monitoring scenarios... 
+
+This is part of this week's lab assignment!
+
+
+```{r eval=FALSE}
+nreps <- 10000
+initabund <- 1000
+GetPower <- function(observers=1,days=3,alpha=0.05,years=25,survint=2){
+     # fill this in!
+  return(Power)
+}
+
+```
+
+```{r echo=FALSE}
+nreps <- 1000
+initabund <- 100
+GetPower <- function(observers=1,days=3,alpha=0.05,years=25,survint=2,trend=-0.03){
+  decline <- logical(nreps)
+  for(i in 1:nreps){
+    detected <- SimulateMonitoringData(initabund,trend,years,observers,days,survint)
+    decline[i] <- IsDecline(detected,alpha)
+  }
+  Power <- length(which(decline==TRUE))/nreps 
+  return(Power)
+}
+cat((sprintf("The statistical power to detect a decline for the default parameters is: %s",GetPower())))    # for default
+
+```
+
+
+And we can evaluate what types of monitoring programs might be acceptable:
+
+```{r echo=FALSE}
+  initabund = 1000
+  survints <- c(1:5)
+  powers <- numeric(length(survints))
+  for(i in 1:length(survints)){
+    powers[i] <- GetPower(survint=survints[i])
   }
   
-  powers[j] <- mean(significant.experiments)       # store average success rate (power) for each N
-}
-plot(possible.ns, powers, ylim=c(0,1))
+  plot(powers~survints,xlab="Survey interval(years)",ylab="Statistical Power") 
+  
 ```
+
+
+
+
+
+
+
+
+
 
 
 
