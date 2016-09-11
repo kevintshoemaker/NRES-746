@@ -382,16 +382,88 @@ div.tocify {
 <pre><code>## [1] 28.10537</code></pre>
 <p>First argument: n, number of samples to generate</p>
 <p>Subsequent arguments: parameters of the distribution * Always check that the distribution is parameterised the way you expect!</p>
+<div id="short-exercise-1" class="section level4">
+<h4>Short exercise #1:</h4>
+<ul>
+<li>Generate 50 samples from <span class="math inline">\(N(10,5)\)</span></li>
+<li>Generate 1000 numbers from <span class="math inline">\(Poisson(50)\)</span></li>
+<li>Generate 10 numbers from <span class="math inline">\(Beta(0.1,0.1)\)</span></li>
+</ul>
+</div>
 </div>
 <div id="the-model" class="section level2">
 <h2>The model</h2>
-<p>In this case, the model is the data-generating process.</p>
+<p>For our purposes, the model is the data-generating process.</p>
+<p>The model could be as simple as the random numbers you were just generating. That is we might assume that the sample data were generated from a Poisson process with mean equal to the sample mean.</p>
+<p><strong>Q</strong>: What is the “model” for the t-test??</p>
+<p><strong>A</strong>: Well, it depends on what flavor of t-test. The simplest model could be something like this: The data from sample A and sample B are drawn from the same normally distributed data population (same mean and same variance). [this is a one-sided, two sample t-test with equal variance].</p>
+<p>In general, the models we will consider are composed of <strong>deterministic</strong> and <strong>stochastic</strong> components.</p>
+<p>For example, ordinary linear regression consists of a determistic component (<span class="math inline">\(y = ax + b\)</span>) and a stochastic component (residuals are normally distributed).</p>
+<div id="decomposing-ordinary-linear-regression" class="section level3">
+<h3>decomposing ordinary linear regression:</h3>
+<p>First, let’s look at the deterministic component:</p>
+<pre class="r"><code>xvals = seq(0,100,10)  # simulated x values define parameter space
+
+deterministic_component &lt;- function(x,a,b){
+  linear &lt;- a + b*x   # linear functional form
+  return(linear)
+}
+
+expected_vals &lt;- deterministic_component(xvals,175,-1.5)
+expected_vals</code></pre>
+<pre><code>##  [1] 175 160 145 130 115 100  85  70  55  40  25</code></pre>
+<pre class="r"><code>plot(xvals,expected_vals)</code></pre>
+<p><img src="LECTURE3_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p>Now, let’s look at the stochastic component:</p>
+<pre class="r"><code>stochastic_component &lt;- function(x,variance){
+  sd &lt;- sqrt(variance)
+  stochvals &lt;- rnorm(length(x),x,sd)
+  return(stochvals)
+}
+
+sim_vals &lt;- stochastic_component(expected_vals,variance=500)
+
+plot(xvals,sim_vals)</code></pre>
+<p><img src="LECTURE3_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<pre class="r"><code># ALTERNATIVELY:
+
+sim_vals &lt;- stochastic_component(deterministic_component(xvals,175,-1.5),500)</code></pre>
+<p>You can think of the deterministic component as the <strong>“signal”</strong> and the stochastic component as the <strong>“noise”</strong>. Most data comprise signal and noise.</p>
+<hr />
+</div>
 </div>
 <div id="replication" class="section level2">
 <h2>Replication!!</h2>
-<p>Wherever there is randomness, we can get different results every time (that’s what it means to be random!). So… if our model results can be random, we have to run multiple replicates. No single result by itself has any great meaning. <em>The ‘cloud’ of replicates becomes the real result!</em></p>
-<div id="e.g.-generate-sampling-distributions-i.e.-the-distribution-of-test-statistcs-for-many-many-independent-samples" class="section level3">
-<h3>e.g., generate <em>sampling distributions</em> (i.e., the distribution of test statistcs for many many independent samples)</h3>
+<p>Wherever there is randomness, we can get different results every time (that’s what it means to be random!). In such cases, a single output of the data generating model by itself has no great meaning. However, we can extract a good deal of meaning if we run lots of replicates <em>The distribution (‘cloud’) of replicates becomes the real result!</em></p>
+<div id="goodness-of-fit" class="section level3">
+<h3>Goodness-of-fit</h3>
+<p>For example, let’s run a goodness of fit test. Here are our real data:</p>
+<pre class="r"><code>realdata &lt;- c(125,50,90,110,80,75,100,400,350,290,350)
+plot(xvals,realdata)</code></pre>
+<p><img src="LECTURE3_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>Is this linear regression model (a=10,b=4,var=1000) a good fit to the data?</p>
+<pre class="r"><code> #### initialize:
+reps &lt;- 1000    # number of replicate datasets to generate
+samplesize &lt;- length(xvals)
+results &lt;- array(0,dim=c(samplesize,reps))   # storage array for results
+for(i in 1:reps){
+  exp_vals &lt;- deterministic_component(xvals,a=10,b=4)
+  sim_vals &lt;- stochastic_component(exp_vals,1000)
+  results[,i] &lt;- sim_vals
+}
+
+    # now make a boxplot of the results
+boxplot(lapply(1:nrow(results), function(i) results[i,])) </code></pre>
+<p><img src="LECTURE3_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<p>Now let’s overlay the real data.</p>
+<pre class="r"><code>boxplot(lapply(1:nrow(results), function(i) results[i,]),xaxt=&quot;n&quot;)
+axis(1,at=c(1:length(xvals)),labels=xvals)
+points(c(1:length(xvals)),realdata,pch=20,cex=3,col=&quot;red&quot;,xaxt=&quot;n&quot;)</code></pre>
+<p><img src="LECTURE3_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>How well does this model fit the data? Is this model likely to produce these data? (we will revisit this concept more quantitatively when we get to likelihood-based model fitting!)</p>
+</div>
+<div id="generating-sampling-distributions-i.e.-the-distribution-of-test-statistcs-for-many-many-independent-samples" class="section level3">
+<h3>Generating <em>sampling distributions</em> (i.e., the distribution of test statistcs for many many independent samples)</h3>
 <p>For example, the ‘brute force’ t-test from the first lecture:</p>
 <pre class="r"><code>reps &lt;- 1000                    # number of replicate samples to generate
 null_difs &lt;- numeric(reps)              # storage vector for the test statistic for each sample
@@ -405,12 +477,70 @@ for(i in 1:reps){
 hist(null_difs)           # plot out the sampling distribution
 abline(v=observed_dif,col=&quot;green&quot;,lwd=3)</code></pre>
 <p><strong>NOTE</strong>: the results of frequentist analyses, e.g., the t-test, are often based on a single replicate from a theoretically infinite number of possibilites. However, the interpretation of the results is implicitly based on replication (“if the null hypothesis were true, and the experiment were <em>replicated</em> lots and lots of times, results as or more extreme as the observed results could be expected from x% of replicates”)</p>
-<div id="short-exercise-1" class="section level4">
-<h4>Short exercise #1:</h4>
-<ul>
-<li>Generate 50 samples from <span class="math inline">\(N(10,5)\)</span></li>
-</ul>
 </div>
+<div id="power-analysis" class="section level3">
+<h3>Power analysis!!</h3>
+<p>When designing experiments or field monitoring protocols, we often ask questions like: * What sample size do I need to be able to address my research questions? * What is the smallest effect size I can reliably detect with my sampling design? * What sources of sampling or measurement error should I make the greatest effort to minimize?</p>
+<p>In such cases, probably the most straightforward way to address these questions is to simulate data under various sampling designs and error structures, and see how well you can recover the information you want!</p>
+</div>
+<div id="power-analysis-example" class="section level3">
+<h3>Power analysis, example</h3>
+<p>Imagine we are designing a monitoring program for a population of an at-risk species, and we want to have at least a 75% chance of detecting a decline of 25% or more over a 10 year period. Let’s assume that we are using visual counts, and that the probability of encountering each individual visually is 2% per person-day. The most recent population estimate was 1000.</p>
+<p>What we know: * A single person has a 2% chance of detecting each animal in the population in a day of surveying * The initial abundance is 1000 * We want to be able to detect a decline as small as 25% over 10 years with at least 75% probability.</p>
+<p>First, let’s set the groundwork by making some helpful functions:</p>
+<p>This function takes the true number in the population and returns the observed number:</p>
+<pre class="r"><code>NumObserved &lt;- function(TrueN=1000,surveyors=1,days=3){
+  probPerPersonDay &lt;- 0.02
+  probPerDay &lt;- 1-(1-probPerPersonDay)^surveyors
+  probPerSurvey &lt;- 1-(1-probPerDay)^days
+  nobs &lt;- rbinom(1,size=TrueN,prob=probPerSurvey)
+}</code></pre>
+<p>This function gives us the current-year abundance using last years abundance and trend information</p>
+<pre class="r"><code>ThisYearAbund &lt;- function(LastYearAbund=1000,trend=-0.03){
+  CurAbund &lt;- LastYearAbund + trend*LastYearAbund
+  return(CurAbund)
+}</code></pre>
+<p>This function will simulate a single dataset!</p>
+<pre class="r"><code>SimulateMonitoringData &lt;- function(InitAbund=1000,trend=-0.03,years=25,observers=1,days=3){
+  prevabund &lt;- InitAbund
+  detected &lt;- numeric(years)
+  for(y in 1:years){
+    thisAbund &lt;- ThisYearAbund(prevabund,trend)
+    detected[y] = NumObserved(thisAbund,observers,days)
+  }
+  return(detected)
+}
+
+SimulateMonitoringData()</code></pre>
+<pre><code>##  [1] 48 54 47 60 66 63 51 55 41 59 63 61 50 52 52 54 60 49 62 49 53 64 59
+## [24] 63 45</code></pre>
+<pre class="r"><code>possible.ns &lt;- seq(from=100, to=2000, by=50)     # The sample sizes we&#39;ll be considering
+powers &lt;- rep(NA, length(possible.ns))           # Empty object to collect simulation estimates
+alpha &lt;- 0.05                                    # Standard significance level
+sims &lt;- 500                                      # Number of simulations to conduct for each N
+
+#### Outer loop to vary the number of subjects ####
+for (j in 1:length(possible.ns)){
+  N &lt;- possible.ns[j]                              # Pick the jth value for N
+  
+  significant.experiments &lt;- rep(NA, sims)         # Empty object to count significant experiments
+  
+  #### Inner loop to conduct experiments &quot;sims&quot; times over for each N ####
+  for (i in 1:sims){
+    Y0 &lt;-  rnorm(n=N, mean=60, sd=20)              # control potential outcome
+    tau &lt;- 5                                       # Hypothesize treatment effect
+    Y1 &lt;- Y0 + tau                                 # treatment potential outcome
+    Z.sim &lt;- rbinom(n=N, size=1, prob=.5)          # Do a random assignment
+    Y.sim &lt;- Y1*Z.sim + Y0*(1-Z.sim)               # Reveal outcomes according to assignment
+    fit.sim &lt;- lm(Y.sim ~ Z.sim)                   # Do analysis (Simple regression)
+    p.value &lt;- summary(fit.sim)$coefficients[2,4]  # Extract p-values
+    significant.experiments[i] &lt;- (p.value &lt;= alpha) # Determine significance according to p &lt;= 0.05
+  }
+  
+  powers[j] &lt;- mean(significant.experiments)       # store average success rate (power) for each N
+}
+plot(possible.ns, powers, ylim=c(0,1))</code></pre>
+<p><img src="LECTURE3_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
 </div>
 </div>
 
