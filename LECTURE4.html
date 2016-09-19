@@ -322,6 +322,9 @@ div.tocify {
     <li>
       <a href="LAB2.html">Lab 2: Virtual ecologist</a>
     </li>
+    <li>
+      <a href="LAB3.html">Lab 3: Likelihood</a>
+    </li>
   </ul>
 </li>
 <li>
@@ -440,8 +443,8 @@ points(xvals,real_yvals,pch=20,cex=3,col=&quot;green&quot;)    # overlay the rea
 <p>Much better! This model could plausibly generate most of these data!</p>
 <p>So, we have used simulation, along with trial and error, to infer parameter values for our model!</p>
 </div>
-<div id="using-data-likelihood-to-make-inferences" class="section level2">
-<h2>Using data <em>likelihood</em> to make inferences</h2>
+<div id="computing-data-likelihood" class="section level2">
+<h2>Computing data <em>likelihood</em></h2>
 <p>First of all, what does “data likelihood” really mean? Formally,</p>
 <p><span class="math inline">\(\pounds (Model|obs.data) \equiv Prob(obs.data|Model)\)</span></p>
 <div id="definition-in-plain-english" class="section level3">
@@ -483,7 +486,7 @@ expected_val</code></pre>
 <pre class="r"><code>mean = expected_val   # 23.96
 stdev = sqrt(params$c)
 
-curve(dnorm(x,mean,stdev),18,30,xlab=&quot;mpg&quot;,ylab=&quot;probability density&quot;)   # probability density
+curve(dnorm(x,mean,stdev),10,30,xlab=&quot;mpg&quot;,ylab=&quot;probability density&quot;)   # probability density
 abline(v=obs.data$mpg,col=&quot;red&quot;,lwd=2)</code></pre>
 <p><img src="LECTURE4_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
 <p>Now it is straightforward to compute the likelihood. We just need to know the probability density where the red line (observed data) intersects with the normal density curve above:</p>
@@ -499,15 +502,94 @@ obs.data</code></pre>
 <pre class="r"><code>par(mfrow=c(1,2))  # set up graphics!
 
 for(i in 1:nrow(obs.data)){
-  curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),18,30,xlab=&quot;mpg&quot;,ylab=&quot;probability density&quot;)   # probability density
+  curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),10,30,xlab=&quot;mpg&quot;,ylab=&quot;probability density&quot;)   # probability density
   abline(v=obs.data$mpg[i],col=&quot;red&quot;,lwd=2)
 }</code></pre>
 <p><img src="LECTURE4_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
-<pre class="r"><code>graphics.off()</code></pre>
 <p>What is the likelihood of observing both of these data points???</p>
+<p><span class="math inline">\(Prob(obs.data_{1}|Model])\cdot Prob(obs.data_{2}|Model])\)</span></p>
+<pre class="r"><code>Likelihood &lt;- dnorm(obs.data$mpg[1],Deterministic_component(obs.data$disp[1],params$a,params$b),sqrt(params$c)) *
+              dnorm(obs.data$mpg[2],Deterministic_component(obs.data$disp[2],params$a,params$b),sqrt(params$c))  
+Likelihood</code></pre>
+<pre><code>## [1] 1.505202e-06</code></pre>
 <p>Let’s consider four observations:</p>
-<p>What is the combined likelihood of all of these data points, assuming each observation is independent…</p>
+<pre class="r"><code>obs.data &lt;- mtcars[c(1,3,4,5),c(&quot;mpg&quot;,&quot;disp&quot;)]
+obs.data</code></pre>
+<pre><code>##                    mpg disp
+## Mazda RX4         21.0  160
+## Datsun 710        22.8  108
+## Hornet 4 Drive    21.4  258
+## Hornet Sportabout 18.7  360</code></pre>
+<pre class="r"><code>par(mfrow=c(2,2))  # set up graphics!
+
+for(i in 1:nrow(obs.data)){
+  curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),10,30,xlab=&quot;mpg&quot;,ylab=&quot;probability density&quot;)   # probability density
+  abline(v=obs.data$mpg[i],col=&quot;red&quot;,lwd=2)
+}</code></pre>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p>What is the combined likelihood of all of these four data points, assuming each observation is independent…</p>
+<pre class="r"><code>Likelihood &lt;- 1     # initialize the likelihood
+for(i in 1:nrow(obs.data)){
+  Likelihood &lt;- Likelihood * dnorm(obs.data$mpg[i],Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c))
+}
+Likelihood</code></pre>
+<pre><code>## [1] 1.738001e-09</code></pre>
+<p>Alternatively, we can use the “prod” function in R:</p>
+<pre class="r"><code>Likelihood &lt;- prod(dnorm(obs.data$mpg,Deterministic_component(obs.data$disp,params$a,params$b),sqrt(params$c)))
+Likelihood</code></pre>
+<pre><code>## [1] 1.738001e-09</code></pre>
+<p>Okay, so it should be fairly obvious how we might get the likelihood of the entire dataset. Assuming independence of observations of course!</p>
+<pre class="r"><code>full.data &lt;- mtcars[,c(&quot;mpg&quot;,&quot;disp&quot;)]
+Likelihood &lt;- prod(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c)))
+Likelihood</code></pre>
+<pre><code>## [1] 4.654279e-84</code></pre>
+<p>You may notice that that’s a pretty small number. When you multiply lots of really small numbers together, we get much smaller numbers. This can be very undesirable, especially when you run into computational errors (e.g., arithmetic overflow). For this reason, and because we generally like sums rather than products, we generally log-transform likelihoods. As you recall,</p>
+<p><span class="math inline">\(log(a\cdot b\cdot c)=log(a)+log(b)+log(c)\)</span></p>
+<p>Log transformations just make it easier to work with likelihoods!</p>
+<p>In fact, the probability distribution functions in R make it extra easy for us to work with log likelihoods, using the ‘log=TRUE’ option!</p>
+<pre class="r"><code>Log.Likelihood &lt;- sum(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c),log=TRUE)) 
+Log.Likelihood  </code></pre>
+<pre><code>## [1] -191.8794</code></pre>
+<pre class="r"><code>exp(Log.Likelihood)   # we can convert back to likelihood if we want...</code></pre>
+<pre><code>## [1] 4.654279e-84</code></pre>
 </div>
+</div>
+<div id="maximum-likelihood-estimation-mle" class="section level2">
+<h2>Maximum Likelihood Estimation (MLE)</h2>
+<p>Maximum likelihood estimation is a general, flexible and generally robust method for drawing inference about models from data.</p>
+<p>The basic idea is simple: given a data generating model, search for the set of parameters that maximizes the data likelihood!</p>
+<p>The steps of a typical MLE analysis are as follows:</p>
+<ol style="list-style-type: decimal">
+<li>Build a likelihood function</li>
+<li>Use numerical optimization algorithms to find the parameters that maximize the likelihood function</li>
+<li>Use the shape of the likelihood function to make inference about parameter uncertainty (e.g., confidence intervals)</li>
+</ol>
+<p>Okay, so what is a <em>likelihood function</em>? We basically already have this for the cars example: it is just a function that produces a joint likelhood value, given (1) a <strong>dataset</strong> and (2) a <strong>data generating function</strong>.</p>
+<pre class="r"><code>LogLikFunction &lt;- function(params,df,yvar,xvar){
+  LogLik &lt;- sum(dnorm(df[,yvar],Deterministic_component(df[,xvar],params[&#39;a&#39;],params[&#39;b&#39;]),sqrt(params[&#39;c&#39;]),log=TRUE))
+  return(LogLik)
+}
+LogLikFunction(unlist(params),df=mtcars,yvar=&quot;mpg&quot;,xvar=&quot;disp&quot;)</code></pre>
+<pre><code>## [1] -191.8794</code></pre>
+<p>Now that we have a likelihood function, we need to search parameter space for the parameter set that maximizes the log likelhood. Luckily, there are lots of <em>computational algorithms</em> that can do this. We will look at this in detail in the next lecture. For now, we just need to know that they exist, and that they can be harnessed using the ‘optim’ function in R.</p>
+<p>Let’s find the MLE for the three parameters in the cars example!!</p>
+<pre class="r"><code>MLE &lt;- optim(fn=LogLikFunction,par=unlist(params),df=mtcars,yvar=&quot;mpg&quot;,xvar=&quot;disp&quot;,control=list(fnscale=-1))  # note, the control param is set so that &quot;optim&quot; maximizes rather than minimizes the Log-likelihood. </code></pre>
+<p>Now, we can get the MLEs for the three parameters:</p>
+<pre class="r"><code>MLE$par</code></pre>
+<pre><code>##            a            b            c 
+## 33.077114768 -0.002338554  8.166392492</code></pre>
+<p>We can also get the log likelihood for the best model</p>
+<pre class="r"><code>MLE$value</code></pre>
+<pre><code>## [1] -79.0089</code></pre>
+<p>Let’s look at goodness-of-fit for the best model!</p>
+<pre class="r"><code>bestParams &lt;- as.list(MLE$par)
+
+xvals=mtcars$disp
+yvals &lt;- mtcars$mpg
+PlotRangeOfPlausibleData(xvals,bestParams,1000)
+points(xvals,yvals,pch=20,cex=3,col=&quot;green&quot;)</code></pre>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
+<p>Now this isn’t such a bad looking model!</p>
 </div>
 
 

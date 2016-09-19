@@ -153,7 +153,7 @@ Much better! This model could plausibly generate most of these data!
 So, we have used simulation, along with trial and error, to infer parameter values for our model!
 
 
-## Using data *likelihood* to make inferences
+## Computing data *likelihood* 
 
 First of all, what does "data likelihood" really mean?  Formally,
 
@@ -206,7 +206,7 @@ Okay we now know our expected (mean) value for mpg for a car with displacement o
 mean = expected_val   # 23.96
 stdev = sqrt(params$c)
 
-curve(dnorm(x,mean,stdev),18,30,xlab="mpg",ylab="probability density")   # probability density
+curve(dnorm(x,mean,stdev),10,30,xlab="mpg",ylab="probability density")   # probability density
 abline(v=obs.data$mpg,col="red",lwd=2)
 
 ```
@@ -230,34 +230,159 @@ obs.data
 par(mfrow=c(1,2))  # set up graphics!
 
 for(i in 1:nrow(obs.data)){
-  curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),18,30,xlab="mpg",ylab="probability density")   # probability density
+  curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),10,30,xlab="mpg",ylab="probability density")   # probability density
   abline(v=obs.data$mpg[i],col="red",lwd=2)
 }
-
-graphics.off()
 
 ```
 
 
 What is the likelihood of observing both of these data points???
 
-```{r}
+$Prob(obs.data_{1}|Model])\cdot Prob(obs.data_{2}|Model])$
 
+```{r}
+Likelihood <- dnorm(obs.data$mpg[1],Deterministic_component(obs.data$disp[1],params$a,params$b),sqrt(params$c)) *
+              dnorm(obs.data$mpg[2],Deterministic_component(obs.data$disp[2],params$a,params$b),sqrt(params$c))  
+Likelihood
 ```
 
 
 Let's consider four observations:
 
 ```{r}
+obs.data <- mtcars[c(1,3,4,5),c("mpg","disp")]
+obs.data
+
+par(mfrow=c(2,2))  # set up graphics!
+
+for(i in 1:nrow(obs.data)){
+  curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),10,30,xlab="mpg",ylab="probability density")   # probability density
+  abline(v=obs.data$mpg[i],col="red",lwd=2)
+}
 
 ```
 
 
-What is the combined likelihood of all of these data points, assuming each observation is independent...
+What is the combined likelihood of all of these four data points, assuming each observation is independent...
+
+```{r}
+Likelihood <- 1     # initialize the likelihood
+for(i in 1:nrow(obs.data)){
+  Likelihood <- Likelihood * dnorm(obs.data$mpg[i],Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c))
+}
+Likelihood
+```
+
+Alternatively, we can use the "prod" function in R:
 
 ```{r}
 
+Likelihood <- prod(dnorm(obs.data$mpg,Deterministic_component(obs.data$disp,params$a,params$b),sqrt(params$c)))
+Likelihood
 ```
+
+
+Okay, so it should be fairly obvious how we might get the likelihood of the entire dataset. Assuming independence of observations of course!
+
+```{r}
+full.data <- mtcars[,c("mpg","disp")]
+Likelihood <- prod(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c)))
+Likelihood
+```
+
+You may notice that that's a pretty small number. When you multiply lots of really small numbers together, we get much smaller numbers. This can be very undesirable, especially when you run into computational errors (e.g., arithmetic overflow). For this reason, and because we generally like sums rather than products, we generally log-transform likelihoods. As you recall,
+
+$log(a\cdot b\cdot c)=log(a)+log(b)+log(c)$
+
+Log transformations just make it easier to work with likelihoods! 
+
+In fact, the probability distribution functions in R make it extra easy for us to work with log likelihoods, using the 'log=TRUE' option!
+
+```{r}
+Log.Likelihood <- sum(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c),log=TRUE)) 
+Log.Likelihood  
+exp(Log.Likelihood)   # we can convert back to likelihood if we want...
+```
+
+## Maximum Likelihood Estimation (MLE)
+
+Maximum likelihood estimation is a general, flexible and generally robust method for drawing inference about models from data.
+
+The basic idea is simple: given a data generating model, search for the set of parameters that maximizes the data likelihood!
+
+The steps of a typical MLE analysis are as follows:
+
+1. Build a likelihood function
+2. Use numerical optimization algorithms to find the parameters that maximize the likelihood function
+3. Use the shape of the likelihood function to make inference about parameter uncertainty (e.g., confidence intervals)
+
+Okay, so what is a *likelihood function*? We basically already have this for the cars example: it is just a function that produces a joint likelhood value, given (1) a **dataset** and (2) a **data generating function**.
+
+```{r}
+LogLikFunction <- function(params,df,yvar,xvar){
+  LogLik <- sum(dnorm(df[,yvar],Deterministic_component(df[,xvar],params['a'],params['b']),sqrt(params['c']),log=TRUE))
+  return(LogLik)
+}
+LogLikFunction(unlist(params),df=mtcars,yvar="mpg",xvar="disp")
+```
+
+Now that we have a likelihood function, we need to search parameter space for the parameter set that maximizes the log likelhood. Luckily, there are lots of *computational algorithms* that can do this. We will look at this in detail in the next lecture. For now, we just need to know that they exist, and that they can be harnessed using the 'optim' function in R.
+
+Let's find the MLE for the three parameters in the cars example!!
+
+```{r}
+MLE <- optim(fn=LogLikFunction,par=unlist(params),df=mtcars,yvar="mpg",xvar="disp",control=list(fnscale=-1))  # note, the control param is set so that "optim" maximizes rather than minimizes the Log-likelihood. 
+```
+
+Now, we can get the MLEs for the three parameters:
+
+```{r}
+MLE$par
+```
+
+We can also get the log likelihood for the best model
+
+```{r}
+MLE$value
+```
+
+Let's look at goodness-of-fit for the best model!
+
+```{r}
+bestParams <- as.list(MLE$par)
+
+xvals=mtcars$disp
+yvals <- mtcars$mpg
+PlotRangeOfPlausibleData(xvals,bestParams,1000)
+points(xvals,yvals,pch=20,cex=3,col="green")
+
+```
+
+
+Now this isn't such a bad looking model!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
