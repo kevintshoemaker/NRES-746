@@ -359,16 +359,169 @@ points(xvals,yvals,pch=20,cex=3,col="green")
 
 ```
 
-Now this isn't such a bad looking model!
+Now this isn't such a bad looking model! 
 
+Using this same strategy, we can fit countless models to data. We just performed a standard non-linear regression. But we could just as well have fit any number of alternative model formulations. Maximum Likelihood is a powerful and flexible framework. We will have plenty of more opportunities to play with likeihood-based frameworks, both in a frequentist and a Bayesian context.
 
 ### Aside: generating initial values
 
-[not finished!]
+Note that the 'optim' function requires specification of initial values for every free parameter in your model. In general, it is not critical that the initial values fit the data very well. However, we need to put serious thought into our initial values. Using values that are too far away from the best-fit parameter estimates can cause our optimization algorithms to fail! The strategy I recommend for setting initial values is:
+
+* If possible, use general understanding of the meaning of the parameters to "eyeball" an approximate value for each parameter
+* Write a data-generation function (sometimes just the deterministic component might be enough) and plot out this function against the observed data. If the fit is "close-ish" then you should be able to use these values for your initial values. If not, tweak the parameters until you find something that is "close-ish".
+
+## Estimating parameter uncertainty
+
+We have now identified the parameter values that maximize the likelihood function. This is now our "best" estimate of the parameter value. But we usually want to know something about how certain we are about our estimate, often in the form of confidence intervals. 
+
+Fortunately, likelihood theory offers us a strategy for estimating confidence intervals around our parameter estimates. The idea is that the *shape* of the likelihood function tells us something about the range of parameter values under which the true parameter value may potentially fall.
+
+For instance, let's plot out the shape of the likelihood function across a **slice** of parameter space. In this case, let's look at the "decay rate" term (the 'b' parameter). We can vary that parameter over a range of possible values and see how the likelihood changes over that parameter space. Let's hold the other parameters at their maximum likelihood values:
+
+```{r}
+
+upperval <- -1/1000
+lowerval <- -1/200
+allvals <- seq(lowerval,upperval,length=1000)
+likelihood_slice <- numeric(1000)   # set up storage vector! 
+newParams <- bestParams 
+for(i in c(1:length(allvals))){
+  newParams$b <- allvals[i]
+  likelihood_slice[i] <- exp(LogLikFunction(unlist(newParams),mtcars,"mpg","disp"))    # get the data likelihood across slice of parameter space
+}
+
+plot(allvals,likelihood_slice,type="l",main="Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Likelihood")
+
+```
+
+Again, we generally want to work with log-likelihoods. And here we have an even better reason to use log-likelihoods. This reason: the "rule of 2", and (more formally) the **likelihood ratio test**. 
+
+For now, suffice it to say that all parameter values within 2 log-likelihood units of the best-fit parameter value are *plausible*. Therefore, a *reasonable* confidence interval (approximate 95% conf int) can be obtained by idenfifying the range of parameter values for which the log-likelihood is within two of the maximum likelihood...
+
+Let's plot out the log-likelihood slice:
+
+```{r}
+upperval <- -1/1000
+lowerval <- -1/200
+allvals <- seq(lowerval,upperval,length=1000)
+loglikelihood_slice <- numeric(1000)   # set up storage vector! 
+newParams <- bestParams 
+for(i in c(1:length(allvals))){
+  newParams$b <- allvals[i]
+  loglikelihood_slice[i] <- LogLikFunction(unlist(newParams),mtcars,"mpg","disp")    # get the data likelihood across slice of parameter space
+}
+
+plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+```
+
+
+Let's "zoom in" to a smaller slice of parameter space so we can more clearly see the "plausible" values:
+
+```{r}
+upperval <- -1/550
+lowerval <- -1/350
+allvals <- seq(lowerval,upperval,length=1000)
+loglikelihood_slice <- numeric(1000)   # set up storage vector! 
+newParams <- bestParams 
+for(i in c(1:length(allvals))){
+  newParams$b <- allvals[i]
+  loglikelihood_slice[i] <- LogLikFunction(unlist(newParams),mtcars,"mpg","disp")    # get the data likelihood across slice of parameter space
+}
+
+plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+```
+
+
+What region of this space falls within 2 log likelihood units of the best value?
+
+```{r}
+bestVal <- bestParams$b
+bestVal
+
+
+
+plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+abline(v=bestVal,lwd=3,col="blue")
+abline(h=(MLE$value-2))
+
+```
+
+
+So what is our 95% confidence interval in this case??  (remember this is *very approximate*!)
+
+```{r}
+
+reasonable_parameter_values <- allvals[loglikelihood_slice>=(MLE$value-2)]
+min(reasonable_parameter_values)
+max(reasonable_parameter_values)
+plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+abline(v=bestVal,lwd=3,col="blue")
+abline(h=(MLE$value-2),lty=2)
+abline(v=min(reasonable_parameter_values),lwd=1,col="blue")
+abline(v=max(reasonable_parameter_values),lwd=1,col="blue")
+```
+
+
+#### Key point!
+
+From the Bolker book:
+
+* The geometry of the likelihood surface -- where it peaks and how the distribution falls off around the peak -- contains essentially all the information you need to estimate parameters and confidence intervals. 
+
+
+### Estimating parameter uncertainty in multiple dimensions: the Likelihood Profile
+
+If we have more than one *free parameter* in our model, it seems strange to fix any parameter at a particular value, as we did in computing the "likelihood slice" above. It makes more sense to allow all the parameters to vary. For the purpose of visualization, let's assume for now that we only have two free parameters in our model: 'a' and 'b'. We will assume for now that the variance parameter is known for certain.   
+
+Let's try to visualize the likelihood surface in two dimensions!
+
+```{r}
+
+upperval_b <- -1/800
+lowerval_b <- -1/300
+
+upperval_a <- 50
+lowerval_a <- 5
+
+allvals_a <- seq(lowerval_a,upperval_a,length=100)
+allvals_b <- seq(lowerval_b,upperval_b,length=100)
+
+loglikelihood_surface <- matrix(0,nrow=100,ncol=100)   # set up storage matrix! 
+
+newParams <- bestParams 
+for(i in 1:length(allvals_a)){  # loop through possible a params
+  newParams$a <- allvals_a[i]
+  for(j in 1:length(allvals_b)){    # loop through possible b params
+    newParams$b <- allvals_b[j]
+    loglikelihood_surface[i,j] <- LogLikFunction(unlist(newParams),mtcars,"mpg","disp")    # get the data likelihood across slice of parameter space
+  }
+}
+
+image(x=allvals_b,y=allvals_a,z=loglikelihood_surface,zlim=c(-100,-75),col=topo.colors(12))
+
+```
+
+Now let's add a contour line to indicate the *95% bivariate confidence region*
+
+```{r}
+conf95 <- qchisq(0.95,2)/2
+image(x=allvals_b,y=allvals_a,z=loglikelihood_surface,zlim=c(-100,-75),col=topo.colors(12))
+contour(x=allvals_b,y=allvals_a,z=loglikelihood_surface,levels=(MLE$value-conf95),add=TRUE,lwd=3,col=gray(0.3))
+
+```
+
+
+So, what is the "profile likelihood" confidence interval for the b parameter?
+
+
+And the a parameter?
+
+
 
 
 ### Ecological example: 
 
+[TBD]
 
 
 
