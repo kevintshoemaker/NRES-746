@@ -12,7 +12,7 @@
 <meta name="author" content="NRES 746" />
 
 
-<title>Lab Exercise 2</title>
+<title>Lab Exercise 3</title>
 
 <script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -313,7 +313,7 @@ div.tocify {
       <a href="LECTURE2.html">Working with probabilities</a>
     </li>
     <li>
-      <a href="LECTURE3.html">The virtual ecologist</a>
+      <a href="LECTURE3.html">The Virtual Ecologist</a>
     </li>
     <li>
       <a href="LECTURE4.html">Likelihood</a>
@@ -340,7 +340,7 @@ div.tocify {
       <a href="LAB2.html">Lab 2: Virtual ecologist</a>
     </li>
     <li>
-      <a href="LAB3.html">Lab 3: Likelihood</a>
+      <a href="LAB3.html">Lab 3: Likelihood and optimization</a>
     </li>
   </ul>
 </li>
@@ -353,6 +353,24 @@ div.tocify {
   <ul class="dropdown-menu" role="menu">
     <li>
       <a href="TreeData.csv">Tree Data</a>
+    </li>
+    <li>
+      <a href="ReedfrogPred.csv">Reed Frog Predation Data</a>
+    </li>
+    <li>
+      <a href="ReedfrogFuncresp.csv">Reed Frog Func Resp</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
+    Student-led topics
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="TreeData.csv">GAMs</a>
     </li>
   </ul>
 </li>
@@ -371,17 +389,290 @@ div.tocify {
 
 
 
-<h1 class="title toc-ignore">Lab Exercise 2</h1>
+<h1 class="title toc-ignore">Lab Exercise 3</h1>
 <h4 class="author"><em>NRES 746</em></h4>
-<h4 class="date"><em>September 9, 2016</em></h4>
+<h4 class="date"><em>October 4, 2016</em></h4>
 
 </div>
 
 
+<div id="maximum-likelihood-and-optimization" class="section level1">
+<h1>Maximum likelihood and optimization</h1>
+<p>These next couple weeks are focused on fitting models, specifically estimating model parameters and confidence intervals, using likelihood techniques. Estimating model parameters means finding the values of a set of parameters that best “fit” the data. <em>Likelihood</em> is a metric that specifies the probability of drawing your particular data given a specified model (or parameters).</p>
+<p>This lab is designed to take 2 lab sessions to complete. <strong>LAB 3 is due by midnight on Monday 10/17</strong></p>
+<p>First, take a little time to review the likelihood lecture!</p>
+<div id="example-reed-frog-predation-data" class="section level2">
+<h2>Example: reed frog predation data</h2>
+<p>Read in the tadpole predation data for <em>Hyperolius spinigularis</em> (Vonesh and Bolker 2005) given to you as ReedfrogPred.csv. Copy the ReedfrogPred.csv file from the course website to your computer. Read in the data.</p>
+<pre class="r"><code>rfp &lt;- read.csv(&quot;ReedfrogPred.csv&quot;)
+head(rfp)</code></pre>
+<pre><code>##   X density pred  size surv propsurv
+## 1 1      10   no   big    9      0.9
+## 2 2      10   no   big   10      1.0
+## 3 3      10   no   big    7      0.7
+## 4 4      10   no   big   10      1.0
+## 5 5      10   no small    9      0.9
+## 6 6      10   no small    9      0.9</code></pre>
+<p>Parameter estimation is simplest when the data represent a collection of independent observations, with each observation having the same set of parameters. Because predation on tadpoles is size and density-dependent, we will subset these data to a single size class (“small”) and density (10) for all treatments including a predator. Subset your data now.</p>
+<pre class="r"><code>rfp_sub &lt;- subset(rfp, (rfp$pred==&#39;pred&#39;)&amp;(rfp$size==&quot;small&quot;)&amp;(rfp$density==10))
+rfp_sub</code></pre>
+<pre><code>##     X density pred  size surv propsurv
+## 13 13      10 pred small    7      0.7
+## 14 14      10 pred small    5      0.5
+## 15 15      10 pred small    9      0.9
+## 16 16      10 pred small    9      0.9</code></pre>
+<p>For each individual, the per-trial probability of being eaten by a predator is a binomial process (i.e., they can survive or die during the interval). Recall that the likelihood that k out of N individuals are eaten as a function of the per capita predation probability p is:</p>
+<p><span class="math inline">\(Prob(k|p,N) = \binom{N}{k}p^{k}(1-p)^{N-k}\)</span></p>
+<p>Since the observations are independent, the joint likelihood of the whole data set is the product of the likelihood of each individual observation. So, if we have n observations, each with the same total number of tadpoles N, and the number of tadpoles killed in the ith observation is ki, then the likelihood is:</p>
+<p><span class="math inline">\(L = \prod_{i=1}^{n}\binom{N}{k_{i}}p^{k_{i}}(1-p)^{N-k_{i}}\)</span></p>
+<p>We conventionally work in terms of the log-likelihood (LL), which is:</p>
+<p><span class="math inline">\(LL = \sum_{i=1}^{n}\left [log\binom{N}{k}+k_{i}log(p)+(N-k_{i})log(1-p) \right ]\)</span></p>
+<p>In R this would be</p>
+<pre class="r"><code>sum(dbinom(rfp_sub$surv, size=N, prob=p, log=TRUE)). </code></pre>
+<p>There is only one parameter in this calculation, <em>p</em>, because we know how many individuals we started with (<em>N</em> = 10 for each trial) and how many survived in each trial (k = 7, 5, 9, and 9). So we want to solve for the most likely value of <em>p</em> given our observations of <em>N</em> and <em>surv</em>. In essence we do this by picking a possible value of <em>p</em> (which can only range from 0 to 1), calculating the log-likelihood (LL) using the equation above, picking another value of p, completing the equation, etc. until we exhaust all possible values of p and identify the one having the highest likelihood value. Of course R has useful built in functions to help us!</p>
+<p>The dbinom() function calculates the binomial likelihood for a specified data set, specifically a vector of the number of successes (or events) k, probability p, and number of trials N. Specify your vector of successes (here a success means being eaten by a predator!):</p>
+<pre class="r"><code>num_killed &lt;- 10-rfp_sub$surv
+num_killed</code></pre>
+<pre><code>## [1] 3 5 1 1</code></pre>
+<p>Given our observed <em>k</em> and <em>N</em> = 10 for a given trial, what is the likelihood that <em>p</em> = 0.5 for each of our trials?</p>
+<pre class="r"><code>dbinom(num_killed,size=10,prob=0.5)</code></pre>
+<pre><code>## [1] 0.117187500 0.246093750 0.009765625 0.009765625</code></pre>
+<p>[1] 0.117187500 0.246093750 0.009765625 0.009765625</p>
+<p>We can see that given our data, fixed sample size, and model (with <em>p</em> = 0.5), our observed outcomes are very unlikely.</p>
+<p>What is the likelihood of observing all 4 of our outcomes, i.e, the joint probability of our data?</p>
+<pre class="r"><code>prod(dbinom(num_killed,size=10,prob=0.5))</code></pre>
+<pre><code>## [1] 2.750312e-06</code></pre>
+<p>The joint likelihood values will be less than 1, and gets smaller and smaller each time we add more data (can you see why?). This is why we prefer to work with log-likelihoods (which yield larger numbers having better mathematical properties). And taking the log of value &lt;1 yields a negative number, which is why we speak in terms of log-likelihoods.</p>
+<p>For now, we can build on this above process to estimate the likelihood function over the entire possible parameter space from 0 to 1.<br />
+First we make a sequence of 100 probabilities from 0.01 to 1.</p>
+<pre class="r"><code>p &lt;- seq(0.01, 1, by=0.01)</code></pre>
+<p>Then we make an empty storage vector for the likelihoods we’ll calculate</p>
+<pre class="r"><code>Lik &lt;- numeric(length=100)</code></pre>
+<p>Now for the <strong>for</strong> loop! For every value of p (a sequence of 100 values) we will calculate the binomial probability and store it in the “Lik” vector.</p>
+<pre class="r"><code>for(i in 1:100){
+  Lik[i] &lt;- prod(dbinom(num_killed,size=10,prob=p[i]))
+}
+plot(Lik~p,lty=&quot;solid&quot;,type=&quot;l&quot;, xlab=&quot;Predation Probability&quot;, ylab=&quot;Likelihood&quot;)</code></pre>
+<p><img src="LAB3_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p>But we want to maximize the log-likelihood:</p>
+<pre class="r"><code>p &lt;- seq(0.01, 1, by=0.01)
+LogLik &lt;- numeric(length=100)
+for(i in 1:100){
+  LogLik[i] &lt;- sum(dbinom(num_killed, size=10, 
+  prob=p[i],log=TRUE))
+}
+plot(LogLik~p,lty=&quot;solid&quot;,type=&quot;l&quot;, xlab=&quot;Predation Probability&quot;, ylab=&quot;Log Likelihood&quot;)</code></pre>
+<p><img src="LAB3_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+<p>We can ask R to tell us at which value of p the LL is maximized:</p>
+<pre class="r"><code>p[which(LogLik==max(LogLik))]</code></pre>
+<pre><code>## [1] 0.25</code></pre>
+<p>And we can add an abline() to the maximum Log-Likelihood estimate:</p>
+<pre class="r"><code>plot(LogLik~p,lty=&quot;solid&quot;,type=&quot;l&quot;, xlab=&quot;Predation Probability&quot;, ylab=&quot;Log Likelihood&quot;)
+abline(v=0.25,lwd=3)</code></pre>
+<p><img src="LAB3_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
+<p>Alternatively, we can use the optim() or mle2() functions to find the maximum likelihood estimate. Although we seek the most likely, or maximum likelihood estimate, in practice we generally minimize the negative log-likelihood. To do so, first write a function to calculate the binomial negative log-likelihood function and estimate parameter p.</p>
+<pre class="r"><code>binomNLL1 &lt;- function(p, k, N) {
+  -sum(dbinom(k, size=N, prob=p, log=TRUE))
+}</code></pre>
+<p>As we did in class, you can use the optim() function to minimize your negative log-likelihood function (binomNLL1) given a vector of starting parameters and your data. The starting parameters need not be accurate, but do need to be reasonable for the function to work, that’s why we spent time in class eyeballing curves and calculating the method of moments. Given that there is only one estimable parameter, p, in the binomial function, you need only provide a starting estimate for it. Calculate the negative log-likelihood:</p>
+<pre class="r"><code>opt1 &lt;- optim(fn=binomNLL1, par = c(p=0.5), N = 10, k = num_killed, method = &quot;BFGS&quot;) </code></pre>
+<pre><code>## Warning in dbinom(k, size = N, prob = p, log = TRUE): NaNs produced
+
+## Warning in dbinom(k, size = N, prob = p, log = TRUE): NaNs produced
+
+## Warning in dbinom(k, size = N, prob = p, log = TRUE): NaNs produced
+
+## Warning in dbinom(k, size = N, prob = p, log = TRUE): NaNs produced
+
+## Warning in dbinom(k, size = N, prob = p, log = TRUE): NaNs produced</code></pre>
+<p>You may get several warning messages, can you think why? opt1 returns a list that stores information about your optimization process.</p>
+<pre class="r"><code>opt1</code></pre>
+<pre><code>## $par
+##         p 
+## 0.2500002 
+## 
+## $value
+## [1] 7.571315
+## 
+## $counts
+## function gradient 
+##       17        7 
+## 
+## $convergence
+## [1] 0
+## 
+## $message
+## NULL</code></pre>
+<p>The important bits are whether or not the process achieved convergence and the parameter estimate that was converged upon.</p>
+<pre class="r"><code>opt1$convergence</code></pre>
+<pre><code>## [1] 0</code></pre>
+<p>Here a value of 0 means convergence has been achieved, a value of 1 means the process failed to converge. We’ll learn more about convergence and alternative optimization options in Chapter 7.</p>
+<p>Your best fit estimate of p is:</p>
+<pre class="r"><code>opt1$par</code></pre>
+<pre><code>##         p 
+## 0.2500002</code></pre>
+<p>This numerically computed answer is almost, but not exactly, equal to the theoretical answer of 0.25. The value of the function you optimized, binomNLL1, is:</p>
+<pre class="r"><code>opt1$value</code></pre>
+<pre><code>## [1] 7.571315</code></pre>
+<p>which is the negative log-likelihood for the model. And, as we already know, the absolute likelihood of this particular outcome (5, 7, 9 and 9 out of 10 tadpoles eaten in four replicates) is quite low:</p>
+<pre class="r"><code>exp(opt1$value)</code></pre>
+<pre><code>## [1] 1941.691</code></pre>
+<p>Plot your observed outcomes against your predictions under the maximum likelihood model:</p>
+<pre class="r"><code>hist(num_killed,xlim=c(0,10),freq=F)
+curve(dbinom(x,prob=0.75,size=10),add=T,from=0,to=10,n=11)</code></pre>
+<p><img src="LAB3_files/figure-html/unnamed-chunk-20-1.png" width="672" /></p>
+<p>Note that freg=F scales the y-axis to density, which is necessary to overlay the curve.</p>
 <div id="exercise-1" class="section level4">
 <h4>Exercise 1</h4>
-<p>Working as a group, make up a fake data set in which the true data generating process is composed of a deterministic and stochastic component from the Bolker book. Be creative- make sure you can tell a plausible natural-resources related “story” about how these data were generated.</p>
-<p>Now, exchange your dataset with that generated from another group. Build likelihood functions for testing your framework.</p>
+<blockquote>
+<p>Develop a function that returns the data likelihood (<em>likelihood function</em>) for the following scenario: you visit three known-occupied wetland sites ten times and for each site you record the number of times a particular frog species is detected within a 5 minute period. Assuming that all sites are occupied continously, compute the likelihood of these data: [3,2 and 6 detections for sites 1, 2, and 3 respectively] for a given detection probability <span class="math inline">\(p\)</span>. Assume that all sites have the same (unknown) detection probability. Using this likelihood function, answer the following questions:</p>
+</blockquote>
+<ol style="list-style-type: decimal">
+<li>What is the maximum likelihood estimate for the <em>p</em> (detection probability) parameter?</li>
+<li>Using the “rule of 2”, determine the approximate 95% confidence interval for the <em>p</em> parameter.</li>
+</ol>
+<p>Provide your code <em>in markdown</em>, with all code fully commented.</p>
+</div>
+</div>
+<div id="adding-in-a-deterministic-relationship" class="section level2">
+<h2>Adding in a Deterministic Relationship</h2>
+<p>So we’ve looked at how to obtain the likelihood of getting our dataset given a stochastic model (the binomial distribution), but now we want to consider more interesting ecological questions like when the mean or variance of the model parameters vary among groups or depend upon covariates. Recall that we subset our data above because we expected survival to be (in part) density-dependent. Here we’ll consider how to model the probability of tadpole survival as a function of the initial density of tadpoles in the population. To do so, we need to incorporate a deterministic function into our stochastic model.</p>
+<p>Read in the functional response dataset and look at the first few lines:</p>
+<pre class="r"><code>rffr &lt;- read.csv(&quot;ReedfrogFuncResp.csv&quot;)
+head(rffr)</code></pre>
+<pre><code>##   X Initial Killed
+## 1 1       5      1
+## 2 2       5      2
+## 3 3      10      5
+## 4 4      10      6
+## 5 5      15     10
+## 6 6      15      9</code></pre>
+<p>First, let’s look at the stochastic distribution of the data, which is the probability of being killed.</p>
+<pre class="r"><code>hist(rffr$Killed/rffr$Initial)</code></pre>
+<p><img src="LAB3_files/figure-html/unnamed-chunk-22-1.png" width="672" /></p>
+<p>Based on the way this histogram looks (and what we know mechanistically about the data), we’ll use a binomial distribution to describe the random error.</p>
+<p>Plot the number killed by the initial density (using plot()) to see what sort of deterministic function would describe the pattern. It looks like it could be linear, but because we know that this is a predation response, and that predators become handling limited at high prey densities. On page 182 Bolker indicates that if predation rate= <span class="math inline">\(aN/(1+ahN)\)</span> (which follows a Type II functional response), this means that the per capita predation rate of tadpoles decreases hyperbolically with tadpole density <span class="math inline">\((= a/(1 + ahN))\)</span>. We’ll use this deterministic function for our data.</p>
+<p>First, let’s see what that curve would look like over our data points with an initial guess at the parameters. Recall that the a parameter of this hyperbolic function indicates the initial slope, which we’ll guess to be around 0.5, and the h parameter indicates 1/asymptote, which we fiddled around with to match the data (so try 1/80).</p>
+<pre class="r"><code>Holl2&lt;-function(x, a, h){(a*x)/(1+(a*h*x))}
+plot(rffr$Killed~rffr$Initial)
+curve(Holl2(x, a=0.5, h=1/80), add=TRUE,col=&quot;red&quot;)</code></pre>
+<p><img src="LAB3_files/figure-html/unnamed-chunk-23-1.png" width="672" /></p>
+<p>This looks pretty good, but we want to actually fit the line to the data instead of making guesses, and we’ll use likelihood to do that. Just like before, we’ll write a <em>negative log likelihood function</em>, but this time we’ll incorporate the deterministic model.</p>
+<pre class="r"><code>binomNLL2&lt;-function(params,N,k){
+    a=params[1]
+    h=params[2]
+    predprob=a/(1+a*h*N)    
+    -sum(dbinom(k,prob=predprob,size=N,log=TRUE))
+}</code></pre>
+<p>This likelihood function says that the structure of the data is described by a binomial distribution (either killed or not), and that the probability of predation (the number killed divided by the initial number) is explained by the Holling type II equation. (The equation is specified differently here than when we used it to make a curve, can you think of why?)</p>
+<p>Now we’ll find the parameter values that best describe these data using optim(). We’ll use the same initial values for a and h that we used to plot the curve. N is the initial number of tadpoles, and k is the number of tadpoles killed.</p>
+<pre class="r"><code>opt2 &lt;- optim(fn=binomNLL2,  par=c(a=0.5,h=(1/80)), N=rffr$Initial, k=rffr$Killed)  #use default simplex algorithm</code></pre>
+<pre><code>## Warning in dbinom(k, prob = predprob, size = N, log = TRUE): NaNs produced
+
+## Warning in dbinom(k, prob = predprob, size = N, log = TRUE): NaNs produced</code></pre>
+<pre class="r"><code>opt2</code></pre>
+<pre><code>## $par
+##          a          h 
+## 0.52593924 0.01660613 
+## 
+## $value
+## [1] 46.72136
+## 
+## $counts
+## function gradient 
+##       53       NA 
+## 
+## $convergence
+## [1] 0
+## 
+## $message
+## NULL</code></pre>
+<p>The results are not that different from our starting values, so we made a good guess.</p>
+<div id="exercise-2" class="section level4">
+<h4>Exercise 2</h4>
+<ul>
+<li>Overlay this line onto your data points to see how different the two lines are.</li>
+<li>Try some different starting values. Can you find any starting values that cause the optimization algorithm (“optim” function) to fail?</li>
+<li>Now visualize prediction intervals around this line to make a plot like Figure 6.5a in the book. We could use a loop to do this, but try using vectors as it’s usually faster to do so in R. First we’ll need vectors of predictor and response values precisely along the best fit line. Next, use qbinom() to estimate the 95% confidence intervals of the binomial distribution. In qbinom(), for the “prob” argument use the ratio of the x and y values to get a probability value from 0-1. For example:</li>
+</ul>
+<pre class="r"><code>upper&lt;-qbinom(0.975,prob=yvec/xvec, size=xvec)
+lower&lt;-qbinom(0.025,prob=yvec/xvec, size=xvec)</code></pre>
+<ul>
+<li>Now use the lines() function to plot the confidence intervals.</li>
+</ul>
+<p><strong>Aside</strong>: Bolker calls these types of confidence intervals <em>plug-in confidence intervals</em> because they ignore the uncertainty in the <em>a</em> and <em>h</em> parameters and just use the uncertainty in the binomial distribution.</p>
+</div>
+<div id="review-of-the-mle-process" class="section level3">
+<h3>Review of the MLE process</h3>
+<p><strong>Step 1</strong>. Identify the response and explanatory variables: Predation probability and Initial Population Size. Just stating what the response and explanatory variables are will help you start modeling.</p>
+<p><strong>Step 2</strong>. Determine the stochastic distribution: Binomial. In this case, the stochastic distribution was easy to identify because we chose it mechanistically. Other times it may not be so clear what the best distribution is, and looking at the histogram and plotting different distributions over the top will be helpful.</p>
+<p><strong>Step 3</strong>. Specify the deterministic function: Holling type II. Again, we chose this function mechanistically, but we could have chosen different functions just by looking at the plot of the points.</p>
+<p><strong>Step 4</strong>. Specify the likelihood of the data given our deterministic expectations and the stochastic distribution: binomNLL2. Our negative <em>log likelihood function</em> combined the stochastic and deterministic elements together by having the stochastic parameter (in this case the binomial probability, <em>p</em>) be dependent upon the deterministic parameters.</p>
+<p><strong>Step 5</strong>. Make a guess for the initial parameters: <em>a</em>=0.5, <em>h</em>=1/80. You need to have an initial guess at the parameters to make optim() work, and we plotted the Holling curve to make our guess. Sometimes you will also need to make a guess at the parameters for the stochastic distribution. In these cases, the <em>method of moments</em> is often the best option.</p>
+<p><strong>Step 6</strong>. Estimate the best fit parameters using maximum likelihood: opt2. We used optim() to search through all the possible value combinations of parameters a and h to estimates for those parameters that correspond to the minimized negative log-likelihood.</p>
+<p><strong>Step 7</strong>. Add confidence intervals around your estimates. We calculated some <em>plug-in estimates</em> to put confidence regions around our estimates based on the stochastic function.</p>
+</div>
+</div>
+<div id="exploring-likelihood-surfaces-and-confidence-regions" class="section level2">
+<h2>Exploring Likelihood Surfaces and Confidence Regions</h2>
+<p>Let’s continue the myxomatosis virus titer example from the optimization lecture. The difference is that this time we’ll model a deterministic process (decay of viral loads over time) in addition to the stochastic process. Our goal is to fit a model to data on viral titers through time for the viruses that are grade 1. Biological common sense, and data from other titer levels, tells us to expect titer levels to start at zero, increase over time to a peak, and then to decline. Given those expectations, we’ll fit a Ricker model to these data, following Bolker’s example and extending it just a bit.</p>
+<p>Our goals are to:</p>
+<ul>
+<li>Find the maximum likelihood estimates of the parameters of the Ricker model fit to the myxomytosis data.</li>
+<li>Visualize the fit of this model to the data by:
+<ul>
+<li>Plotting the data</li>
+<li>Adding the predicted Ricker curve</li>
+<li>Adding plug-in confidence intervals</li>
+<li>Plot the 2-dimensional likelihood surface for the parameters of the Ricker and add the bivariate 95% confidence interval</li>
+</ul></li>
+</ul>
+<p>You can add the data from the emdbook package:</p>
+<pre class="r"><code>library(emdbook)
+data(MyxoTiter_sum)
+head(MyxoTiter_sum)</code></pre>
+<pre><code>##   grade day titer
+## 1     1   2 5.207
+## 2     1   2 5.734
+## 3     1   2 6.613
+## 4     1   3 5.997
+## 5     1   3 6.612
+## 6     1   3 6.810</code></pre>
+<p>Select just the grade 1 titers:</p>
+<pre class="r"><code>myxdat &lt;- subset(MyxoTiter_sum, grade==1)
+
+plot(myxdat$titer~myxdat$day)</code></pre>
+<p><img src="LAB3_files/figure-html/unnamed-chunk-28-1.png" width="672" /></p>
+<div id="exercise-3" class="section level4">
+<h4>Exercise 3:</h4>
+<p><strong>Fit a Ricker model to the myxomatosis data</strong></p>
+<p>Our question is: how does a virus titer change in rabbits over time after infection? This is almost exactly the same problem as we just did, but we’re using different distributions and functions. To solve the problem, you’ll need to go through the same steps outlined above.</p>
+<p><strong>Step 1</strong>. <em>Identify the response and explanatory variables</em>.</p>
+<p><strong>Step 2</strong>. <em>Determine the stochastic distribution.</em><br />
+Start by plotting the histogram of the response variable. Bolker suggests a gamma distribution – does it look like a gamma would work? Write down the parameters for the gamma distribution (page 133). (For the gamma distribution, use with the shape and scale parameters (not the rate)). If you prefer (it is easier!), you may model the error distribution as normal!</p>
+<p><strong>Step 3</strong>. <em>Specify the deterministic function</em>.<br />
+Plot the data points (hint: look at figure 6.5b). Bolker suggests the Ricker curve – does it look like the Ricker curve would work? (Note that grade 1 virus is so virulent that most rabbits die before the titer has a chance to drop off entirely) Write down the equation and parameters for the Ricker curve (page 94):</p>
+<p><strong>Step 4</strong>. <em>Specify the likelihood of the data given our deterministic expectations and the stochastic distribution.</em> Take a moment to think how the parameters of the stochastic distribution are determined by the parameters of the deterministic function. For the gamma distribution, both the shape and scale parameters are related to the mean of the distribution, i.e., mean = shape × scale (page 133). So how will you specify that the deterministic function (the Ricker model) should represent the mean? What parameters do you need your (negative) log-likelihood function to estimate? Write out your negative log-likelihood function to solve for the likelihood.</p>
+<p>Note that the shape parameter can be specified as: <span class="math inline">\(\frac{mean^2}{var}\)</span> and the scale parameter can be specified as <span class="math inline">\(\frac{var}{mean}\)</span></p>
+<p><strong>Step 5</strong>. <em>Make a guess for the initial parameters</em>. We need initial parameters to put into optim(). Remember that the Ricker curve parameters can be estimated based on the initial slope and maximum (see pg. 95). Try plotting the curve over the points to get an approximate fit. There really isn’t any easier way to get there than trial and error for the deterministic function.</p>
+<p><strong>Step 6</strong>. <em>Estimate the best fit parameters using maximum likelihood</em>.<br />
+Now use optim() to get your maximum likelihood parameter estimates.</p>
+<p><strong>Step 7</strong>. <em>Add plug-in prediction intervals around your estimates</em>.<br />
+After your run of optim (did you achieve convergence?), plot your fitted Ricker curve to your data. Revisit the earlier prediction interval code to add <em>plug-in</em> confidence intervals around your predicted curve based on gamma distributed errors (should resemble Figure 6.5b on page 184 of text).</p>
+<p>Use the qgamma or qnorm functions (depending on how you are modeling your error…)</p>
+<pre class="r"><code>upper&lt;-qgamma(0.975,shape=?, scale=?)
+lower&lt;-qbinom(0.025,shape=?, scale=?)</code></pre>
+</div>
+<div id="exercise-4-2-dimensional-likelihood-surface" class="section level4">
+<h4>Exercise 4: 2-dimensional likelihood surface</h4>
+<p>Making plug-in confidence intervals looks nice on the plot, but if we also want to visualize parameter uncertainty (and not just the stochastic data generating process) we need to consider an <em>n</em>-dimensional likelihood surface. Pick two parameters from your myxomatosis model (holding any remaining parameters constant) and visualize how the likelihood changes as we change these two parameters at the same time. Imagine making a graph like the one at the beginning of the lab showing the likelihood being affected by the parameter <em>p</em>. We want to add another dimension to that plot by having likelihood also be affected by another parameter. What we’ll end up with will look something like Figure 6.7 in the Bolker book.</p>
+<p>Plot the 2-D likelihood surface (you may use code examples from lecture). Use nested <strong>for</strong> loops to explore these two dimensions of parameter space. Calculate the likelihood for many values along both dimensions and store those likelihoods in a 2-dimensional matrix. Finally create a line for the 95% bivariate confidence interval (the CI for both parameters), use contour(). Specify the level of contour by the -LL cutoff value derived from the chi-square distribution (use qchisq(), and see. pg. 194 for how Bolker made his 95% bivariate confidence region).</p>
+</div>
+<div id="optional-exercise-5-profile-likelihood" class="section level4">
+<h4>Optional Exercise 5: profile likelihood</h4>
+<p>Pick one of the parameters in your model (selected parameter) and construct a profile likelihood for this parameter. You need to modify your likelihood and optim functions to estimate only the other parameters (because you’ll be fixing the selected parameter). Use the profile likelihood to compute a 95% confidence interval for this parameter.</p>
+</div>
+</div>
 </div>
 
 
