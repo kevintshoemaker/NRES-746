@@ -1,0 +1,372 @@
+---
+title: "Bayesian Analysis #2: MCMC"
+author: "NRES 746"
+date: "October 18, 2016"
+output: 
+  html_document: 
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+### Markov Chain Monte Carlo
+
+Now in many cases, we simply won't have the computational power to partition our parameter space into discrete pixels and completely evaluate the posterior probability for all *n*-dimensional pixels in that space. In these cases, we tend to harness ingenious algorithms known as Markov-Chain Monte Carlo. This approach uses stochastic jumps in parameter space to (eventually) settle on a stationary posterior distribution. The key to MCMC is the following:
+
+> The ratio of successful jump probabilities is proportional to the ratio of the posterior probabilities. 
+
+The jump probability can be characterized as:
+
+$Prob(jump) * Prob(accept)$
+
+The ratio of jump probabilities can be characterized as:
+
+$\frac{Prob(jump_{b\rightarrow a})\cdot Prob(accept a|b)}{Prob(jump_{a\rightarrow b})\cdot Prob(accept b|a)}$
+
+This ratio MUST be equal to the ratio of the posterior probabilities:
+
+$\frac{Posterior(A)}{Posterior(B)}$
+
+If this rule is met, then in the long run the chain will spend a lot of time occupying high-probability parts of parameter space. With enough jumps, the long-term distribution will match the joint posterior probability distribution.
+
+## Metropolis-Hastings algorithm
+
+This algorithm is very similar to the simulated annealing algorithm! The main difference: the "temperature" doesn't decrease over time and the parameter *k* is set to 1.
+
+The M-H algorithm can be expressed as:
+
+$Prob(accept A|B) = min(1,\frac{Posterior(B)}{Posterior(A)}\cdot \frac{Prob(b\rightarrow a)}{Prob(a\rightarrow b)})$
+
+Note that essentially this is the same as the Metropolis simulated-annealing algorithm, with the posterior probabilities substituted for the likelihood and the *k* parameter set to 1
+
+### Myxomatosis revisited (again!)
+
+```{r}
+library(emdbook)
+
+MyxDat <- MyxoTiter_sum
+Myx <- subset(MyxDat,grade==1)
+head(Myx)
+```
+
+Recall that we are modeling the distribution of measured titers (virus loads) for Australian rabbits. Bolker chose to use a Gamma distribution. Here is the empirical distribution:
+
+```{r}
+hist(Myx$titer,freq=FALSE)
+```
+
+We need to estimate the gamma rate and shape parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
+
+```{r}
+hist(Myx$titer,freq=FALSE)
+curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
+
+```
+
+Recall that the 2-D (log) likelihood surface looks something like this:
+
+```{r echo=FALSE}
+##############
+# define 2-D parameter space!
+##############
+
+shapevec <- seq(3,100,by=0.1)   
+scalevec <- seq(0.01,0.5,by=0.001)
+
+##############
+# define the likelihood surface across this grid within parameter space
+##############
+
+GammaLogLikelihoodFunction <- function(params){
+  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))
+}
+surface2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
+
+newparams <- params
+for(i in 1:length(shapevec)){
+  newparams['shape'] <- shapevec[i]
+  for(j in 1:length(scalevec)){
+    newparams['scale'] <- scalevec[j]
+    surface2D[i,j] <- GammaLogLikelihoodFunction(newparams) 
+  }
+}
+
+############
+# Visualize the likelihood surface
+############
+
+image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+```
+
+
+
+Here is an implementation of the M-H algorithm to find the joint posterior distribution!
+
+First, we need a likelihood function (our old friend!)
+
+```{r}
+GammaLikelihoodFunction <- function(params){
+  prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=F))
+}
+
+params <- c(shape=40,scale=0.15) 
+params
+GammaLikelihoodFunction(params)
+
+```
+
+Then, we need a prior distribution for our parameters! Let's assign relatively flat priors for both of our parameters. In this case, let's assign a $gamma(shape=0.01,scale=100)$ for the shape parameter and a $gamma(shape=0.1,scale=10)$ distribution for the scale parameter:
+
+```{r}
+GammaPriorFunction <- function(params){
+  prior <- c(shape=NA,scale=NA)
+  prior['shape'] <- dgamma(params['shape'],shape=0.001,scale=1000)
+  prior['scale'] <- dgamma(params['scale'],shape=0.01,scale=100)
+  # prior['shape'] <- dunif(params['shape'],3,100)
+  # prior['scale'] <- dunif(params['scale'],0.01,0.5)
+  return(prod(prior))
+}
+
+curve(dgamma(x,shape=0.01,scale=1000),3,100)
+
+params <- c(shape=40,scale=0.15) 
+params
+GammaPriorFunction(params)
+
+```
+Note that we are also assuming (fairly standard assumption) that the shape and scale are independent in the prior (multiplicative probabilities for the joint prior)
+
+Then, we need a function that can compute the ratio of posterior probabilities for any given jump in parameter space. Because we are dealing with a *ratio* of posterior probabilities, we do NOT need to compute the normalization constant. Without the need for a normalization constant, we just need to compute the ratio of weighted likelihoods (that is, the likelihood weighted by the prior)
+
+```{r}
+PosteriorRatio <- function(oldguess,newguess){
+  oldLik <- max(1e-90,GammaLikelihoodFunction(oldguess))
+  oldPrior <- max(1e-90,GammaPriorFunction(oldguess))
+  newLik <- GammaLikelihoodFunction(newguess)
+  newPrior <- GammaPriorFunction(newguess)
+  return((newLik*newPrior)/(oldLik*oldPrior))
+}
+
+oldguess <- params
+newguess <- c(shape=39,scale=0.15)
+
+PosteriorRatio(oldguess,newguess)
+
+```  
+
+Then we need a function for making new guesses, or jumps in parameter space:
+
+```{r}
+     # function for making new guesses
+newGuess <- function(oldguess){
+  sdshapejump <- 4
+  sdscalejump <- 0.07
+  jump <- c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
+  newguess <- abs(oldguess + jump)
+  return(newguess)
+}
+  # set a new "guess" near to the original guess
+
+newGuess(oldguess=params)     # each time is different- this is the first optimization procedure with randomness built in
+newGuess(oldguess=params)
+newGuess(oldguess=params)
+```
+
+
+
+Okay, now we are ready to implement the Metropolis-Hastings MCMC algorithm:
+
+
+First we need a starting point:
+
+```{r}
+startingvals <- c(shape=75,scale=0.28)    # starting point for the algorithm
+```
+
+Let's play with the different functions we have so far...
+
+
+```{r}
+newguess <- newGuess(startingvals)
+newguess
+
+PosteriorRatio(startingvals,newguess)   # difference in posterior ratio
+
+```
+
+
+Now let's look at the Metropolis routine:
+
+```{r}
+chain.length <- 100
+oldguess <- startingvals
+guesses <- matrix(0,nrow=chain.length,ncol=2)
+colnames(guesses) <- names(startingvals)
+
+counter <- 1
+while(counter <= chain.length){
+  newguess <- newGuess(oldguess)
+  post.rat <- PosteriorRatio(oldguess,newguess)
+  prob.accept <- min(1,post.rat)
+  rand <- runif(1)
+  if(rand<=prob.accept){
+    oldguess <- newguess
+    guesses[counter,] <- newguess 
+    counter=counter+1
+  }
+}
+
+# visualize!
+
+image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+lines(guesses,col="red")
+
+```
+
+
+Let's run it for longer...
+
+
+```{r}
+chain.length <- 1000
+oldguess <- startingvals
+guesses <- matrix(0,nrow=chain.length,ncol=2)
+colnames(guesses) <- names(startingvals)
+
+counter <- 1
+while(counter <= chain.length){
+  newguess <- newGuess(oldguess)
+  post.rat <- PosteriorRatio(oldguess,newguess)
+  prob.accept <- min(1,post.rat)
+  rand <- runif(1)
+  if(rand<=prob.accept){
+    oldguess <- newguess
+    guesses[counter,] <- newguess 
+    counter=counter+1
+  }
+}
+
+# visualize!
+
+image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+lines(guesses,col="red")
+```
+
+
+This looks better! The search algorithm is finding the high-likelihood parts of parameter space pretty well!
+
+Now, let's look at the chain for the "shape" parameter
+
+```{r}
+plot(1:chain.length,guesses[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+```
+
+And for the scale parameter...
+
+```{r}
+plot(1:chain.length,guesses[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+```
+
+Can we say that these chains have converged on the posterior distribution for the shape parameter??
+
+
+First of all, the beginning of the chain "remembers" the starting value, and is therefore not a stationary distribution. We need to remove the first part of the chain, called the **'burn-in'**.
+
+```{r}
+burn.in <- 100
+MCMCsamples <- guesses[-c(1:burn.in),]
+
+chain.length=chain.length-burn.in
+plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+```
+
+
+Let's run it for even longer...
+
+
+```{r}
+chain.length <- 10000
+oldguess <- startingvals
+guesses <- matrix(0,nrow=chain.length,ncol=2)
+colnames(guesses) <- names(startingvals)
+
+counter <- 1
+while(counter <= chain.length){
+  newguess <- newGuess(oldguess)
+  post.rat <- PosteriorRatio(oldguess,newguess)
+  prob.accept <- min(1,post.rat)
+  rand <- runif(1)
+  if(rand<=prob.accept){
+    oldguess <- newguess
+    guesses[counter,] <- newguess 
+    counter=counter+1
+  }
+}
+
+# visualize!
+
+image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+lines(guesses,col="red")
+```
+
+
+Let's first remove the first 1000 samples as a burn-in
+
+```{r}
+burn.in <- 1000
+MCMCsamples <- guesses[-c(1:burn.in),]
+chain.length=chain.length-burn.in
+```
+
+
+Now, let's look at the chains again
+
+```{r}
+plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+
+```
+
+
+When evaluating these trace plots, we are hoping to see a "stationary distribution" that looks like white noise. This trace plot looks like it might have a little autocorrelation. One way to "fix" this is to thin the MCMC samples:
+
+```{r}
+thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=10),]
+plot(1:nrow(thinnedMCMC),thinnedMCMC[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:nrow(thinnedMCMC),thinnedMCMC[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+```
+
+
+
+Now we can examine our posterior distribution!
+
+```{r}
+plot(density(thinnedMCMC[,'scale']),main="scale parameter",xlab="scale")
+plot(density(thinnedMCMC[,'shape']),main="shape parameter",xlab="shape")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
