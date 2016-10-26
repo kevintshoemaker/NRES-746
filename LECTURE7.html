@@ -422,6 +422,9 @@ div.tocify {
 <p>This ratio MUST be equal to the ratio of the posterior probabilities:</p>
 <p><span class="math inline">\(\frac{Posterior(A)}{Posterior(B)}\)</span></p>
 <p>If this rule is met, then in the long run the chain will spend a lot of time occupying high-probability parts of parameter space. With enough jumps, the long-term distribution will match the joint posterior probability distribution.</p>
+<blockquote>
+<p>MCMC is essentially a type of random number generator that is designed to sample from difficult-to-describe (e.g., multivariate, hierarchical) probability distributions. In many/most cases, the posterior distribution for ecological problems is a very difficult-to-describe probability distribution.</p>
+</blockquote>
 </div>
 <div id="metropolis-hastings-algorithm" class="section level2">
 <h2>Metropolis-Hastings algorithm</h2>
@@ -429,6 +432,73 @@ div.tocify {
 <p>The M-H algorithm can be expressed as:</p>
 <p><span class="math inline">\(Prob(accept A|B) = min(1,\frac{Posterior(B)}{Posterior(A)}\cdot \frac{Prob(b\rightarrow a)}{Prob(a\rightarrow b)})\)</span></p>
 <p>Note that essentially this is the same as the Metropolis simulated-annealing algorithm, with the posterior probabilities substituted for the likelihood and the <em>k</em> parameter set to 1</p>
+</div>
+<div id="bivariate-normal-example" class="section level2">
+<h2>Bivariate normal example</h2>
+<p>This example is modified from <a href="http://www.mas.ncl.ac.uk/~ndjw1/teaching/sim/gibbs/gibbs.html">this link by Prof Darren Wilkinson</a></p>
+<p>Remember that MCMC samplers are just a type of random number generator. We can use a Metropolis-Hastings sampler to develop our own random number generator for a fairly simple known distribution. In this example, we use a M-H Sampler to generate random numbers from a standard bivariate normal probability distribution.</p>
+<p>We don’t need an MCMC sampler for this simple example. One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution.</p>
+<pre class="r"><code>rbvn&lt;-function (n, rho)   #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
+{
+        x &lt;- rnorm(n, 0, 1)
+        y &lt;- rnorm(n, rho * x, sqrt(1 - rho^2))
+        cbind(x, y)
+}
+
+bvn&lt;-rbvn(10000,0.98)
+par(mfrow=c(3,2))
+plot(bvn,col=1:10000)
+plot(bvn,type=&quot;l&quot;)
+plot(ts(bvn[,1]))
+plot(ts(bvn[,2]))
+hist(bvn[,1],40)
+hist(bvn[,2],40)</code></pre>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<pre class="r"><code>par(mfrow=c(1,1))</code></pre>
+<pre class="r"><code>library(mvtnorm)</code></pre>
+<pre><code>## 
+## Attaching package: &#39;mvtnorm&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:emdbook&#39;:
+## 
+##     dmvnorm</code></pre>
+<pre class="r"><code>metropolisHastings &lt;- function (n, rho=0.98){    # a MCMC sampler implementation of a bivariate random number generator
+    mat &lt;- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
+    x &lt;- 0
+    y &lt;- 0
+    prev &lt;- dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))
+    mat[1, ] &lt;- c(x, y)        # initialize the markov chain
+    counter &lt;- 1
+    while(counter&lt;=n) {
+      newx &lt;- rnorm(1,x,0.5)     # make a jump
+      newy &lt;- rnorm(1,y,0.5)
+      
+      newprob &lt;- dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
+      ratio &lt;- newprob/prev
+      
+      prob.accept &lt;- min(1,ratio)     # decide whether to accept the new jump!
+      rand &lt;- runif(1)
+      if(rand&lt;=prob.accept){
+        x=newx;y=newy
+        mat[counter,] &lt;- c(x,y) 
+        counter=counter+1
+        prev &lt;- newprob
+      }
+      
+    }
+    return(mat)
+}</code></pre>
+<p>Then we can use the M-H sampler to get random samples from this known distribution…</p>
+<pre class="r"><code>bvn&lt;-metropolisHastings(10000,0.98)
+par(mfrow=c(3,2))
+plot(bvn,col=1:10000)
+plot(bvn,type=&quot;l&quot;)
+plot(ts(bvn[,1]))
+plot(ts(bvn[,2]))
+hist(bvn[,1],40)
+hist(bvn[,2],40)</code></pre>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<pre class="r"><code>par(mfrow=c(1,1))</code></pre>
+<p>Okay, enough with super simple examples- let’s try it for a non-trivial problem, like the Myxomatosis example from the Bolker book!</p>
 <div id="myxomatosis-revisited-again" class="section level3">
 <h3>Myxomatosis revisited (again!)</h3>
 <pre class="r"><code>library(emdbook)
@@ -445,13 +515,13 @@ head(Myx)</code></pre>
 ## 6     1   3 6.810</code></pre>
 <p>Recall that we are modeling the distribution of measured titers (virus loads) for Australian rabbits. Bolker chose to use a Gamma distribution. Here is the empirical distribution:</p>
 <pre class="r"><code>hist(Myx$titer,freq=FALSE)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
 <p>We need to estimate the gamma rate and shape parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:</p>
 <pre class="r"><code>hist(Myx$titer,freq=FALSE)
 curve(dgamma(x,shape=40,scale=0.15),add=T,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
 <p>Recall that the 2-D (log) likelihood surface looks something like this:</p>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
 <p>Here is an implementation of the M-H algorithm to find the joint posterior distribution!</p>
 <p>First, we need a likelihood function (our old friend!)</p>
 <pre class="r"><code>GammaLikelihoodFunction &lt;- function(params){
@@ -475,14 +545,14 @@ params</code></pre>
 }
 
 curve(dgamma(x,shape=0.01,scale=1000),3,100)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
 <pre class="r"><code>params &lt;- c(shape=40,scale=0.15) 
 params</code></pre>
 <pre><code>## shape scale 
 ## 40.00  0.15</code></pre>
 <pre class="r"><code>GammaPriorFunction(params)</code></pre>
 <pre><code>## [1] 1.502831e-06</code></pre>
-<p>Note that we are also assuming (fairly standard assumption) that the shape and scale are independent in the prior (multiplicative probabilities for the joint prior)</p>
+<p>Note that we are also assuming (fairly standard assumption) that the shape and scale are <em>independent</em> in the prior (multiplicative probabilities for the joint prior).</p>
 <p>Then, we need a function that can compute the ratio of posterior probabilities for any given jump in parameter space. Because we are dealing with a <em>ratio</em> of posterior probabilities, we do NOT need to compute the normalization constant. Without the need for a normalization constant, we just need to compute the ratio of weighted likelihoods (that is, the likelihood weighted by the prior)</p>
 <pre class="r"><code>PosteriorRatio &lt;- function(oldguess,newguess){
   oldLik &lt;- max(1e-90,GammaLikelihoodFunction(oldguess))
@@ -510,21 +580,21 @@ newGuess &lt;- function(oldguess){
 
 newGuess(oldguess=params)     # each time is different- this is the first optimization procedure with randomness built in</code></pre>
 <pre><code>##      shape      scale 
-## 38.9558275  0.1756608</code></pre>
-<pre class="r"><code>newGuess(oldguess=params)</code></pre>
-<pre><code>##      shape      scale 
-## 40.5363219  0.1557664</code></pre>
+## 29.7815940  0.1980339</code></pre>
 <pre class="r"><code>newGuess(oldguess=params)</code></pre>
 <pre><code>##       shape       scale 
-## 39.50265801  0.06916286</code></pre>
-<p>Okay, now we are ready to implement the Metropolis-Hastings MCMC algorithm:</p>
-<p>First we need a starting point:</p>
+## 40.37349215  0.08592807</code></pre>
+<pre class="r"><code>newGuess(oldguess=params)</code></pre>
+<pre><code>##      shape      scale 
+## 42.5866789  0.1065055</code></pre>
+<p>Now we are ready to implement the Metropolis-Hastings MCMC algorithm:</p>
+<p>We need a starting point:</p>
 <pre class="r"><code>startingvals &lt;- c(shape=75,scale=0.28)    # starting point for the algorithm</code></pre>
 <p>Let’s play with the different functions we have so far…</p>
-<pre class="r"><code>newguess &lt;- newGuess(startingvals)
+<pre class="r"><code>newguess &lt;- newGuess(startingvals)    # take a jump in parameter space
 newguess</code></pre>
 <pre><code>##      shape      scale 
-## 72.9776409  0.2814788</code></pre>
+## 71.2901411  0.3355522</code></pre>
 <pre class="r"><code>PosteriorRatio(startingvals,newguess)   # difference in posterior ratio</code></pre>
 <pre><code>## [1] 0</code></pre>
 <p>Now let’s look at the Metropolis routine:</p>
@@ -551,7 +621,7 @@ while(counter &lt;= chain.length){
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
 <p>Let’s run it for longer…</p>
 <pre class="r"><code>chain.length &lt;- 1000
 oldguess &lt;- startingvals
@@ -576,14 +646,14 @@ while(counter &lt;= chain.length){
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
 <p>This looks better! The search algorithm is finding the high-likelihood parts of parameter space pretty well!</p>
 <p>Now, let’s look at the chain for the “shape” parameter</p>
 <pre class="r"><code>plot(1:chain.length,guesses[,&#39;shape&#39;],type=&quot;l&quot;,main=&quot;shape parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;shape&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
 <p>And for the scale parameter…</p>
 <pre class="r"><code>plot(1:chain.length,guesses[,&#39;scale&#39;],type=&quot;l&quot;,main=&quot;scale parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;scale&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-17-1.png" width="672" /></p>
 <p>Can we say that these chains have converged on the posterior distribution for the shape parameter??</p>
 <p>First of all, the beginning of the chain “remembers” the starting value, and is therefore not a stationary distribution. We need to remove the first part of the chain, called the <strong>‘burn-in’</strong>.</p>
 <pre class="r"><code>burn.in &lt;- 100
@@ -591,9 +661,9 @@ MCMCsamples &lt;- guesses[-c(1:burn.in),]
 
 chain.length=chain.length-burn.in
 plot(1:chain.length,MCMCsamples[,&#39;shape&#39;],type=&quot;l&quot;,main=&quot;shape parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;shape&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-18-1.png" width="672" /></p>
 <pre class="r"><code>plot(1:chain.length,MCMCsamples[,&#39;scale&#39;],type=&quot;l&quot;,main=&quot;scale parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;scale&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-15-2.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-18-2.png" width="672" /></p>
 <p>Let’s run it for even longer…</p>
 <pre class="r"><code>chain.length &lt;- 10000
 oldguess &lt;- startingvals
@@ -618,27 +688,312 @@ while(counter &lt;= chain.length){
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-19-1.png" width="672" /></p>
 <p>Let’s first remove the first 1000 samples as a burn-in</p>
 <pre class="r"><code>burn.in &lt;- 1000
 MCMCsamples &lt;- guesses[-c(1:burn.in),]
 chain.length=chain.length-burn.in</code></pre>
 <p>Now, let’s look at the chains again</p>
 <pre class="r"><code>plot(1:chain.length,MCMCsamples[,&#39;shape&#39;],type=&quot;l&quot;,main=&quot;shape parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;shape&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-18-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-21-1.png" width="672" /></p>
 <pre class="r"><code>plot(1:chain.length,MCMCsamples[,&#39;scale&#39;],type=&quot;l&quot;,main=&quot;scale parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;scale&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-18-2.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-21-2.png" width="672" /></p>
 <p>When evaluating these trace plots, we are hoping to see a “stationary distribution” that looks like white noise. This trace plot looks like it might have a little autocorrelation. One way to “fix” this is to thin the MCMC samples:</p>
 <pre class="r"><code>thinnedMCMC &lt;- MCMCsamples[seq(1,chain.length,by=10),]
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,&#39;shape&#39;],type=&quot;l&quot;,main=&quot;shape parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;shape&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-19-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-22-1.png" width="672" /></p>
 <pre class="r"><code>plot(1:nrow(thinnedMCMC),thinnedMCMC[,&#39;scale&#39;],type=&quot;l&quot;,main=&quot;scale parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;scale&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-19-2.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-22-2.png" width="672" /></p>
 <p>Now we can examine our posterior distribution!</p>
 <pre class="r"><code>plot(density(thinnedMCMC[,&#39;scale&#39;]),main=&quot;scale parameter&quot;,xlab=&quot;scale&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-20-1.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-23-1.png" width="672" /></p>
 <pre class="r"><code>plot(density(thinnedMCMC[,&#39;shape&#39;]),main=&quot;shape parameter&quot;,xlab=&quot;shape&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-20-2.png" width="672" /></p>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-23-2.png" width="672" /></p>
+<p>And we can visualize as before.</p>
+<pre class="r"><code>par(mfrow=c(3,2))
+plot(thinnedMCMC,col=1:10000)
+plot(thinnedMCMC,type=&quot;l&quot;)
+plot(ts(thinnedMCMC[,1]))
+plot(ts(thinnedMCMC[,2]))
+hist(thinnedMCMC[,1],40)
+hist(thinnedMCMC[,2],40)</code></pre>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
+<pre class="r"><code>par(mfrow=c(1,1))</code></pre>
+<p>Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm is not necessarily the most efficient or the most general of MCMC algorithms. That award tends to go to the <strong>Gibbs sampler</strong>. In lab we will play around with Gibbs samplers, mostly using an amazing piece of software called <strong>BUGS</strong> (<strong>B</strong>ayesian <strong>I</strong>nference <strong>U</strong>sing <strong>G</strong>ibbs <strong>S</strong>ampling).</p>
+</div>
+</div>
+<div id="gibbs-sampler" class="section level2">
+<h2>Gibbs sampler</h2>
+<p>The Gibbs sampler is amazingly straightforward and powerful. Basically, the algorithm successively samples from the full conditional probability distribution – that is, the posterior distribution for arbitrary parameter <em>i</em> conditional on known values for all other parameters in the model.</p>
+<p>In many cases, we can’t work out the full posterior distribution for our model directly, but we <strong>CAN</strong> work out the conditional posterior distribution if all parameters except for the parameter in question were known with certainty, the posterior distribution is generally fairly easy to work out!</p>
+</div>
+<div id="bivariate-normal-example-1" class="section level2">
+<h2>Bivariate normal example</h2>
+<p>Again, remember that MCMC samplers are just a type of random number generator. We can use a Gibbs sampler to develop our own random number generator for a fairly simple known distribution. In this example (same as before), we use a Gibbs Sampler to generate random numbers from a standard bivariate normal probability distribution. Notice that the Gibbs sampler is in many ways more simple and straightforward than the M-H algorithm.</p>
+<p>We don’t need a Gibbs Sampler for this simple example. One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution.</p>
+<pre class="r"><code>rbvn&lt;-function (n, rho){  #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
+        x &lt;- rnorm(n, 0, 1)
+        y &lt;- rnorm(n, rho * x, sqrt(1 - rho^2))
+        cbind(x, y)
+}
+
+bvn&lt;-rbvn(10000,0.98)
+par(mfrow=c(3,2))
+plot(bvn,col=1:10000)
+plot(bvn,type=&quot;l&quot;)
+plot(ts(bvn[,1]))
+plot(ts(bvn[,2]))
+hist(bvn[,1],40)
+hist(bvn[,2],40)</code></pre>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-25-1.png" width="672" /></p>
+<pre class="r"><code>par(mfrow=c(1,1))</code></pre>
+<pre class="r"><code>gibbs&lt;-function (n, rho){    # a gibbs sampler implementation of a bivariate random number generator
+    mat &lt;- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
+    x &lt;- 0
+    y &lt;- 0
+    mat[1, ] &lt;- c(x, y)        # initialize the markov chain
+    for (i in 2:n) {
+            x &lt;- rnorm(1, rho * y, sqrt(1 - rho^2))        # sample from x conditional on y
+            y &lt;- rnorm(1, rho * x, sqrt(1 - rho^2))        # sample from y conditional on x
+            mat[i, ] &lt;- c(x, y)
+    }
+    mat
+}</code></pre>
+<p>Then we can use the Gibbs sampler to get random samples from this known distribution…</p>
+<pre class="r"><code>bvn&lt;-gibbs(10000,0.98)
+par(mfrow=c(3,2))
+plot(bvn,col=1:10000)
+plot(bvn,type=&quot;l&quot;)
+plot(ts(bvn[,1]))
+plot(ts(bvn[,2]))
+hist(bvn[,1],40)
+hist(bvn[,2],40)</code></pre>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-27-1.png" width="672" /></p>
+<pre class="r"><code>par(mfrow=c(1,1))</code></pre>
+<p>There is quite a bit of apparent autocorrelation in the samples of the markov chain here. Gibbs samplers frequently have this issue.</p>
+<div id="back-to-myxomatosis" class="section level3">
+<h3>Back to Myxomatosis!</h3>
+<div id="aside-the-bugs-language" class="section level4">
+<h4>Aside: the BUGS language</h4>
+<p>Finally, let’s build a Gibbs sampler for our favorite Myxomatosis example! To do this, we will use the BUGS language, as implemented in JAGS, to help us!</p>
+<p>The BUGS language looks simlar to R, but there are several key differences:</p>
+<ul>
+<li>First of all, BUGS is a compiled language, so the order of operations in your code doesn’t really matter</li>
+<li>BUGS is not vectorized- you need to use FOR loops!</li>
+<li>Several probability distributions are parameterized very differently in BUGS. Notably, the normal distribution is parameterized with a mean and a precision (<span class="math inline">\(1/Variance\)</span>).</li>
+</ul>
+<p>Here is the myxomatosis example, as implemented in the BUGS language:</p>
+<pre class="r"><code>model {
+  
+  #############
+  # LIKELIHOOD
+  ############
+  for(obs in 1:n.observations){
+    titer[obs] ~ dgamma(shape,rate)
+  }
+  
+  #############
+  # PRIORS
+  ############
+  shape ~ dgamma(0.001,0.001)
+  scale ~ dgamma(0.01,0.01)
+  rate &lt;- 1/scale
+}</code></pre>
+<p>We can use the “sink” function in R to write out this model to a text file:</p>
+<pre class="r"><code>sink(&quot;BUGSmodel.txt&quot;)
+  cat(&quot;
+    model {
+      
+      #############
+      # LIKELIHOOD
+      ############
+      for(obs in 1:n.observations){
+        titer[obs] ~ dgamma(shape,rate)
+      }
+      
+      #############
+      # PRIORS
+      ############
+      shape ~ dgamma(0.001,0.001)
+      scale ~ dgamma(0.01,0.01)
+      rate &lt;- 1/scale
+    }
+  &quot;)</code></pre>
+<pre><code>## 
+##     model {
+##       
+##       #############
+##       # LIKELIHOOD
+##       ############
+##       for(obs in 1:n.observations){
+##         titer[obs] ~ dgamma(shape,rate)
+##       }
+##       
+##       #############
+##       # PRIORS
+##       ############
+##       shape ~ dgamma(0.001,0.001)
+##       scale ~ dgamma(0.01,0.01)
+##       rate &lt;- 1/scale
+##     }
+## </code></pre>
+<pre class="r"><code>sink()</code></pre>
+<p>Then we can “package” the data into a single list object that contains all the relevant data referenced in the BUGS code:</p>
+<pre class="r"><code>myx.data.for.bugs &lt;- list(
+  titer = Myx$titer,
+  n.observations = length(Myx$titer)
+)
+
+myx.data.for.bugs</code></pre>
+<pre><code>## $titer
+##  [1] 5.207 5.734 6.613 5.997 6.612 6.810 5.930 6.501 7.182 7.292 7.819
+## [12] 7.489 6.918 6.808 6.235 6.916 4.196 7.682 8.189 7.707 7.597 7.112
+## [23] 7.354 7.158 7.466 7.927 8.499
+## 
+## $n.observations
+## [1] 27</code></pre>
+<p>Then we need to define the initial values for all parameters. It is convenient to define this as a function, so that each MCMC chain can be initialized with different starting values. This will become clear later!</p>
+<pre class="r"><code>init.vals.for.bugs &lt;- function(){
+  list(
+    shape=runif(1,20,100),
+    scale=runif(1,0.05,0.3)
+  )
+}
+
+init.vals.for.bugs()</code></pre>
+<pre><code>## $shape
+## [1] 25.0886
+## 
+## $scale
+## [1] 0.174054</code></pre>
+<pre class="r"><code>init.vals.for.bugs()</code></pre>
+<pre><code>## $shape
+## [1] 22.80532
+## 
+## $scale
+## [1] 0.1251892</code></pre>
+<pre class="r"><code>init.vals.for.bugs()</code></pre>
+<pre><code>## $shape
+## [1] 35.87
+## 
+## $scale
+## [1] 0.2575426</code></pre>
+<p>Now we can call JAGS!</p>
+<pre class="r"><code>library(R2jags)</code></pre>
+<pre><code>## Loading required package: rjags</code></pre>
+<pre><code>## Loading required package: coda</code></pre>
+<pre><code>## Linked to JAGS 4.2.0</code></pre>
+<pre><code>## Loaded modules: basemod,bugs</code></pre>
+<pre><code>## 
+## Attaching package: &#39;R2jags&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:coda&#39;:
+## 
+##     traceplot</code></pre>
+<pre class="r"><code>library(coda)
+
+params.to.store &lt;- c(&quot;shape&quot;,&quot;scale&quot;)
+
+jags.fit &lt;- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=5000,model.file=&quot;BUGSmodel.txt&quot;,n.chains = 3,n.burnin = 0 )</code></pre>
+<pre><code>## module glm loaded</code></pre>
+<pre><code>## Compiling model graph
+##    Resolving undeclared variables
+##    Allocating nodes
+## Graph information:
+##    Observed stochastic nodes: 27
+##    Unobserved stochastic nodes: 2
+##    Total graph size: 37
+## 
+## Initializing model</code></pre>
+<pre class="r"><code>jagsfit.mcmc &lt;- as.mcmc(jags.fit)   # convert to &quot;MCMC&quot; object (coda package)
+
+summary(jagsfit.mcmc)</code></pre>
+<pre><code>## 
+## Iterations = 1:4996
+## Thinning interval = 5 
+## Number of chains = 3 
+## Sample size per chain = 1000 
+## 
+## 1. Empirical mean and standard deviation for each variable,
+##    plus standard error of the mean:
+## 
+##             Mean       SD Naive SE Time-series SE
+## deviance 77.6562  2.25265 0.041128       0.275441
+## scale     0.1673  0.05486 0.001002       0.008882
+## shape    45.5149 13.22829 0.241514       1.954242
+## 
+## 2. Quantiles for each variable:
+## 
+##              2.5%     25%     50%     75%   97.5%
+## deviance 75.39847 75.9874 76.9299 78.6597 83.5792
+## scale     0.09525  0.1259  0.1544  0.1954  0.3045
+## shape    22.89239 35.6600 44.8012 54.9619 72.7765</code></pre>
+<pre class="r"><code>plot(jagsfit.mcmc)</code></pre>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-32-1.png" width="672" /></p>
+</div>
+</div>
+<div id="assessing-convergence" class="section level3">
+<h3>Assessing convergence</h3>
+<p>This is probably a good time to talk about convergence of MCMC chains on the stationary posterior distribution. The above plots don’t look great. We want to see white noise, and we want to see chains that look similar to one another.</p>
+<p>The first check is just visual- we look for the following to assess convergence:</p>
+<ul>
+<li>The chains for each parameter, when viewed as a “trace plot” should look like white noise, or similar.</li>
+<li>Multiple chains with different starting conditions should look the same!</li>
+</ul>
+<p>One way we might be able to do a better job here is to run the chains longer and discard the initial samples as a <em>burn in</em>!</p>
+<p>We can also try to reduce serial autocorrelation by thinning our chain- here we retain only 1 out of every 20 samples.</p>
+<pre class="r"><code>jags.fit &lt;- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file=&quot;BUGSmodel.txt&quot;,n.chains = 3, n.burnin=10000,n.thin = 20)</code></pre>
+<pre><code>## Compiling model graph
+##    Resolving undeclared variables
+##    Allocating nodes
+## Graph information:
+##    Observed stochastic nodes: 27
+##    Unobserved stochastic nodes: 2
+##    Total graph size: 37
+## 
+## Initializing model</code></pre>
+<pre class="r"><code>jagsfit.mcmc &lt;- as.mcmc(jags.fit)   # convert to &quot;MCMC&quot; object (coda package)
+
+summary(jagsfit.mcmc)</code></pre>
+<pre><code>## 
+## Iterations = 10001:49981
+## Thinning interval = 20 
+## Number of chains = 3 
+## Sample size per chain = 2000 
+## 
+## 1. Empirical mean and standard deviation for each variable,
+##    plus standard error of the mean:
+## 
+##             Mean      SD  Naive SE Time-series SE
+## deviance 77.4195  2.0910 0.0269947       0.061144
+## scale     0.1595  0.0477 0.0006158       0.002337
+## shape    47.0086 12.8688 0.1661354       0.654608
+## 
+## 2. Quantiles for each variable:
+## 
+##              2.5%     25%     50%     75%   97.5%
+## deviance 75.38182 75.9215 76.7993 78.2129 83.0798
+## scale     0.09247  0.1259  0.1506  0.1847  0.2738
+## shape    25.50344 37.5788 46.0392 54.9988 75.1838</code></pre>
+<pre class="r"><code>plot(jagsfit.mcmc)</code></pre>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-33-1.png" width="672" /></p>
+<p>Just visually, this looks better. Now we can use some more quantitative convergence metrics.</p>
+<div id="the-gelman-rubin-diagnostic" class="section level4">
+<h4>The Gelman-Rubin diagnostic</h4>
+<p>One simple and intuitive convergence diagnostic is the <em>Gelman-Rubin diagnostic</em>, which assesses whether chains are more different from one another than would be expected on the basis of simple Monte Carlo error:</p>
+<pre class="r"><code>gelman.diag(jagsfit.mcmc)</code></pre>
+<pre><code>## Potential scale reduction factors:
+## 
+##          Point est. Upper C.I.
+## deviance       1.01       1.02
+## scale          1.01       1.03
+## shape          1.01       1.03
+## 
+## Multivariate psrf
+## 
+## 1.01</code></pre>
+<p>In general, values of 1.2 or higher are considered poorly converged. If so, you should try running longer chains!</p>
+<p>So this model looks pretty good!</p>
+</div>
 </div>
 </div>
 
