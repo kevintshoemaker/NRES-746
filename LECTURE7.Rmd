@@ -205,8 +205,8 @@ Then, we need a prior distribution for our parameters! Let's assign relatively f
 ```{r}
 GammaPriorFunction <- function(params){
   prior <- c(shape=NA,scale=NA)
-  prior['shape'] <- dgamma(params['shape'],shape=0.001,scale=1000)
-  prior['scale'] <- dgamma(params['scale'],shape=0.01,scale=100)
+  prior['shape'] <- dgamma(params['shape'],shape=0.01,scale=100)
+  prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000)
   # prior['shape'] <- dunif(params['shape'],3,100)
   # prior['scale'] <- dunif(params['scale'],0.01,0.5)
   return(prod(prior))
@@ -280,7 +280,7 @@ PosteriorRatio(startingvals,newguess)   # difference in posterior ratio
 Now let's look at the Metropolis routine:
 
 ```{r}
-chain.length <- 100
+chain.length <- 10
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
@@ -311,7 +311,7 @@ Let's run it for longer...
 
 
 ```{r}
-chain.length <- 1000
+chain.length <- 100
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
@@ -336,6 +336,34 @@ contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
 ```
 
+How about for even longer??
+
+
+```{r}
+chain.length <- 1000
+oldguess <- startingvals
+guesses <- matrix(0,nrow=chain.length,ncol=2)
+colnames(guesses) <- names(startingvals)
+
+counter <- 1
+while(counter <= chain.length){
+  newguess <- newGuess(oldguess)
+  post.rat <- PosteriorRatio(oldguess,newguess)
+  prob.accept <- min(1,post.rat)
+  rand <- runif(1)
+  if(rand<=prob.accept){
+    oldguess <- newguess
+    guesses[counter,] <- newguess 
+    counter=counter+1
+  }
+}
+
+# visualize!
+
+image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+lines(guesses,col="red")
+```
 
 This looks better! The search algorithm is finding the high-likelihood parts of parameter space pretty well!
 
@@ -366,11 +394,11 @@ plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="
 ```
 
 
-Let's run it for even longer...
+But it still doesn't look all that great. Let's run it for even longer, and see if we get something that looks more like a proper random number generator (white noise)...
 
 
 ```{r}
-chain.length <- 10000
+chain.length <- 20000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
@@ -396,10 +424,10 @@ lines(guesses,col="red")
 ```
 
 
-Let's first remove the first 1000 samples as a burn-in
+Let's first remove the first 5000 samples as a burn-in
 
 ```{r}
-burn.in <- 1000
+burn.in <- 5000
 MCMCsamples <- guesses[-c(1:burn.in),]
 chain.length=chain.length-burn.in
 ```
@@ -446,14 +474,16 @@ hist(thinnedMCMC[,2],40)
 par(mfrow=c(1,1))
 ```
 
-Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm is not necessarily the most efficient or the most general of MCMC algorithms. That award tends to go to the **Gibbs sampler**. In lab we will play around with Gibbs samplers, mostly using an amazing piece of software called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling).
+Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm is not necessarily the most easily generalizable to a host of different model types. That award tends to go to the **Gibbs sampler**. In lab we will play around with Gibbs samplers, mostly using an amazing piece of software called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling). 
+
+NOTE: BUGS implementations (e.g., JAGS) actually tend to use a combination of M-H and Gibbs sampling! 
 
 
 ## Gibbs sampler
 
-The Gibbs sampler is amazingly straightforward and powerful. Basically, the algorithm successively samples from the full conditional probability distribution -- that is, the posterior distribution for arbitrary parameter *i* conditional on known values for all other parameters in the model.  
+The Gibbs sampler is amazingly straightforward and powerful. Basically, the algorithm successively samples from the *full conditional* probability distribution -- that is, the posterior distribution for arbitrary parameter *i* conditional on known values for all other parameters in the model.  
 
-In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution if all parameters except for the parameter in question were known with certainty, the posterior distribution is generally fairly easy to work out!
+In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is especially true if we use conjugate priors for our model specification. Even if not, the full conditional is often analytically tractable. Nonetheless, even if it's not analytically tractable, we can use a univariate M-H procedure as a "brute force" last resort!
 
 
 ## Bivariate normal example
@@ -514,7 +544,7 @@ par(mfrow=c(1,1))
 ```
 
 
-There is quite a bit of apparent autocorrelation in the samples of the markov chain here. Gibbs samplers frequently have this issue. 
+There is quite a bit of apparent autocorrelation in the samples of the markov chain here. Gibbs samplers frequently have this issue! 
 
 
 ### Back to Myxomatosis!
@@ -548,7 +578,7 @@ model {
   ############
   shape ~ dgamma(0.001,0.001)
   scale ~ dgamma(0.01,0.01)
-  rate <- 1/scale
+  rate <- 1/scale   # convert the scale parameter to a "rate" for BUGS
 }
 
 ```
@@ -581,7 +611,7 @@ sink()
 
 ```
 
-Then we can "package" the data into a single list object that contains all the relevant data referenced in the BUGS code:
+Now that we have the BUGS model packaged as a text file, we "package" the data into a single list object that contains all the relevant data referenced in the BUGS code:
 
 ```{r}
 myx.data.for.bugs <- list(
@@ -596,10 +626,11 @@ Then we need to define the initial values for all parameters. It is convenient t
 
 ```{r}
 init.vals.for.bugs <- function(){
-  list(
+  init.list <- list(
     shape=runif(1,20,100),
     scale=runif(1,0.05,0.3)
   )
+  return(init.list)
 }
 
 init.vals.for.bugs()
@@ -633,7 +664,7 @@ This is probably a good time to talk about convergence of MCMC chains on the sta
 The first check is just visual- we look for the following to assess convergence:
 
 * The chains for each parameter, when viewed as a "trace plot" should look like white noise, or similar.
-* Multiple chains with different starting conditions should look the same!
+* Multiple chains with different starting conditions should look the same!! 
 
 One way we might be able to do a better job here is to run the chains longer and discard the initial samples as a *burn in*!
 
@@ -653,16 +684,22 @@ Just visually, this looks better. Now we can use some more quantitative converge
 
 #### The Gelman-Rubin diagnostic
 
-One simple and intuitive convergence diagnostic is the *Gelman-Rubin diagnostic*, which assesses whether chains are more different from one another than would be expected on the basis of simple Monte Carlo error:
+One simple and intuitive convergence diagnostic is the *Gelman-Rubin diagnostic*, which assesses whether chains are more different from one another than they should be on the basis of simple Monte Carlo error:
 
 ```{r}
 gelman.diag(jagsfit.mcmc)
 ```
 
-In general, values of 1.2 or higher are considered poorly converged. If so, you should try running longer chains!
+In general, values of 1.1 or higher are considered poorly converged (sometimes the less stringent criterion of 1.2 is used). If so, you should try running longer chains!
 
 So this model looks pretty good!
 
+
+
+## Useful links for MCMC
+
+[Darren Winkinson's research blog](https://darrenjw.wordpress.com/2011/07/16/gibbs-sampler-in-various-languages-revisited/)
+[Where do the full conditionals come from in Gibbs sampling?](https://darrenjw.wordpress.com/2011/07/16/gibbs-sampler-in-various-languages-revisited/)
 
 
 

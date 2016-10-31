@@ -14,6 +14,163 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
 
+**Model selection** or **model comparison** is a very common problem in ecology- that is, we often have multiple competing hypotheses about how our data were generated. 
+
+If we can describe our data generating process explicitly as a set of deterministic and stochastic componenets, then we should be able to use Likelihood-based methods (e.g., LRT, AIC, BIC, Bayesian model selection) to infer which data generating model(s) could have plausibly produced our observed data. 
+
+
+## Principle of Parsimony
+
+We will discuss several alternative approaches to model selection in ecology. However, all approaches follow a basic principle- that -- all things equal, we should prefer the simpler model over any more complex alternative. This is known as the principle of parsimony.
+
+### Example data: Balsam fir data from NY
+
+Bolker uses a study of balsam fir in New York to illustrate model selection. Perhaps it's time to move on from Myxomatosis!
+
+Let's load up the data first
+
+```{r}
+library(emdbook)
+data(FirDBHFec)
+fir <- na.omit(FirDBHFec[,c("TOTCONES","DBH","WAVE_NON")])
+fir$TOTCONES <- round(fir$TOTCONES)
+head(fir)
+```
+
+We can examine the fecundity (total cones) as a function of the tree size (DBH):
+
+```{r}
+plot(fir$TOTCONES ~ fir$DBH)
+```
+
+One additional point of complexity in this data set- some trees were sampled from areas that have undergone periodic wave-like die-offs. Other trees were sampled from areas that have not undergone these die-offs. 
+
+```{r}
+ndx <- fir$WAVE_NON=="w"
+plot(fir$TOTCONES[ndx] ~ fir$DBH[ndx],xlab="DBH",ylab="Tot Cones")
+points(fir$DBH[!ndx],fir$TOTCONES[!ndx],pch=4,col="red")
+legend("topleft",pch=c(1,4),col=c("black","red"),legend=c("Wave","Non-wave"))
+```
+
+Let's assume that fecundity increases as a power-law relationship with the DBH:
+
+$\mu = a\cdot DBH^{b}$
+
+Let's also assume that the fecundity follows a negative binomial distribution:
+
+$Y = NegBin(\mu,k)$
+
+We can model each of these parameters- a, mu, k, separately for trees from wave and nonwave populations.
+
+We can also run simpler models in which these parameters are modeled as the same for both populations.
+
+Then we can ask the question: which model is the "best model"?
+
+#### FULL MODEL
+
+Here is a likelihood function for the *full model* -- that is, the most complex model:
+
+```{r}
+NegBinomLik_full <- function(params){
+  wave.code <- as.numeric(fir$WAVE_NON)
+  a <- c(params[1],params[2])[wave.code]
+  b <- c(params[3],params[4])[wave.code]
+  k <- c(params[5],params[6])[wave.code] 
+  expcones <- a*fir$DBH^b
+  -sum(dnbinom(fir$TOTCONES,mu=expcones,size=k,log=TRUE))
+}
+
+params <- c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1)
+
+NegBinomLik_full(params)
+```
+
+
+We can fit the full model using "optim" (using a simplex optimization routine), just like we have done before:
+
+```{r}
+
+MLE_full <- optim(fn=NegBinomLik_full,par=c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1),method="L-BFGS-B")
+
+MLE_full$par
+
+MLE_full$value
+
+```
+
+
+#### REDUCED MODELS
+
+Let's run a simpler model now. This time, let's model the b parameter as equal for wave and nonwave population:
+
+
+```{r}
+NegBinomLik_constb <- function(params){
+  wave.code <- as.numeric(fir$WAVE_NON)
+  a <- c(params[1],params[2])[wave.code]
+  b <- params[3]
+  k <- c(params[4],params[5])[wave.code] 
+  expcones <- a*fir$DBH^b
+  -sum(dnbinom(fir$TOTCONES,mu=expcones,size=k,log=TRUE))
+}
+
+params <- c(a.n=1,a.w=1,b=1,k.n=1,k.w=1)
+
+NegBinomLik_constb(params)
+```
+
+
+And we can fit the full model using "optim":
+
+```{r}
+
+MLE_constb <- optim(fn=NegBinomLik_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="L-BFGS-B")
+
+MLE_constb$par
+
+MLE_constb$value
+
+```
+
+
+Let's compute the *deviances* of the two models. Recall that deviance is defined as -2*log_likelihood
+
+```{r}
+deviance_full <- 2*MLE_full$value
+
+deviance_constb <- 2*MLE_constb$value
+
+deviance_full
+deviance_constb
+```
+
+Note here that the deviance of the full model is lower than the deviance from the reduced model. This should always be the case- if not, something is wrong. That is, the accuracy of the fit to data should *always* improve when more parameters are added! This is where the principle of parsimony comes into play! 
+
+What if we wanted to test which model was better supported by the data. One way is to use our old friend, the Likelihood Ratio Test (LRT)!
+
+### Likelihood-ratio test
+
+We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces. The same principle applies for model selection.  The LRT tests whether the extra goodness of fit is worth the extra complexity of the additional parameters.
+ 
+The LRT can be used for two-way model comparison as long as one model is nested within the other. If the models are not nested (full model vs reduced model) then the LRT doesn't really make sense.
+
+```{r}
+Deviance.dif <- deviance_constb - deviance_full 
+Deviance.dif
+
+Chisq.crit <- qchisq(0.95,1)
+
+Deviance.dif>=Chisq.crit
+
+```
+
+Clearly, the deviance gain is not worth the extra complexity in this case!
+
+
+
+
+### Information-theoretic metrics
+ 
 
 ### Bayes Factor
 
@@ -22,6 +179,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 
 
+fir$WAVE_NON
 
 
 
