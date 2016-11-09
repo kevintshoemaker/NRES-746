@@ -11,7 +11,6 @@
 
 <meta name="author" content="NRES 746" />
 
-<meta name="date" content="2016-10-20" />
 
 <title>Model Selection</title>
 
@@ -413,13 +412,13 @@ div.tocify {
 
 <h1 class="title toc-ignore">Model Selection</h1>
 <h4 class="author"><em>NRES 746</em></h4>
-<h4 class="date"><em>October 20, 2016</em></h4>
+<h4 class="date"><em>November 9, 2016</em></h4>
 
 </div>
 
 
 <p><strong>Model selection</strong> or <strong>model comparison</strong> is a very common problem in ecology- that is, we often have multiple competing hypotheses about how our data were generated.</p>
-<p>If we can describe our data generating process explicitly as a set of deterministic and stochastic componenets, then we should be able to use Likelihood-based methods (e.g., LRT, AIC, BIC, Bayesian model selection) to infer which data generating model(s) could have plausibly produced our observed data.</p>
+<p>If we can describe our data generating process explicitly as a set of deterministic and stochastic componenets, then we should be able to use Likelihood-based methods (e.g., LRT, AIC, BIC, Bayesian model selection) to infer which data generating model(s) could most plausibly have generated our observed data.</p>
 <div id="principle-of-parsimony" class="section level2">
 <h2>Principle of Parsimony</h2>
 <p>We will discuss several alternative approaches to model selection in ecology. However, all approaches follow a basic principle- that – all things equal, we should prefer the simpler model over any more complex alternative. This is known as the principle of parsimony.</p>
@@ -442,27 +441,27 @@ head(fir)</code></pre>
 <p>We can examine the fecundity (total cones) as a function of the tree size (DBH):</p>
 <pre class="r"><code>plot(fir$TOTCONES ~ fir$DBH)</code></pre>
 <p><img src="LECTURE8_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
-<p>One additional point of complexity in this data set- some trees were sampled from areas that have undergone periodic wave-like die-offs. Other trees were sampled from areas that have not undergone these die-offs.</p>
-<pre class="r"><code>ndx &lt;- fir$WAVE_NON==&quot;w&quot;
+<p>One additional point of complexity in this data set- some trees were sampled from areas that have undergone periodic wave-like die-offs. Other trees were sampled from areas that have not undergone die-offs.</p>
+<pre class="r"><code>ndx &lt;- fir$WAVE_NON==&quot;w&quot;   # logical vector indicating which observations were from &quot;wave&quot; sites
 plot(fir$TOTCONES[ndx] ~ fir$DBH[ndx],xlab=&quot;DBH&quot;,ylab=&quot;Tot Cones&quot;)
 points(fir$DBH[!ndx],fir$TOTCONES[!ndx],pch=4,col=&quot;red&quot;)
-legend(&quot;topleft&quot;,pch=c(1,4),col=c(&quot;black&quot;,&quot;red&quot;),legend=c(&quot;Wave&quot;,&quot;Non-wave&quot;))</code></pre>
+legend(&quot;topleft&quot;,pch=c(1,4),col=c(&quot;black&quot;,&quot;red&quot;),legend=c(&quot;Wave&quot;,&quot;Non-wave&quot;),bty=&quot;n&quot;)</code></pre>
 <p><img src="LECTURE8_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
-<p>Let’s assume that fecundity increases as a power-law relationship with the DBH:</p>
+<p>Let’s assume (following Bolker) that fecundity increases as a power-law relationship with DBH:</p>
 <p><span class="math inline">\(\mu = a\cdot DBH^{b}\)</span></p>
 <p>Let’s also assume that the fecundity follows a negative binomial distribution:</p>
 <p><span class="math inline">\(Y = NegBin(\mu,k)\)</span></p>
-<p>We can model each of these parameters- a, mu, k, separately for trees from wave and nonwave populations.</p>
+<p>We can model each of these parameters (<em>a</em>, <em>mu</em>, and <em>k</em>) separately for trees from wave and nonwave populations.</p>
 <p>We can also run simpler models in which these parameters are modeled as the same for both populations.</p>
-<p>Then we can ask the question: which model is the “best model”?</p>
+<p>Then we can ask the question: <strong>which model is the “best model”?</strong></p>
 <div id="full-model" class="section level4">
 <h4>FULL MODEL</h4>
 <p>Here is a likelihood function for the <em>full model</em> – that is, the most complex model:</p>
 <pre class="r"><code>NegBinomLik_full &lt;- function(params){
-  wave.code &lt;- as.numeric(fir$WAVE_NON)
-  a &lt;- c(params[1],params[2])[wave.code]
-  b &lt;- c(params[3],params[4])[wave.code]
-  k &lt;- c(params[5],params[6])[wave.code] 
+  wave.code &lt;- as.numeric(fir$WAVE_NON)      # convert to ones and twos
+  a &lt;- c(params[1],params[2])[wave.code]     # a parameters
+  b &lt;- c(params[3],params[4])[wave.code]      # b parameter (not a function of wave/nonwave)
+  k &lt;- c(params[5],params[6])[wave.code]       # dispersion parameters
   expcones &lt;- a*fir$DBH^b
   -sum(dnbinom(fir$TOTCONES,mu=expcones,size=k,log=TRUE))
 }
@@ -471,7 +470,7 @@ params &lt;- c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1)
 
 NegBinomLik_full(params)</code></pre>
 <pre><code>## [1] 1762.756</code></pre>
-<p>We can fit the full model using “optim” (using a simplex optimization routine), just like we have done before:</p>
+<p>We can fit the full model using “optim” (using a quasi-newton optimization routine), just like we have done before:</p>
 <pre class="r"><code>MLE_full &lt;- optim(fn=NegBinomLik_full,par=c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1),method=&quot;L-BFGS-B&quot;)
 
 MLE_full$par</code></pre>
@@ -484,10 +483,10 @@ MLE_full$par</code></pre>
 <h4>REDUCED MODELS</h4>
 <p>Let’s run a simpler model now. This time, let’s model the b parameter as equal for wave and nonwave population:</p>
 <pre class="r"><code>NegBinomLik_constb &lt;- function(params){
-  wave.code &lt;- as.numeric(fir$WAVE_NON)
-  a &lt;- c(params[1],params[2])[wave.code]
-  b &lt;- params[3]
-  k &lt;- c(params[4],params[5])[wave.code] 
+  wave.code &lt;- as.numeric(fir$WAVE_NON)      # convert to ones and twos
+  a &lt;- c(params[1],params[2])[wave.code]      # a parameters
+  b &lt;- params[3]                              # b parameter (not a function of wave/nonwave)
+  k &lt;- c(params[4],params[5])[wave.code]      # dispersion parameters
   expcones &lt;- a*fir$DBH^b
   -sum(dnbinom(fir$TOTCONES,mu=expcones,size=k,log=TRUE))
 }
@@ -519,8 +518,8 @@ deviance_full</code></pre>
 </div>
 <div id="likelihood-ratio-test" class="section level3">
 <h3>Likelihood-ratio test</h3>
-<p>We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces. The same principle applies for model selection. The LRT tests whether the extra goodness of fit is worth the extra complexity of the additional parameters.</p>
-<p>The LRT can be used for two-way model comparison as long as one model is nested within the other. If the models are not nested (full model vs reduced model) then the LRT doesn’t really make sense.</p>
+<p>We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces. The same principle applies for model selection. The LRT tests whether the extra goodness-of-fit is worth the extra complexity of the additional parameters.</p>
+<p>The LRT can be used for two-way model comparison as long as one model is nested within the other (full model vs reduced model). If the models are not nested then the LRT doesn’t really make sense.</p>
 <pre class="r"><code>Deviance.dif &lt;- deviance_constb - deviance_full 
 Deviance.dif</code></pre>
 <pre><code>## [1] 0.2467524</code></pre>
@@ -528,14 +527,151 @@ Deviance.dif</code></pre>
 
 Deviance.dif&gt;=Chisq.crit</code></pre>
 <pre><code>## [1] FALSE</code></pre>
-<p>Clearly, the deviance gain is not worth the extra complexity in this case!</p>
+<p>Clearly, the deviance gain is not worth the extra complexity in this case! Therefore, we favor the reduced model.</p>
+<p>What about if we try a different reduced model. This time, we decide to fix the a, b, and k parameters, so the “wave” factor is not considered.</p>
+<pre class="r"><code>NegBinomLik_nowave &lt;- function(params){
+  a &lt;- params[1]      # a parameters
+  b &lt;- params[2]      # b parameter (not a function of wave/nonwave)
+  k &lt;- params[3]      # dispersion parameters
+  expcones &lt;- a*fir$DBH^b
+  -sum(dnbinom(fir$TOTCONES,mu=expcones,size=k,log=TRUE))
+}
+
+params &lt;- c(a=1,b=1,k=1)
+
+NegBinomLik_nowave(params)</code></pre>
+<pre><code>## [1] 1762.756</code></pre>
+<p>And let’s fit the full model using “optim”:</p>
+<pre class="r"><code>MLE_nowave &lt;- optim(fn=NegBinomLik_nowave,par=params,method=&quot;L-BFGS-B&quot;)
+
+MLE_nowave$par</code></pre>
+<pre><code>##         a         b         k 
+## 0.3036727 2.3197228 1.5029500</code></pre>
+<pre class="r"><code>MLE_nowave$value</code></pre>
+<pre><code>## [1] 1136.015</code></pre>
+<p>Now we can perform a LRT to see which model is better!</p>
+<pre class="r"><code>deviance_full &lt;- 2*MLE_full$value
+
+deviance_nowave &lt;- 2*MLE_nowave$value
+
+Deviance.dif &lt;- deviance_nowave - deviance_full 
+Deviance.dif</code></pre>
+<pre><code>## [1] 2.009946</code></pre>
+<pre class="r"><code>Chisq.crit &lt;- qchisq(0.95,3)   # now three additional params in the more complex model!
+
+Deviance.dif&gt;=Chisq.crit</code></pre>
+<pre><code>## [1] FALSE</code></pre>
+<p>Again, the difference in deviance does not justify the additional parameters. This difference in deviance between the full and restricted model could be produced easily by random chance.</p>
+<p>Remember <em>this is a frequentist test</em>. The null hypothesis is that there is no difference between the restricted model and the more complex model. So we are imagining multiple alternative universes where we are collecting data and determining a maximum likelihood estimate. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different MLE. Now imagine we <em>fix</em> the value of one or more of our parameters at the <strong>true</strong> parameter value and collect thousands of datasets, each time maximizing the likelihood with respect to all the other parameters. The <em>deviance</em> between the restricted model and the full model should be chi-squared distributed with df = number of dimensions that were “fixed”!</p>
+<p>As you can imagine, there are a lot of pairwise comparisons that could be generated, even in this simple example. For instance, there are 15 pairwise comparisons that could be produced from even this simple example. What about more complex models? Clearly this can get a bit unwieldy!</p>
+<p>In addition, not all models we wish to compare will necessarily be nested. For example, consider the model selection exercise we were performing in lab- comparing the M-M fit to the Ricker fit…</p>
 </div>
 <div id="information-theoretic-metrics" class="section level3">
 <h3>Information-theoretic metrics</h3>
+<p>Information-theoretic metrics for model comparison, like AIC, provide a way to get around the issues with LRT. These metrics allow us to make tables for comparing multiple models at once. However, these metrics <em>have no frequentist interpretation</em>.</p>
+<p>Metrics like AIC represent (theoretically) the distance between some particular model and the “true” model. Information-theoretic metrics are composed of a likelihood component (e.g., deviance) and a <em>penalty term</em>. For AIC, the likelihood component is the <em>deviance</em> (<span class="math inline">\(-2*logL\)</span>) and the penalty term is twice the number of parameters #### Akaike Information Criterion (AIC)</p>
+<p>AIC is computed using the following equation:</p>
+<p><span class="math inline">\(AIC = -2L + 2k\)</span></p>
+<p>AIC is the most commonly used information criterion.</p>
+<p>L is the log-likelhood at the MLE</p>
+<p>k is the number of parameters in the model</p>
+<p>As with all information-theoretic metrics, we look for the model associated with the minimum AIC</p>
+<p>For small sample sizes, Burnham and Anderson (2002) recommend that a finite-size correction should be used:</p>
+<p><span class="math inline">\(AIC_c = AIC + \frac{2k(k+1)}{n-k-1}\)</span></p>
+<p>A <em>rule of thumb</em> is that models within 2 AIC units of the best model are “reasonable”. Does this remind you of another “rule of 2”??</p>
+<p>However, some statisticians caution that models within 7 AIC units of the best model can be useful and may warrant further consideration!</p>
+<div id="schwarz-information-criterion-bic" class="section level4">
+<h4>Schwarz information criterion (BIC)</h4>
+<p>Another common I-T metric is the Schwarz, or <em>Bayesian</em> information criterion. The penalty term for BIC is (log n)*k.</p>
+<p>$BIC = -2logL + (log n)k $</p>
+<p>In general, BIC is more conservative than AIC- that is, more likely to select the simpler model (since the penalty term is generally greater)</p>
+</div>
+<div id="aic-in-action" class="section level4">
+<h4>AIC in action</h4>
+<p>Let’s return to the fir fecundity model, and use AIC to select among a set of models. Let’s first fit one more candidate model…</p>
+<p>This time, we decide to fix the a, and k parameters, so the “wave” factor is only considered for the “b” parameter.</p>
+<pre class="r"><code>NegBinomLik_constak &lt;- function(params){
+  wave.code &lt;- as.numeric(fir$WAVE_NON)      # convert to ones and twos
+  a &lt;- params[1]                             # a parameters
+  b &lt;- c(params[2],params[3])[wave.code]                              # b parameter (not a function of wave/nonwave)
+  k &lt;- params[4]                               # dispersion parameters
+  expcones &lt;- a*fir$DBH^b
+  -sum(dnbinom(fir$TOTCONES,mu=expcones,size=k,log=TRUE))
+}
+
+params &lt;- c(a=1,b.n=1,b.w=1,k=1)  
+
+NegBinomLik_constak(params)</code></pre>
+<pre><code>## [1] 1762.756</code></pre>
+<p>And we can fit the full model using “optim”:</p>
+<pre class="r"><code>MLE_constak &lt;- optim(fn=NegBinomLik_constak,par=params)
+
+MLE_constak$par</code></pre>
+<pre><code>##         a       b.n       b.w         k 
+## 0.3448975 2.2745907 2.2327297 1.5057655</code></pre>
+<pre class="r"><code>MLE_constak$value</code></pre>
+<pre><code>## [1] 1135.758</code></pre>
+<pre class="r"><code>deviance_constak &lt;- 2*MLE_constak$value</code></pre>
+<p>Now we can compare the four models we have run so far using AIC</p>
+<pre class="r"><code>AIC_constak &lt;- deviance_constak + 2*4
+AIC_full &lt;- deviance_full + 2*6
+AIC_constb &lt;- deviance_constb + 2*5
+AIC_nowave &lt;- deviance_nowave + 2*3
+
+AICtable &lt;- data.frame(
+  Model = c(&quot;Full&quot;,&quot;Constant b&quot;,&quot;Constant a and k&quot;,&quot;All constant&quot;),
+  AIC = c(AIC_full,AIC_constb,AIC_constak,AIC_nowave),
+  Deviance = c(deviance_full,deviance_constb,deviance_constak,deviance_nowave),
+  params = c(6,5,4,3),
+  stringsAsFactors = F
+)
+
+AICtable$DeltaAIC &lt;- AICtable$AIC-AICtable$AIC[which.min(AICtable$AIC)]
+
+AICtable[order(AICtable$AIC),c(1,2,5,4,3)]</code></pre>
+<pre><code>##              Model      AIC DeltaAIC params Deviance
+## 4     All constant 2278.030 0.000000      3 2272.030
+## 3 Constant a and k 2279.515 1.484647      4 2271.515
+## 2       Constant b 2280.267 2.236807      5 2270.267
+## 1             Full 2282.020 3.990054      6 2270.020</code></pre>
+<p>This AIC table shows us that the simplest model is best! The principle of parsimony shines through, despite the fact that the deviance is lowest for the full model.</p>
+<p>Note that we could (and Bolker does) compare non-nested models as well. Bolker uses AIC to compare alternative stochastic components: negative binomial vs gamma vs lognormal vs poisson.</p>
+</div>
 </div>
 <div id="bayes-factor" class="section level3">
 <h3>Bayes Factor</h3>
-<p>fir$WAVE_NON</p>
+<p>Can we do model selection in a Bayesian framework? The answer is yes! Unfortunately it is not usually as straightforward as using I-T metrics…</p>
+<p>Note that BIC is no more Bayesian than AIC. Bayesians generally do not use BIC for model selection. One metric that is used by Bayesians for model selection is the <em>Bayes Factor</em>. The Bayes factor is defined as the ratio of <em>marginal likelihoods</em>.</p>
+<p>Recall that our I-T metrics, as well as likelihood ratio tests, used the value of the likelihood surface at the MLE. That is, we are only taking into account a single point on the likelihood surface to represent what our data have to say about our model.</p>
+<p>Bayesians prefer to take into account the entire likelihood surface rather than just a single point. The <em>marginal likelihood</em> represents the mean of the likelihood across parameter space, averaged over the prior distribution.</p>
+<p><span class="math inline">\(\={\mathcal{L}} = \int \mathcal{L}(x)\cdot Prior(x) dx\)</span></p>
+<p>The marginal likelihood represents the average probability of the data across parameter space, or the <em>average quality of fit to the data</em>. The ratio of marginal likelihoods is known as the <strong>Bayes factor</strong></p>
+<p><span class="math inline">\(\={\mathcal{L}}_1 / \={\mathcal{L}}_2\)</span></p>
+<p>This is interpreted as <em>the odds in favor of model 1 over model 2</em></p>
+<p>This simple formula naturally accounts for over-parameterization. Simpler models will generally have higher marginal likelihoods than more complex models. We have already seen why this might be. More complex models will always have a higher likelihood at the MLE, but generally will have much lower likelihoods in other parts of parameter space. A higher marginal likelihood means that a model fits the data better even after taking all of parameter space into account.</p>
+<p>Interestingly, 2*logarithm of the Bayes factor (putting it on the deviance scale) is comparable to AIC (with a fairly strong prior) and BIC (with a fairly weak prior).</p>
+<p>In practice, computing marginal likelihoods can be tricky, involving multidimensional integrals!</p>
+<div id="bayes-factor-example" class="section level4">
+<h4>Bayes Factor Example</h4>
+<p>A simple binomial distribution example can illustrate Bayes factors quite nicely</p>
+<p>Imagine we conduct a tadpole experiment, where two of ten tadpoles die. What is the probability of mortality?</p>
+<pre class="r"><code>LikFunc1 &lt;- function(p){
+  dbinom(2,size=10,prob=p)
+}
+
+LikFunc2 &lt;- function(p){
+  dbinom(2,size=10,prob=0.5)
+}
+
+curve(LikFunc1(x),0,1,ylab=&quot;Likelihood&quot;,xlab=&quot;prob of mortality&quot;)
+abline(h=LikFunc2(1),col=&quot;red&quot;)</code></pre>
+<p><img src="LECTURE8_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+</div>
+</div>
+<div id="deviance-information-criterion-dic" class="section level3">
+<h3>Deviance Information Criterion (DIC)</h3>
+<p>Computed by default in JAGS and WinBUGS</p>
+<p>Generally not reliable!</p>
 </div>
 </div>
 
