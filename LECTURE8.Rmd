@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 **Model selection** or **model comparison** is a very common problem in ecology- that is, we often have multiple competing hypotheses about how our data were generated. 
 
-If we can describe our data generating process explicitly as a set of deterministic and stochastic componenets, then we should be able to use Likelihood-based methods (e.g., LRT, AIC, BIC, Bayesian model selection) to infer which data generating model(s) could most plausibly have generated our observed data. 
+If we can describe our data generating process explicitly as a set of deterministic and stochastic componenets (likelihood function), then we should be able to use Likelihood-based methods (e.g., LRT, AIC, BIC, Bayesian model selection) to infer which data generating model(s) could most plausibly have generated our observed data. 
 
 ## Principle of Parsimony
 
@@ -67,7 +67,7 @@ Then we can ask the question: **which model is the "best model"?**
 
 #### FULL MODEL
 
-Here is a likelihood function for the *full model* -- that is, the most complex model:
+Here is a likelihood function for the *full model* -- that is, the most complex model (6-dimensional likelihood surface):
 
 ```{r}
 NegBinomLik_full <- function(params){
@@ -132,7 +132,7 @@ MLE_constb$value
 ```
 
 
-Let's compute the *deviances* of the two models. Recall that deviance is defined as -2*log_likelihood
+Let's compute the *deviances* of the two models. Recall that deviance is defined as $-2*log(likelihood)$
 
 ```{r}
 deviance_full <- 2*MLE_full$value
@@ -143,13 +143,30 @@ deviance_full
 deviance_constb
 ```
 
-Note here that the deviance of the full model is lower than the deviance from the reduced model. This should always be the case- if not, something is wrong. That is, the accuracy of the fit to data should *always* improve when more parameters are added! This is where the principle of parsimony comes into play! 
-
+Note here that the deviance of the full model is lower than the deviance from the reduced model. This should always be the case- if not, something is wrong. That is, the degree to which the fitted model matches the data should *always* improve when more parameters are added! This is where the principle of parsimony comes into play! 
 What if we wanted to test which model was better supported by the data. One way is to use our old friend, the Likelihood Ratio Test (LRT)!
 
 ### Likelihood-ratio test
 
-We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces. The same principle applies for model selection.  The LRT tests whether the extra goodness-of-fit is worth the extra complexity of the additional parameters.
+We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces (at and near the MLE). The same principle applies for model selection.  The LRT tests whether the extra goodness-of-fit is worth the extra complexity of the additional parameters.
+
+As you recall, the likelihood ratio is defined (obviously) as:
+
+$\frac{Likelihood_{reduced}}{Likelihood_{full}}$
+
+Because the raw likelihood ratio under the null hypothesis does not have a known distribution, we first convert the likelihood ratio:
+
+$-2ln(\frac{Likelihood_{reduced}}{Likelihood_{full}})$
+
+Which can also be written as:
+
+$-2ln(Likelidhood_{reduced}) - -2ln(Likelihood_{full})$
+
+or 
+
+$ Deviance_{reduced} - Deviance_{full}$  
+
+When expressed as a difference of deviances, the likelihood ratio (asymptotically) should be chi-square distributed with df=number of fixed dimensions
  
 The LRT can be used for two-way model comparison as long as one model is nested within the other (full model vs reduced model). If the models are not nested then the LRT doesn't really make sense.
 
@@ -158,12 +175,19 @@ Deviance.dif <- deviance_constb - deviance_full
 Deviance.dif
 
 Chisq.crit <- qchisq(0.95,1)
+Chisq.crit
 
-Deviance.dif>=Chisq.crit
+Deviance.dif>=Chisq.crit   # perform the LRT
 
+1-pchisq(Deviance.dif,1)   # p-value
 ```
 
-Clearly, the deviance gain is not worth the extra complexity in this case! Therefore, we favor the reduced model. 
+```{r}
+curve(dchisq(x,df=1),0,5)
+abline(v=Deviance.dif,col="red",lwd=4)
+```
+
+Clearly, the deviance gain is not worth the extra complexity in this case (this deviance gain could easily be produced by random chance!) Therefore, we favor the reduced model. 
 
 What about if we try a different reduced model. This time, we decide to fix the a, b, and k parameters, so the "wave" factor is not considered.
 
@@ -182,7 +206,7 @@ NegBinomLik_nowave(params)
 ```
 
 
-And let's fit the full model using "optim":
+And we use "optim" to locate the maximum likelihood estimate:
 
 ```{r}
 
@@ -205,10 +229,21 @@ deviance_nowave <- 2*MLE_nowave$value
 Deviance.dif <- deviance_nowave - deviance_full 
 Deviance.dif
 
-Chisq.crit <- qchisq(0.95,3)   # now three additional params in the more complex model!
+Chisq.crit <- qchisq(0.95,df=3)   # now three additional params in the more complex model!
+Chisq.crit
 
 Deviance.dif>=Chisq.crit
+
+1-pchisq(Deviance.dif,df=3)   # p-value
+
 ```
+
+
+```{r}
+curve(dchisq(x,df=3),0,15)
+abline(v=Deviance.dif,col="red",lwd=4)
+```
+
 
 Again, the difference in deviance does not justify the additional parameters. This difference in deviance between the full and restricted model could be produced easily by random chance. 
 
@@ -222,7 +257,8 @@ In addition, not all models we wish to compare will necessarily be nested. For e
 
 Information-theoretic metrics for model comparison, like AIC, provide a way to get around the issues with LRT. These metrics allow us to make tables for comparing multiple models at once. However, these metrics *have no frequentist interpretation*. 
  
-Metrics like AIC represent (theoretically) the distance between some particular model and the "true" model. Information-theoretic metrics are composed of a likelihood component (e.g., deviance) and a *penalty term*. For AIC, the likelihood component is the *deviance* ($-2*logL$) and the penalty term is twice the number of parameters 
+Metrics like AIC represent (theoretically) the distance between some particular model and the "true" model. Information-theoretic metrics are composed of a likelihood component (e.g., -2Ln(L)) and a *penalty term*. For AIC, the likelihood component is the *deviance* ($-2*logL$) and the penalty term is twice the number of parameters. 
+
 #### Akaike Information Criterion (AIC) 
 
 AIC is computed using the following equation:  
@@ -235,14 +271,14 @@ L is the log-likelhood at the MLE
 
 k is the number of parameters in the model
 
-As with all information-theoretic metrics, we look for the model associated with the minimum AIC
+As with all information-theoretic metrics, we look for the model associated with the minimum AIC. This is the "best model"! So simple!
 
 For small sample sizes, Burnham and Anderson (2002) recommend that a finite-size correction should be used:
 
   $AIC_c = AIC + \frac{2k(k+1)}{n-k-1}$
  
 
-A *rule of thumb* is that models within 2 AIC units of the best model are "reasonable". Does this remind you of another "rule of 2"??
+A *rule of thumb* is that models within 2 AIC units of the best model are "reasonable".
 
 However, some statisticians caution that models within 7 AIC units of the best model can be useful and may warrant further consideration!
 
@@ -251,16 +287,16 @@ However, some statisticians caution that models within 7 AIC units of the best m
 
 Another common I-T metric is the Schwarz, or *Bayesian* information criterion. The penalty term for BIC is (log n)*k.   
 
-$BIC = -2logL + (log n)\cdot k$
+$BIC = -2logL + (log(n))\cdot k$
 
 In general, BIC is more conservative than AIC- that is, more likely to select the simpler model (since the penalty term is generally greater)
 
 
 #### AIC in action
 
-Let's return to the fir fecundity model, and use AIC to select among a set of models. Let's first fit one more candidate model...
+Let's return to the fir fecundity model, and use AIC to select among a set of models. Let's first fit a couple more candidate models...
 
-This time, we decide to fix the a, and k parameters, so the "wave" factor is only considered for the "b" parameter.
+This time, we decide to fix the *a*, and *k* parameters, so the "wave" factor is only considered for the *b* parameter.
 
 ```{r}
 NegBinomLik_constak <- function(params){
@@ -293,19 +329,45 @@ deviance_constak <- 2*MLE_constak$value
 ```
 
 
-Now we can compare the four models we have run so far using AIC
+Finally, let's fit a model with no "wave" effect, but where we assume the error is Poisson distributed...
+
+```{r}
+PoisLik_nowave <- function(params){
+  a <- params[1]      # a parameters
+  b <- params[2]      # b parameter (not a function of wave/nonwave)
+  expcones <- a*fir$DBH^b
+  -sum(dpois(fir$TOTCONES,lambda=expcones,log=TRUE))
+}
+
+params <- c(a=1,b=1)
+
+PoisLik_nowave(params)
+
+MLE_pois <- optim(fn=PoisLik_nowave,par=params)
+
+MLE_pois$par
+
+MLE_pois$value
+
+deviance_pois <- 2*MLE_pois$value
+```
+
+**Note** we could not compare the Poisson model to the Negative Binomial model using LRT- one is not nested within the other!
+
+Now we can compare the five models we have run so far using AIC
 
 ```{r}
 AIC_constak <- deviance_constak + 2*4
 AIC_full <- deviance_full + 2*6
 AIC_constb <- deviance_constb + 2*5
 AIC_nowave <- deviance_nowave + 2*3
+AIC_pois <- deviance_pois + 2*2
 
 AICtable <- data.frame(
-  Model = c("Full","Constant b","Constant a and k","All constant"),
-  AIC = c(AIC_full,AIC_constb,AIC_constak,AIC_nowave),
-  Deviance = c(deviance_full,deviance_constb,deviance_constak,deviance_nowave),
-  params = c(6,5,4,3),
+  Model = c("Full","Constant b","Constant a and k","All constant","Poisson"),
+  AIC = c(AIC_full,AIC_constb,AIC_constak,AIC_nowave,AIC_pois),
+  Deviance = c(deviance_full,deviance_constb,deviance_constak,deviance_nowave,deviance_pois),
+  params = c(6,5,4,3,2),
   stringsAsFactors = F
 )
 
@@ -314,15 +376,13 @@ AICtable$DeltaAIC <- AICtable$AIC-AICtable$AIC[which.min(AICtable$AIC)]
 AICtable[order(AICtable$AIC),c(1,2,5,4,3)]
 ```
 
-This AIC table shows us that the simplest model is best! Despite the fact that the deviance is lowest for the full model! (principle of parsimony dictates at work) 
-
-Note that we could (and Bolker does) compare non-nested models as well. Bolker uses AIC to compare alternative stochastic components: negative binomial vs gamma vs lognormal vs poisson. 
+This AIC table shows us that the simplest model is best! Despite the fact that the deviance is lowest for the full model! (principle of parsimony at work) 
 
 ### Bayes Factor
 
 Can we do model selection in a Bayesian framework? The answer is yes! Unfortunately it is not usually as straightforward as using I-T metrics...
 
-Note that BIC is no more Bayesian than AIC. Bayesians generally do not use BIC for model selection. One metric that is used by Bayesians for model selection is the *Bayes Factor*. The Bayes factor is defined as the ratio of *marginal likelihoods*. 
+Note that BIC is no more Bayesian than AIC. Bayesians generally do not use BIC for model selection... One metric that *is* used by Bayesians for model selection is the *Bayes Factor*. The Bayes factor is defined as the ratio of *marginal likelihoods*. 
 
 Recall that our I-T metrics, as well as likelihood ratio tests, used the value of the likelihood surface at the MLE. That is, we are only taking into account a single point on the likelihood surface to represent what our data have to say about our model.
 
@@ -330,7 +390,7 @@ Bayesians prefer to take into account the entire likelihood surface rather than 
 
 $\overline{\mathcal{L}} = \int \mathcal{L}(x)\cdot Prior(x) dx$
 
-The marginal likelihood represents the average probability of the data across parameter space, or the *average quality of fit to the data*. The ratio of marginal likelihoods is known as the **Bayes factor**
+The marginal likelihood represents the average probability of the data across parameter space, or the *average quality of fit of a given model to the data*. The ratio of marginal likelihoods is known as the **Bayes factor**
 
 $\overline{\mathcal{L}}_1 / \overline{\mathcal{L}}_2$ 
 
@@ -340,14 +400,14 @@ This simple formula naturally accounts for over-parameterization. Simpler models
 
 Interestingly, 2*logarithm of the Bayes factor (putting it on the deviance scale) is comparable to AIC (with a fairly strong prior) and BIC (with a fairly weak prior).
 
-In practice, computing marginal likelihoods can be tricky, involving multidimensional integrals!
+In practice, computing marginal likelihoods can be tricky, involving multidimensional integration!
 
 
 #### Bayes Factor Example
 
 A simple binomial distribution example can illustrate Bayes factors quite nicely
 
-Imagine we conduct a tadpole experiment, where two of ten tadpoles die. We are interested in comparing a simple model where p is fixed at 0.5 with a more complex model where p is a *free parameter*.  
+Imagine we conduct a tadpole experiment, where two of ten tadpoles die. We are interested in comparing a simple model where *p* is fixed at 0.5 with a more complex model where *p* is a *free parameter*.  
 
 First let's look at the simple model. 
 
@@ -359,13 +419,23 @@ barplot(probs1,ylab="probability")
 
 **Q** What is the *marginal likelihood* under the simple model given an observation of 2 mortalities?
 
-Now lets' think about the more complex model, where p is a free parameter. First, let's assume that p is assigned a uniform $beta(1,1)$ prior across parameter space:
+Now lets' think about the more complex model, where *p* is a free parameter. First, let's assume that *p* is assigned a uniform $beta(1,1)$ prior across parameter space:
 
 ```{r}
 curve(dbeta(x,1,1))
 ```
 
-What is the marginal likelihood of observing any particular data from 0 to 10? Intuitively, because *p* could take any possible value, we know that the marginal likelihood of any particular data observation should be the same as any other observation. Therefore, since there are 11 possibilities, the marginal likelihood of any particular data observation should be 1/11.
+What is the marginal likelihood of observing any particular number of mortalities from 0 to 10? Intuitively, because *p* could take any possible value with equal probability, we know that the marginal likelihood of observing 2 mortalities should be the same as making any other observation. That is, neither the likelihood function nor the prior distribution favors any particular observation over any other. 
+
+
+We can prove this to ourselved with a simple experiment:
+
+```{r}
+lots=100000
+hist(rbinom(lots,10,prob=rbeta(lots,1,1)),freq = F)   # no particular observation is favored
+```
+
+Therefore, since there are 11 possibilities, the marginal likelihood of any particular data observation under the model with p as a free parameter should be 1/11.
 
 Here is a visualization of the marginal likelihood across all possible data observations:
 
@@ -409,32 +479,220 @@ BayesFactor = (1/11)/dbinom(2,10,0.5)
 BayesFactor
 ```
 
-
-What are the odds in favor of the more complex model in this case?
-
 What if the data instead were 3 mortalities? Which model is the best model?
+
+
+```{r}
+BayesFactor = dbinom(3,10,0.5)/(1/11)
+BayesFactor
+```
+
+The simpler model wins!!! That would never happen if we looked at raw deviance- the deviance of the more highly-parameterized model will always be lower. That's why we have to penalize or *regularize* more highly-parameterized models.  
 
 Does it make sense that the principle of parsimony is naturally incorporated in the Bayes factor? That is, we don't need to impose a penalty term- it is there already!!!
 
 
 ### Deviance Information Criterion (DIC)
 
-Computed by default in JAGS and WinBUGS
+DIC is computed by default in JAGS and WinBUGS. And it is perfectly analogous to other I-T metrics like AIC (and therefore easy to interpret and use)!
 
-Generally not reliable! 
-
-
+... but it is generally not reliable and I would not reccommend using it in most cases... 
 
 
+Let's run an example anyway...
+
+
+First, let's write a BUGS model for the fir data
+
+```{r}
+cat("
+
+model  {
+
+### Likelihood
+
+  for(i in 1:n.obs){
+    expected.cones[i] <- a[wave[i]]*pow(DBH[i],b[wave[i]])   # a*DBH^b
+    p[i] <- r[wave[i]] / (r[wave[i]] + expected.cones[i])
+    observed.cones[i] ~ dnegbin(p[i],r[wave[i]])
+  }
+  
+  
+  ### Priors
+  for(j in 1:2){   # estimate separately for wave and non-wave
+    a[j] ~ dunif(0.001,2)
+    b[j] ~ dunif(0.5,4)
+    r[j] ~ dunif(0.5,5)
+  }
+  
+}
+    
+",file="BUGS_fir.txt")
+
+```
+
+Then we need to package the data for JAGS
+
+```{r}
+data.package <- list(
+  observed.cones = fir$TOTCONES,
+  n.obs = nrow(fir),
+  wave = as.numeric(fir$WAVE_NON),
+  DBH = fir$DBH
+)
+#data.package
+```
+
+
+Now we make a function for generating initial values:
+
+```{r}
+init.generator <- function(){ list(
+  a = runif(2, 0.2,0.5),
+  b = runif(2, 2,3),
+  r = runif(2, 1,2)
+  
+  )
+}
+init.generator()
+```
+
+Then we can run the model!
+
+```{r}
+library(R2jags)    # load packages
+library(coda)
+library(lattice)
+
+params.to.monitor <- c("a","b","r")
+
+jags.fit <- jags(data=data.package,inits=init.generator,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+
+jagsfit.mcmc <- as.mcmc(jags.fit)   # convert to "MCMC" object (coda package)
+
+summary(jagsfit.mcmc)
+
+plot(jagsfit.mcmc)
+
+
+```
+
+
+```{r}
+densityplot(jagsfit.mcmc)
+```
+
+
+First of all, is there any evidence that the dispersion of cone data from wave sites is different than that of the non-wave sites?
+
+
+```{r}
+hist(jags.fit$BUGSoutput$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2))
+hist(jags.fit$BUGSoutput$sims.list$r[,2],density=20,col="green",add=T,freq=F)
+legend("topright",col=c("green","white"),density=c(20,0),legend=c("wave","nonwave"),bty="n")
+
+```
 
 
 
+What is the DIC for this model?
+
+```{r}
+DIC_full <- jags.fit$BUGSoutput$DIC
+DIC_full
+
+```
 
 
 
+Now let's build the reduced model and compare DIC values!
 
 
+```{r}
+cat("
 
+model  {
+
+### Likelihood
+
+  for(i in 1:n.obs){
+    expected.cones[i] <- a*pow(DBH[i],b)   # a*DBH^b
+    p[i] <- r / (r + expected.cones[i])
+    observed.cones[i] ~ dnegbin(p[i],r)
+  }
+  
+  
+  ### Priors
+  
+  a ~ dunif(0.001,2)
+  b ~ dunif(0.5,4)
+  r ~ dunif(0.5,5)
+
+  
+}
+    
+",file="BUGS_fir_reduced.txt")
+
+```
+
+Then we need to package the data for JAGS
+
+```{r}
+data.package <- list(
+  observed.cones = fir$TOTCONES,
+  n.obs = nrow(fir),
+  #wave = as.numeric(fir$WAVE_NON),
+  DBH = fir$DBH
+)
+#data.package
+```
+
+
+Now we make a function for generating initial values:
+
+```{r}
+init.generator <- function(){ list(
+  a = runif(1, 0.2,0.5),
+  b = runif(1, 2,3),
+  r = runif(1, 1,2)
+  
+  )
+}
+init.generator()
+```
+
+Then we can run the model!
+
+```{r}
+
+params.to.monitor <- c("a","b","r")
+
+jags.fit <- jags(data=data.package,inits=init.generator,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+
+jagsfit.mcmc <- as.mcmc(jags.fit)   # convert to "MCMC" object (coda package)
+
+summary(jagsfit.mcmc)
+
+plot(jagsfit.mcmc)
+
+
+```
+
+
+```{r}
+densityplot(jagsfit.mcmc)
+```
+
+
+What is the DIC for this model?
+
+```{r}
+DIC_reduced <- jags.fit$BUGSoutput$DIC
+
+DIC_reduced
+DIC_full
+
+```
 
 
 
