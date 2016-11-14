@@ -2,20 +2,83 @@
 
 model  {
 
-### Likelihood
+  ### Replicate the data once to feed into the likelihood functions
 
   for(i in 1:n.obs){
-    expected.cones[i] <- a*pow(DBH[i],b)   # a*DBH^b
-    p[i] <- r / (r + expected.cones[i])
-    observed.cones[i] ~ dnegbin(p[i],r)
+    for(j in 1:n.models){
+      observed.cones[i,j] <- y[i]
+    }
+    observed.cones2[i] <- y[i]   #  ... and replicate data once more for model selection... after fitting all models, this replicated data set is used to determine under which model the data were most likely to have been generated. 
+  }
+
+  ### Likelihood for model 1: full
+
+  for(i in 1:n.obs){
+    expected.cones[i,1] <- a1[wave[i]]*pow(DBH[i],b1[wave[i]])       # a*DBH^b
+    p[i,1] <- r1[wave[i]] / (r1[wave[i]] + expected.cones[i,1])
+    observed.cones[i,1] ~ dnegbin(p[i,1],r1[wave[i]])
   }
   
   
+  ### Priors, model 1
+  for(j in 1:2){   # estimate separately for wave and non-wave
+    a1[j] ~ dunif(0.001,2)
+    b1[j] ~ dunif(0.5,4)
+    r1[j] ~ dunif(0.5,5)
+  }
+
+  ### Likelihood for model 2: reduced
+
+  for(i in 1:n.obs){
+    expected.cones[i,2] <- a2*pow(DBH[i],b2)       # a*DBH^b
+    p[i,2] <- r2 / (r2 + expected.cones[i,2])
+    observed.cones[i,2] ~ dnegbin(p[i,2],r2)
+  }
+  
+  
+  ### Priors, model 2
+  a2 ~ dunif(0.001,2)
+  b2 ~ dunif(0.5,4)
+  r2 ~ dunif(0.5,5)
+
+  ### Likelihood for model 3: constant a and b
+
+  for(i in 1:n.obs){
+    expected.cones[i,3] <- a3*pow(DBH[i],b3)       # a*DBH^b
+    p[i,3] <- r3[wave[i]] / (r3[wave[i]] + expected.cones[i,3])
+    observed.cones[i,3] ~ dnegbin(p[i,3],r3[wave[i]])
+  }
+  
+  
+  ### Priors, model 3
+  for(j in 1:2){   # estimate separately for wave and non-wave
+    r3[j] ~ dunif(0.5,5)
+  }
+  a3 ~ dunif(0.001,2)
+  b3 ~ dunif(0.5,4)
+
+  ### Select the best model
+
+  for(i in 1:n.obs){
+    observed.cones2[i] ~ dnegbin(p[i,selected],r3[wave[i]])
+  }
+  
   ### Priors
   
-  a ~ dunif(0.001,2)
-  b ~ dunif(0.5,4)
-  r ~ dunif(0.5,5)
+    # model selection...
+  prior[1] <- 1/4
+  prior[2] <- 1/2     # put more weight because fewer parameters
+  prior[3] <- 1/4
+  selected ~ dcat(prior[])   
+
+  n.models <- 3
+  for(j in 1:n.models){
+    a[j] ~ dunif(0.001,2)
+    b[j] ~ dunif(0.5,4)
+  }
+
+  r ~ dunif(0.5,5)   # neg binom dispersion
+  rate ~ dgamma (0.01,0.01)
 
   
 }
