@@ -1,0 +1,262 @@
+---
+title: "Time Series"
+author: Sonia Heckler and Nick Miley
+output: 
+  html_document: 
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+# ARIMA
+
+Two Parts
+
+1. Autoregressive Model (AR):  It creates a regression model using previous values from the time series. It applies a “moving window” where the response of the previous predictor data becomes the predictor data for the next group.
+
+2. Moving Average (MA): A smoothing technique to reduce the effects of random variation.
+
+3. (Can also have a seasonal component.)
+
+### Box-Jenkins Univariate Model
+
+* Assumes stationarity
+  + NO trend, inconsistent variance and seasonality (although seasonality can sometimes be included)
+* Very flexible
+* Building a good ARIMA requires statistical experience (be dangerous?)
+
+### Terms in the Model
+
+* Difference operators
+* Autoregressive terms
+* Moving Average Terms
+* Seasonal Difference operators
+* Seasonal Autoregressive terms
+* Seasonal Moving Average
+
+*As with all models, only include the necessary terms
+
+### Building an ARIMA with the Keeling curve
+
+```{r}
+data(co2)
+str(co2)
+
+plot(co2)
+```
+
+### Trend?
+
+Autocorrelation Plot
+
+```{r pressure, echo=FALSE}
+acf(co2,type = "correlation")
+```
+
+Yes, there is a trend.
+
+### If trend...
+
+Differencing (ie. subtracting mean) or fitting a curve and subtracting the fitted values
+
+detrend(): computes the least-squares fit of a straight line to the data and subtracts the resulting function from the data.
+
+```{r}
+# subtracting yearly mean
+yearlymean <- ave(co2, gl(39, 12), FUN = mean)
+co2.dt <- co2 - yearlymean
+
+# blackbox way to do it but not necessary
+# co2.dt <- pracma::detrend(co2.m, tt = "constant")
+# co2.dt <- ts(as.numeric(co2.dt), start = c(1959, 1), frequency = 12)
+# will get the same result as above
+
+```
+
+### Detrended
+
+```{r}
+plot(co2.dt)
+```
+
+### Seasonality?
+
+Seasonal Subseries Plot
+
+```{r}
+monthplot(co2.dt, ylab = "data")
+```
+
+Autocorrelation Plot
+
+```{r}
+acf(co2.dt, type = "correlation")
+```
+
+Yes, there is seasonality.
+
+### If Seasonality...
+
+Seasonal differencing
+
+diff(): takes timeseries (ts), applies a given lag and returns lagged differences for each value in the timeseries.
+
+```{r}
+# differencing once
+co2.dt.dif <- diff(co2.dt,lag = 12)
+plot(co2.dt.dif)
+```
+
+Check diagnostic plots again.
+
+Seasonal Subseries Plot
+
+```{r}
+monthplot(co2.dt.dif, ylab = "data")
+```
+
+Autocorrelation Plot: Still some seasonality showing up in this plot
+
+```{r}
+acf(co2.dt.dif, type = "correlation")
+```
+
+Based on the autocorrelation plot, model will need a seasonal component to address strong seasonality with differencing.
+
+CAVEAT: Be judicious with differencing more than once, you can run into issues of over correcting. 
+
+### Unequal variance?
+
+This dataset has equal variance.
+
+### If unequal variance...
+
+Use natural log transformation
+
+![](/Users/sonia/Documents/NRES 746/TimeSeries/images/adjustingforvariance.jpg)
+
+### Another option in R for diagnosing data
+
+Seasonal Trend Decomposition using loess
+
+Loess: a non-parametric regression method using multiple regression models, k-nearest-neighbor-based meta-model
+
+stl(): Decomposes time series into seasonal, trend and irregular components using loess
+
+```{r}
+co2.stl <- stl(co2,s.window = "periodic")
+plot(co2.stl)
+# black box?
+```
+
+### Choose an ARIMA Model
+
+Assess the shape of the autocorrelation or partial autocorrelation plots to determine model.
+
+![](/Users/sonia/Documents/NRES 746/TimeSeries/images/ARIMAtable.jpg)
+
+
+Based on the autocorrelation plot...
+
+```{r}
+acf(co2.dt.dif, type = "correlation")
+```
+
+ARIMA model with possible seasonal autocorrelation
+
+Syntax looks like: AR(1) with seasonal AR(12)
+The autoregression term has a lag of 1 because that is when the autocorrelation plot drops off, and seasonal autocorrelation has a lag of 12 because the seasonality is a 12 month cycle.
+
+### ARIMA
+
+In base R:
+
+arima(): fit an ARIMA model to a timeseries dataset
+
+arima0(): same as arima() with the added ability to use the predict() function to predict values out into the future
+
+```{r}
+# ARIMA(1,0,0)[12]
+# without seasonality on fully differenced data
+results <- arima0(co2.dt.dif, order = c(1,0,0), include.mean = FALSE)
+# exclude mean because estimation of mean is 0, since mean was taken out in the detrending
+
+# ARIMA(1,0,0)(0,1,1)[12]
+# with seasonality on detrended data with seasonality
+resultsseason <- arima0(co2.dt, order = c(1,0,0), seasonal = c(0,1,1), include.mean = FALSE)
+# order and season = c(p,d,q) c(AR, degree of differencing, MA order)
+
+results
+resultsseason
+
+acf(results$residuals)
+acf(resultsseason$residuals)
+```
+
+The ARIMA model with the seasonal componant does much better when comparing the AICs as we would expect.
+
+Another option in forecast package:
+
+auto.arima(): takes a timeseries (ts) and calculates the best arima based on the AIC, AICc and BIC.
+
+```{r}
+resultsauto <- forecast::auto.arima(co2)
+resultsauto
+
+acf(resultsauto$residuals)
+```
+
+Be careful! The computor has a tendency to overfit. It is important to look at the number of terms in the equation and make sure some have not cancelled others out. In this case, the seasonal MA and the none seasonal AR introduce opposite correlations effectively canceling each other out. It is definately important to unpack the black box.
+
+### Plots for the best model from above
+
+```{r}
+# plot
+fitted.co2.dt <- co2.dt - resultsseason$residuals
+ts.plot(co2.dt, fitted.co2.dt, col = 1:2)
+
+# on original data
+fitted.co2 <- fitted.co2.dt + yearlymean
+ts.plot(co2, fitted.co2, col = 1:2)
+```
+
+### With an understanding of the process...
+
+R will deal with trends, seasonality and unequal variance with arima0(). *Make sure you know which terms to put in the model first.*
+
+```{r}
+final <- arima0(co2, order = c(1,1,0), seasonal = c(0,1,1))
+acf(final$residuals)
+```
+
+### So what about predictions?
+
+```{r}
+
+co2.fitted <- co2 - final$residuals
+predict.final <- predict(final,n.ahead = 36,se.fit = FALSE)
+
+ts.plot(co2, co2.fitted, predict.final, col = 1:3)
+
+# and standard error 
+# from which you could get confidence intervals... at some point I hope to figure that out and plot it
+predict.final.se <- predict(final,n.ahead = 36)
+predict.final.se$se
+
+```
+
+### Final Thoughts:
+
+1. ARIMA models are tricky to build. Statistical experience definately helps.
+
+2. It is important to open the black box and fully understand what the model is doing.
+
+3. Diagonostics are critical, but open to interpretation.
+
+
+
+

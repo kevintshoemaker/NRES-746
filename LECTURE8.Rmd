@@ -411,7 +411,7 @@ In practice, computing marginal likelihoods can be tricky, involving multidimens
 
 A simple binomial distribution example can illustrate Bayes factors quite nicely
 
-Imagine we conduct a tadpole experiment, where two of ten tadpoles die. We are interested in comparing a simple model where *p* is fixed at 0.5 with a more complex model where *p* is a *free parameter*.  
+Imagine we conduct a tadpole experiment where we are interested in estimating the mortality rate of some treatment, on the basis of the number of dead tadpoles observed out of 10 in a tank. We are interested in comparing a simple model where *p* is fixed at 0.5 with a more complex model where *p* is a *free parameter*.  
 
 First let's look at the simple model. 
 
@@ -421,25 +421,49 @@ names(probs1) = 0:10
 barplot(probs1,ylab="probability")
 ```
 
-**Q** What is the *marginal likelihood* under the simple model given an observation of 2 mortalities?
+**Q** What is the *marginal likelihood* under the simple model for an observation of 2 mortalities? How about 3 mortalities?
 
-Now lets' think about the more complex model, where *p* is a free parameter. First, let's assume that *p* is assigned a uniform $beta(1,1)$ prior across parameter space:
+**A** It is exactly `r dbinom(2,10,0.5)`. That is, there is no marginalizing to do since there is no free parameter to marginalize over. The likelihood is the likelihood is ... well you get it!
+
+Now let's consider a 'complex' model, where *p* is a free parameter (one additional free parameter relative to the simple model). First, let's assume that *p* is assigned a uniform $beta(1,1)$ prior across parameter space:
 
 ```{r}
 curve(dbeta(x,1,1))
 ```
 
-What is the marginal likelihood of observing any particular number of mortalities from 0 to 10? Intuitively, because *p* could take any possible value with equal probability, we know that the marginal likelihood of observing 2 mortalities should be the same as making any other observation. That is, neither the likelihood function nor the prior distribution favors any particular observation over any other. 
+What is the marginal likelihood of observing any particular number of mortalities from 0 to 10? For example, what is the average probability of observing a 2 exactly, across all possible values of p??? 
 
+Intuitively, because all values of *p* are equally likely, all possible observations should also be equally likely! That is, neither the likelihood function nor the prior distribution favors any particular observation (0 to 10) over any other.   
 
-We can prove this to ourselved with a simple experiment:
+We can do this mathematically...
+
+For two observed mortalities, the marginal likelihood is: 
+
+```{r}
+
+?integrate
+binom2 <- function(x) dbinom(x=2,size=10,prob=x)
+marginal_likelihood <- integrate(f=binom2,0,1)$value    # use "integrate" function
+marginal_likelihood
+
+```
+
+For three observed mortalities, the marginal likelihood (probability of observing a "3" across all possible values of p) is:
+
+```{r}
+binom3 <- function(x) dbinom(x=3,size=10,prob=x)
+marginal_likelihood <- integrate(f=binom3,0,1)$value    # use "integrate" function
+marginal_likelihood
+```
+
+Basically, the way our model is written, no particular observation is favored over any other:
 
 ```{r}
 lots=100000
-hist(rbinom(lots,10,prob=rbeta(lots,1,1)),freq = F)   # no particular observation is favored
+hist(rbinom(lots,10,prob=rbeta(lots,1,1)),freq = F,xlab="potential observations")   # no particular observation is favored
 ```
 
-Therefore, since there are 11 possibilities, the marginal likelihood of any particular data observation under the model with p as a free parameter should be 1/11.
+Therefore, since there are 11 possibilities, the marginal likelihood of any particular data observation under the model with p as a free parameter should be 1/11 = `r 1/11`.
 
 Here is a visualization of the marginal likelihood across all possible data observations:
 
@@ -485,22 +509,114 @@ BayesFactor
 
 What if the data instead were 3 mortalities? Which model is the best model?
 
+```{r}
+
+probs2 <- rep(1/11,times=11)          
+names(probs2) = 0:10
+barplot(probs2,ylab="probability",ylim=c(0,1))
+
+probs1 <- dbinom(0:10,10,0.5)          
+names(probs1) = 0:10
+barplot(probs1,ylab="probability",add=T,col="red",density=20)
+
+abline(v=4.3,col="green",lwd=4 )
+```
+
 
 ```{r}
 BayesFactor = dbinom(3,10,0.5)/(1/11)
 BayesFactor
 ```
 
-The simpler model wins!!! That would never happen if we looked at raw deviance- the deviance of the more highly-parameterized model will always be lower. That's why we have to penalize or *regularize* more highly-parameterized models.  
+*The simpler model wins*!!! That would never happen if we compared maximum likelihood estimates- the deviance of the (fitted) more highly-parameterized model will always be lower! That's why we have to penalize or *regularize* more highly-parameterized models.
 
-Does it make sense that the principle of parsimony is naturally incorporated in the Bayes factor? That is, we don't need to impose a penalty term- it is there already!!!
+We can visualize this! First of all, what is the maximum likelihood estimate for p under the model with 3 mortality observations?
+
+```{r}
+
+# probs2 <- rep(1/11,times=11)          
+# names(probs2) = 0:10
+# barplot(probs2,ylab="probability",ylim=c(0,1))
+
+probs1 <- dbinom(0:10,10,0.5)          
+names(probs1) = 0:10
+barplot(probs1,ylab="probability",col="red",density=20,ylim=c(0,1))
+
+probs3 <- dbinom(0:10,10,0.3)          
+names(probs3) = 0:10
+barplot(probs3,ylab="probability",add=T,col="green",density=10,angle = -25)
+
+abline(v=4.3,col="green",lwd=4 )
+```
+
+So clearly the likelihood ratio favors the more complex model (fitted) vs the simple, 0-parameter model!
+
+What does the likelihood ratio test say?
+
+```{r}
+Likelihood_simple <- dbinom(3,10,0.5)
+Likelihood_complex <- dbinom(3,10,0.3)
+Likelihood_simple
+Likelihood_complex
+-2*log(Likelihood_simple)--2*log(Likelihood_complex)
+
+qchisq(0.95,1)
+
+
+```
+
+What about AIC?
+
+```{r}
+
+AIC_simple <- -2*log(Likelihood_simple) + 2*0
+AIC_complex <-  -2*log(Likelihood_complex) + 2*1
+
+AIC_simple
+AIC_complex    
+
+
+```
+
+What about AICc?
+
+$AIC_c = AIC + \frac{2k(k+1)}{n-k-1}$
+
+
+```{r}
+
+AICc_simple <- -2*log(Likelihood_simple) + 0 + 0
+AICc_complex <-  -2*log(Likelihood_complex) + 1 + ((2*2)/(3-1-1))
+
+AICc_simple
+AICc_complex    
+
+```
+
+
+What about BIC?
+
+```{r}
+
+BIC_simple <- -2*log(Likelihood_simple) + 0
+BIC_complex <-  -2*log(Likelihood_complex) + log(3)*1
+
+BIC_simple
+BIC_complex    
+
+
+```
+
+All these methods give the same basic answer- the simple model is better, even though the complex model fits better!
+
+**Q** Does it make sense that the principle of parsimony is naturally incorporated in the Bayes factor? That is, we don't need to impose a penalty term- it is there already!!!
 
 
 ### Deviance Information Criterion (DIC)
 
-DIC is computed by default in JAGS and WinBUGS. And it is perfectly analogous to other I-T metrics like AIC (and therefore easy to interpret and use)!
+DIC is computed by default in JAGS and WinBUGS. And it is analogous to other I-T metrics like AIC (and therefore easy to interpret and use)!
 
-... but it is generally not reliable and I would not reccommend using it in most cases... 
+... but it is generally not reliable and I would not recommend using it in most cases, especially for complex hierarchical models... 
 
 
 Let's run an example anyway...
@@ -516,7 +632,7 @@ model  {
 ### Likelihood
 
   for(i in 1:n.obs){
-    expected.cones[i] <- a[wave[i]]*pow(DBH[i],b[wave[i]])   # a*DBH^b
+    expected.cones[i] <- a[wave[i]]*pow(DBH[i],b[wave[i]])   # power function: a*DBH^b
     p[i] <- r[wave[i]] / (r[wave[i]] + expected.cones[i])
     observed.cones[i] ~ dnegbin(p[i],r[wave[i]])
   }
@@ -591,7 +707,7 @@ First of all, is there any evidence that the dispersion of cone data from wave s
 
 
 ```{r}
-hist(jags.fit$BUGSoutput$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2))
+hist(jags.fit$BUGSoutput$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2),xlim=c(0.5,2.5))
 hist(jags.fit$BUGSoutput$sims.list$r[,2],density=20,col="green",add=T,freq=F)
 legend("topright",col=c("green","white"),density=c(20,0),legend=c("wave","nonwave"),bty="n")
 
@@ -709,7 +825,7 @@ What about AIC? Is the AIC the same every time?
 
 ### Explicit Bayesian model selection
 
-Another cool, but not perfect, method of Bayesian model selection is to write the model selection directly into the JAGS code!
+Another cool, sometimes useful, but not perfect, method of Bayesian model selection is to write the model selection directly into the JAGS code!
 
 
 ```{r}
@@ -717,21 +833,16 @@ cat("
 
 model  {
 
-  ### Replicate the data once to feed into the likelihood functions
-
-  for(i in 1:n.obs){
-    for(j in 1:n.models){
-      observed.cones[i,j] <- y[i]
-    }
-    observed.cones2[i] <- y[i]   #  ... and replicate data once more for model selection... after fitting all models, this replicated data set is used to determine under which model the data were most likely to have been generated. 
-  }
-
   ### Likelihood for model 1: full
 
   for(i in 1:n.obs){
     expected.cones[i,1] <- a1[wave[i]]*pow(DBH[i],b1[wave[i]])       # a*DBH^b
-    p[i,1] <- r1[wave[i]] / (r1[wave[i]] + expected.cones[i,1])
-    observed.cones[i,1] ~ dnegbin(p[i,1],r1[wave[i]])
+    spread.cones[i,1] <- r1[wave[i]]
+    p[i,1] <- spread.cones[i,1] / (spread.cones[i,1] + expected.cones[i,1])
+    observed.cones[i,1] ~ dnegbin(p[i,1],spread.cones[i,1])
+    predicted.cones[i,1] ~ dnegbin(p[i,1],spread.cones[i,1])
+    SE_obs[i,1] <- pow(observed.cones[i,1]-expected.cones[i,1],2)
+    SE_pred[i,1] <- pow(predicted.cones[i,1]-expected.cones[i,1],2)
   }
   
   
@@ -746,8 +857,12 @@ model  {
 
   for(i in 1:n.obs){
     expected.cones[i,2] <- a2*pow(DBH[i],b2)       # a*DBH^b
-    p[i,2] <- r2 / (r2 + expected.cones[i,2])
-    observed.cones[i,2] ~ dnegbin(p[i,2],r2)
+    spread.cones[i,2] <- r2
+    p[i,2] <- spread.cones[i,2] / (spread.cones[i,2] + expected.cones[i,2])
+    observed.cones[i,2] ~ dnegbin(p[i,2],spread.cones[i,2])
+    predicted.cones[i,2] ~ dnegbin(p[i,2],spread.cones[i,2])
+    SE_obs[i,2] <- pow(observed.cones[i,2]-expected.cones[i,2],2)
+    SE_pred[i,2] <- pow(predicted.cones[i,2]-expected.cones[i,2],2)
   }
   
   
@@ -760,11 +875,21 @@ model  {
 
   for(i in 1:n.obs){
     expected.cones[i,3] <- a3*pow(DBH[i],b3)       # a*DBH^b
-    p[i,3] <- r3[wave[i]] / (r3[wave[i]] + expected.cones[i,3])
-    observed.cones[i,3] ~ dnegbin(p[i,3],r3[wave[i]])
+    spread.cones[i,3] <- r3[wave[i]]
+    p[i,3] <- spread.cones[i,3] / (spread.cones[i,3] + expected.cones[i,3])
+    observed.cones[i,3] ~ dnegbin(p[i,3],spread.cones[i,3])
+    predicted.cones[i,3] ~ dnegbin(p[i,3],spread.cones[i,3])
+    SE_obs[i,3] <- pow(observed.cones[i,3]-expected.cones[i,3],2)
+    SE_pred[i,3] <- pow(predicted.cones[i,3]-expected.cones[i,3],2)
   }
   
-  
+  SSE_obs[1] <- sum(SE_obs[,1]) 
+  SSE_pred[1] <- sum(SE_pred[,1])
+  SSE_obs[2] <- sum(SE_obs[,2]) 
+  SSE_pred[2] <- sum(SE_pred[,2])
+  SSE_obs[3] <- sum(SE_obs[,3]) 
+  SSE_pred[3] <- sum(SE_pred[,3])
+
   ### Priors, model 3
   for(j in 1:2){   # estimate separately for wave and non-wave
     r3[j] ~ dunif(0.5,5)
@@ -772,43 +897,239 @@ model  {
   a3 ~ dunif(0.001,2)
   b3 ~ dunif(0.5,4)
 
-  ### Select the best model
+  #####################
+  ### SELECT THE BEST MODEL!!! 
+  #####################
 
   for(i in 1:n.obs){
-    observed.cones2[i] ~ dnegbin(p[i,selected],r3[wave[i]])
+    observed.cones2[i] ~ dnegbin(p[i,selected],spread.cones[i,selected])
+    predicted.cones2[i] ~ dnegbin(p[i,selected],spread.cones[i,selected])     # for posterior predictive check!
+    SE2_obs[i] <- pow(observed.cones2[i]-expected.cones[i,selected],2)
+    SE2_pred[i] <- pow(predicted.cones2[i]-expected.cones[i,selected],2)
   }
   
+  SSE2_obs <- sum(SE2_obs[])
+  SSE2_pred <- sum(SE2_pred[])
+
+
   ### Priors
   
     # model selection...
-  prior[1] <- 1/4
-  prior[2] <- 1/2     # put more weight because fewer parameters
-  prior[3] <- 1/4
+  prior[1] <- 1/5
+  prior[2] <- 3/5     # put substantially more weight because fewer parameters (there are more rigorous ways to do this!!)
+  prior[3] <- 1/5
   selected ~ dcat(prior[])   
-
-  n.models <- 3
-  for(j in 1:n.models){
-    a[j] ~ dunif(0.001,2)
-    b[j] ~ dunif(0.5,4)
-  }
-
-  r ~ dunif(0.5,5)   # neg binom dispersion
-  rate ~ dgamma (0.01,0.01)
-
+  
   
 }
     
-",file="BUGS_fir_reduced.txt")
+",file="BUGS_fir_modelselection.txt")
+
+```
+
+
+Now we can use MCMC to find which model we put our beliefs in after we account for our data!
+
+Then we need to package the data for JAGS
+
+```{r}
+data.package <- list(
+  observed.cones = matrix(rep(fir$TOTCONES,times=3),ncol=3,byrow=F),
+  observed.cones2 = fir$TOTCONES,
+  n.obs = nrow(fir),
+  wave = as.numeric(fir$WAVE_NON),
+  #n.models = 3,
+  DBH = fir$DBH
+)
+#data.package
+```
+
+Then we can run the model!
+
+```{r}
+
+params.to.monitor <- c("a1","b1","r1","a2","b2","r2","a3","b3","r3","selected","predicted.cones2","predicted.cones","SSE_obs","SSE_pred","SSE2_obs","SSE2_pred")
+
+jags.fit <- jags(data=data.package,parameters.to.save=params.to.monitor,n.iter=5000,model.file="BUGS_fir_modelselection.txt",n.chains = 2,n.burnin = 1000,n.thin=2 )
+
+jagsfit.mcmc <- as.mcmc(jags.fit)   # convert to "MCMC" object (coda package)
+
+BUGSlist <- as.data.frame(jags.fit$BUGSoutput$sims.list)
+#summary(jagsfit.mcmc)
+
+#plot(jagsfit.mcmc)
+
+
+```
+
+
+```{r}
+#plot(jagsfit.mcmc[,"selected"])
+
+plot(jagsfit.mcmc[,"a1[1]"])
+plot(jagsfit.mcmc[,"a1[2]"])
+plot(jagsfit.mcmc[,"a2"])
+plot(jagsfit.mcmc[,"a3"])
+
+plot(jagsfit.mcmc[,"r1[1]"])
+plot(jagsfit.mcmc[,"r1[2]"])
+plot(jagsfit.mcmc[,"r2"])
+plot(jagsfit.mcmc[,"r3[1]"])
+
+
+```
+
+
+Let's look at the model selection (that's the whole point!!)
+
+```{r}
+n.iterations <- length(jags.fit$BUGSoutput$sims.list$selected)
+selected <- table(jags.fit$BUGSoutput$sims.list$selected)
+names(selected) <- c("Full model","No wave","Fixed a&b")
+selected
+
+barplot(selected/n.iterations,ylab="Degree of belief")
 
 ```
 
 
 #### Evaluate model fit
 
+Now we can look at model fit! We will use the same method we used in lab- the posterior predictive check... 
+
+We can write a for loop to extract the prediction results for each model (and for the model-averaged model):
+
+First let's just look at the model predictions vs the observed data. First, model 1
+
+```{r}
+
+n.data <- length(fir$DBH)
+
+plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
+
+for(d in 1:n.data){
+  tofind <- sprintf("predicted.cones[%s,1]",d)
+  model1 <- as.vector(jagsfit.mcmc[,tofind])
+  points(rep(fir$DBH[d],times=100),sample(model1[[1]],100),pch=20,col="gray",cex=0.4)
+}
+
+```
 
 
+First let's just look at the model predictions vs the observed data. Next, model 2 (reduced)
+
+```{r}
+
+plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
+
+for(d in 1:n.data){
+  tofind <- sprintf("predicted.cones[%s,2]",d)
+  model1 <- as.vector(jagsfit.mcmc[,tofind])
+  points(rep(fir$DBH[d],times=100),sample(model1[[1]],100),pch=20,col="gray",cex=0.4)
+}
+
+```
+
+And model 3 (fixed a and b):
+
+```{r}
+plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
+
+for(d in 1:n.data){
+  tofind <- sprintf("predicted.cones[%s,3]",d)
+  model1 <- as.vector(jagsfit.mcmc[,tofind])
+  points(rep(fir$DBH[d],times=100),sample(model1[[1]],100),pch=20,col="gray",cex=0.4)
+}
+```
+
+
+Clearly all the models seem to fit okay... But, it seems like there is more prediction error than is necessary... Let's run a posterior predictive check!
+
+For model 1:
+
+```{r}
+plot(as.vector(jagsfit.mcmc[,"SSE_pred[1]"][[1]])~as.vector(jagsfit.mcmc[,"SSE_obs[1]"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
+abline(0,1,col="red")
+p.value=length(which(as.vector(jagsfit.mcmc[,"SSE_pred[1]"][[1]])>as.vector(jagsfit.mcmc[,"SSE_obs[1]"][[1]])))/length(as.vector(jagsfit.mcmc[,"SSE_pred[1]"][[1]]))
+p.value 
+```
+
+```{r}
+plot(as.vector(jagsfit.mcmc[,"SSE_pred[2]"][[1]])~as.vector(jagsfit.mcmc[,"SSE_obs[2]"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
+abline(0,1,col="red")
+p.value=length(which(as.vector(jagsfit.mcmc[,"SSE_pred[2]"][[1]])>as.vector(jagsfit.mcmc[,"SSE_obs[2]"][[1]])))/length(as.vector(jagsfit.mcmc[,"SSE_pred[2]"][[1]]))
+p.value 
+```
+
+```{r}
+plot(as.vector(jagsfit.mcmc[,"SSE_pred[3]"][[1]])~as.vector(jagsfit.mcmc[,"SSE_obs[3]"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
+abline(0,1,col="red")
+p.value=length(which(as.vector(jagsfit.mcmc[,"SSE_pred[3]"][[1]])>as.vector(jagsfit.mcmc[,"SSE_obs[3]"][[1]])))/length(as.vector(jagsfit.mcmc[,"SSE_pred[3]"][[1]]))
+p.value                                                                                                                    
+```
+
+
+Interesting- the model seems to not fit very well! 
+
+
+Okay that's it for model selection, now let's move on to:
 
 ### Model averaging
+
+The fact that model selection is such a big deal in Ecology indicates that we are rarely certain about which model is the best model. Even after constructing an AIC table we may be very unsure about which model is the "true" model. 
+
+The AIC weights tell us in essence how much we "believe" in each model. This is a very Bayesian interpretation, but model averaging really is best thought of in a Bayesian context. 
+
+One way to do model averaging relies on AIC weights. Basically we take the set of predictions from each model independently and weight them by the Akaike weight. This is not terribly straightforward in practice. There is a literature on this and R packages for helping though (see package ['AICcmodavg'](https://cran.r-project.org/web/packages/AICcmodavg/AICcmodavg.pdf))
+
+
+#### The Bayesian version!
+
+We can use the results from the JAGS code above to easily generate Bayesian model-averaged predictions! JAGS makes it relatively simple and straightforward to do model averaging in a Bayesian context!
+
+Look at the predictions for the model averaged model: 
+
+
+```{r}
+
+plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
+
+for(d in 1:n.data){
+  tofind <- sprintf("predicted.cones2[%s]",d)
+  model1 <- as.vector(jagsfit.mcmc[,tofind])
+  points(rep(fir$DBH[d],times=100),sample(model1[[1]],100),pch=20,col="gray",cex=0.4)
+}
+
+```
+
+Note that these predictions naturally incorporate both parameter uncertainty and structural (model selection) uncertainty!
+
+
+We can do a posterior predictive check with the model-averaged model!
+
+```{r}
+plot(as.vector(jagsfit.mcmc[,"SSE2_pred"][[1]])~as.vector(jagsfit.mcmc[,"SSE2_obs"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
+abline(0,1,col="red")
+p.value=length(which(as.vector(jagsfit.mcmc[,"SSE2_pred"][[1]])>as.vector(jagsfit.mcmc[,"SSE2_obs"][[1]])))/length(as.vector(jagsfit.mcmc[,"SSE2_pred"][[1]]))
+p.value 
+```
+
+
+```{r}
+plot(jagsfit.mcmc[,"predicted.cones[1,1]"])  # e.g., first observation from model 1
+
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
 
