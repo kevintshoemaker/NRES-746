@@ -1,0 +1,294 @@
+---
+title: "Ordination Lab"
+output: 
+  html_document: 
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+For this lab we will work on multivariate ordination analyses of biological communities.  We will be running a type of unconstrained analysis known as Non-metric multidimensional scaling (NMDS) and interpreting then visualizing the results. 
+
+The dataset we are using is a community data matrix provided by Jade Keehn of the Feldman lab. Plant species richness was collected along 54 100m transects in sand dune habitat. One environnmental variable (disturbance, as measured by presence of 4x4 vehicle tracks) was gathered at each site. 
+
+```{r,results="hide"}
+library(vegan)
+library(MASS)  
+library(vegan3d)
+data<-read.table("TestDataset2.csv", sep=",", header=TRUE, blank.lines.skip = TRUE)
+lizzy<-read.table("TestHypotheses.csv", sep=",", header=TRUE, blank.lines.skip = TRUE) 
+```
+##Run Ordination
+
+Running an ordination is made simple with the VEGAN package, but picking the proper parameters and understanding the results takes some work.
+
+```{r}
+ord<-metaMDS(data,binomial=TRUE,distance="bray") 
+ord
+```
+
+Due to the nonlinear relationship of NMDS ordinations the iteration often has difficulty in finding the global optimum. Therefore, it is recommended to use several random starts and to select those solutions with the smallest stresses. This sounds like a lot of work, but we are in luck as VEGAN has a function which does this for us: metaMDS. metaMDS allows us to easily run multiple iterations (default is 20). If you desire running more iterations simply add 'try=# of iterations' to the code.
+
+Note that the defaults of k (# of dimensions) is 2 and the dissimilarity index is Bray-Curtis.
+
+##Plotting the Ordination
+
+The metaMDS function rotates the solution so that the largest variance of site scores will be on the first axis. Also, the species scores are expanded (from weighted averages of site scores) so that they have equal variances with site scores. 
+
+Code is provided for plotting the species and site ordinations together and seperately.
+
+```{r}
+plot(ord,main="Ordination",type="t") 
+plot(ord,main="Species Ordination",type="t",display="species")
+plot(ord,main="Site Ordination",type="t",display="sites")
+```
+
+Species ordination: each point corresponds to a species' point of central tendency. Distances between species are their degree of similarity in terms of their distribution within the plots. The axes are gradients of plot-occurrence similarity. The species close to each other are likely to co-occur in the landscape, whereas species that are far apart probably do not occur in the same plots.
+
+Site ordination: each point represents a vegetation plot (1-54 sites). The greater the distance between the points, the greater the difference in floristic composition of the plots.  The axes are gradients of floristic similarity and have no environmental meaning, but can be correlated with environmental data from the study plots.
+
+##Community Dissimilarities
+
+Function 'vegdist' gives the ecological dissimilarity between each pair of sites. The example below allows us to see the dissimilarity index which is automatically calculated within vegan package ordinations. The higher the value the more dissimilar the sites are.
+
+```{r}
+d<-vegdist(data,binary="TRUE",method="bray") 
+d
+```
+
+NMDS has become a commonly used ordination method by ecologists as it can use ecologically meaningful ways of measuring community dissimilarities, via dissimilarity indices. As a result, NMDS can handle non-linear species responses and effectively find the underlying gradients.
+
+As mentioned above, metaMDS uses the Bray-Curtis dissimilarity index by default. However, there are several indices available in the metaMDS function. For example, the Jaccard index has better metric properties. Function 'rankindex' can be used to study which index best seperates communities along environmental gradients. The following example uses the environmental variable of 'disturbance' to compare dissimilarity indices.
+
+```{r}
+rankindex(scale(lizzy$Dist),data,c("euc","man","bray","jac","kul"))
+```
+
+Two of the recommended indices (Bray,Jaccard) are equal and not a bad choice for calculating environmental gradients.
+
+##Choosing Dimensions
+
+The next step in running your ordination is to choose the number of dimensions to portray the data in. Results of your ordination can be displayed in 1,2 or 3D.
+
+####One Dimension
+```{r, results="hide"}
+ord1<-metaMDS(data,k=1,binomial=TRUE,distance="bray") 
+plot(ord1,display="sites",main="1-Dimension",type="t")
+```
+
+####Two Dimensions
+```{r, results="hide"}
+ord2<-metaMDS(data,k=2,binomial=TRUE,distance="bray")
+plot(ord2,display="sites",main="2-Dimensions",type="t")
+```
+
+####Three Dimensions: uses the vegan3D package 
+```{r, results="hide"}
+ord3<-metaMDS(data,k=3,binomial=TRUE,distance="bray") 
+ordiplot3d(ord3,display="sites",main="3-Dimensions",choices=1:3,pch=19,zlab="Dissimilarity")
+```
+
+Stress values are a statistic of goodness of fit and help to determine a good number of dimensions to use. NMDS maps observed communtiy dissimilarities nonlinearly onto ordination space and can handle nonlinear species responses. We can visualize the mapping with a Shepard or stressplot and compare the goodness of fit between 2 and 3 dimensions.
+
+```{r}
+stressplot(ord2,main="2D Shepard Stress Plot")
+stressplot(ord3,main="3D Shepard Stress Plot")
+
+```
+
+There are several ways of interpreting a stress plot. Visually, the points should adhere cleanly to the curve; large scatter suggests that original dissimilarities aren't well-preserved in the reduced number of dimensions. Additionally, two statistics of goodness of fit are provided: Non-metric fit is the correlation based on stress and the linear fit is based on distance between the step line and the points.  
+
+###Goodness of Fit
+
+We can also run and plot a goodness of fit measure on all points. The large values and circles indicate sites with high stress and poor fit. 
+
+####Goodness of Fit 2D
+```{r}
+gof2<-goodness(ord2)
+gof2
+plot(ord2,display="sites",main="2D Goodness of Fit",type="t")
+points(ord2,cex=2*gof2/mean(gof2))
+
+```
+
+####Goodness of Fit 3D
+```{r}
+gof3<-goodness(ord3)
+gof3
+plot(ord3,display="sites",main="3D Goodness of Fit",type="t")
+points(ord3,cex=2*gof3/mean(gof3))
+
+```
+
+So, with all that how do you know the correct number of dimensions?! The answer is easy, there is no correct number, though some may be worse than others. It is a subjective call and up to you as the ecologist based on your needs and the above analyses. However, ordinations are typically done with 2 and 3 dimensions.
+
+####Comparing ordinations with Procrustes rotation
+
+Say we run two ordinations, each with a different dissimilarity index, and then wanted to compare those two ordinations. It may be difficult to do so as the ordinations will most likely be very similar. The best way to compare ordinations is to use Procrustes rotation. A bit of historical context never hurts. Procrustes, in Greek mythology, was a metal smith on Mount Korydallos and was known as "the stretcher." Now, this dude had an odd habit of attempting to make his victims fit his bed by either stretching or amputating their limbs. The name is apt in the sense that a Procrustes rotation rotates a matrix to maximum similarity with another matrix by using uniform scaling (expansion or contraction) and rotation to minimize the squared differences between the two ordinations. 
+
+```{r, results="hide"}
+#Ordination with Bray-Curtis dissimilarity index
+ord_bray<-metaMDS(data,k=2,binomial=TRUE,distance="bray")
+#Ordination with Jaccard dissimilarity index
+ord_jac<-metaMDS(data,k=2,binomial=TRUE,distance="jac")
+```
+
+```{r}
+#Function procrustes performs analysis
+pro<-procrustes(ord_bray, ord_jac)
+pro
+plot(pro)
+```
+
+The differences appear small and deal with just a few points. 
+
+```{r}
+#Plot of residuals to identify the points with the large differences
+plot(pro,kind=2)
+```
+
+The descriptive statistic, 'Procrustes sum of squares', is the sum of the squared arrows in the plot. The rotation is nonsymmetric and the value will change by reversing the order of the ordinations in the function. A more scale-independent and symmetric statistic can be found by adding "symmetric=TRUE" to the function. 
+
+```{r}
+#Symmetric rotation
+pro_sym<-procrustes(ord_bray, ord_jac,symmetric=TRUE)
+pro_sym
+plot(pro_sym)
+```
+
+###Environmental Interpretation
+
+At this point we have little idea as to what the ordination axes mean ecologically. There are many ways of overlaying environmental information onto ordination diagrams to help explain the ordination. This allows us to correlate the X and Y axes with the ecological knowledge we gathered at our study site. 
+
+####Vector Fitting
+
+A comonly used interpretation approach is to fit environmental vectors onto an ordination. The fitted vector arrows are interpreted as follows: 1) the arrow points in the direction of the most rapid change in the environmental variable; aka the direction of the gradient. 2) The length of an arrow is proportional to the magnitude of change in that direction and represents the strength of relationship between variable and community; aka the strength of the gradient. 
+We can easily fit an environmental variable to our ordination using function envfit. Here we will fit the environmental variable of 'disturbance' to the sites. 
+
+```{r, results="hide"}
+ord2<-metaMDS(data,binomial=TRUE) # rerun ordination 
+
+```
+```{r}
+plot(ord2,display="sites",main="Fitted Vector",type="t") #plot site ordination
+vec<-envfit(ord2,lizzy$Dist,permu=999)
+vec
+plot(vec) 
+```
+
+####Surface Fitting
+
+Vector fitting implies a linear relationship between your environmental variables and the ordination, which may not always be the case. Instead we can fit a surface of the environmental variable to the ordiantion. This allows us to determine if the response is truly linear. If so, the gradient of fitted surface will be parallel to the arrow and the contours will be perpendicular to the arrow. 
+
+```{r}
+ef<-envfit(ord2~lizzy$Dist)
+plot(ord2,display="sites",main="Tubular Bro")
+plot(ef)
+surfin<-ordisurf(ord2,lizzy$Dist,add=TRUE) #Function ordisurf fits the surface to the ordination
+```
+
+Looks as though disturbance truly has a linear fit to the sites!
+
+###Classification 
+
+Ordination vs classification: the main purpose of both is to interpret patterns in species composition. Classification is used for grouping ecological communities whereas ordination is used for arranging data along gradients. They are complementary approaches and the vegan package allows us to overlay a classification approach (hierarchical clustering) onto an ordination in order to help visualize our data, the real power of ordinations!
+
+```{r}
+dis<-vegdist(data) #Hierarchic clustering needs dissimilarities as its input
+```
+
+The function hclust has 3 alternative clustering methods: single linkage (nearest neighbor), complete linkage (furthest neighbor) and average linkage. Running the function produces dendograms which are a visualization of the dissimilarity matrix, based on the presence-absence data. 
+
+```{r}
+clus_sin<-hclust(dis,"single")
+plot(clus_sin,main="Single Linkage")
+```
+Single linkage can be well portrayed on an ordination and is capable of finding discontinuities in the data. However, it is prone to joining single sites to large clusters. 
+
+```{r}
+clus_com<-hclust(dis,"complete")
+plot(clus_com,main="Complete Linkage")
+```
+Complete linkage creates compact clusters.
+
+```{r}
+clus_ave<-hclust(dis,"average")
+plot(clus_ave,main="Average Linkage")
+```
+
+Average linkage is a compromise between the previous two and more neutral in the groupings. 
+
+All these methods are agglomerative and start by combining the two most similar sites then they combine points to points or groups to groups, based on the 'fusion' criteria. The vertical axes of the dendrograms shows the level of fusion, or dissimilarity. 
+
+###Interpreting the classes
+
+We can cut the dendrograms at a specified fusion level in order to get a desired number of clusters. 
+
+```{r}
+plot(clus_com)
+rect.hclust(clus_com,5) #rect.hclust allows us to visualize the cut we make. This is up to you as the ecologist!
+grp<-cutree(clus_com,3) #cutree produces a classification vector with the number of classes
+```
+
+###Displaying Clusters onto Ordination
+```{r}
+plot(ord2,display="sites",type="t")
+ordihull(ord2,grp,lty=2,col="red") #convex hulls
+```
+```{r}
+plot(ord2,display="sites",type="t")
+ordispider(ord2,grp,lty=2,col="red") #spider plot
+```
+
+```{r}
+plot(ord2,display="sites",type="t")
+ordiellipse(ord2,grp,lty=2,col="red") #ellipse plot
+```
+
+By overlaying a classification onto an ordination you are able to cross-check each method. For example, if the clusters appear distinct (not overlapping) then both analyses may be adequate. However, the classes can overlap and the analyses can still be good. You can improve the analyses by bumping up the number of dimensions in the ordination in order to display the multivariate class structure. Also be aware that ordination and classification may use different dissimilarity indices. 
+
+###Minimum Spanning Tree
+
+The tree connecting individual points is called a minimum spanning tree. In graph theory, a tree is a connected graph with no loops, the spanning tree is the tree that connects all points and the minimum spanning tree is where the total length of connecting segments is the shortest. We can use the function spantree to find this tree.
+
+```{r}
+mst<-spantree(dis,toolong=1)
+plot(mst,ord3,pch=12,col="red")
+```
+
+The function spantree uses the dissimilarity index we used above in building the tree. An MST can potentially be used to cross-check an ordination; if the tree is linear the ordination might be good, if the tree is curved there may be arc artefacts and a messy tree could indicate a bad ordination or a need for more dimensions. 
+
+
+###3 Dimensional!!!
+
+Up to this point we have been working in 2 dimensions. However, there are several packages that are useful for visualizing our ordinations in 3 dimensions.
+
+```{r}
+library(scatterplot3d)
+library(rgl)
+```
+
+####Drop a dendrogram onto an ordination 
+```{r}
+orditree3d(ord3,clus_com,display="sites",type="t")  
+```
+
+####Use an RGL device to visualize a dynamic ordination and classification
+```{r}
+ordirgltree(ord3,clus_com,col="red",type="t",display = "site")
+```
+
+####Three-Dimensional Ordination with disturbance variable fitted
+```{r}
+ef<-envfit(ord3~lizzy$Dist,choices=1:3)
+plot<-ordiplot3d(ord3,type="n",angle=45,choices=1:3,display="site",col="red",ax.col="black",envfit=ef)
+points(plot,"points",pch=5,col="red",cex=0.5) 
+```
+
+
+
+
