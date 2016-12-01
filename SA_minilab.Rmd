@@ -1,0 +1,119 @@
+---
+title: "Spatial Autocorrelation Mini-lab"
+author: "Danny Nielsen and Cristina Perez"
+date: "November 27, 2016"
+output: html_document
+---
+
+
+###This lab will walk you through the process of detecting Spatial Autocorrelation (SA) in spatial data, and how to deal with SA once detected. We will use the provided woodrat data for these exercises
+
+####First, let's load the data
+
+```{r}
+ratdat <- read.csv("Cap_data_for SA.csv")
+```
+
+
+###Let's try and model density as a function of slope, keeping the effects of SA in mind!
+
+###First, we will want to run some SA analysis! We'll need to load some packages.
+
+```{r}
+library(ncf)  #package for building correlograms
+library(nlme)
+library(raster)
+library(vegan)
+library(colorRamps)
+library(emdbook)
+```
+
+###Question 1: Look at the data and generate some basic plots. Does anything appear to indicate SA?
+
+###Now, let's see if we can detect SA in our data.
+
+####Let's first define some objects we'll use from the dataset
+```{r}
+x.coords <- (ratdat$UTM.E) 
+y.coords <- (ratdat$UTM.N)
+density <- (ratdat$Density)
+slope <- (ratdat$WWslope)
+```
+
+####Now, use the correlog function. Use the help to learn what the function requires to run!
+```{r, results="hide"}
+?correlog
+```
+
+```{r, results = "hide", echo=FALSE}
+rat.cor <- correlog(x.coords, y.coords, density, increment = 10, resamp = 50) # measuring for the "density" variable, increment for uniformly distributed distance classes, resampling at 50
+```
+
+###After running the correlog function, you should be able to plot the results!
+```{r}
+plot(rat.cor)
+```
+
+###Question 2: Look at the results. Does SA appear to be present?
+
+####Now, what should we do? We can thin the data to reduce the influence of SA. Or, we can incorporate SA directly into our model.
+
+###Question 3: Study the correlogram and determine which method you would like to use to handle the SA: thinning or direct modeling.
+
+###For thinning, you could use the following function: (from Dan Warren: https://gist.github.com/danlwarren/271288d5bab45d2da549)
+```{r}
+thin.max <- function(x, cols, npoints){    #Create empty vector for output
+  
+  inds <- vector(mode="numeric")
+  
+  #Create distance matrix
+  this.dist <- as.matrix(dist(x[,cols], upper=TRUE))
+  
+  #Draw first index at random
+  inds <- c(inds, as.integer(runif(1, 1, length(this.dist[,1]))))
+  
+  #Get second index from maximally distant point from first one
+  #Necessary because apply needs at least two columns or it'll barf
+  #in the next bit
+  inds <- c(inds, which.max(this.dist[,inds]))
+  
+  while(length(inds) < npoints){
+    #For each point, find its distance to the closest point that's already been selected
+    min.dists <- apply(this.dist[,inds], 1, min)
+    
+    #Select the point that is furthest from everything we've already selected
+    this.ind <- which.max(min.dists)
+    
+    #Get rid of ties, if they exist
+    if(length(this.ind) > 1){
+      print("Breaking tie...")
+      this.ind <- this.ind[1]
+    }
+    inds <- c(inds, this.ind)
+  }
+  
+  return(x[inds,])
+}
+```
+
+
+###Question 3.2: After thinning the data, run the correlog function again. Plot the new results and determine what, if any, difference it has made? Try adjusting the "npoints" number and see what kind of difference it makes to the results?
+
+##Rather than thinning, you may just want to incorporate the SA directly in your model
+####We can do this by fitting linear models with Generalized Least Squares (GLS)
+
+
+
+```{r}
+m2 <- gls(log1p(density)~slope + I(slope^2), data = ratdat) #model without including SA residuals
+m3 <- gls(log1p(density)~slope + I(slope^2), correlation = corExp(form = ~UTM.E + UTM.N, nugget = TRUE), data = ratdat) #we add the correlation argument to run the same model with SA residuals included
+
+vario2<- Variogram(m2, form = ~UTM.E + UTM.N, resType = "pearson")  #create variograms that you can then plot!
+vario3 <- Variogram(m3, form = ~UTM.E + UTM.N, resType = "pearson")
+```
+
+###Question 3.3 
+###Model density as a function of slope with and without incorporating SA. You should get similar plots as above!
+
+###Determine which model is the better fit?
+###Use the AIC function to compare the two models.

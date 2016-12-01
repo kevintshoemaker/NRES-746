@@ -1,0 +1,210 @@
+---
+title: "Spatial Autocorrelation"
+author: "Danny Nielsen and Cristina Perez"
+date: "November 28, 2016"
+output: 
+  html_document: 
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+## Example of Spatial Autocorrelation using simulated spatial data. Example from http://www.petrkeil.com/?p=1050
+
+```{r}
+###First we need to install the package sp and attach to the following libraries:
+
+library(raster)
+library(vegan)
+library(colorRamps)
+library(emdbook)
+```
+
+
+###Now we construct a 30 X 30 matrix and generate values for each pixel that correspond with a color.
+
+```{r}
+side <- 30 #Set the number for side
+Matrix <- matrix(NA, nrow=side, ncol=side) #our matrix with 30 rows and 30 columns
+x.coord <- rep(1:side, each=side) #replicates x values. For all 30, and repeats "each" of 30 times
+y.coord <- rep(1:side, times=side) #same as above for the y-values, or rows
+xy <- data.frame(x.coord, y.coord) #create dataframe of x and y coordinates
+
+xy.dist <- dist(xy) #computes distance matrix computed by using specified distance measure to compute distances between rows of a data matrix
+```
+
+```{r}
+pcnm.axes <- pcnm(xy.dist)$vectors #
+z.value <- pcnm.axes[,8]*200 + rnorm(side*side, 0, 1)
+Matrix[] <- z.value 
+r <- raster (Matrix)
+```
+
+###Our simulated grid of colored pixels!
+```{r}
+plot(r, axes=F, col=matlab.like(20), main ="Simulated data values") #Create plot with pixel colors ranging from blue to red. Pixels should show similar colors close together, and different values as intermediate distances, then similar again at larger distance.
+```
+
+###Before we statistically test for SA, what can you infer from the above figure?
+###Do the pixel values appear to suggest SA? If so, what kind???
+
+###Now we will use some statistics to test for Spatial Autocorrelation
+```{r, results="hide"}
+library(ncf)  #package for building correlograms
+library(raster)
+library(ggplot2)
+library(nlme)
+```
+
+###We now run correlog function with our simulated data
+```{r Correlog, results="hide"}
+ncf.cor <- correlog(x.coord, y.coord, z.value, increment=2, resamp=50) 
+```
+
+###Then we can plot the correlogram!
+```{r}
+plot(ncf.cor) 
+```
+
+###What can we infer from the plot about the presence of SA? What kind???
+
+
+
+##Now, let's do some analyses with real capture data
+```{r}
+rats <- read.csv("Cap_data_for SA.csv")
+
+rats$Habitat <- NULL
+head(rats)
+
+#Let's first define some objects we'll use from the dataset
+x.coordrats <- (rats$UTM.E) 
+y.coordrats <- (rats$UTM.N)
+density <- (rats$Density)
+slope <- (rats$WWslope)
+elevation <- (rats$DEMKV)
+```
+
+```{r}
+plot(rats$Density~rats$WWslope)
+```
+
+###Let's run the correlog function with the unthinned data to see if our density estimates show sign of SA
+```{r, results="hide"}
+ncf.rats <- correlog(x.coordrats, y.coordrats, density, increment = 10, resamp = 50) # measuring for the "slope" variable, increment for uniformly distributed distance classes, resampling at 50
+```
+
+```{r}
+plot(ncf.rats)
+```
+
+
+
+####What if we want to remove/reduce the influence of SA? We can use thinning!#####
+
+###Thinning Function adatped from Dan Warren: https://gist.github.com/danlwarren/271288d5bab45d2da549
+
+```{r}
+thin.max <- function(x, cols, npoints){    #Create empty vector for output
+  
+  inds <- vector(mode="numeric")
+  
+  #Create distance matrix
+  this.dist <- as.matrix(dist(x[,cols], upper=TRUE))
+  
+  #Draw first index at random
+  inds <- c(inds, as.integer(runif(1, 1, length(this.dist[,1]))))
+  
+  #Get second index from maximally distant point from first one
+  #Necessary because apply needs at least two columns or it'll barf
+  #in the next bit
+  inds <- c(inds, which.max(this.dist[,inds]))
+  
+  while(length(inds) < npoints){
+    #For each point, find its distance to the closest point that's already been selected
+    min.dists <- apply(this.dist[,inds], 1, min)
+    
+    #Select the point that is furthest from everything we've already selected
+    this.ind <- which.max(min.dists)
+    
+    #Get rid of ties, if they exist
+    if(length(this.ind) > 1){
+      print("Breaking tie...")
+      this.ind <- this.ind[1]
+    }
+    inds <- c(inds, this.ind)
+  }
+  
+  return(x[inds,])
+}
+```
+
+###Pass our data through the thinning function
+
+```{r}
+thindat <- thin.max(rats, c("UTM.E", "UTM.N") , 20)
+thindat
+head(thindat)
+```
+
+####Let's pull the thinned data out tha we want
+```{r}
+xthin <- (thindat$UTM.E) #setting the thinned eastings
+ythin <- (thindat$UTM.N) #setting the thinned northings
+thinslope <- (thindat$WWslope)  #setting the thinned slope values
+thindensity <- (thindat$Density) #setting the thinned density 
+```
+
+
+###Run correlog function with the new thinned data!
+```{r, results="hide"}
+thinned.rats <- correlog(xthin, ythin, thindensity, increment = 10, resamp = 50) #increment for uniformly distributed distance classes
+```
+graphics.off()
+###Now, let's see the correlogram with the thinned data
+```{r}
+par(mfrow=c(1,2))
+plot(thinned.rats) #correlogram of thinned data
+title(sub="Thinned Data")
+plot(ncf.rats) #plots the results of correlog function
+title (sub = "Unthinned Data") 
+```
+
+##The thinned data seems to center more around '0' value, indicating reduced influence of SA. However, still quite a lot of movement! But, it is somewhat better than with the unthinned data!
+
+
+
+
+####Instead of removing SA via thinning or other methods, we can explicitly incorporate SA into our models
+##Modeling data with Residual SA using Generalized least-squares (GLS)
+
+###Density by slope model without residual SA
+```{r}
+m2 <- gls(log1p(density)~slope + I(slope^2), data = rats)
+vario2<- Variogram(m2, form = ~UTM.E + UTM.N, resType = "pearson")
+plot(vario2, main = "Without residual SA")
+```
+
+#Same model with residual SA
+```{r}
+m3 <- gls(log1p(density)~slope + I(slope^2), correlation = corExp(form = ~UTM.E + UTM.N, nugget = TRUE), data = rats)
+vario3 <- Variogram(m3, form = ~UTM.E + UTM.N, resType = "pearson")
+vario4 <- Variogram(m3, form = ~UTM.E + UTM.N, resType = "normalized", maxDist = 100)
+```
+
+###We can use AIC to compare models!
+```{r}
+AIC(m2,m3)
+```
+
+```{r}
+par(mfrow=c(1,2))
+plot(vario3, main = "With residual SA")
+plot(vario4, main = "With normalized residuals")
+```
+
+###Note the reduced influece in SA in the plots! The plot with normalized residuals shows that the influence of SA has been largely removed.
