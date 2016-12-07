@@ -254,6 +254,54 @@ Okay, the fit seems more or less reasonable!
 
 ## Predictive ability
 
+In many cases, goodness-of-fit is not ultimately what we are most interested in. What we really want to know is whether the model does a good job at predicting the response variable. 
+
+One way to do this would be for us to focus on an R-squared or pseudo-R2 statistic:
+
+$R^2 = 1-\frac{SS_{res}}{SS_{tot}}$        
+
+$PseudoR^2 = 1-(\frac{logLik_{mod}}{logLik_{null}})$
+
+Let's compute these metrics for the fitted data:
+
+```{r}
+
+SS_res <- sum((Myx$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],Myx$day))^2)
+SS_tot <- sum((Myx$titer-mean(Myx$titer))^2)
+Rsquared <- 1-SS_res/SS_tot
+
+cat("R-squared = ", Rsquared, "\n")
+
+NegLogLik_null <- function(params){
+  -sum(dgamma(Myx$titer,shape=params[2],scale=params[1]/params[2],log = T))
+}
+
+init.params <- c(mean=7,shape=50)
+
+MaxLik_null <- optim(par=init.params, fn=NegLogLik_null)
+
+McFadden <- 1-(MaxLik$value/MaxLik_null$value)
+cat("McFadden's R-squared = ", McFadden) 
+```
+
+Another way to evaluate model skill, or performance, is to use root mean squared error:
+
+$RMSE = sqrt(mean(residuals^2))$
+
+RMSE gives a good indicator of the mean error rate, which is often useful and interpretable in an absolute way. For example, the modeled temperature is usually within 1.3 degrees C of the true temperature... 
+
+```{r}
+RMSE = sqrt(mean((Myx$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],Myx$day))^2))
+cat("RMSE = ", RMSE, "\n")
+```
+
+
+So is our model *good*???  
+
+Does it really do a good job at prediction? Is the model over-fitted?
+
+### Validation 
+
 Let's imagine we collect some new Myxomatosis titer data, and it looks like this:
 
 ```{r}
@@ -266,7 +314,7 @@ newdata
 ```
 
 
-How could we evaluate whether our model does a good job of predicting the new data? There are many ways to do this! One way is simply to visualize the new data against the cloud of data possibly produced under the fitted model...
+First we might simply visualize the new data against the cloud of data possibly produced under the fitted model...
 
 ```{r}
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15),type="n",xlab="days",ylab="titer")
@@ -292,54 +340,103 @@ legend("topleft",pch=c(20,20),col=c("black","red"),legend=c("original data","val
 ```
 
 
-One way to do this more quantitatively would be for us to focus on a pseudo-R2 statistic like McFadden's metric:
 
-$1-(\frac{logLik_{mod}}{logLik_{null}})$
-
-Let's compute this metric for the fitted data:
+Now let's evaluate the skill of our model at predicting the new data... using our above measures of skill, or performance. 
 
 ```{r}
 
-NegLogLik_null <- function(params){
-  -sum(dgamma(Myx$titer,shape=params[2],scale=params[1]/params[2],log = T))
-}
+SS_res <- sum((newdata$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day))^2)
+SS_tot <- sum((newdata$titer-mean(newdata$titer))^2)
+Rsquared_validation <- 1-SS_res/SS_tot
 
-init.params <- c(mean=7,shape=50)
-NegLogLik_null(init.params)
-
-MaxLik_null <- optim(par=init.params, fn=NegLogLik_null)
-
-
-McFadden <- 1-(MaxLik$value/MaxLik_null$value)
-McFadden 
-```
-
-
-In general, values of McFadden R-squared from 0.2 to 0.4 are considered good. So our model is good! 
-
-Now let's see if the model is *good* when used to predict the withheld data...
-
-```{r}
+cat("R-squared = ", Rsquared, "\n")
 
 expected <- Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day)
 McFadden_validation <- 1-(sum(dgamma(newdata$titer,shape=MaxLik$par["shape"],scale=expected/MaxLik$par["shape"], log = T))/sum(dgamma(newdata$titer,shape=MaxLik_null$par["shape"],scale=MaxLik_null$par["mean"]/MaxLik_null$par["shape"],log=T)))
-McFadden_validation
+cat("pseudo R-squared = ", McFadden_validation, "\n")
+
+RMSE = sqrt(mean((newdata$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day))^2))
+cat("RMSE = ", RMSE, "\n")
 
 ```
 
-This shows that the model seems to perform adequately for the new data.
+The above analyses seem to indicate that the model fits the new data well, and that the model is successfully able to explain some of the variation in the new data.
+
+### Generality/extrapolation
+
+Imagine we collect some more new data, this time in which titers are measured from day 10 to 16. Let's see if the model does a good job now! 
 
 
-### K-fold Cross-validation
+```{r}
+newdata <- data.frame(
+  grade = 1,
+  day = c(10,11,12,13,14,15,16),
+  titer = c(6.8,8.0,4.5,3.1,2.7,1.2,0.04)
+)
+newdata
+```
+
+
+As before, let's first simply visualize the new data against the cloud of data possibly produced under the fitted model...
+
+```{r}
+plot(Myx$titer~Myx$day,xlim=c(0,20),ylim=c(0,15),type="n",xlab="days",ylab="titer")
+expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:20)
+points(1:20,expected,type="l",col="green")
+
+expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:20)
+simdata <- array(0,dim=c(1000,20))
+for(i in 1:1000){
+  simdata[i,] <- rgamma(20,shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
+}
+
+upper <- apply(simdata,2,function(t) quantile(t,0.975))
+lower <- apply(simdata,2,function(t) quantile(t,0.025))
+
+points(1:20,upper,type="l",col="green",lty=2)
+points(1:20,lower,type="l",col="green",lty=2)
+
+boxplot(x=as.list(as.data.frame(simdata)),at=1:20,add=T,boxwex=0.25,xaxt="n",range=0,border="green")
+points(newdata$day,newdata$titer,cex=1.5,pch=20,col="red")
+points(Myx$day,Myx$titer,cex=1.5,pch=20,col="black")
+legend("topleft",pch=c(20,20),col=c("black","red"),legend=c("original data","new data"))
+```
+
+Now let's evaluate the skill of our model at predicting the withheld data... using our favorite measures of skill, or performance. 
+
+```{r}
+
+SS_res <- sum((newdata$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day))^2)
+SS_tot <- sum((newdata$titer-mean(newdata$titer))^2)
+Rsquared_validation <- 1-SS_res/SS_tot
+
+cat("R-squared = ", Rsquared, "\n")
+
+expected <- Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day)
+McFadden_validation <- 1-(sum(dgamma(newdata$titer,shape=MaxLik$par["shape"],scale=expected/MaxLik$par["shape"], log = T))/sum(dgamma(newdata$titer,shape=MaxLik_null$par["shape"],scale=MaxLik_null$par["mean"]/MaxLik_null$par["shape"],log=T)))
+cat("pseudo R-squared = ", McFadden_validation, "\n")
+
+RMSE = sqrt(mean((newdata$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day))^2))
+cat("RMSE = ", RMSE, "\n")
+
+```
+
+Interestingly, this example shows a couple things:    
+1) The model was very poor at extrapolating.   
+2) The R-squared isn't always the best measure of model performance.   
+3) The McFadden pseudo-Rsquared can go below 0!   
+
+
+### Cross-validation
 
 In many cases, you will not have new data against which to test the model. Cross-validation allows us to test the model anyway. Here is some pseudocode:   
 
 1. Partition the data into *k* partitions
 2. Fit the model, leaving one data partition out at a time
-    - loop through the partitions. 
-    - for each iteration of the loop, fit the model to all the data EXCEPT the observations in this partition
-    - use this model to predict the response variable for all observations in this partition
-3. Compute overall model performance for the cross-validation!
+    - loop through the partitions.    
+    - for each iteration of the loop, fit the model to all the data EXCEPT the observations in this partition   
+    - use this new fitted model to predict the response variable for all observations in this partition   
+3. Compute overall model performance for the cross-validation!    
 
 
 The most common forms of cross-validation are: (1) leave-one-out (jackknife) and (10-fold) 
@@ -396,47 +493,181 @@ VarExplained_full
 VarExplained_CV
 ```
 
-Clearly the model performance is lower for the cross-validation, but this is probably a more honest evaluation of model performance. 
+Clearly the model performance is lower for the cross-validation, and usually will be! But this is also a more honest evaluation of model performance. 
 
-## Generality/extrapolation
+### Example: multiple logistic regression
 
-Imagine we collect some new data in which titers are measured from day 10 to 16. Let's see if the model does a good job now! 
+NOTE: example modified from [here](https://www.r-bloggers.com/how-to-perform-a-logistic-regression-in-r/)
+
+Let's evaluate which factors were related to surviving the titanic disaster!
 
 
 ```{r}
-newdata <- data.frame(
-  grade = 1,
-  day = c(10,11,12,13,14,15,16),
-  titer = c(6.8,8.8,4.5,3.1,2.7,1.2,1.3)
-)
-newdata
+titanic <- read.csv("titanic.csv",header=T)
+head(titanic)
+```
+
+Our goal is to model the probability of surviving the titanic disaster as a function of covariates like sex, age, number of siblings or spouses onboard, number of parents or children, passenger fare, etc.
+
+Let's first build a simple logistic regression model for this problem. 
+
+```{r}
+model1 <- glm(Survived ~ Sex + SibSp + Parch + Fare, data=titanic, family="binomial")
+summary(model1)
 ```
 
 
-How could we evaluate whether our model does a good job of predicting the new data? There are many ways to do this! One way is simply to visualize the new data against the cloud of data possibly produced under the fitted model...
+Alternatively, we could write our own likelihood function!!
 
 ```{r}
-plot(Myx$titer~Myx$day,xlim=c(0,20),ylim=c(0,15),type="n",xlab="days",ylab="titer")
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:20)
-points(1:20,expected,type="l",col="green")
+params <- c(
+  int=1,
+  male = -3,
+  sibsp = 0,
+  parch = 0,
+  fare = 0.02
+)
 
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:20)
-simdata <- array(0,dim=c(1000,20))
-for(i in 1:1000){
-  simdata[i,] <- rgamma(20,shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
+LikFunc <- function(params){
+  linear <- params['int'] + 
+    params['male']*as.numeric(titanic$Sex=="male") +
+    params['sibsp']*titanic$SibSp +
+    params['parch']*titanic$Parch +
+    params['fare']*titanic$Fare
+  logitlinear <-  1/(1+exp(-(linear)))
+  -sum(dbinom(titanic$Survived,size=1,prob = logitlinear,log=T))
 }
 
-upper <- apply(simdata,2,function(t) quantile(t,0.975))
-lower <- apply(simdata,2,function(t) quantile(t,0.025))
+LikFunc(params)
 
-points(1:20,upper,type="l",col="green",lty=2)
-points(1:20,lower,type="l",col="green",lty=2)
+MLE <- optim(fn=LikFunc,par = params)
 
-boxplot(x=as.list(as.data.frame(simdata)),at=1:20,add=T,boxwex=0.25,xaxt="n",range=0,border="green")
-points(newdata$day,newdata$titer,cex=1.5,pch=20,col="red")
-points(Myx$day,Myx$titer,cex=1.5,pch=20,col="black")
-legend("topleft",pch=c(20,20),col=c("black","red"),legend=c("original data","new data"))
+MLE$par
+
 ```
+
+Interesting- the results are very slightly different from the glm results...!
+
+Since we are interested in evaluating model performance, let's see how well the model predicts which people survived the titanic disaster...
+
+
+BUT... since the response is binary, our model skill metrics don't really work too well!
+
+For binary responses, the ROC curve is a good way of evaluating model performance!
+
+```{r}
+library(ROCR)
+library(rms)
+
+
+###################################
+#################### CROSS VALIDATION CODE
+
+n.folds = 10
+foldVector = rep(c(1:n.folds),times=floor(length(titanic$Survived)/9))[1:length(titanic$Survived)]
+#n.folds = length(titanic$resp_factor)
+#foldVector <- c(1:length(titanic$resp_factor))
+
+counter = 1
+CVprediction <- numeric(nrow(titanic))
+CVobserved <- numeric(nrow(titanic))
+realprediction <- numeric(nrow(titanic))
+realdata <- numeric(nrow(titanic))
+
+counter=1
+
+#test <- numeric(nrow(titanic))
+for(i in 1:n.folds){
+  model <- glm(formula = Survived ~ Sex + SibSp + Parch + Fare, family = "binomial", data = titanic[which(foldVector!=i),]) 
+  predict_CV  <- plogis(predict(model,newdata=titanic[which(foldVector==i),])) 
+  predict_real  <-  plogis(predict(model1,newdata=titanic[which(foldVector==i),]))
+  REAL <- titanic$Survived[which(foldVector==i)]
+  for(j in 1:length(which(foldVector==i))){
+    CVprediction[counter] <- predict_CV[j]
+    CVobserved[counter] <-  REAL[j]      
+    realprediction[counter] <- predict_real[j]   
+    realdata[counter] <- REAL[j]         
+    counter = counter + 1  
+  }
+}
+
+CV_RMSE = sqrt(mean((CVobserved-CVprediction)^2))       # root mean squared error for holdout samples in 10-fold cross-validation ...
+real_RMSE = sqrt(mean((CVobserved-realprediction)^2))  # root mean squared error for residuals from final model
+
+# print RMSE statistics
+CV_RMSE 
+real_RMSE   
+
+binaryresponse=TRUE
+
+if(binaryresponse){
+  graphics.off()
+  par(mfrow=c(2,1))
+  pred <- prediction(CVprediction,CVobserved)     # for holdout samples in cross-validation
+  perf <- performance(pred,"tpr","fpr")
+  auc <- performance(pred,"auc")
+  plot(perf)
+  text(.9,.1,paste("AUC = ",round(auc@y.values[[1]],2),sep=""))
+  
+  pred <- prediction(realprediction,CVobserved)     # for final model
+  perf <- performance(pred,"tpr","fpr")
+  auc <- performance(pred,"auc")
+  plot(perf)
+  text(.9,.1,paste("AUC = ",round(auc@y.values[[1]],2),sep=""))
+}
+
+### display confusion matrix and kappa for a single threshold
+
+cutoff = 0.5
+
+trueLabels <- CVobserved
+predLabels <- ifelse(CVprediction>=cutoff,1,0)    
+tot <- length(CVobserved)
+tp <- length(which((trueLabels==1)&(predLabels==1)))  
+tn <- length(which((trueLabels==0)&(predLabels==0)))
+fp <- length(which((trueLabels==0)&(predLabels==1)))
+fn <- length(which((trueLabels==1)&(predLabels==0)))
+pr_agree <- (tp+tn)/tot    # overall agreement, or accuracy
+pr_agree_rand <- ((tp+fn)/tot)*((tp+fp)/tot)+((fn+tn)/tot)*((fp+tn)/tot)
+kappa <- (pr_agree-pr_agree_rand)/(1-pr_agree_rand)
+kappa
+
+
+matrix(c(tp,fp,fn,tn),nrow=2,ncol=2)
+sensitivity <- tp/(tp+fn)
+specificity <- tn/(tn+fp)
+toterror <- (fn+fp)/tot
+sensitivity
+specificity
+toterror
+
+if(binaryresponse){
+  CVprediction[which(CVprediction==1)] <- 0.9999
+  CVprediction[which(CVprediction==0)] <- 0.0001
+  realprediction[which(realprediction==1)] <- 0.9999
+  realprediction[which(realprediction==0)] <- 0.0001
+}
+
+
+realdata = CVobserved
+fit_deviance_CV <- mean((CVobserved-CVprediction)^2)
+if(binaryresponse) fit_deviance_CV <- mean(-2*(dbinom(CVobserved,1,CVprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
+fit_deviance_real <- mean((CVobserved-realprediction)^2)
+if(binaryresponse) fit_deviance_real <- mean(-2*(dbinom(CVobserved,1,realprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
+null_deviance <- mean((CVobserved-mean(CVobserved))^2)
+if(binaryresponse) null_deviance <- mean(-2*(dbinom(CVobserved,1,mean(CVobserved),log=T)-dbinom(realdata,1,realdata,log=T)))
+deviance_explained_CV <- (null_deviance-fit_deviance_CV)/null_deviance   # based on holdout samples
+deviance_explained_real <- (null_deviance-fit_deviance_real)/null_deviance   # based on full model...
+
+deviance_explained_CV
+deviance_explained_real
+
+```
+
+
+
+NEXT: do the same analysis with Random Forest... 
+
 
 
 

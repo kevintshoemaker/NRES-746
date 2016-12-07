@@ -713,6 +713,38 @@ p.value</code></pre>
 </div>
 <div id="predictive-ability" class="section level2">
 <h2>Predictive ability</h2>
+<p>In many cases, goodness-of-fit is not ultimately what we are most interested in. What we really want to know is whether the model does a good job at predicting the response variable.</p>
+<p>One way to do this would be for us to focus on an R-squared or pseudo-R2 statistic:</p>
+<p><span class="math inline">\(R^2 = 1-\frac{SS_{res}}{SS_{tot}}\)</span></p>
+<p><span class="math inline">\(PseudoR^2 = 1-(\frac{logLik_{mod}}{logLik_{null}})\)</span></p>
+<p>Let’s compute these metrics for the fitted data:</p>
+<pre class="r"><code>SS_res &lt;- sum((Myx$titer-Ricker(MaxLik$par[&quot;a&quot;],MaxLik$par[&quot;b&quot;],Myx$day))^2)
+SS_tot &lt;- sum((Myx$titer-mean(Myx$titer))^2)
+Rsquared &lt;- 1-SS_res/SS_tot
+
+cat(&quot;R-squared = &quot;, Rsquared, &quot;\n&quot;)</code></pre>
+<pre><code>## R-squared =  0.46578</code></pre>
+<pre class="r"><code>NegLogLik_null &lt;- function(params){
+  -sum(dgamma(Myx$titer,shape=params[2],scale=params[1]/params[2],log = T))
+}
+
+init.params &lt;- c(mean=7,shape=50)
+
+MaxLik_null &lt;- optim(par=init.params, fn=NegLogLik_null)
+
+McFadden &lt;- 1-(MaxLik$value/MaxLik_null$value)
+cat(&quot;McFadden&#39;s R-squared = &quot;, McFadden) </code></pre>
+<pre><code>## McFadden&#39;s R-squared =  0.2165806</code></pre>
+<p>Another way to evaluate model skill, or performance, is to use root mean squared error:</p>
+<p><span class="math inline">\(RMSE = sqrt(mean(residuals^2))\)</span></p>
+<p>RMSE gives a good indicator of the mean error rate, which is often useful and interpretable in an absolute way. For example, the modeled temperature is usually within 1.3 degrees C of the true temperature…</p>
+<pre class="r"><code>RMSE = sqrt(mean((Myx$titer-Ricker(MaxLik$par[&quot;a&quot;],MaxLik$par[&quot;b&quot;],Myx$day))^2))
+cat(&quot;RMSE = &quot;, RMSE, &quot;\n&quot;)</code></pre>
+<pre><code>## RMSE =  0.6767347</code></pre>
+<p>So is our model <em>good</em>???</p>
+<p>Does it really do a good job at prediction? Is the model over-fitted?</p>
+<div id="validation" class="section level3">
+<h3>Validation</h3>
 <p>Let’s imagine we collect some new Myxomatosis titer data, and it looks like this:</p>
 <pre class="r"><code>newdata &lt;- data.frame(
   grade = 1,
@@ -728,7 +760,7 @@ newdata</code></pre>
 ## 5     1   6   9.1
 ## 6     1   7   8.3
 ## 7     1   8   8.8</code></pre>
-<p>How could we evaluate whether our model does a good job of predicting the new data? There are many ways to do this! One way is simply to visualize the new data against the cloud of data possibly produced under the fitted model…</p>
+<p>First we might simply visualize the new data against the cloud of data possibly produced under the fitted model…</p>
 <pre class="r"><code>plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15),type=&quot;n&quot;,xlab=&quot;days&quot;,ylab=&quot;titer&quot;)
 expected &lt;- Ricker(MaxLik$par[&#39;a&#39;],MaxLik$par[&#39;b&#39;],1:10)
 points(1:10,expected,type=&quot;l&quot;,col=&quot;green&quot;)
@@ -749,40 +781,94 @@ boxplot(x=as.list(as.data.frame(simdata)),at=1:10,add=T,boxwex=0.25,xaxt=&quot;n
 points(newdata$day,newdata$titer,cex=1.5,pch=20,col=&quot;red&quot;)
 points(Myx$day,Myx$titer,cex=1.5,pch=20,col=&quot;black&quot;)
 legend(&quot;topleft&quot;,pch=c(20,20),col=c(&quot;black&quot;,&quot;red&quot;),legend=c(&quot;original data&quot;,&quot;validation data&quot;))</code></pre>
-<p><img src="LECTURE9_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
-<p>One way to do this more quantitatively would be for us to focus on a pseudo-R2 statistic like McFadden’s metric:</p>
-<p><span class="math inline">\(1-(\frac{logLik_{mod}}{logLik_{null}})\)</span></p>
-<p>Let’s compute this metric for the fitted data:</p>
-<pre class="r"><code>NegLogLik_null &lt;- function(params){
-  -sum(dgamma(Myx$titer,shape=params[2],scale=params[1]/params[2],log = T))
-}
+<p><img src="LECTURE9_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
+<p>Now let’s evaluate the skill of our model at predicting the new data… using our above measures of skill, or performance.</p>
+<pre class="r"><code>SS_res &lt;- sum((newdata$titer-Ricker(MaxLik$par[&quot;a&quot;],MaxLik$par[&quot;b&quot;],newdata$day))^2)
+SS_tot &lt;- sum((newdata$titer-mean(newdata$titer))^2)
+Rsquared_validation &lt;- 1-SS_res/SS_tot
 
-init.params &lt;- c(mean=7,shape=50)
-NegLogLik_null(init.params)</code></pre>
-<pre><code>## [1] 37.74754</code></pre>
-<pre class="r"><code>MaxLik_null &lt;- optim(par=init.params, fn=NegLogLik_null)
-
-
-McFadden &lt;- 1-(MaxLik$value/MaxLik_null$value)
-McFadden </code></pre>
-<pre><code>## [1] 0.2165806</code></pre>
-<p>In general, values of McFadden R-squared from 0.2 to 0.4 are considered good. So our model is good!</p>
-<p>Now let’s see if the model is <em>good</em> when used to predict the withheld data…</p>
+cat(&quot;R-squared = &quot;, Rsquared, &quot;\n&quot;)</code></pre>
+<pre><code>## R-squared =  0.46578</code></pre>
 <pre class="r"><code>expected &lt;- Ricker(MaxLik$par[&quot;a&quot;],MaxLik$par[&quot;b&quot;],newdata$day)
 McFadden_validation &lt;- 1-(sum(dgamma(newdata$titer,shape=MaxLik$par[&quot;shape&quot;],scale=expected/MaxLik$par[&quot;shape&quot;], log = T))/sum(dgamma(newdata$titer,shape=MaxLik_null$par[&quot;shape&quot;],scale=MaxLik_null$par[&quot;mean&quot;]/MaxLik_null$par[&quot;shape&quot;],log=T)))
-McFadden_validation</code></pre>
-<pre><code>## [1] 0.2275702</code></pre>
-<p>This shows that the model seems to perform adequately for the new data.</p>
-<div id="k-fold-cross-validation" class="section level3">
-<h3>K-fold Cross-validation</h3>
+cat(&quot;pseudo R-squared = &quot;, McFadden_validation, &quot;\n&quot;)</code></pre>
+<pre><code>## pseudo R-squared =  0.2275702</code></pre>
+<pre class="r"><code>RMSE = sqrt(mean((newdata$titer-Ricker(MaxLik$par[&quot;a&quot;],MaxLik$par[&quot;b&quot;],newdata$day))^2))
+cat(&quot;RMSE = &quot;, RMSE, &quot;\n&quot;)</code></pre>
+<pre><code>## RMSE =  1.144803</code></pre>
+<p>The above analyses seem to indicate that the model fits the new data well, and that the model is successfully able to explain some of the variation in the new data.</p>
+</div>
+<div id="generalityextrapolation" class="section level3">
+<h3>Generality/extrapolation</h3>
+<p>Imagine we collect some more new data, this time in which titers are measured from day 10 to 16. Let’s see if the model does a good job now!</p>
+<pre class="r"><code>newdata &lt;- data.frame(
+  grade = 1,
+  day = c(10,11,12,13,14,15,16),
+  titer = c(6.8,8.0,4.5,3.1,2.7,1.2,0.04)
+)
+newdata</code></pre>
+<pre><code>##   grade day titer
+## 1     1  10  6.80
+## 2     1  11  8.00
+## 3     1  12  4.50
+## 4     1  13  3.10
+## 5     1  14  2.70
+## 6     1  15  1.20
+## 7     1  16  0.04</code></pre>
+<p>As before, let’s first simply visualize the new data against the cloud of data possibly produced under the fitted model…</p>
+<pre class="r"><code>plot(Myx$titer~Myx$day,xlim=c(0,20),ylim=c(0,15),type=&quot;n&quot;,xlab=&quot;days&quot;,ylab=&quot;titer&quot;)
+expected &lt;- Ricker(MaxLik$par[&#39;a&#39;],MaxLik$par[&#39;b&#39;],1:20)
+points(1:20,expected,type=&quot;l&quot;,col=&quot;green&quot;)
+
+expected &lt;- Ricker(MaxLik$par[&#39;a&#39;],MaxLik$par[&#39;b&#39;],1:20)
+simdata &lt;- array(0,dim=c(1000,20))
+for(i in 1:1000){
+  simdata[i,] &lt;- rgamma(20,shape=MaxLik$par[&#39;shape&#39;],scale=expected/MaxLik$par[&#39;shape&#39;])
+}
+
+upper &lt;- apply(simdata,2,function(t) quantile(t,0.975))
+lower &lt;- apply(simdata,2,function(t) quantile(t,0.025))
+
+points(1:20,upper,type=&quot;l&quot;,col=&quot;green&quot;,lty=2)
+points(1:20,lower,type=&quot;l&quot;,col=&quot;green&quot;,lty=2)
+
+boxplot(x=as.list(as.data.frame(simdata)),at=1:20,add=T,boxwex=0.25,xaxt=&quot;n&quot;,range=0,border=&quot;green&quot;)
+points(newdata$day,newdata$titer,cex=1.5,pch=20,col=&quot;red&quot;)
+points(Myx$day,Myx$titer,cex=1.5,pch=20,col=&quot;black&quot;)
+legend(&quot;topleft&quot;,pch=c(20,20),col=c(&quot;black&quot;,&quot;red&quot;),legend=c(&quot;original data&quot;,&quot;new data&quot;))</code></pre>
+<p><img src="LECTURE9_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<p>Now let’s evaluate the skill of our model at predicting the withheld data… using our favorite measures of skill, or performance.</p>
+<pre class="r"><code>SS_res &lt;- sum((newdata$titer-Ricker(MaxLik$par[&quot;a&quot;],MaxLik$par[&quot;b&quot;],newdata$day))^2)
+SS_tot &lt;- sum((newdata$titer-mean(newdata$titer))^2)
+Rsquared_validation &lt;- 1-SS_res/SS_tot
+
+cat(&quot;R-squared = &quot;, Rsquared, &quot;\n&quot;)</code></pre>
+<pre><code>## R-squared =  0.46578</code></pre>
+<pre class="r"><code>expected &lt;- Ricker(MaxLik$par[&quot;a&quot;],MaxLik$par[&quot;b&quot;],newdata$day)
+McFadden_validation &lt;- 1-(sum(dgamma(newdata$titer,shape=MaxLik$par[&quot;shape&quot;],scale=expected/MaxLik$par[&quot;shape&quot;], log = T))/sum(dgamma(newdata$titer,shape=MaxLik_null$par[&quot;shape&quot;],scale=MaxLik_null$par[&quot;mean&quot;]/MaxLik_null$par[&quot;shape&quot;],log=T)))
+cat(&quot;pseudo R-squared = &quot;, McFadden_validation, &quot;\n&quot;)</code></pre>
+<pre><code>## pseudo R-squared =  -0.3697861</code></pre>
+<pre class="r"><code>RMSE = sqrt(mean((newdata$titer-Ricker(MaxLik$par[&quot;a&quot;],MaxLik$par[&quot;b&quot;],newdata$day))^2))
+cat(&quot;RMSE = &quot;, RMSE, &quot;\n&quot;)</code></pre>
+<pre><code>## RMSE =  2.196227</code></pre>
+<p>Interestingly, this example shows a couple things:<br />
+1) The model was very poor at extrapolating.<br />
+2) The R-squared isn’t always the best measure of model performance.<br />
+3) The McFadden pseudo-Rsquared can go below 0!</p>
+</div>
+<div id="cross-validation" class="section level3">
+<h3>Cross-validation</h3>
 <p>In many cases, you will not have new data against which to test the model. Cross-validation allows us to test the model anyway. Here is some pseudocode:</p>
 <ol style="list-style-type: decimal">
 <li>Partition the data into <em>k</em> partitions</li>
 <li>Fit the model, leaving one data partition out at a time
 <ul>
-<li>loop through the partitions.</li>
-<li>for each iteration of the loop, fit the model to all the data EXCEPT the observations in this partition</li>
-<li>use this model to predict the response variable for all observations in this partition</li>
+<li>loop through the partitions.<br />
+</li>
+<li>for each iteration of the loop, fit the model to all the data EXCEPT the observations in this partition<br />
+</li>
+<li>use this new fitted model to predict the response variable for all observations in this partition<br />
+</li>
 </ul></li>
 <li>Compute overall model performance for the cross-validation!</li>
 </ol>
@@ -810,33 +896,33 @@ Myx$pred_full &lt;- Ricker(MaxLik$par[&#39;a&#39;],MaxLik$par[&#39;b&#39;],Myx$d
 
 Myx</code></pre>
 <pre><code>##    grade day titer fold  pred_CV pred_full
-## 1      1   2 5.207   27 5.037240  5.056415
-## 2      1   2 5.734    6 4.964784  5.056415
-## 3      1   2 6.613    9 4.848091  5.056415
-## 4      1   3 5.997    8 6.421393  6.390345
-## 5      1   3 6.612   16 6.372576  6.390345
-## 6      1   3 6.810   14 6.356336  6.390345
-## 7      1   4 5.930   21 7.239066  7.178825
-## 8      1   4 6.501    3 7.210826  7.178825
-## 9      1   4 7.182   24 7.179047  7.178825
-## 10     1   4 7.292   12 7.173159  7.178825
-## 11     1   5 7.819    5 7.550076  7.560555
-## 12     1   5 7.489   26 7.562292  7.560555
-## 13     1   5 6.918   11 7.585407  7.560555
-## 14     1   5 6.808    1 7.589677  7.560555
-## 15     1   6 6.235   18 7.710027  7.644080
-## 16     1   6 6.916   10 7.678921  7.644080
-## 17     1   2 4.196    4 5.170366  5.056415
-## 18     1   9 7.682   19 6.680056  6.857841
-## 19     1   8 8.189   23 7.113403  7.235101
-## 20     1   7 7.707   25 7.500069  7.513847
-## 21     1   7 7.597   17 7.506437  7.513847
-## 22     1   8 7.112   15 7.251935  7.235101
-## 23     1   8 7.354   20 7.221209  7.235101
-## 24     1   6 7.158   22 7.666217  7.644080
+## 1      1   2 5.207   18 5.037240  5.056415
+## 2      1   2 5.734   12 4.964784  5.056415
+## 3      1   2 6.613    3 4.848091  5.056415
+## 4      1   3 5.997   19 6.421393  6.390345
+## 5      1   3 6.612   27 6.372576  6.390345
+## 6      1   3 6.810    4 6.356336  6.390345
+## 7      1   4 5.930   13 7.239066  7.178825
+## 8      1   4 6.501   24 7.210826  7.178825
+## 9      1   4 7.182   14 7.179047  7.178825
+## 10     1   4 7.292    5 7.173159  7.178825
+## 11     1   5 7.819    8 7.550076  7.560555
+## 12     1   5 7.489   10 7.562292  7.560555
+## 13     1   5 6.918   22 7.585407  7.560555
+## 14     1   5 6.808   16 7.589677  7.560555
+## 15     1   6 6.235   25 7.710027  7.644080
+## 16     1   6 6.916   23 7.678921  7.644080
+## 17     1   2 4.196   15 5.170366  5.056415
+## 18     1   9 7.682    7 6.680056  6.857841
+## 19     1   8 8.189    9 7.113403  7.235101
+## 20     1   7 7.707   21 7.500069  7.513847
+## 21     1   7 7.597   26 7.506437  7.513847
+## 22     1   8 7.112   20 7.251935  7.235101
+## 23     1   8 7.354    6 7.221209  7.235101
+## 24     1   6 7.158    1 7.666217  7.644080
 ## 25     1   6 7.466    2 7.651439  7.644080
-## 26     1   6 7.927    7 7.630461  7.644080
-## 27     1   6 8.499   13 7.602640  7.644080</code></pre>
+## 26     1   6 7.927   17 7.630461  7.644080
+## 27     1   6 8.499   11 7.602640  7.644080</code></pre>
 <p>To assess how well the model is performing, let’s compute the root mean squared error for the full model vs the cross-validation:</p>
 <pre class="r"><code>RMSE_full &lt;- sqrt(mean((Myx$titer-Myx$pred_full)^2))
 RMSE_CV &lt;- sqrt(mean((Myx$titer-Myx$pred_CV)^2))
@@ -852,48 +938,229 @@ VarExplained_full</code></pre>
 <pre><code>## [1] 0.46578</code></pre>
 <pre class="r"><code>VarExplained_CV</code></pre>
 <pre><code>## [1] 0.3655692</code></pre>
-<p>Clearly the model performance is lower for the cross-validation, but this is probably a more honest evaluation of model performance.</p>
+<p>Clearly the model performance is lower for the cross-validation, and usually will be! But this is also a more honest evaluation of model performance.</p>
 </div>
-</div>
-<div id="generalityextrapolation" class="section level2">
-<h2>Generality/extrapolation</h2>
-<p>Imagine we collect some new data in which titers are measured from day 10 to 16. Let’s see if the model does a good job now!</p>
-<pre class="r"><code>newdata &lt;- data.frame(
-  grade = 1,
-  day = c(10,11,12,13,14,15,16),
-  titer = c(6.8,8.8,4.5,3.1,2.7,1.2,1.3)
+<div id="example-multiple-logistic-regression" class="section level3">
+<h3>Example: multiple logistic regression</h3>
+<p>NOTE: example modified from <a href="https://www.r-bloggers.com/how-to-perform-a-logistic-regression-in-r/">here</a></p>
+<p>Let’s evaluate which factors were related to surviving the titanic disaster!</p>
+<pre class="r"><code>titanic &lt;- read.csv(&quot;titanic.csv&quot;,header=T)
+head(titanic)</code></pre>
+<pre><code>##   PassengerId Survived Pclass
+## 1           1        0      3
+## 2           2        1      1
+## 3           3        1      3
+## 4           4        1      1
+## 5           5        0      3
+## 6           6        0      3
+##                                                  Name    Sex Age SibSp
+## 1                             Braund, Mr. Owen Harris   male  22     1
+## 2 Cumings, Mrs. John Bradley (Florence Briggs Thayer) female  38     1
+## 3                              Heikkinen, Miss. Laina female  26     0
+## 4        Futrelle, Mrs. Jacques Heath (Lily May Peel) female  35     1
+## 5                            Allen, Mr. William Henry   male  35     0
+## 6                                    Moran, Mr. James   male  NA     0
+##   Parch           Ticket    Fare Cabin Embarked
+## 1     0        A/5 21171  7.2500              S
+## 2     0         PC 17599 71.2833   C85        C
+## 3     0 STON/O2. 3101282  7.9250              S
+## 4     0           113803 53.1000  C123        S
+## 5     0           373450  8.0500              S
+## 6     0           330877  8.4583              Q</code></pre>
+<p>Our goal is to model the probability of surviving the titanic disaster as a function of covariates like sex, age, number of siblings or spouses onboard, number of parents or children, passenger fare, etc.</p>
+<p>Let’s first build a simple logistic regression model for this problem.</p>
+<pre class="r"><code>model1 &lt;- glm(Survived ~ Sex + SibSp + Parch + Fare, data=titanic, family=&quot;binomial&quot;)
+summary(model1)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = Survived ~ Sex + SibSp + Parch + Fare, family = &quot;binomial&quot;, 
+##     data = titanic)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -2.2371  -0.6229  -0.5964   0.7498   2.4891  
+## 
+## Coefficients:
+##              Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)  0.946635   0.169354   5.590 2.28e-08 ***
+## Sexmale     -2.642219   0.186114 -14.197  &lt; 2e-16 ***
+## SibSp       -0.353892   0.098185  -3.604 0.000313 ***
+## Parch       -0.200724   0.112037  -1.792 0.073200 .  
+## Fare         0.014685   0.002644   5.553 2.80e-08 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 1186.66  on 890  degrees of freedom
+## Residual deviance:  859.04  on 886  degrees of freedom
+## AIC: 869.04
+## 
+## Number of Fisher Scoring iterations: 5</code></pre>
+<p>Alternatively, we could write our own likelihood function!!</p>
+<pre class="r"><code>params &lt;- c(
+  int=1,
+  male = -3,
+  sibsp = 0,
+  parch = 0,
+  fare = 0.02
 )
-newdata</code></pre>
-<pre><code>##   grade day titer
-## 1     1  10   6.8
-## 2     1  11   8.8
-## 3     1  12   4.5
-## 4     1  13   3.1
-## 5     1  14   2.7
-## 6     1  15   1.2
-## 7     1  16   1.3</code></pre>
-<p>How could we evaluate whether our model does a good job of predicting the new data? There are many ways to do this! One way is simply to visualize the new data against the cloud of data possibly produced under the fitted model…</p>
-<pre class="r"><code>plot(Myx$titer~Myx$day,xlim=c(0,20),ylim=c(0,15),type=&quot;n&quot;,xlab=&quot;days&quot;,ylab=&quot;titer&quot;)
-expected &lt;- Ricker(MaxLik$par[&#39;a&#39;],MaxLik$par[&#39;b&#39;],1:20)
-points(1:20,expected,type=&quot;l&quot;,col=&quot;green&quot;)
 
-expected &lt;- Ricker(MaxLik$par[&#39;a&#39;],MaxLik$par[&#39;b&#39;],1:20)
-simdata &lt;- array(0,dim=c(1000,20))
-for(i in 1:1000){
-  simdata[i,] &lt;- rgamma(20,shape=MaxLik$par[&#39;shape&#39;],scale=expected/MaxLik$par[&#39;shape&#39;])
+LikFunc &lt;- function(params){
+  linear &lt;- params[&#39;int&#39;] + 
+    params[&#39;male&#39;]*as.numeric(titanic$Sex==&quot;male&quot;) +
+    params[&#39;sibsp&#39;]*titanic$SibSp +
+    params[&#39;parch&#39;]*titanic$Parch +
+    params[&#39;fare&#39;]*titanic$Fare
+  logitlinear &lt;-  1/(1+exp(-(linear)))
+  -sum(dbinom(titanic$Survived,size=1,prob = logitlinear,log=T))
 }
 
-upper &lt;- apply(simdata,2,function(t) quantile(t,0.975))
-lower &lt;- apply(simdata,2,function(t) quantile(t,0.025))
+LikFunc(params)</code></pre>
+<pre><code>## [1] 457.3548</code></pre>
+<pre class="r"><code>MLE &lt;- optim(fn=LikFunc,par = params)
 
-points(1:20,upper,type=&quot;l&quot;,col=&quot;green&quot;,lty=2)
-points(1:20,lower,type=&quot;l&quot;,col=&quot;green&quot;,lty=2)
+MLE$par</code></pre>
+<pre><code>##         int        male       sibsp       parch        fare 
+##  1.00192952 -2.68340590 -0.37983132 -0.23729121  0.01494866</code></pre>
+<p>Interesting- the results are very slightly different from the glm results…!</p>
+<p>Since we are interested in evaluating model performance, let’s see how well the model predicts which people survived the titanic disaster…</p>
+<p>BUT… since the response is binary, our model skill metrics don’t really work too well!</p>
+<p>For binary responses, the ROC curve is a good way of evaluating model performance!</p>
+<pre class="r"><code>library(ROCR)</code></pre>
+<pre><code>## Loading required package: gplots</code></pre>
+<pre><code>## 
+## Attaching package: &#39;gplots&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:stats&#39;:
+## 
+##     lowess</code></pre>
+<pre class="r"><code>library(rms)</code></pre>
+<pre><code>## Loading required package: Hmisc</code></pre>
+<pre><code>## Loading required package: survival</code></pre>
+<pre><code>## Loading required package: Formula</code></pre>
+<pre><code>## Loading required package: ggplot2</code></pre>
+<pre><code>## Warning: package &#39;ggplot2&#39; was built under R version 3.3.2</code></pre>
+<pre><code>## 
+## Attaching package: &#39;Hmisc&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:base&#39;:
+## 
+##     format.pval, round.POSIXt, trunc.POSIXt, units</code></pre>
+<pre><code>## Loading required package: SparseM</code></pre>
+<pre><code>## 
+## Attaching package: &#39;SparseM&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:base&#39;:
+## 
+##     backsolve</code></pre>
+<pre class="r"><code>###################################
+#################### CROSS VALIDATION CODE
 
-boxplot(x=as.list(as.data.frame(simdata)),at=1:20,add=T,boxwex=0.25,xaxt=&quot;n&quot;,range=0,border=&quot;green&quot;)
-points(newdata$day,newdata$titer,cex=1.5,pch=20,col=&quot;red&quot;)
-points(Myx$day,Myx$titer,cex=1.5,pch=20,col=&quot;black&quot;)
-legend(&quot;topleft&quot;,pch=c(20,20),col=c(&quot;black&quot;,&quot;red&quot;),legend=c(&quot;original data&quot;,&quot;new data&quot;))</code></pre>
-<p><img src="LECTURE9_files/figure-html/unnamed-chunk-18-1.png" width="672" /></p>
+n.folds = 10
+foldVector = rep(c(1:n.folds),times=floor(length(titanic$Survived)/9))[1:length(titanic$Survived)]
+#n.folds = length(titanic$resp_factor)
+#foldVector &lt;- c(1:length(titanic$resp_factor))
+
+counter = 1
+CVprediction &lt;- numeric(nrow(titanic))
+CVobserved &lt;- numeric(nrow(titanic))
+realprediction &lt;- numeric(nrow(titanic))
+realdata &lt;- numeric(nrow(titanic))
+
+counter=1
+
+#test &lt;- numeric(nrow(titanic))
+for(i in 1:n.folds){
+  model &lt;- glm(formula = Survived ~ Sex + SibSp + Parch + Fare, family = &quot;binomial&quot;, data = titanic[which(foldVector!=i),]) 
+  predict_CV  &lt;- plogis(predict(model,newdata=titanic[which(foldVector==i),])) 
+  predict_real  &lt;-  plogis(predict(model1,newdata=titanic[which(foldVector==i),]))
+  REAL &lt;- titanic$Survived[which(foldVector==i)]
+  for(j in 1:length(which(foldVector==i))){
+    CVprediction[counter] &lt;- predict_CV[j]
+    CVobserved[counter] &lt;-  REAL[j]      
+    realprediction[counter] &lt;- predict_real[j]   
+    realdata[counter] &lt;- REAL[j]         
+    counter = counter + 1  
+  }
+}
+
+CV_RMSE = sqrt(mean((CVobserved-CVprediction)^2))       # root mean squared error for holdout samples in 10-fold cross-validation ...
+real_RMSE = sqrt(mean((CVobserved-realprediction)^2))  # root mean squared error for residuals from final model
+
+# print RMSE statistics
+CV_RMSE </code></pre>
+<pre><code>## [1] 0.3983029</code></pre>
+<pre class="r"><code>real_RMSE   </code></pre>
+<pre><code>## [1] 0.3937799</code></pre>
+<pre class="r"><code>binaryresponse=TRUE
+
+if(binaryresponse){
+  graphics.off()
+  par(mfrow=c(2,1))
+  pred &lt;- prediction(CVprediction,CVobserved)     # for holdout samples in cross-validation
+  perf &lt;- performance(pred,&quot;tpr&quot;,&quot;fpr&quot;)
+  auc &lt;- performance(pred,&quot;auc&quot;)
+  plot(perf)
+  text(.9,.1,paste(&quot;AUC = &quot;,round(auc@y.values[[1]],2),sep=&quot;&quot;))
+  
+  pred &lt;- prediction(realprediction,CVobserved)     # for final model
+  perf &lt;- performance(pred,&quot;tpr&quot;,&quot;fpr&quot;)
+  auc &lt;- performance(pred,&quot;auc&quot;)
+  plot(perf)
+  text(.9,.1,paste(&quot;AUC = &quot;,round(auc@y.values[[1]],2),sep=&quot;&quot;))
+}
+
+### display confusion matrix and kappa for a single threshold
+
+cutoff = 0.5
+
+trueLabels &lt;- CVobserved
+predLabels &lt;- ifelse(CVprediction&gt;=cutoff,1,0)    
+tot &lt;- length(CVobserved)
+tp &lt;- length(which((trueLabels==1)&amp;(predLabels==1)))  
+tn &lt;- length(which((trueLabels==0)&amp;(predLabels==0)))
+fp &lt;- length(which((trueLabels==0)&amp;(predLabels==1)))
+fn &lt;- length(which((trueLabels==1)&amp;(predLabels==0)))
+pr_agree &lt;- (tp+tn)/tot    # overall agreement, or accuracy
+pr_agree_rand &lt;- ((tp+fn)/tot)*((tp+fp)/tot)+((fn+tn)/tot)*((fp+tn)/tot)
+kappa &lt;- (pr_agree-pr_agree_rand)/(1-pr_agree_rand)
+kappa</code></pre>
+<pre><code>## [1] 0.5410852</code></pre>
+<pre class="r"><code>matrix(c(tp,fp,fn,tn),nrow=2,ncol=2)</code></pre>
+<pre><code>##      [,1] [,2]
+## [1,]  231  111
+## [2,]   79  470</code></pre>
+<pre class="r"><code>sensitivity &lt;- tp/(tp+fn)
+specificity &lt;- tn/(tn+fp)
+toterror &lt;- (fn+fp)/tot
+sensitivity</code></pre>
+<pre><code>## [1] 0.6754386</code></pre>
+<pre class="r"><code>specificity</code></pre>
+<pre><code>## [1] 0.856102</code></pre>
+<pre class="r"><code>toterror</code></pre>
+<pre><code>## [1] 0.2132435</code></pre>
+<pre class="r"><code>if(binaryresponse){
+  CVprediction[which(CVprediction==1)] &lt;- 0.9999
+  CVprediction[which(CVprediction==0)] &lt;- 0.0001
+  realprediction[which(realprediction==1)] &lt;- 0.9999
+  realprediction[which(realprediction==0)] &lt;- 0.0001
+}
+
+
+realdata = CVobserved
+fit_deviance_CV &lt;- mean((CVobserved-CVprediction)^2)
+if(binaryresponse) fit_deviance_CV &lt;- mean(-2*(dbinom(CVobserved,1,CVprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
+fit_deviance_real &lt;- mean((CVobserved-realprediction)^2)
+if(binaryresponse) fit_deviance_real &lt;- mean(-2*(dbinom(CVobserved,1,realprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
+null_deviance &lt;- mean((CVobserved-mean(CVobserved))^2)
+if(binaryresponse) null_deviance &lt;- mean(-2*(dbinom(CVobserved,1,mean(CVobserved),log=T)-dbinom(realdata,1,realdata,log=T)))
+deviance_explained_CV &lt;- (null_deviance-fit_deviance_CV)/null_deviance   # based on holdout samples
+deviance_explained_real &lt;- (null_deviance-fit_deviance_real)/null_deviance   # based on full model...
+
+deviance_explained_CV</code></pre>
+<pre><code>## [1] 0.2564415</code></pre>
+<pre class="r"><code>deviance_explained_real</code></pre>
+<pre><code>## [1] 0.2760832</code></pre>
+<p>NEXT: do the same analysis with Random Forest…</p>
+</div>
 </div>
 
 
