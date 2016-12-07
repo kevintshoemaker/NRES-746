@@ -1027,31 +1027,11 @@ MLE$par</code></pre>
 <p>Since we are interested in evaluating model performance, let’s see how well the model predicts which people survived the titanic disaster…</p>
 <p>BUT… since the response is binary, our model skill metrics don’t really work too well!</p>
 <p>For binary responses, the ROC curve is a good way of evaluating model performance!</p>
-<pre class="r"><code>library(ROCR)</code></pre>
-<pre><code>## Loading required package: gplots</code></pre>
-<pre><code>## 
-## Attaching package: &#39;gplots&#39;</code></pre>
-<pre><code>## The following object is masked from &#39;package:stats&#39;:
-## 
-##     lowess</code></pre>
-<pre class="r"><code>library(rms)</code></pre>
-<pre><code>## Loading required package: Hmisc</code></pre>
-<pre><code>## Loading required package: survival</code></pre>
-<pre><code>## Loading required package: Formula</code></pre>
-<pre><code>## Loading required package: ggplot2</code></pre>
-<pre><code>## Warning: package &#39;ggplot2&#39; was built under R version 3.3.2</code></pre>
-<pre><code>## 
-## Attaching package: &#39;Hmisc&#39;</code></pre>
-<pre><code>## The following objects are masked from &#39;package:base&#39;:
-## 
-##     format.pval, round.POSIXt, trunc.POSIXt, units</code></pre>
-<pre><code>## Loading required package: SparseM</code></pre>
-<pre><code>## 
-## Attaching package: &#39;SparseM&#39;</code></pre>
-<pre><code>## The following object is masked from &#39;package:base&#39;:
-## 
-##     backsolve</code></pre>
-<pre class="r"><code>###################################
+<pre class="r"><code>library(ROCR)
+library(rms)
+
+
+###################################
 #################### CROSS VALIDATION CODE
 
 n.folds = 10
@@ -1090,25 +1070,20 @@ CV_RMSE </code></pre>
 <pre><code>## [1] 0.3983029</code></pre>
 <pre class="r"><code>real_RMSE   </code></pre>
 <pre><code>## [1] 0.3937799</code></pre>
-<pre class="r"><code>binaryresponse=TRUE
+<pre class="r"><code>par(mfrow=c(2,1))
+pred &lt;- prediction(CVprediction,CVobserved)     # for holdout samples in cross-validation
+perf &lt;- performance(pred,&quot;tpr&quot;,&quot;fpr&quot;)
+auc &lt;- performance(pred,&quot;auc&quot;)
+plot(perf)
+text(.9,.1,paste(&quot;AUC = &quot;,round(auc@y.values[[1]],2),sep=&quot;&quot;))
 
-if(binaryresponse){
-  graphics.off()
-  par(mfrow=c(2,1))
-  pred &lt;- prediction(CVprediction,CVobserved)     # for holdout samples in cross-validation
-  perf &lt;- performance(pred,&quot;tpr&quot;,&quot;fpr&quot;)
-  auc &lt;- performance(pred,&quot;auc&quot;)
-  plot(perf)
-  text(.9,.1,paste(&quot;AUC = &quot;,round(auc@y.values[[1]],2),sep=&quot;&quot;))
-  
-  pred &lt;- prediction(realprediction,CVobserved)     # for final model
-  perf &lt;- performance(pred,&quot;tpr&quot;,&quot;fpr&quot;)
-  auc &lt;- performance(pred,&quot;auc&quot;)
-  plot(perf)
-  text(.9,.1,paste(&quot;AUC = &quot;,round(auc@y.values[[1]],2),sep=&quot;&quot;))
-}
-
-### display confusion matrix and kappa for a single threshold
+pred &lt;- prediction(realprediction,CVobserved)     # for final model
+perf &lt;- performance(pred,&quot;tpr&quot;,&quot;fpr&quot;)
+auc &lt;- performance(pred,&quot;auc&quot;)
+plot(perf)
+text(.9,.1,paste(&quot;AUC = &quot;,round(auc@y.values[[1]],2),sep=&quot;&quot;))</code></pre>
+<p><img src="LECTURE9_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
+<pre class="r"><code>### display confusion matrix and kappa for a single threshold
 
 cutoff = 0.5
 
@@ -1137,21 +1112,17 @@ sensitivity</code></pre>
 <pre><code>## [1] 0.856102</code></pre>
 <pre class="r"><code>toterror</code></pre>
 <pre><code>## [1] 0.2132435</code></pre>
-<pre class="r"><code>if(binaryresponse){
-  CVprediction[which(CVprediction==1)] &lt;- 0.9999
-  CVprediction[which(CVprediction==0)] &lt;- 0.0001
-  realprediction[which(realprediction==1)] &lt;- 0.9999
-  realprediction[which(realprediction==0)] &lt;- 0.0001
-}
+<pre class="r"><code>CVprediction[which(CVprediction==1)] &lt;- 0.9999
+CVprediction[which(CVprediction==0)] &lt;- 0.0001
+realprediction[which(realprediction==1)] &lt;- 0.9999
+realprediction[which(realprediction==0)] &lt;- 0.0001
+
 
 
 realdata = CVobserved
-fit_deviance_CV &lt;- mean((CVobserved-CVprediction)^2)
-if(binaryresponse) fit_deviance_CV &lt;- mean(-2*(dbinom(CVobserved,1,CVprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
-fit_deviance_real &lt;- mean((CVobserved-realprediction)^2)
-if(binaryresponse) fit_deviance_real &lt;- mean(-2*(dbinom(CVobserved,1,realprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
-null_deviance &lt;- mean((CVobserved-mean(CVobserved))^2)
-if(binaryresponse) null_deviance &lt;- mean(-2*(dbinom(CVobserved,1,mean(CVobserved),log=T)-dbinom(realdata,1,realdata,log=T)))
+fit_deviance_CV &lt;- mean(-2*(dbinom(CVobserved,1,CVprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
+fit_deviance_real &lt;- mean(-2*(dbinom(CVobserved,1,realprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
+null_deviance &lt;- mean(-2*(dbinom(CVobserved,1,mean(CVobserved),log=T)-dbinom(realdata,1,realdata,log=T)))
 deviance_explained_CV &lt;- (null_deviance-fit_deviance_CV)/null_deviance   # based on holdout samples
 deviance_explained_real &lt;- (null_deviance-fit_deviance_real)/null_deviance   # based on full model...
 
