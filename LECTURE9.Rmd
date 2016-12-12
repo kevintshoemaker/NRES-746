@@ -495,7 +495,8 @@ VarExplained_CV
 
 Clearly the model performance is lower for the cross-validation, and usually will be! But this is also a more honest evaluation of model performance. 
 
-### Example: multiple logistic regression
+
+## Example: multiple logistic regression
 
 NOTE: example modified from [here](https://www.r-bloggers.com/how-to-perform-a-logistic-regression-in-r/)
 
@@ -512,7 +513,7 @@ Our goal is to model the probability of surviving the titanic disaster as a func
 Let's first build a simple logistic regression model for this problem. 
 
 ```{r}
-model1 <- glm(Survived ~ Sex + SibSp + Parch + Fare, data=titanic, family="binomial")
+model1 <- glm(Survived ~ Sex + Age + SibSp + Parch + Fare, data=titanic, family="binomial")
 summary(model1)
 ```
 
@@ -548,118 +549,266 @@ MLE$par
 
 Interesting- the results are very slightly different from the glm results...!
 
+### Univariate relationships
+
+Let's visualize the univariate relationships in this model! To do this, we will hold all other variables at their mean value...
+
+```{r}
+
+SibSp_range <- range(titanic$SibSp)
+Parch_range <- range(titanic$Parch)
+Fare_range <- range(titanic$Fare)
+Age_range <- range(titanic$Age,na.rm = T)
+
+```
+
+First, let's look at fare
+
+```{r}
+
+### 
+
+plot(titanic$Survived~titanic$Fare,pch=16,xlab="FARE ($)",ylab="Survived!")
+
+predict_df <- data.frame(
+  Sex = "male",
+  Age = mean(titanic$Age,na.rm=T),
+  SibSp = mean(titanic$SibSp),
+  Parch = mean(titanic$Parch),
+  Fare = seq(Fare_range[1],Fare_range[2])
+)
+
+probSurv <- predict(model1,predict_df,type="response")
+
+lines(seq(Fare_range[1],Fare_range[2]),probSurv)
+
+
+```
+
+Next, let's look at Sex:
+
+```{r}
+
+### 
+
+predict_df <- data.frame(
+  Sex = c("male","female"),
+  Age = mean(titanic$Age,na.rm=T),
+  SibSp = mean(titanic$SibSp),
+  Parch = mean(titanic$Parch),
+  Fare = mean(titanic$Fare,na.rm=T)
+)
+
+tapply(titanic$Survived,titanic$Sex,mean)[2:1]
+
+probSurv <- predict(model1,predict_df,type="response")
+names(probSurv) <- c("male","female")
+
+probSurv
+
+
+```
+
+Now, let's look at age:
+
+```{r}
+
+### 
+
+plot(titanic$Survived~titanic$Age,pch=16,xlab="AGE",ylab="Survived!")
+
+predict_df <- data.frame(
+  Sex = "male",
+  Age = seq(Age_range[1],Age_range[2]),
+  SibSp = mean(titanic$SibSp),
+  Parch = mean(titanic$Parch),
+  Fare = mean(titanic$Fare,na.rm=T)
+)
+
+probSurv <- predict(model1,predict_df,type="response")
+
+lines(seq(Age_range[1],Age_range[2]),probSurv)
+
+```
+
+Now, let's look at number of siblings/spouses:
+
+```{r}
+
+### 
+
+plot(titanic$Survived~titanic$SibSp,pch=16,xlab="# of Siblings/spouses",ylab="Survived!")
+
+predict_df <- data.frame(
+  Sex = "male",
+  Age = mean(titanic$Age,na.rm=T),
+  SibSp = seq(SibSp_range[1],SibSp_range[2],0.01),
+  Parch = mean(titanic$Parch),
+  Fare = mean(titanic$Fare,na.rm=T)
+)
+
+probSurv <- predict(model1,predict_df,type="response")
+
+lines(seq(SibSp_range[1],SibSp_range[2],0.01),probSurv)
+
+```
+
+
+### Performance evaluation / validation
 Since we are interested in evaluating model performance, let's see how well the model predicts which people survived the titanic disaster...
 
+First of all, we will use cross-validation to evaluate model predictive performance
 
 BUT... since the response is binary, our model skill metrics don't really work too well!
 
-For binary responses, the ROC curve is a good way of evaluating model performance!
+For binary responses, the ROC curve (and area under the curve statistic) is a good way of evaluating model performance!
+
+First let's prepare the workspace- load the packages!
 
 ```{r}
 library(ROCR)
 library(rms)
+```
 
+```{r echo=FALSE}
+model1 <- glm(Survived ~ Sex + SibSp + Parch + Fare, data=titanic, family="binomial")
+
+```
+
+Then, we set the number of "folds" for cross-validation
+
+```{r}
 
 ###################################
 #################### CROSS VALIDATION CODE
 
-n.folds = 10
+n.folds = 10       # set the number of "folds"
 foldVector = rep(c(1:n.folds),times=floor(length(titanic$Survived)/9))[1:length(titanic$Survived)]
-#n.folds = length(titanic$resp_factor)
-#foldVector <- c(1:length(titanic$resp_factor))
 
-counter = 1
-CVprediction <- numeric(nrow(titanic))
-CVobserved <- numeric(nrow(titanic))
-realprediction <- numeric(nrow(titanic))
-realdata <- numeric(nrow(titanic))
+```
 
-counter=1
+Then, we do the cross validation, looping through each fold of the data, leaving out each fold in turn for model training.
 
-#test <- numeric(nrow(titanic))
+```{r}
+
+CV_df <- data.frame(
+  CVprediction = numeric(nrow(titanic)),      # make a data frame for storage
+  realprediction = 0,
+  realdata = 0
+)
+
 for(i in 1:n.folds){
-  model <- glm(formula = Survived ~ Sex + SibSp + Parch + Fare, family = "binomial", data = titanic[which(foldVector!=i),]) 
-  predict_CV  <- plogis(predict(model,newdata=titanic[which(foldVector==i),])) 
-  predict_real  <-  plogis(predict(model1,newdata=titanic[which(foldVector==i),]))
-  REAL <- titanic$Survived[which(foldVector==i)]
-  for(j in 1:length(which(foldVector==i))){
-    CVprediction[counter] <- predict_CV[j]
-    CVobserved[counter] <-  REAL[j]      
-    realprediction[counter] <- predict_real[j]   
-    realdata[counter] <- REAL[j]         
-    counter = counter + 1  
-  }
+  fit_ndx <- which(foldVector!=i)
+  validate_ndx <- which(foldVector==i)
+  model <- glm(formula = Survived ~ Sex + SibSp + Parch + Fare, family = "binomial", data = titanic[fit_ndx,]) 
+  CV_df$CVprediction[validate_ndx] <-  plogis(predict(model,newdata=titanic[validate_ndx,])) 
+  CV_df$realprediction[validate_ndx]  <-  plogis(predict(model1,newdata=titanic[validate_ndx,]))
+  CV_df$realdata[validate_ndx] <- titanic$Survived[validate_ndx]
 }
 
-CV_RMSE = sqrt(mean((CVobserved-CVprediction)^2))       # root mean squared error for holdout samples in 10-fold cross-validation ...
-real_RMSE = sqrt(mean((CVobserved-realprediction)^2))  # root mean squared error for residuals from final model
+CV_RMSE = sqrt(mean((CV_df$realdata - CV_df$CVprediction)^2))       # root mean squared error for holdout samples in 10-fold cross-validation
+real_RMSE = sqrt(mean((CV_df$realdata - CV_df$realprediction)^2))  # root mean squared error for residuals from final model
 
 # print RMSE statistics
-CV_RMSE 
-real_RMSE   
 
+cat("The RMSE for the model under cross-validation is: ", CV_RMSE, "\n")
+
+cat("The RMSE for the model using all data for training is: ", real_RMSE, "\n")
+   
+
+```
+
+
+However, RMSE doesn't have much value for binary responses like this! Here we use the ROC curve instead. 
+
+### Aside: ROC curve and AUC
+
+ROC is a useful *threshold-independent* metric for evaluating the performance of a binary classifier! 
+
+What does it mean to be threshold independent? It helps to look at the data we have for evaluating model performance
+
+```{r}
+head(CV_df)
+```
+
+To effectively compare our predictions with the observation we have to pick some threshold above which we call the prediction a "1" and below which it is a zero. 
+
+A threshold-independent classifier like ROC considers model performance across all possible thresholds. 
+
+Here are some example ROC curves:
+
+![](roccomp.jpg)
+
+
+The ROC curve is generated by plotting the true positive rate against the false positive rate for all possible thresholds. For example, take the extremes:
+
+Imagine the threshold is zero, so we predict all outcomes are a 1-- that is, all people are predicted to survive the titanic disaster. In this case, the true positive rate is exactly 1, and the false positive rate (the rate at which mortalities were incorrectly classified as survival) is also 1! 
+
+Imagine the opposite case: we predict everyone died. In this case, the true positive rate is 0, as is the false positive rate (all mortalities are correctly classified!)
+
+Now imagine a threshold of around 0.25- we call everything above this a "1". Now we HOPE that the observations with predictions above 0.25 are 
+*enriched* in true positives relative to false positives. Maybe we get 80% correct classification of survivors and say 10 incorrect classification of mortalities (false positives). 
+
+**Q** What would a perfect classifier look like?
+
+**Q** What would a classifier look like that performed no better than random chance?
+
+**Q** What if the classifier performed worse than random chance?
+
+Now, let's consider the meaning of the area under the ROC curve. This is an important skill metric for a binary classifier!
+
+Okay, back to the example! Let's plot out the ROC curves!
+
+```{r}
 par(mfrow=c(2,1))
-pred <- prediction(CVprediction,CVobserved)     # for holdout samples in cross-validation
+pred <- prediction(CV_df$CVprediction,CV_df$realdata)     # for holdout samples in cross-validation
 perf <- performance(pred,"tpr","fpr")
 auc <- performance(pred,"auc")
-plot(perf)
+plot(perf, main="Cross-validation")
 text(.9,.1,paste("AUC = ",round(auc@y.values[[1]],2),sep=""))
 
-pred <- prediction(realprediction,CVobserved)     # for final model
+pred <- prediction(CV_df$realprediction,CV_df$realdata)     # for final model
 perf <- performance(pred,"tpr","fpr")
 auc <- performance(pred,"auc")
-plot(perf)
+plot(perf, main="All data")
 text(.9,.1,paste("AUC = ",round(auc@y.values[[1]],2),sep=""))
 
 
-### display confusion matrix and kappa for a single threshold
-
-cutoff = 0.5
-
-trueLabels <- CVobserved
-predLabels <- ifelse(CVprediction>=cutoff,1,0)    
-tot <- length(CVobserved)
-tp <- length(which((trueLabels==1)&(predLabels==1)))  
-tn <- length(which((trueLabels==0)&(predLabels==0)))
-fp <- length(which((trueLabels==0)&(predLabels==1)))
-fn <- length(which((trueLabels==1)&(predLabels==0)))
-pr_agree <- (tp+tn)/tot    # overall agreement, or accuracy
-pr_agree_rand <- ((tp+fn)/tot)*((tp+fp)/tot)+((fn+tn)/tot)*((fp+tn)/tot)
-kappa <- (pr_agree-pr_agree_rand)/(1-pr_agree_rand)
-kappa
+```
 
 
-matrix(c(tp,fp,fn,tn),nrow=2,ncol=2)
-sensitivity <- tp/(tp+fn)
-specificity <- tn/(tn+fp)
-toterror <- (fn+fp)/tot
-sensitivity
-specificity
-toterror
+Finally, we can use the same pseudo-R-squared metric we learned above as an alternative metric of performance
 
+```{r}
 
-CVprediction[which(CVprediction==1)] <- 0.9999
-CVprediction[which(CVprediction==0)] <- 0.0001
-realprediction[which(realprediction==1)] <- 0.9999
-realprediction[which(realprediction==0)] <- 0.0001
+CV_df$CVprediction[which(CV_df$CVprediction==1)] <- 0.9999       # ensure that all predictions are not exactly 0 or 1
+CV_df$CVprediction[which(CV_df$CVprediction==0)] <- 0.0001
+CV_df$realprediction[which(CV_df$realprediction==1)] <- 0.9999
+CV_df$realprediction[which(CV_df$realprediction==0)] <- 0.0001
 
-
-
-realdata = CVobserved
-fit_deviance_CV <- mean(-2*(dbinom(CVobserved,1,CVprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
-fit_deviance_real <- mean(-2*(dbinom(CVobserved,1,realprediction,log=T)-dbinom(realdata,1,realdata,log=T)))
-null_deviance <- mean(-2*(dbinom(CVobserved,1,mean(CVobserved),log=T)-dbinom(realdata,1,realdata,log=T)))
+fit_deviance_CV <- mean(-2*(dbinom(CV_df$realdata,1,CV_df$CVprediction,log=T)-dbinom(CV_df$realdata,1,CV_df$realdata,log=T)))
+fit_deviance_real <- mean(-2*(dbinom(CV_df$realdata,1,CV_df$realprediction,log=T)-dbinom(CV_df$realdata,1,CV_df$realdata,log=T)))
+null_deviance <- mean(-2*(dbinom(CV_df$realdata,1,mean(CV_df$realdata),log=T)-dbinom(CV_df$realdata,1,CV_df$realdata,log=T)))
 deviance_explained_CV <- (null_deviance-fit_deviance_CV)/null_deviance   # based on holdout samples
 deviance_explained_real <- (null_deviance-fit_deviance_real)/null_deviance   # based on full model...
 
-deviance_explained_CV
-deviance_explained_real
+# print RMSE statistics
+
+cat("The McFadden R2 for the model under cross-validation is: ", deviance_explained_CV, "\n")
+
+cat("The McFadden R2 for the model using all data for training is: ", deviance_explained_real, "\n")
+ 
+
+
 
 ```
 
 
 
-NEXT: do the same analysis with Random Forest... 
+
+
+
+
 
 
 
