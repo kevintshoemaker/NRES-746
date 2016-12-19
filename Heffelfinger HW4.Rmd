@@ -1,0 +1,317 @@
+---
+title: "Heffelfinger_HW4"
+author: "Levi Heffelfinger"
+date: "December 5, 2016"
+output: html_document
+---
+
+##Homework #4
+
+##Levi Heffelfinger
+
+##NRES 746
+
+#Question 1 - Ricker model in JAGS
+
+
+
+
+
+Creating file and and setting up our priors
+```{r}
+library(R2jags)
+library(coda)
+
+cat(file="BUGSrickermodel.jags","
+    model {
+    
+    #############
+    # LIKELIHOOD
+    ############
+    for(i in 1:n.observations){
+    mean[i]<- a*day[i]*exp(-b*day[i])  #ricker function relationship
+    rate[i]<- shape/mean[i]            # BUGS wants rate not scale
+    titer[i] ~ dgamma(shape,rate[i])
+    }
+    
+    #############
+    # PRIORS
+    ############
+    a ~ dgamma(0.1,0.1) #have to specify for each variable
+    b ~ dgamma(0.1,0.1)
+    shape ~ dgamma(0.01,0.01)
+    }
+    ")
+
+```
+
+Running it in JAGS
+```{r}
+library(emdbook)
+
+MyxDat <- MyxoTiter_sum
+Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
+head(Myx)
+
+myx.data.for.bugs <- list( #need these 3 parts of the data file
+  titer = Myx$titer,
+  day = Myx$day,
+  n.observations = length(Myx$titer)
+)
+
+myx.data.for.bugs
+
+init.vals.for.bugs <- function(){ #function to come up with some reasonable but random starting values for jags
+  list(
+    shape=runif(1,20,100),
+    a=runif(1,0,10),
+    b=runif(1,0,5)
+  )
+}
+init.vals.for.bugs()
+
+params.to.store <- c("shape","a", "b")    # specify the parameters we want to get the posteriors for
+
+#call jags to run model with given information
+jags.rick <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,
+                  n.iter=50000,model.file="BUGSrickermodel.jags",n.chains = 3,n.burnin = 5000,n.thin = 20 )
+jags.rick
+jags.rick$BUGSoutput$mean$a
+jagsrick.mcmc <- as.mcmc(jags.rick)   # convert to "MCMC" object (coda package)
+summary(jagsrick.mcmc) #read out of results
+```
+
+
+The maximum likelihood estimates are estimated from the liklihood surface as the highest probable values to explain the data, whereas the Bayesian estimates are means of the posterior distributions. Our estimates are very close for a and b, but our shape estimate in the Bayesian model is smaller than in ML. It should be noted that the Bayesian credible interval contains the shape estimate from ML.  
+
+ML estimates:
+a=3.5615
+b=0.1713
+shape=90.6791
+
+
+
+JAGS Plots
+```{r}
+par(mar=c(2,2,2,2)) #resizes margins so plots fit
+plot(jagsrick.mcmc) #plots chains and posteriors
+library(lattice)
+densityplot(jagsrick.mcmc)
+
+```
+
+Setting up ricker function
+
+```{r}
+ricker<- function(x,a, b) {
+  a*x*exp(-b*x)}
+```
+
+Plotting ricker function with JAGS results
+
+```{r}
+plot(myx.data.for.bugs$titer~myx.data.for.bugs$day, xlab="Day since infection", ylab="Virus titer", xlim=c(0,10), ylim=c(0,9))
+curve(ricker(x,a=jags.rick$BUGSoutput$mean$a, b=jags.rick$BUGSoutput$mean$b), add=TRUE, col="green")
+```
+
+Checking for convergence
+```{r}
+print(gelman.diag(jagsrick.mcmc), digits = 4)
+```
+Gelman-rubin shows less than 1.1 so we're good to go!
+
+##Question 2
+
+Running JAGS with M-M function
+
+```{r}
+cat(file="BUGSmmmodel.jags","
+    model {
+    
+    #############
+    # LIKELIHOOD
+    ############
+    for(i in 1:n.observations){
+    mean[i]<- (a*day[i])/(b+day[i])  #ricker function relationship
+    rate[i]<- shape/mean[i]            # BUGS wants rate not scale
+    titer[i] ~ dgamma(shape,rate[i])
+    }
+    
+    #############
+    # PRIORS
+    ############
+    a ~ dgamma(0.1,0.1) #have to specify for each variable
+    b ~ dgamma(0.1,0.1)
+    shape ~ dgamma(0.01,0.01)
+    }
+    ")
+
+
+library(emdbook)
+
+MyxDat <- MyxoTiter_sum
+Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
+head(Myx)
+
+myx.data.for.bugs <- list( #need these 3 parts of the data file
+  titer = Myx$titer,
+  day = Myx$day,
+  n.observations = length(Myx$titer)
+)
+
+myx.data.for.bugs
+
+init.vals.for.bugs <- function(){ #function to come up with some reasonable but random starting values for jags
+  list(
+    shape=runif(1,20,100),
+    a=runif(1,0,10),
+    b=runif(1,0,5)
+  )
+}
+init.vals.for.bugs()
+
+params.to.store <- c("shape","a", "b")    # specify the parameters we want to get the posteriors for
+
+#call jags to run model with given information
+jags.mm <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,
+                  n.iter=50000,model.file="BUGSmmmodel.jags",n.chains = 3,n.burnin = 5000,n.thin = 20 )
+
+```
+
+Display trceplots and posteriors
+
+```{r}
+jagsmm.mcmc <- as.mcmc(jags.mm)   # convert to "MCMC" object (coda package)
+par(mar=c(2,2,2,2)) #resizes margins so plots fit
+plot(jagsmm.mcmc) #plots chains and posteriors
+```
+
+Density plots
+
+```{r}
+densityplot(jagsmm.mcmc) #density plots
+```
+
+Estimates and Confidence Intervals
+
+```{r}
+jags.mm
+
+```
+
+Michaels-Menten versus Ricker
+
+```{r}
+mm<- function(x,a, b) {
+  (a*x)/(b+x)}
+
+plot(myx.data.for.bugs$titer~myx.data.for.bugs$day, xlab="Day since infection", ylab="Virus titer", xlim=c(0,10), ylim=c(0,9))
+curve(mm(x,a=jags.mm$BUGSoutput$mean$a,b=jags.mm$BUGSoutput$mean$b), add=TRUE, col="green")
+curve(ricker(x,a=jags.rick$BUGSoutput$mean$a,b=jags.rick$BUGSoutput$mean$b), add=TRUE, col="red")
+legend("bottomright",legend=c("Ricker","Michaelis-Menten"), col=c("red","blue"), lty=1)
+```
+The M-M model looks like a better fit than the Ricker model. this can be specifically seen at the upper end of days since infection. The hypothesis that the titre levels off asymptotically appears seems be true.
+
+
+Convergence assesment
+
+```{r}
+print(gelman.diag(jagsmm.mcmc), digits = 4) 
+```
+The Gelman-Ruben diagnostic is less than 1.1.  The chains look decent with maybe a little autocorrelation.  there doesn't seem to be chain divergence and it appears the this model has converged.
+
+###Question 3
+
+Goodness-of-fit and model comparision
+
+```{r}
+jags.rick$BUGSoutput$DIC
+jags.mm$BUGSoutput$DIC
+```
+The M-M model has a lower DIC (by about 6), so it is the better model by this metric. This amount of difference indicates that the M-M model is better, but the Ricker model isn't too shabby either.
+
+###Pseudocode for GOF
+####Step 1
+
+Generate some data based on the parameters drawn from posterior and look at squared residuals
+
+```{r}
+#create storage vectors
+reps<- 1000
+new.titer.data<- array(Myx$day, dim=c(length(Myx$day),reps+1))
+exp_vals<- array(Myx$day, dim=c(length(Myx$day),reps+1))
+SSE_sims<- array(NA, dim=c(reps,1))
+SSE_obs<- array(NA, dim=c(reps,1))
+obs_titer<- array(Myx$titer,dim=c(length(Myx$day),reps+1))
+day<- Myx$day
+
+```
+Run in loop to create mulitple datasets
+```{r}
+#loop to get values
+  for(i in 1:reps){ #loop to create 1000 sets of new parameters drawn from the posterior of the model
+  n.sims <- jags.rick$BUGSoutput$n.sims
+  r_index <- sample(n.sims, 1, replace = T) #gets random number from within posteriors
+  new.a <- jags.rick$BUGSoutput$sims.list$a[r_index]
+  new.b <- jags.rick$BUGSoutput$sims.list$b[r_index]
+  new.shape <- jags.rick$BUGSoutput$sims.list$shape[r_index]
+  new_data<- rgamma(length(day), rate=new.shape/ricker(day, new.a, new.b), shape= new.shape) #generates dataset based on selected new parameters
+  new.titer.data[,i+1] <-new_data
+  exp_vals[,i+1]<- ricker(day, new.a, new.b) #generate expected values with those new parameters
+  SSE.sim<- sum((new.titer.data[,i+1] - exp_vals[,i+1])^2) #gets the sum of squared errors for simulated data
+  SSE.obs<- sum((obs_titer[,i+1] - exp_vals[,i+1])^2)      # gets the sum of squared errors for observed data
+  SSE_sims[i]<- SSE.sim
+  SSE_obs[i]<-SSE.obs
+  }
+```
+
+####Step 2
+
+Boxplot
+
+```{r}
+#restructure days data for boxplot
+rownames(new.titer.data)<-Myx$day 
+days_ordered<-sort(unique(Myx$day))
+row_ind<- match(days_ordered, Myx$day) #pulls first match for each day
+
+#create boxplot with observed data overlay
+boxplot(lapply(row_ind, function(i) new.titer.data[i+1,]), ylim=c(0,12), xaxt="n",xlab="Day since infection", ylab="Virus titer") 
+axis(1, at=c(1:8), labels = c(2:9))
+points(Myx$day-1,Myx$titer, col="blue", pch=20, cex=1.5)
+```
+
+Boxplot shows decent fit.  All observed data fall within whiskers of plot
+
+####Step 3
+
+Plot residuals.  Observed vs. Fitted
+
+```{r}
+plot(SSE_sims~SSE_obs, xlab="SSE observed data", ylab = "SSE Simulated data")
+abline(1,1)
+```
+
+simulated and observed residuals do not outrank each other substantially
+
+####Step 4
+
+Bayesian P-Value
+
+```{r}
+#number of times the simulated data errors are greater than the observed data errors over number of replicates
+SSE_all<-matrix(c(SSE_sims,SSE_obs),nrow = reps, ncol = 2)
+Bayesian_p<-length(which(SSE_all[,1]>SSE_all[,2]))/reps
+Bayesian_p
+```
+The Bayesian P value around 0.75 indicated a decent model fit. A perfect fit (the observed data was generated by the exact process we have modeled) would be 0.5. Values near 0 or 1 are bad. Used to compare relatively to other models
+
+##Question 5
+Model(s) could be created to evalaute the trend as the days since infection increases using data for less virulent grades to allow us to have longer living organisms. Then fit the new function to grade 1 data to predict future results of the virus keeping in mind that we are using a less virulent grade.  Future population prediction could be reasonabily made using this method.  
+
+
+
+
+
+
+
