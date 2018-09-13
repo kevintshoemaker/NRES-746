@@ -1,5 +1,4 @@
 
-
 ############################################################
 ####                                                    ####  
 ####  NRES 470, Lecture 1                               ####
@@ -112,7 +111,9 @@ t.test.algorithm <- function(dat = reshape_df, group = "Treatment", value = "Mas
   # Compute the sample statistic
   #############
   
-  observed_dif <- mean(df$TreatmentA) - mean(df$TreatmentB)
+  indexA <- which(dat[,group]=="A")     # rows representing treatment A
+  indexB <- which(dat[,group]=="B")     # rows representing treatment B
+  observed_dif <- mean(dat[indexA,value]) - mean(dat[indexB,value])
   
   #############
   # Simulate the STATISTICAL POPULATION under the null hypothesis
@@ -151,7 +152,7 @@ t.test.algorithm <- function(dat = reshape_df, group = "Treatment", value = "Mas
 
 }
 
-ttest <- t.test.algorithm()   # try to run your function with default arguments!
+ttest <- t.test.algorithm(dat = reshape_df, group = "Treatment", value = "Mass" )   # try to run the new function
 
 ttest$p_value     # get the p_value
 
@@ -173,12 +174,14 @@ summary(df.vardif)    # summarize!
 ###########
 # Test data for unequal sample sizes...
 
+# NOTE: we use R's missing data designation "NA" to fill in missing data for treatment B here... 
+
 df.ndif <- data.frame(
   TreatmentA = c(135, 128, 139, 122, 126, 121, 128, 135, 134, 129, 134, 125, 130, 132, 125),
-  TreatmentB = c(98, 271, 340) 
+  TreatmentB = c(98, 271, 340, rep(NA,12)) 
 )
 
-summary(df.ndif)    # summarize! 
+summary(df.ndif)    # summarize!    
 
 
 ##################
@@ -215,7 +218,9 @@ t.test.permutation <- function(dat = reshape_df, group = "Treatment", value = "M
   # Compute the sample statistic
   #############
   
-  observed_dif <- mean(df$TreatmentA) - mean(df$TreatmentB)
+  indexA <- which(dat[,group]=="A")     # rows representing treatment A
+  indexB <- which(dat[,group]=="B")     # rows representing treatment B
+  observed_dif <- mean(dat[indexA,value]) - mean(dat[indexB,value])
   
   reps <- 5000            # Define the number of permutations to run (number of replicates)
   null_difs <- numeric(reps)   # initialize storage variable

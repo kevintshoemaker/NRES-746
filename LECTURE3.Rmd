@@ -1,7 +1,7 @@
 ---
 title: "The Virtual Ecologist"
 author: "NRES 746"
-date: "September 10, 2016"
+date: "Fall 2018"
 output: 
   html_document: 
     theme: cerulean
@@ -13,150 +13,239 @@ output:
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
+```{r echo=FALSE}
+
+############################################################
+####                                                    ####  
+####  NRES 746, Lecture 3                               ####
+####                                                    ####
+####  Kevin Shoemaker                                   #### 
+####  University of Nevada, Reno                        ####
+####                                                    #### 
+############################################################
+
+
+############################################################
+####  The virtual ecologist                             ####
+####     Building data simulation models                ####
+############################################################
+
+
+```
+
+
+For those wishing to follow along with the R-based demo in class, [click here](LECTURE3.R) for the companion R-script for this lecture.   
+
+
 NOTE: some of this demo borrows from Hadley wickham's presentation: [Simuation](http://had.co.nz/stat480/lectures/15-simulation.pdf)
 
 ## Why simulate 'fake data'?  
 
 * Formalize your understanding of the data generating process
-* Formalize your understanding of how sampling methods and uncertainty potentially affect information recovery
-    * Power Analysis!
-    * Sampling design!
+* Assess how sampling methods potentially affect information recovery
+    * Power Analysis!     
+    * Sampling design!    
+* Generate sampling distributions   
 * Test whether model fitting algorithms and statistical tests do what you think they should (e.g., estimate parameters correctly)! (test for bias, precision, etc.)
-* ~~Severe violations of academic integrity~~
 
-We have simulated data in class already!
+We have simulated data already (e.g., CLT, brute-force t-test)! Even bootstrapping is a form of data simulation...
 
-## Random numbers (from known distribution)
+## Random number generators (sample "data" from known distributions)    
 
 ```{r eval=FALSE}
-runif(1,0,25)   # simulate arbitrary # of samples from dist with arbitrary params
+
+###########
+# Random number generators (a key component of data simulation models)
+
+runif(1,0,25)   # draw random numbers from various probability distributions
 rpois(1,3.4)
 rnorm(1,22,5.4)
+
 ```
 
-First argument: n, number of samples to generate  
+First argument: *n*, number of random draws you want  
 
-Subsequent arguments: parameters of the distribution  
+Subsequent arguments: **parameters** of the distribution  
 
-* Always check that the distribution is parameterised the way you expect!
+* Always check that the distribution is parameterized the way you expect (e.g., that the normal distribution is parameterized with a mean and standard deviation) -- especially if you leave out the argument name in the random-number-generation functions!) 
 
-#### Short exercise #1:
+### Short exercise #1:
 
-* Generate 50 samples from $N(10,5)$
-* Generate 1000 numbers from $Poisson(50)$
-* Generate 10 numbers from $Beta(0.1,0.1)$
+* Generate 50 samples from $N(10,5)$      
+* Generate 1000 numbers from $Poisson(50)$      
+* Generate 10 numbers from $Beta(0.1,0.1)$       
 
-## The model
+## Building a data simulation model
 
-For our purposes, the model is the data-generating process. 
+For our purposes, a **simulation model** is any fully specified, (usually) stochastic, computer-programmed data-generating process. 
 
-The model could be as simple as the random numbers you were just generating. That is we might assume that the sample data were generated from a Poisson process with mean equal to the sample mean. 
+Your data simulation model could be as simple as the random numbers you were just generating. For example, we could assume that our sample data were generated from a Poisson process with constant mean ($\lambda$). 
 
-In general, the models we will consider are composed of **deterministic** and **stochastic** components.   
+In general, our simulation models will comprise both **deterministic** and **stochastic** components.   
 
-For example, ordinary linear regression consists of a determistic component ($y = ax + b$) and a stochastic component (residuals are normally distributed). 
+For example, ordinary linear regression consists of a *determistic component* ($y = ax + b$) and a *stochastic component* (residuals are normally distributed). 
 
 ### decomposing ordinary linear regression:
 
-First, let's look at the **deterministic component**:
+First, let's look at the **deterministic component**. The deterministic component maps covariate (predictor variable, or independent variable) values to the expected response. It is deterministic because the answer will be the same every time, provided your input (covariate) values are the same.   
+
 ```{r}
 
-xvals = seq(0,100,10)  # simulated x values define parameter space
+############
+# SIMULATE DATA GENERATION: decompose into deterministic and stochastic components 
+
+##########
+# Deterministic component: define function for transforming a predictor variable into an expected response (linear regression)
+
+    # Arguments:
+      # x: vector of covariate values
+      # a: the intercept of a linear relationship mapping the covariate to an expected response
+      # b: the slope of a linear relationship mapping the covariate to an expected response
 
 deterministic_component <- function(x,a,b){
-  linear <- a + b*x   # linear functional form
+  linear <- a + b*x   # specify a deterministic, linear functional form
   return(linear)
 }
 
-expected_vals <- deterministic_component(xvals,175,-1.5)
+xvals = seq(0,100,10)  # define the values of a hypothetical predictor variable (e.g., tree girth)
+
+expected_vals <- deterministic_component(xvals,175,-1.5)   # use the deterministic component to determine the expected response (e.g., tree volume)
 expected_vals
 
-plot(xvals,expected_vals)
+plot(xvals,expected_vals)   # plot out the relationship
 
 ```
 
-Now, let's look at the **stochastic component**:
+Now, let's look at the **stochastic component** (also known as the "noise"). Recall that a normal distribution is defined by a mean and a variance (or standard deviation). We can consider the deterministic component as representing the **mean** (expected) value of the response for any given value(s) of relevant covariates. Therefore, all we need to generate stochastic data for any given covariate value(s) is a **variance**, or standard deviation. 
 
 ```{r}
-stochastic_component <- function(x,variance){
-  sd <- sqrt(variance)
-  stochvals <- rnorm(length(x),x,sd)
+
+##########
+# Stochastic component: define a function for transforming an expected (deterministic) response and adding a layer of "noise" on top!
+
+    # Arguments:
+      # x: vector of expected responses
+      # variance: variance of the "noise" component of your data simulation model
+
+stochastic_component <- function(x,variance){     
+  sd <- sqrt(variance)       # convert variance to standard deviation       
+  stochvals <- rnorm(length(x),x,sd)       # add a layer of "noise" on top of the expected response values
   return(stochvals)
 }
 
-sim_vals <- stochastic_component(expected_vals,variance=500)
+    ### Simulate stochastic data!!
+sim_vals <- stochastic_component(expected_vals,variance=500)   # try it- run the function to add noise to your expected values. 
 
-plot(xvals,sim_vals)
+plot(xvals,sim_vals)     # plot it- it should look much more "noisy" now!
 
 # ALTERNATIVELY:
 
-sim_vals <- stochastic_component(deterministic_component(xvals,175,-1.5),500)    # stochastic "shell"
+sim_vals <- stochastic_component(deterministic_component(xvals,175,-1.5),500)    # stochastic "shell" surrounds a deterministic "core"    
 
 ```
 
-You can think of the deterministic component as the **"signal"** and the stochastic component as the **"noise"**. Most data-generating processes that we will consider have both!
+You can think of the deterministic component as the **"signal"** and the stochastic component as the **"noise"**. Most data-generating processes that we will consider have both components!
+
 
 ------------
-## Replication!! 
-Wherever there is randomness, we can get different results every time (that's what it means to be random!). In such cases, a single output of the data generating model by itself has no great meaning. However, we can extract a good deal of meaning if we run lots of replicates *The distribution ('cloud') of replicates becomes the real result!* 
+## Replication! 
 
+Okay, we've now generated our first random data set! 
 
-### Goodness-of-fit (can this model plausibly generate the observed data?)
+But wherever there is randomness (stochasticity), we can get different results every time (that's what it means to be random!). In such cases, a single output of the data generating model by itself has little meaning. However, we can extract a great deal of meaning if we run lots of replicates. _*The distribution ('cloud') of replicates becomes the real result!*_ 
 
-For example, let's run a goodness-of-fit test. Here are our real data:
+### Goodness-of-fit   
+
+For example, let's run a goodness-of-fit test. A goodness-of-fit test asks the question: can this model plausibly generate the observed data? 
+
+For example, consider a set of "real" data:
 
 ```{r}
-realdata <- c(125,50,90,110,80,75,100,400,350,290,350)
-plot(xvals,realdata)
+
+############
+# Goodness-of-fit test!
+
+
+############
+# Imagine you have the following "real" data (e.g., tree volumes). 
+
+realdata <- data.frame(Volume=c(125,50,90,110,80,75,100,400,350,290,350),Girth=xvals)
+plot(realdata$Girth,realdata$Volume)
+
 ```
 
-Is this linear regression model (a=10,b=4,var=1000) a good fit to the data?
+Is the following linear regression model a good fit to the data?
+
+```
+
+intercept (a) = 10   
+slope (b) = 4
+variance(var) = 1000
+
+```
 
 ```{r}
- #### initialize:
-reps <- 1000    # number of replicate datasets to generate
-samplesize <- length(xvals)
-results <- array(0,dim=c(samplesize,reps))   # storage array for results
-for(i in 1:reps){
-  exp_vals <- deterministic_component(xvals,a=10,b=4)
-  sim_vals <- stochastic_component(exp_vals,1000)  # stochastic wrapper!
-  results[,i] <- sim_vals
+
+#############
+# Let's simulate many datasets from our hypothesized data generating model:
+
+reps <- 1000    # specify number of replicate datasets to generate
+samplesize <- nrow(realdata)    # define the number of data points we should generate for each simulation "experiment"
+simresults <- array(0,dim=c(samplesize,reps))   # initialize a storage array for results 
+for(i in 1:reps){       # for each independent simulation "experiment":
+  exp_vals <- deterministic_component(realdata$Girth,a=10,b=4)          # simulate the expected tree volumes for each measured girth value
+  sim_vals <- stochastic_component(exp_vals,1000)  # add stochastic noise
+  simresults[,i] <- sim_vals   # store the simulated data for later
 }
 
     # now make a boxplot of the results
-boxplot(lapply(1:nrow(results), function(i) results[i,])) 
+boxplot(lapply(1:nrow(simresults), function(i) simresults[i,]),xaxt="n")    # (repeat) make a boxplot of the simulation results
+axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add x axis labels 
 
 ```
 
-Now let's overlay the real data.
+Now let's overlay the "real" data.
 
 ```{r}
-boxplot(lapply(1:nrow(results), function(i) results[i,]),xaxt="n")
-axis(1,at=c(1:length(xvals)),labels=xvals)
-points(c(1:length(xvals)),realdata,pch=20,cex=3,col="red",xaxt="n")
+
+#########
+# Now overlay the "real" data
+
+boxplot(lapply(1:nrow(simresults), function(i) simresults[i,]),xaxt="n")    # (repeat) make a boxplot of the simulation results
+axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add x axis labels 
+points(c(1:samplesize),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # this time, overlay the "real" data 
+
 ```
 
-How well does this model fit the data? Is this particular model likely to produce these data? (we will revisit this concept more quantitatively when we get to likelihood-based model fitting!)
+How well does this model fit the data? 
 
-### Generating *sampling distributions* (i.e., the distribution of test statistcs for many many independent samples)
+Is this particular model likely to produce these data? (we will revisit this concept more quantitatively when we get to likelihood-based model fitting!)
+
+### Generating *sampling distributions* (i.e., simulate the distribution of test statistics under a null hypothesis)
 
 For example, the 'brute force' t-test from the first lecture:
 
-```{r eval=FALSE}
+```{r}
+
+###########
+# Using data simulation to flesh out sampling distributions for frequentist inference 
+
+    # e.g., the "brute force t test" example:
+
 reps <- 1000                    # number of replicate samples to generate
 null_difs <- numeric(reps)              # storage vector for the test statistic for each sample
-
 for(i in 1:reps){
-  sampleA <- sample(popData_null,size=sample.size)        # sample representing "groups" A and B under the null hypothesis
-  sampleB <- sample(popData_null,size=sample.size)
+  sampleA <- rnorm(10,10,4)        # sample representing "groups" A and B under the null hypothesis
+  sampleB <- rnorm(10,10,4)
   null_difs[i] <- mean(sampleA)-mean(sampleB)         # test statistic (model result)
 }
 
 hist(null_difs)           # plot out the sampling distribution
-abline(v=observed_dif,col="green",lwd=3)
+abline(v=3.5,col="green",lwd=3)
+
 ```
 
-**NOTE**: Frequentist statistical tests are based on a data sample that is inherently a single replicate from a theoretically infinite number of possibilites. However, the interpretation of the results is implicitly based on the idea of replication ("if the null hypothesis were true, and the experiment were *replicated* lots and lots of times, results as or more extreme as the observed results could be expected from x% of replicates")
+**NOTE**: Frequentist statistical tests are based on a single sample that is inherently a single replicate from a theoretically infinite number of samples. However, the interpretation of the results is implicitly based on the idea of sample replication ("if the null hypothesis were true, and the experiment were *replicated* lots and lots of times, results as or more extreme as the observed results could be expected from x% of replicates")
 
 ### Power analysis!! (can my sampling design detect the "signal"?)
 
@@ -170,74 +259,117 @@ In such cases, probably the most straightforward way to address these questions 
 
 ### Power analysis, example
 
-Imagine we are designing a monitoring program for a population of an at-risk species, and we want to have at least a 75% chance of detecting a decline of 25% or more over a 10 year period. Let's assume that we are using visual counts, and that the probability of encountering each organism visually is 2% per person-day. The most recent population estimate was 1000.   
+Imagine we are designing a monitoring program for a population of an at-risk species, and we want to have *at least a 75% chance of detecting a decline of 25% or more over a 10 year period*. Let's assume that we are using visual counts, and that the probability of encountering each organism visually is 2% per person-day. The most recent population estimate was 1000.   
 
-What we know:  
-
-* A single person has a 2% chance of detecting each animal in the population in a day of surveying
-* The initial abundance is 1000
-* We need to detect a decline as small as 25% over 10 years with at least 75% probability.
+>What we know:   
+>* A single person has a 2% chance of detecting each animal in the population in a day of surveying    
+>* The initial abundance is 1000    
+>* We need to detect a decline as small as 25% over 10 years with at least 75% probability.    
 
 First, let's set the groundwork by making some helper functions (break the problem into smaller chunks):
 
 This function takes the true number in the population and returns the observed number:
 
 ```{r}
+
+###############
+# Power analysis example: designing a monitoring program for a rare species
+
+
+   ### first, let's develop some helper functions:
+
+########
+# function for computing the number of observed/detected animals in a single survey
+
+    # Arguments:
+      # TrueN: true population abundance
+      # surveyors: number of survey participants each day
+      # days: survey duration, in days
+
 NumObserved <- function(TrueN=1000,surveyors=1,days=3){
-  probPerPersonDay <- 0.02
-  probPerDay <- 1-(1-probPerPersonDay)^surveyors
-  probPerSurvey <- 1-(1-probPerDay)^days
-  nobs <- rbinom(1,size=TrueN,prob=probPerSurvey)
+  probPerPersonDay <- 0.02      # define the probability of detection per person-days
+  probPerDay <- 1-(1-probPerPersonDay)^surveyors      # define the probability of detection per day (multiple surveyors)
+  probPerSurvey <- 1-(1-probPerDay)^days       # define the probability of detection for the entire survey
+  nobs <- rbinom(1,size=TrueN,prob=probPerSurvey)     # simulate the number of animals detected!
   return(nobs)
 }
-NumObserved(TrueN=500,surveyors=2,days=7)
+NumObserved(TrueN=500,surveyors=2,days=7)   # test the new function
+
 ```
 
 This function gives us the current-year abundance using last years abundance and trend information
 
 ```{r}
+
+#########
+# function for computing abundance dynamics of a declining population
+
+    # Arguments:
+      # LastYearAbund: true population abundance in the previous year
+      # trend: proportional change in population size from last year
+
 ThisYearAbund <- function(LastYearAbund=1000,trend=-0.03){
-  CurAbund <- LastYearAbund + trend*LastYearAbund
+  CurAbund <- LastYearAbund + trend*LastYearAbund    # compute abundance this year
   CurAbund <- floor(CurAbund)  # can't have fractional individuals!
   return(CurAbund)
 }
-ThisYearAbund(LastYearAbund=500,trend=-0.03)
+ThisYearAbund(LastYearAbund=500,trend=-0.03)    # test the new function
 
 ```
 
 This function will simulate a single dataset (time series of observations over a given number of years)!
 
 ```{r}
+
+########
+# develop a function for simulating monitoring data from a declining population
+
+    # Arguments:
+      # initabund: true initial population abundance
+      # trend: proportional change in population size from last year
+      # years: duration of simulation
+      # observers: number of survey participants each day
+      # days: survey duration, in days
+      # survint: survey interval, in years (e.g., 2 means surveys are conducted every other year)
+
 SimulateMonitoringData <- function(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2){
-  prevabund <- initabund
-  detected <- numeric(years)     # set up storate variable
-  for(y in 1:years){
+  prevabund <- initabund        # initialize "previous-year abundance" at initial abundance 
+  detected <- numeric(years)     # set up storage variable
+  for(y in 1:years){            # for each year of the simulation:
     thisAbund <- ThisYearAbund(prevabund,trend)             # compute the current abundance on the basis of the trend
     detected[y] <- NumObserved(thisAbund,observers,days)     # sample the current population using this monitoring scheme
-    prevabund <- thisAbund   # this years abundance becomes the previous years abundance
+    prevabund <- thisAbund   # set this years abundance as the previous years abundance (to set up the simulation for next year)
   }
   surveyed <- c(1:years)%%survint==0    # which years were surveys actually performed?
-  detected[!surveyed] <- NA
-  return(detected)
+  detected[!surveyed] <- NA            # if the survey is not performed that year, return a missing value
+  return(detected)       # return the number of individuals detected
 }
 
-SimulateMonitoringData(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2)
+SimulateMonitoringData(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2)    # test the new function
 
 ```
 
 Now we can develop a function for determining if a decline was in fact detected by the method:
 
 ```{r}
+
+#########
+# finally, develop a function for assessing whether or not a decline was detected:
+
+    # Arguments:
+      # monitoringData: simulated results from a long-term monitoring study
+      # alpha: define acceptable type-I error rate (false positive rate)
+
 IsDecline <- function(monitoringData,alpha=0.05){
-  time <- 1:length(monitoringData)
-  model <- lm(monitoringData~time)    # for now, let's use ordinary linear regression
-  p_value <- summary(model)$coefficients["time","Pr(>|t|)"]
-  isdecline <- ifelse(summary(model)$coefficients["time","Estimate"]<0,TRUE,FALSE)
-  sig_decline <- ifelse((p_value<=alpha)&(isdecline),TRUE,FALSE)    # if declining and significant trend
+  time <- 1:length(monitoringData)      # vector of survey years
+  model <- lm(monitoringData~time)    # for now, let's use ordinary linear regression (perform linear regression on simulated monitoring data)
+  p_value <- summary(model)$coefficients["time","Pr(>|t|)"]      # extract the p-value  
+  isdecline <- ifelse(summary(model)$coefficients["time","Estimate"]<0,TRUE,FALSE)     # determine if the simulated monitoring data determined a "significant" decline
+  sig_decline <- ifelse((p_value<=alpha)&(isdecline),TRUE,FALSE)    # if declining and significant trend, then the monitoring protocol successfully diagnosed a decline
   return(sig_decline)
 }
 
-IsDecline(monitoringData=c(10,20,NA,15,1),alpha=0.05)
+IsDecline(monitoringData=c(10,20,NA,15,1),alpha=0.05)    # test the function
 
 ```
 
@@ -247,8 +379,13 @@ This is part of this week's lab assignment!
 
 
 ```{r eval=FALSE}
-nreps <- 10000
-initabund <- 1000
+
+###########
+# Lab exercise: develop a "power" function to return the statistical power to detect a decline under alternative monitoring schemes...
+
+nreps <- 10000      # set number of replicate monitoring "experiments"
+initabund <- 1000    # set initial population abundance.
+
 GetPower <- function(observers=1,days=3,alpha=0.05,years=25,survint=2){
      # fill this in!
   return(Power)
@@ -257,6 +394,7 @@ GetPower <- function(observers=1,days=3,alpha=0.05,years=25,survint=2){
 ```
 
 ```{r echo=FALSE}
+
 nreps <- 1000
 initabund <- 100
 GetPower <- function(observers=1,days=3,alpha=0.05,years=25,survint=2,trend=-0.03){
@@ -276,6 +414,7 @@ cat((sprintf("The statistical power to detect a decline for the default paramete
 And we can evaluate what types of monitoring programs might be acceptable:
 
 ```{r echo=FALSE}
+
   initabund = 1000
   survints <- c(1:5)
   powers <- numeric(length(survints))
@@ -283,13 +422,13 @@ And we can evaluate what types of monitoring programs might be acceptable:
     powers[i] <- GetPower(survint=survints[i])
   }
   
-  plot(powers~survints,xlab="Survey interval(years)",ylab="Statistical Power",main="Power to detect trand, by sampling interval") 
+  plot(powers~survints,xlab="Survey interval(years)",ylab="Statistical Power",main="Power to detect trend, by sampling interval") 
   
 ```
 
 
 
-
+[--go to next lecture--](LECTURE4.html) 
 
 
 
