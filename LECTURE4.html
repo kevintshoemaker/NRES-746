@@ -11,7 +11,6 @@
 
 <meta name="author" content="NRES 746" />
 
-<meta name="date" content="2016-09-18" />
 
 <title>Likelihood!</title>
 
@@ -314,6 +313,21 @@ div.tocify {
     <li>
       <a href="LECTURE2.html">Working with probabilities</a>
     </li>
+    <li>
+      <a href="LECTURE3.html">The Virtual Ecologist</a>
+    </li>
+    <li>
+      <a href="LECTURE4.html">Likelihood</a>
+    </li>
+    <li>
+      <a href="LECTURE5.html">Optimization</a>
+    </li>
+    <li>
+      <a href="LECTURE6.html">Bayesian #1: concepts</a>
+    </li>
+    <li>
+      <a href="LECTURE7.html">Bayesian #2: mcmc</a>
+    </li>
   </ul>
 </li>
 <li class="dropdown">
@@ -326,6 +340,18 @@ div.tocify {
     <li>
       <a href="LAB1.html">Lab 1: Algorithms in R</a>
     </li>
+    <li>
+      <a href="FINALPROJ.html">Final project overview</a>
+    </li>
+    <li>
+      <a href="LAB2.html">Lab 2: Virtual ecologist</a>
+    </li>
+    <li>
+      <a href="LAB3.html">Lab 3: Likelihood</a>
+    </li>
+    <li>
+      <a href="FigureDemo.html">Demo: Figures in R</a>
+    </li>
   </ul>
 </li>
 <li class="dropdown">
@@ -337,6 +363,12 @@ div.tocify {
   <ul class="dropdown-menu" role="menu">
     <li>
       <a href="TreeData.csv">Tree Data</a>
+    </li>
+    <li>
+      <a href="ReedfrogPred.csv">Reed Frog Predation Data</a>
+    </li>
+    <li>
+      <a href="ReedfrogFuncresp.csv">Reed Frog Func Resp</a>
     </li>
   </ul>
 </li>
@@ -357,28 +389,34 @@ div.tocify {
 
 <h1 class="title toc-ignore">Likelihood!</h1>
 <h4 class="author"><em>NRES 746</em></h4>
-<h4 class="date"><em>September 18, 2016</em></h4>
+<h4 class="date"><em>Fall 2018</em></h4>
 
 </div>
 
 
-<p>In the last class, we talked about simulating data from models. This is often called <em>forward</em> modeling- that is, we take a model and use it to predict emergent patterns. The process flow goes something like this:</p>
+<p>For those wishing to follow along with the R-based demo in class, <a href="LECTURE4.R">click here</a> for the companion R-script for this lecture.</p>
+<p>In the last class (and lab), we talked about simulating data from models. This is often called <em>forward</em> modeling- that is, we take a model and use it to predict emergent patterns. The process flow goes something like this:</p>
 <p><span class="math inline">\(Model \rightarrow Data\)</span></p>
 <p>In this class, we will talk about <em>inference</em> using the method of <strong>maximum likelihood</strong>. Inference is in some ways the opposite process (sometimes called <em>inverse</em> modeling). We are using the data to say something about the model.</p>
 <p><span class="math inline">\(Data \rightarrow Model\)</span></p>
 <p>In many ways, these two processes – <em>simulation</em> and <em>inference</em> – are inter-related. Simulation can help us to make better inferences, and inference can help us to construct better simulation models!</p>
-<p>Let’s see how simulation can help us to make inference. This leads directly into the core idea of maximum likelihood!</p>
+<p>First let’s see how simulation can help us to make inference. This leads directly into the core idea of maximum likelihood!</p>
 <div id="using-data-simulation-to-make-inferences" class="section level2">
 <h2>Using data simulation to make inferences</h2>
-<p>Let’s use the “mtcars” data for this example: (note: some code borrowed from <a href="http://stats.stackexchange.com/questions/142443/simple-non-linear-regression-problem">here</a>)</p>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p>Let’s use the built-in “mtcars” data for this example: (note: some code borrowed from <a href="http://stats.stackexchange.com/questions/142443/simple-non-linear-regression-problem">here</a>)</p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
 <p>Looks nonlinear, with relatively constant variance across parameter space. So let’s see if we can build a model that could possibly produce these data!!</p>
 <p>Since this looks a little like an exponential decline, let’s first build a function that can generate data that follows that deterministic function:</p>
 <p><span class="math inline">\(mpg = N\left \{ intercept\cdot e^{slope\cdot displacement} ,Variance\right \}\)</span></p>
 <p>Or, if we package the parameters simply as params a, b, and c:</p>
 <p><span class="math inline">\(mpg = N\left \{ a\cdot e^{b\cdot displacement} ,c\right \}\)</span></p>
-<pre class="r"><code>Deterministic_component &lt;- function(xvals,a,b){
-  yexp &lt;- a*exp(b*xvals)        # deterministic exponential decay
+<p>What’s the <em>deterministic component</em> here?</p>
+<p>Take a minute to visualize the negative exponential functional relationship - e.g., using the “curve()” function in R.</p>
+<pre class="r"><code>#########
+# try an exponential model
+
+Deterministic_component &lt;- function(xvals,a,b){
+  yexp &lt;- a*exp(b*xvals)        # deterministic exponential decay (assuming b is negative)
   return(yexp)
 }
 
@@ -388,18 +426,24 @@ DataGenerator_exp &lt;- function(xvals,params){
   return(yvals)
 }</code></pre>
 <p>Let’s test this function to see if it does what we want:</p>
-<pre class="r"><code>xvals=mtcars$disp    # xvals same as data (this is a &quot;fixed effect&quot;, so there is no random component here- we can&#39;t really &quot;sample&quot; x values)
+<pre class="r"><code>###########
+# generate data under an assumed process model
+
+xvals=mtcars$disp    # xvals same as data (this is a &quot;fixed effect&quot;, so there is no random component here- we can&#39;t really &quot;sample&quot; x values)
 params &lt;- list()  
-params$a=30
+params$a=30             # set model parameters arbitrarily (eyeballing to the data)
 params$b=-0.005   # = 1/200
 params$c=1
 
 yvals &lt;- DataGenerator_exp(xvals,params)
 
-plot(yvals~xvals)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
-<p>Okay, looks reasonable. Now, let’s write a function to generate multiple replicate datasets from a particular model and make boxplots describing the plausible data produced by the model across measured parameter space.</p>
-<pre class="r"><code>PlotRangeOfPlausibleData &lt;- function(xvals,params,reps){ 
+plot(yvals~xvals)      # plot the simulated data</code></pre>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>Okay, looks reasonable. Now, let’s write a function to generate multiple replicate datasets from a known model and make boxplots describing the plausible data produced by the model across measured parameter space.</p>
+<pre class="r"><code>##########
+# assess goodness-of-fit of a known data-generating model
+
+PlotRangeOfPlausibleData &lt;- function(xvals,params,reps){ 
   samplesize &lt;- length(xvals)
   results &lt;- array(0,dim=c(samplesize,reps))   # storage array for results
   for(i in 1:reps){
@@ -415,57 +459,74 @@ plot(yvals~xvals)</code></pre>
 <p>Let’s try it out!</p>
 <pre class="r"><code>reps &lt;- 1000    # number of replicate datasets to generate
 
-PlotRangeOfPlausibleData(xvals,params,reps)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+PlotRangeOfPlausibleData(xvals,params,reps)    # run the function to visualize the range of data that could be produced under this model</code></pre>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
 <p>Now we can overlay the data and see how well we did!</p>
-<pre class="r"><code>real_yvals &lt;- mtcars$mpg
+<pre class="r"><code>############
+# finally, overlay the real data to evaluate goodness of fit!
+
+real_yvals &lt;- mtcars$mpg
 PlotRangeOfPlausibleData(xvals,params,reps)
 points(xvals,real_yvals,pch=20,cex=3,col=&quot;green&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
-<p>Okay, not very good yet. Let’s see if we can improve this by changing the parameters. Let’s increase the intercept and reduce the slope:</p>
-<pre class="r"><code>params$a=40       # was 30
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p>Okay, not very good yet. Let’s see if we can improve the fit by <em>changing the parameters</em>. Let’s increase the intercept and reduce the slope:</p>
+<pre class="r"><code>##########
+# now change the parameters and see if the data fit to the model
+
+params$a=40       # was 30
 params$b=-0.001   # was 0.005
 
     
 PlotRangeOfPlausibleData(xvals,params,reps)
 points(xvals,real_yvals,pch=20,cex=3,col=&quot;green&quot;)    # overlay the real data</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
 <p>Oops- we overshot!! Let’s find something in the middle!</p>
-<pre class="r"><code>params$a=33       # was 40
+<pre class="r"><code>#######
+# try again- select a new set of parameters
+
+params$a=33       # was 40
 params$b=-0.002   # was 0.001
 
     
 PlotRangeOfPlausibleData(xvals,params,reps)
 points(xvals,real_yvals,pch=20,cex=3,col=&quot;green&quot;)    # overlay the real data</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
 <p>Much better! This model could plausibly generate most of these data!</p>
-<p>So, we have used simulation, along with trial and error, to infer parameter values for our model!</p>
+<p>So, we have used simulation, along with trial and error, to infer the most <strong>likely</strong> parameter values for our model!</p>
+<p>A <em>likelihood function</em>, very generally, is a function that: + takes the <strong>data</strong> and a <strong>hypothesized data-generating model</strong> as input arguments and: + returns the relative plausibility that <em>this</em> model could have produced <em>these</em> data.</p>
+<p>The higher the plausibility, the higher the value the likelihood function returns.</p>
+<p><strong>Q:</strong> What is the likelihood function we have used in this example?</p>
 </div>
-<div id="computing-data-likelihood" class="section level2">
-<h2>Computing data <em>likelihood</em></h2>
-<p>First of all, what does “data likelihood” really mean? Formally,</p>
+<div id="computing-data-likelihood-more-rigorously" class="section level2">
+<h2>Computing data <em>likelihood</em> more rigorously</h2>
+<p>First of all, what does “data likelihood” really mean, in a formal sense?</p>
 <p><span class="math inline">\(\mathcal{L} (Model|obs.data) \equiv Prob(obs.data|Model)\)</span></p>
 <div id="definition-in-plain-english" class="section level3">
 <h3>Definition, in plain English!</h3>
-<p>The likelihood of a set of parameters <span class="math inline">\(\theta\)</span> given some observed data is equal to the <em>probability</em> of observing these data given those particular parameter values. In this way, likelihood is a quantitative measure of <em>goodness-of-fit</em>. Higher likelihoods correspond to a higher probability of the model producing the observed data.</p>
+<p>The likelihood of a fully-specified model with a set of parameters <span class="math inline">\(\theta\)</span>, given some observed data, is equal to the <em>probability</em> of observing these data, given the defined model with those specific parameter values. In this way, likelihood is a quantitative measure of <em>goodness-of-fit</em>. Higher likelihoods correspond to a higher probability of the model producing the observed data.</p>
+<p>But remember, we generally use likelihood as a <em>relative</em> rather than an <em>absolute</em> metric. Therefore, the model with the highest likelihood (out of a set of candidate models) doesn’t necessarily mean the model would pass a basic goodness-of-fit test!</p>
 </div>
 <div id="worked-example" class="section level3">
 <h3>Worked example</h3>
-<p>Let’s go through an example! For simplicity, let’s stick with the cars example for now.</p>
-<p>For simplicity, let’s consider only the first observation:</p>
-<pre class="r"><code>obs.data &lt;- mtcars[1,c(&quot;mpg&quot;,&quot;disp&quot;)]
+<p>Let’s go through an example! For now, we will stick with the cars example for now.</p>
+<p>For simplicity, let’s consider <em>only the first observation</em>:</p>
+<pre class="r"><code>#############
+# Work with likelihood!
+
+obs.data &lt;- mtcars[1,c(&quot;mpg&quot;,&quot;disp&quot;)]    # for simplicity, consider only the first observation
 obs.data</code></pre>
 <pre><code>##           mpg disp
 ## Mazda RX4  21  160</code></pre>
 <p>Remember, we are considering the following data generating model:</p>
 <p><span class="math inline">\(mpg = N\left \{ a\cdot e^{b\cdot displacement} ,c\right \}\)</span></p>
-<p>Let’s assume for a second that the parameters we selected in our trial-and-error exercise above are the true parameters. What is the expected value of our observation under this data generating model.</p>
+<p>Let’s assume for a second that the parameters we selected in our trial-and-error exercise above are the true parameters. What is the expected value of our single observation under this data generating model.</p>
 <pre class="r"><code>############
 # &quot;best fit&quot; parameters from above
 ############
 
-params$a=33       # was 40
-params$b=-0.002   # was 0.001
+params &lt;- list()    # set up empty list to store parameters
+params$a=33            # fill the list with the &quot;best fit&quot; parameter set from above    
+params$b=-0.002   
 params$c=1
 
 params</code></pre>
@@ -477,22 +538,32 @@ params</code></pre>
 ## 
 ## $c
 ## [1] 1</code></pre>
-<pre class="r"><code>expected_val &lt;- Deterministic_component(obs.data$disp,params$a,params$b)
-expected_val</code></pre>
+<pre class="r"><code>expected_val &lt;- Deterministic_component(obs.data$disp,params$a,params$b)   
+expected_val      # expected mpg for the first observation in the &quot;mtcars&quot; dataset</code></pre>
 <pre><code>## [1] 23.96292</code></pre>
 <p>Okay we now know our expected (mean) value for mpg for a car with displacement of 160 cubic inches. We also know the observed mpg for a car with a displacement of 160 cubic inches: it was 21 mpgs. Since the model also specifies the variance (1) we can compute the probability of observing a car with 21 mpgs under our model.</p>
-<pre class="r"><code>mean = expected_val   # 23.96
-stdev = sqrt(params$c)
+<p>Recall that when we are trying to compute the probability of getting any particular number out of a random number generator with known distribution, we can use the “d<em>x</em>” version of the probability distribution function in R (e.g., “dnorm()”, “dunif()”, “dpois()”):</p>
+<pre class="r"><code>###########
+# Visualize the likelihood of this single observation. 
 
-curve(dnorm(x,mean,stdev),10,30,xlab=&quot;mpg&quot;,ylab=&quot;probability density&quot;)   # probability density
-abline(v=obs.data$mpg,col=&quot;red&quot;,lwd=2)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
-<p>Now it is straightforward to compute the likelihood. We just need to know the probability density where the red line (observed data) intersects with the normal density curve above:</p>
-<pre class="r"><code>likelihood = dnorm(obs.data$mpg,mean,stdev)
+mean = expected_val   # expected (mean) value for this observation, given the &quot;known&quot; data generating model
+stdev = sqrt(params$c)    # standard deviation
+
+curve(dnorm(x,mean,stdev),10,30,xlab=&quot;possible vals for mpg under the specified model&quot;,ylab=&quot;probability density&quot;)   # probability of all plausible mpg values under the data generating model.  
+abline(v=obs.data$mpg,col=&quot;red&quot;,lwd=2)    # overlay the observed data</code></pre>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
+<p>Now it is straightforward to compute the likelihood. We just need to know the probability density where the red line (observed data) intersects with the normal density curve (above). For this we can use the “dnorm()” function (probability density, normal distribution):</p>
+<pre class="r"><code>###########
+# compute the likelihood of the first observation
+
+likelihood = dnorm(obs.data$mpg,mean,stdev)
 likelihood</code></pre>
 <pre><code>## [1] 0.004949936</code></pre>
 <p>Now let’s consider a second observation as well!</p>
-<pre class="r"><code>obs.data &lt;- mtcars[c(1,3),c(&quot;mpg&quot;,&quot;disp&quot;)]
+<pre class="r"><code>###########
+# Visualize the likelihood of two observations. 
+
+obs.data &lt;- mtcars[c(1,3),c(&quot;mpg&quot;,&quot;disp&quot;)]
 obs.data</code></pre>
 <pre><code>##             mpg disp
 ## Mazda RX4  21.0  160
@@ -503,15 +574,21 @@ for(i in 1:nrow(obs.data)){
   curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),10,30,xlab=&quot;mpg&quot;,ylab=&quot;probability density&quot;)   # probability density
   abline(v=obs.data$mpg[i],col=&quot;red&quot;,lwd=2)
 }</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
 <p>What is the likelihood of observing both of these data points???</p>
 <p><span class="math inline">\(Prob(obs.data_{1}|Model])\cdot Prob(obs.data_{2}|Model])\)</span></p>
-<pre class="r"><code>Likelihood &lt;- dnorm(obs.data$mpg[1],Deterministic_component(obs.data$disp[1],params$a,params$b),sqrt(params$c)) *
+<pre class="r"><code>##########
+# compute the likelihood of observing BOTH data points
+
+Likelihood &lt;- dnorm(obs.data$mpg[1],Deterministic_component(obs.data$disp[1],params$a,params$b),sqrt(params$c)) *
               dnorm(obs.data$mpg[2],Deterministic_component(obs.data$disp[2],params$a,params$b),sqrt(params$c))  
 Likelihood</code></pre>
 <pre><code>## [1] 1.505202e-06</code></pre>
 <p>Let’s consider four observations:</p>
-<pre class="r"><code>obs.data &lt;- mtcars[c(1,3,4,5),c(&quot;mpg&quot;,&quot;disp&quot;)]
+<pre class="r"><code>##############
+# and now... four observations!
+
+obs.data &lt;- mtcars[c(1,3,4,5),c(&quot;mpg&quot;,&quot;disp&quot;)]
 obs.data</code></pre>
 <pre><code>##                    mpg disp
 ## Mazda RX4         21.0  160
@@ -524,28 +601,39 @@ for(i in 1:nrow(obs.data)){
   curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),10,30,xlab=&quot;mpg&quot;,ylab=&quot;probability density&quot;)   # probability density
   abline(v=obs.data$mpg[i],col=&quot;red&quot;,lwd=2)
 }</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
 <p>What is the combined likelihood of all of these four data points, assuming each observation is independent…</p>
-<pre class="r"><code>Likelihood &lt;- 1     # initialize the likelihood
+<pre class="r"><code>##########
+# compute the likelihood of observing all four data points
+
+Likelihood &lt;- 1     # initialize the likelihood
 for(i in 1:nrow(obs.data)){
   Likelihood &lt;- Likelihood * dnorm(obs.data$mpg[i],Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c))
 }
 Likelihood</code></pre>
 <pre><code>## [1] 1.738001e-09</code></pre>
 <p>Alternatively, we can use the “prod” function in R:</p>
-<pre class="r"><code>Likelihood &lt;- prod(dnorm(obs.data$mpg,Deterministic_component(obs.data$disp,params$a,params$b),sqrt(params$c)))
+<pre class="r"><code># Alternatively, we can use the &quot;prod&quot; function in R
+
+Likelihood &lt;- prod(dnorm(obs.data$mpg,Deterministic_component(obs.data$disp,params$a,params$b),sqrt(params$c)))
 Likelihood</code></pre>
 <pre><code>## [1] 1.738001e-09</code></pre>
 <p>Okay, so it should be fairly obvious how we might get the likelihood of the entire dataset. Assuming independence of observations of course!</p>
-<pre class="r"><code>full.data &lt;- mtcars[,c(&quot;mpg&quot;,&quot;disp&quot;)]
+<pre class="r"><code>##########
+# Finally, compute the likelihood of ALL data points in the entire data set, using the &quot;prod()&quot; function
+
+full.data &lt;- mtcars[,c(&quot;mpg&quot;,&quot;disp&quot;)]
 Likelihood &lt;- prod(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c)))
 Likelihood</code></pre>
 <pre><code>## [1] 4.654279e-84</code></pre>
-<p>You may notice that that’s a pretty small number. When you multiply lots of really small numbers together, we get much smaller numbers. This can be very undesirable, especially when you run into computational errors (e.g., arithmetic overflow). For this reason, and because we generally like sums rather than products, we generally log-transform likelihoods. As you recall,</p>
+<p>You may notice that that’s a pretty small number. When you multiply lots of really small numbers together, we get much smaller numbers. This can be very undesirable, especially when you run into computational errors (e.g., arithmetic overflow/underflow – meaning the number is beyond the range that can be represented in computer memory). For this reason, and because we generally like sums rather than products, we generally <em>log-transform</em> likelihoods. As you recall,</p>
 <p><span class="math inline">\(log(a\cdot b\cdot c)=log(a)+log(b)+log(c)\)</span></p>
 <p>Log transformations just make it easier to work with likelihoods!</p>
 <p>In fact, the probability distribution functions in R make it extra easy for us to work with log likelihoods, using the ‘log=TRUE’ option!</p>
-<pre class="r"><code>Log.Likelihood &lt;- sum(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c),log=TRUE)) 
+<pre class="r"><code>##########
+# Compute the log-likelihood (much easier to work with!)
+
+Log.Likelihood &lt;- sum(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c),log=TRUE)) 
 Log.Likelihood  </code></pre>
 <pre><code>## [1] -191.8794</code></pre>
 <pre class="r"><code>exp(Log.Likelihood)   # we can convert back to likelihood if we want...</code></pre>
@@ -554,56 +642,86 @@ Log.Likelihood  </code></pre>
 </div>
 <div id="maximum-likelihood-estimation-mle" class="section level2">
 <h2>Maximum Likelihood Estimation (MLE)</h2>
-<p>Maximum likelihood estimation is a general, flexible and generally robust method for drawing inference about models from data.</p>
-<p>The basic idea is simple: given a data generating model, search for the set of parameters that maximizes the data likelihood!</p>
+<p>Maximum likelihood estimation is a general, flexible method for drawing <em>inference</em> about models from data.</p>
+<p>The basic idea is simple: given a data generating model and a set of free parameters, search for the set of parameters that maximizes the data likelihood!</p>
+<p>Like any function, a <em>likelihood function</em> has inputs and outputs.</p>
+<p>The <strong>inputs</strong> are: + A set of <strong>free parameters</strong>, which are the parameters we are trying to estimate!<br />
++ A dataset for which we want to compute the likelihood!<br />
++ Any fixed, ancillary parameters you want!</p>
+<p>The <strong>algorithm</strong> is: + A data generating model, often constructed by combining a deterministic and stochastic component. Likelihood is computed by adding together the log-likelihoods of all observations.</p>
+<p>The <strong>output</strong> is:<br />
++ The [scalar] likelihood of the data, given the model and specific values for the free parameters.</p>
+<p>NOTE: instead of likelihood, we often use the log-likelihood NOTE: instead of log-likelihood, we often use the <em>negative log-likelihood</em> (it is more common to identify the minimum rather than the maximum of an objective function- this is the default for the native optimization function in R, “optim()”)</p>
+<p><strong>Q</strong>: What are the free parameters in the mtcars example?</p>
+<p>It is important to note that the likelihood function (or more accurately, the likelihood <em>surface</em>) essentially contains all the information in the data that can be used to make inference about the model. The problem then becomes, how can we search for the maximum-likelihood estimate (MLE) and characterize the likelhood surface around the MLE? We will discuss the mechanics of this in the <a href="LECTURE5.html">next lecture (optimization)</a>.</p>
 <p>The steps of a typical MLE analysis are as follows:</p>
 <ol style="list-style-type: decimal">
-<li>Build a likelihood function</li>
-<li>Use numerical optimization algorithms to find the parameters that maximize the likelihood function</li>
+<li>Build a <em>likelihood function</em> for the specified model, bundling all free parameters together into one vector argument (given a known data-generating model and a bundled set of parameter values, return the likelihood of any dataset)</li>
+<li>Use <em>numerical optimization algorithms</em> to find the set of parameters that maximize the likelihood function</li>
 <li>Use the shape of the likelihood function to make inference about parameter uncertainty (e.g., confidence intervals)</li>
 </ol>
-<p>Okay, so what is a <em>likelihood function</em>? We basically already have this for the cars example: it is just a function that produces a joint likelhood value, given (1) a <strong>dataset</strong> and (2) a <strong>data generating function</strong>.</p>
-<pre class="r"><code>LogLikFunction &lt;- function(params,df,yvar,xvar){
+<p>Okay, let’s build our first <em>likelihood function</em>? We basically already have this for the cars example:</p>
+<pre class="r"><code>##########
+# Example likelihood function!
+
+# Arguments:
+#   params: bundled vector of free parameters for the known data-generating model
+#   df: a data frame that holds the observed data
+#   yvar: the name of the response variable (ancillary)
+#   xvar: the name of the predictor variable (ancillary)
+
+LogLikFunction &lt;- function(params,df,yvar,xvar){
   LogLik &lt;- sum(dnorm(df[,yvar],Deterministic_component(df[,xvar],params[&#39;a&#39;],params[&#39;b&#39;]),sqrt(params[&#39;c&#39;]),log=TRUE))
   return(LogLik)
 }
 LogLikFunction(unlist(params),df=mtcars,yvar=&quot;mpg&quot;,xvar=&quot;disp&quot;)</code></pre>
 <pre><code>## [1] -191.8794</code></pre>
-<p>Now that we have a likelihood function, we need to search parameter space for the parameter set that maximizes the log likelhood. Luckily, there are lots of <em>computational algorithms</em> that can do this. We will look at this in detail in the next lecture. For now, we just need to know that they exist, and that they can be harnessed using the ‘optim’ function in R.</p>
+<p>Now that we have a likelihood function, we need to search parameter space for the parameter set that maximizes the log-likelhood of the data. Luckily, there are lots of <em>computational algorithms</em> that can do this. We will look at this in detail in the optimization lecture. For now, we just need to know that these fancy algorithms exist, and that they can be harnessed using the ‘optim()’ function in R.</p>
+<p>The “optim()” function wants (1) a likelihood function, (2) a set of free parameters, along with starting values for these parameters, (3) any other ancillary variables that the likelhood function requires, and (4) parameters specifying aspects of the optimization algorithm (e.g., which numerical algorithm to use).</p>
 <p>Let’s find the MLE for the three parameters in the cars example!!</p>
-<pre class="r"><code>MLE &lt;- optim(fn=LogLikFunction,par=unlist(params),df=mtcars,yvar=&quot;mpg&quot;,xvar=&quot;disp&quot;,control=list(fnscale=-1))  # note, the control param is set so that &quot;optim&quot; maximizes rather than minimizes the Log-likelihood. </code></pre>
-<p>Now, we can get the MLEs for the three parameters:</p>
-<pre class="r"><code>MLE$par</code></pre>
+<pre class="r"><code>############
+# Use numerical optimization methods to identify the maximum likelihood estimate (and the likelihood at the MLE)
+
+MLE &lt;- optim(fn=LogLikFunction,par=unlist(params),df=mtcars,yvar=&quot;mpg&quot;,xvar=&quot;disp&quot;,control=list(fnscale=-1))  # note, the control param is set so that &quot;optim&quot; maximizes rather than minimizes the Log-likelihood. </code></pre>
+<p>Now, we can get the MLEs for the three parameters (the parameter values that maximize the likelihood function):</p>
+<pre class="r"><code>MLE$par   # maximum likelihood parameter estimates</code></pre>
 <pre><code>##            a            b            c 
 ## 33.077114768 -0.002338554  8.166392492</code></pre>
-<p>We can also get the log likelihood for the best model</p>
-<pre class="r"><code>MLE$value</code></pre>
+<p>We can also get the log likelihood for the best model (the maximum log-likelhood value, achieved by using the above parameter values as inputs to the likelihood function)</p>
+<pre class="r"><code>MLE$value   # log likelihood for the best model</code></pre>
 <pre><code>## [1] -79.0089</code></pre>
 <p>Let’s look at goodness-of-fit for the best model!</p>
-<pre class="r"><code>bestParams &lt;- as.list(MLE$par)
+<pre class="r"><code>##############
+# visualize goodness-of-fit for the best model
 
-xvals=mtcars$disp
+bestParams &lt;- as.list(MLE$par)   # extract the MLE parameter vals
+
+xvals &lt;- mtcars$disp
 yvals &lt;- mtcars$mpg
 PlotRangeOfPlausibleData(xvals,bestParams,1000)
 points(xvals,yvals,pch=20,cex=3,col=&quot;green&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-25-1.png" width="672" /></p>
 <p>Now this isn’t such a bad looking model!</p>
-<p>Using this same strategy, we can fit countless models to data. We just performed a standard non-linear regression. But we could just as well have fit any number of alternative model formulations. Maximum Likelihood is a powerful and flexible framework. We will have plenty of more opportunities to play with likeihood-based frameworks, both in a frequentist and a Bayesian context.</p>
+<p>Using this same strategy, we can fit countless models to data. We just performed a standard non-linear regression. But we could just as well have fit any number of alternative model formulations. Maximum Likelihood is a powerful and flexible framework. We will have plenty of more opportunities to work with likelihood functions, both in a frequentist and a Bayesian context.</p>
 <div id="aside-generating-initial-values" class="section level3">
 <h3>Aside: generating initial values</h3>
 <p>Note that the ‘optim’ function requires specification of initial values for every free parameter in your model. In general, it is not critical that the initial values fit the data very well. However, we need to put serious thought into our initial values. Using values that are too far away from the best-fit parameter estimates can cause our optimization algorithms to fail! The strategy I recommend for setting initial values is:</p>
 <ul>
-<li>If possible, use general understanding of the meaning of the parameters to “eyeball” an approximate value for each parameter</li>
+<li>If possible, use general understanding of the meaning of the parameters to “eyeball” an approximate value for each parameter<br />
+</li>
 <li>Write a data-generation function (sometimes just the deterministic component might be enough) and plot out this function against the observed data. If the fit is “close-ish” then you should be able to use these values for your initial values. If not, tweak the parameters until you find something that is “close-ish”.</li>
 </ul>
 </div>
 </div>
 <div id="estimating-parameter-uncertainty" class="section level2">
 <h2>Estimating parameter uncertainty</h2>
-<p>We have now identified the parameter values that maximize the likelihood function. This is now our “best” estimate of the parameter value. But we usually want to know something about how certain we are about our estimate, often in the form of confidence intervals.</p>
+<p>We have now identified the parameter values that maximize the likelihood function. These are now our “best” estimates of the parameter values (MLE). But we usually want to know something about how certain we are about our estimate, often in the form of confidence intervals.</p>
 <p>Fortunately, likelihood theory offers us a strategy for estimating confidence intervals around our parameter estimates. The idea is that the <em>shape</em> of the likelihood function tells us something about the range of parameter values under which the true parameter value may potentially fall.</p>
-<p>For instance, let’s plot out the shape of the likelihood function across a <strong>slice</strong> of parameter space. In this case, let’s look at the “decay rate” term (the ‘b’ parameter). We can vary that parameter over a range of possible values and see how the likelihood changes over that parameter space. Let’s hold the other parameters at their maximum likelihood values:</p>
-<pre class="r"><code>upperval &lt;- -1/1000
+<p>For instance, let’s plot out the shape of the likelihood function across a <strong>slice</strong> of parameter space (vary one parameter and hold all others constant). In this case, let’s look at the “decay rate” term (the ‘b’ parameter). We can vary that parameter over a range of possible values and see how the likelihood changes over that parameter space. Let’s hold the other parameters at their maximum likelihood values:</p>
+<pre class="r"><code>##############
+# Visualize a &quot;slice&quot; of the likeihood function
+
+upperval &lt;- -1/1000
 lowerval &lt;- -1/200
 allvals &lt;- seq(lowerval,upperval,length=1000)
 likelihood_slice &lt;- numeric(1000)   # set up storage vector! 
@@ -614,11 +732,14 @@ for(i in c(1:length(allvals))){
 }
 
 plot(allvals,likelihood_slice,type=&quot;l&quot;,main=&quot;Likelihood Slice&quot;,xlab=&quot;Parameter Slice for \&#39;b\&#39;&quot;,ylab=&quot;Likelihood&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-25-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-26-1.png" width="672" /></p>
 <p>Again, we generally want to work with log-likelihoods. And here we have an even better reason to use log-likelihoods. This reason: the “rule of 2”, and (more formally) the <strong>likelihood ratio test</strong>.</p>
-<p>For now, suffice it to say that all parameter values within 2 log-likelihood units of the best-fit parameter value are <em>plausible</em>. Therefore, a <em>reasonable</em> confidence interval (approximate 95% conf int) can be obtained by idenfifying the range of parameter values for which the log-likelihood is within two of the maximum likelihood…</p>
+<p>For now, suffice it to say that all parameter values within 2 log-likelihood units of the best-fit parameter value are <em>plausible</em>. Therefore, a <em>reasonable</em> confidence interval (approximate 95% conf int) can be obtained by idenfifying the set of possible parameter values for which the log-likelihood is within two of the maximum likelihood…</p>
 <p>Let’s plot out the log-likelihood slice:</p>
-<pre class="r"><code>upperval &lt;- -1/1000
+<pre class="r"><code>#################
+# Work with log-likelihood instead...
+
+upperval &lt;- -1/1000
 lowerval &lt;- -1/200
 allvals &lt;- seq(lowerval,upperval,length=1000)
 loglikelihood_slice &lt;- numeric(1000)   # set up storage vector! 
@@ -629,9 +750,12 @@ for(i in c(1:length(allvals))){
 }
 
 plot(allvals,loglikelihood_slice,type=&quot;l&quot;,main=&quot;Log Likelihood Slice&quot;,xlab=&quot;Parameter Slice for \&#39;b\&#39;&quot;,ylab=&quot;Log-Likelihood&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-26-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-27-1.png" width="672" /></p>
 <p>Let’s “zoom in” to a smaller slice of parameter space so we can more clearly see the “plausible” values:</p>
-<pre class="r"><code>upperval &lt;- -1/550
+<pre class="r"><code>###########
+# zoom in closer to the MLE
+
+upperval &lt;- -1/550
 lowerval &lt;- -1/350
 allvals &lt;- seq(lowerval,upperval,length=1000)
 loglikelihood_slice &lt;- numeric(1000)   # set up storage vector! 
@@ -642,17 +766,23 @@ for(i in c(1:length(allvals))){
 }
 
 plot(allvals,loglikelihood_slice,type=&quot;l&quot;,main=&quot;Log Likelihood Slice&quot;,xlab=&quot;Parameter Slice for \&#39;b\&#39;&quot;,ylab=&quot;Log-Likelihood&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-27-1.png" width="672" /></p>
-<p>What region of this space falls within 2 log likelihood units of the best value?</p>
-<pre class="r"><code>bestVal &lt;- bestParams$b
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-28-1.png" width="672" /></p>
+<p>What region of this space falls within 2 log-likelihood units of the best value?</p>
+<pre class="r"><code>##############
+# what parameter values are within 2 log likelihood units of the best value?
+
+bestVal &lt;- bestParams$b
 bestVal</code></pre>
 <pre><code>## [1] -0.002338554</code></pre>
 <pre class="r"><code>plot(allvals,loglikelihood_slice,type=&quot;l&quot;,main=&quot;Log Likelihood Slice&quot;,xlab=&quot;Parameter Slice for \&#39;b\&#39;&quot;,ylab=&quot;Log-Likelihood&quot;)
 abline(v=bestVal,lwd=3,col=&quot;blue&quot;)
 abline(h=(MLE$value-2))</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-28-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-29-1.png" width="672" /></p>
 <p>So what is our 95% confidence interval in this case?? (remember this is <em>very approximate</em>!)</p>
-<pre class="r"><code>reasonable_parameter_values &lt;- allvals[loglikelihood_slice&gt;=(MLE$value-2)]
+<pre class="r"><code>##############
+# Generate an approximate 95% confidence interval for the &quot;b&quot; parameter
+
+reasonable_parameter_values &lt;- allvals[loglikelihood_slice&gt;=(MLE$value-2)]
 min(reasonable_parameter_values)</code></pre>
 <pre><code>## [1] -0.002595063</code></pre>
 <pre class="r"><code>max(reasonable_parameter_values)</code></pre>
@@ -662,7 +792,7 @@ abline(v=bestVal,lwd=3,col=&quot;blue&quot;)
 abline(h=(MLE$value-2),lty=2)
 abline(v=min(reasonable_parameter_values),lwd=1,col=&quot;blue&quot;)
 abline(v=max(reasonable_parameter_values),lwd=1,col=&quot;blue&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-29-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-30-1.png" width="672" /></p>
 <div id="key-point" class="section level4">
 <h4>Key point!</h4>
 <p>From the Bolker book:</p>
@@ -674,7 +804,14 @@ abline(v=max(reasonable_parameter_values),lwd=1,col=&quot;blue&quot;)</code></pr
 <h3>Estimating parameter uncertainty in multiple dimensions: the Likelihood Profile</h3>
 <p>If we have more than one <em>free parameter</em> in our model, it seems strange to fix any parameter at a particular value, as we did in computing the “likelihood slice” above. It makes more sense to allow all the parameters to vary. For the purpose of visualization, let’s assume for now that we only have two free parameters in our model: ‘a’ and ‘b’. We will assume for now that the variance parameter is known for certain.</p>
 <p>Let’s try to visualize the likelihood surface in two dimensions!</p>
-<pre class="r"><code>upperval_b &lt;- -1/800
+<pre class="r"><code>###############
+# A better confidence interval, using the likelihood &quot;profile&quot;
+
+
+##########
+# first, visualize the likelihood surface in 2 dimensions
+
+upperval_b &lt;- -1/800
 lowerval_b &lt;- -1/300
 
 upperval_a &lt;- 50
@@ -694,50 +831,62 @@ for(i in 1:length(allvals_a)){  # loop through possible a params
   }
 }
 
-image(x=allvals_b,y=allvals_a,z=loglikelihood_surface,zlim=c(-100,-75),col=topo.colors(12))</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-30-1.png" width="672" /></p>
+image(x=allvals_a,y=allvals_b,z=loglikelihood_surface,zlim=c(-100,-75),col=topo.colors(12))</code></pre>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-31-1.png" width="672" /></p>
 <p>Now let’s add a contour line to indicate the <em>95% bivariate confidence region</em></p>
-<pre class="r"><code>conf95 &lt;- qchisq(0.95,2)/2
+<pre class="r"><code>##########
+# add a contour line, assuming deviances follow a chi-squared distribution
+
+conf95 &lt;- qchisq(0.95,2)/2  # this evaluates to around 3. Since we are varying freely across 2 dimensions, we use chisq with 2 degrees of freedom
 image(x=allvals_a,y=allvals_b,z=loglikelihood_surface,zlim=c(-100,-75),col=topo.colors(12))
 contour(x=allvals_a,y=allvals_b,z=loglikelihood_surface,levels=(MLE$value-conf95),add=TRUE,lwd=3,col=gray(0.3))</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-31-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-32-1.png" width="672" /></p>
 <p>So, what is the “<strong>profile likelihood</strong>” confidence interval for the a parameter?</p>
-<p>By “profile likelihood” confidence interval, we mean this: we have a parameter of interest, and “nuisance parameter(s)”. For every value of the parameter of interest, we find the highest likelihood value across all possible values of all the other parameters.</p>
-<pre class="r"><code>              ### A parameter
+<p>By “profile likelihood” confidence interval, we mean this: we have a parameter of interest, and one or more “nuisance parameter(s)” (free parameters that we want to factor out of the equation for now). For every value of the parameter of interest, we find the highest likelihood value across all possible values of all the other parameters (parameter of interest is a sequence of fixed points across its range, other parameter(s) are free to vary.</p>
+<pre class="r"><code>#############
+# visualize likelhood profile!
+
+              ### A parameter
 profile_A &lt;- apply(loglikelihood_surface,1,max)
-reasonable_parameter_values_A &lt;- allvals_a[profile_A &gt;=(MLE$value-conf95)]
+reasonable_parameter_values_A &lt;- allvals_a[profile_A &gt;=(MLE$value-qchisq(0.95,1)/2)]
 min(reasonable_parameter_values_A)</code></pre>
-<pre><code>## [1] 29.25852</code></pre>
+<pre><code>## [1] 29.97996</code></pre>
 <pre class="r"><code>max(reasonable_parameter_values_A)</code></pre>
-<pre><code>## [1] 37.28457</code></pre>
+<pre><code>## [1] 36.38277</code></pre>
 <pre class="r"><code>plot(allvals_a,profile_A,type=&quot;l&quot;,main=&quot;Log Likelihood profile&quot;,xlab=&quot;Parameter Slice for \&#39;a\&#39;&quot;,ylab=&quot;Log-Likelihood&quot;)
 abline(v=MLE$par[&quot;a&quot;],lwd=3,col=&quot;blue&quot;)
 abline(v=min(reasonable_parameter_values_A),lwd=1,col=&quot;blue&quot;)
 abline(v=max(reasonable_parameter_values_A),lwd=1,col=&quot;blue&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-32-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-33-1.png" width="672" /></p>
 <p>And the b parameter?</p>
-<pre class="r"><code>profile_B &lt;- apply(loglikelihood_surface,2,max)
-reasonable_parameter_values_B &lt;- allvals_b[profile_B &gt;=(MLE$value-conf95)]
+<pre class="r"><code>############
+# profile for the b parameter... 
+
+profile_B &lt;- apply(loglikelihood_surface,2,max)
+reasonable_parameter_values_B &lt;- allvals_b[profile_B &gt;=(MLE$value-qchisq(0.95,1)/2)]
 min(reasonable_parameter_values_B)</code></pre>
-<pre><code>## [1] -0.002982632</code></pre>
+<pre><code>## [1] -0.002849031</code></pre>
 <pre class="r"><code>max(reasonable_parameter_values_B)</code></pre>
-<pre><code>## [1] -0.001742652</code></pre>
+<pre><code>## [1] -0.001859552</code></pre>
 <pre class="r"><code>plot(allvals_b,profile_B,type=&quot;l&quot;,main=&quot;Log Likelihood profile&quot;,xlab=&quot;Parameter Slice for \&#39;b\&#39;&quot;,ylab=&quot;Log-Likelihood&quot;)
 abline(v=MLE$par[&quot;b&quot;],lwd=3,col=&quot;blue&quot;)
 abline(v=min(reasonable_parameter_values_B),lwd=1,col=&quot;blue&quot;)
 abline(v=max(reasonable_parameter_values_B),lwd=1,col=&quot;blue&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-33-1.png" width="672" /></p>
-<p>So,what happens if we compare the profile likelihood confidence interval with the “slice” method we used earlier??</p>
 <p><img src="LECTURE4_files/figure-html/unnamed-chunk-34-1.png" width="672" /></p>
-<p><strong>Why is there a difference??</strong></p>
+<p>So,what happens if we compare the profile likelihood confidence interval with the “slice” method we used earlier??</p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-35-1.png" width="672" /></p>
+<p><strong>Does it make sense why there is a difference (i.e., why the profile-likelihood CI is wider than the slice CI)??</strong></p>
 <p>In R and other software packages you may have worked with, you will have the option to estimate the confidence interval using the ‘profile likelihood’ method. Now you know what that means!</p>
-<div id="short-exercise-1" class="section level4">
-<h4>Short exercise 1</h4>
+<p>**Are there any other ways of getting a confidence interval from a likelihood surface?<br />
++ Evaluate the shape of the likelihood surface at the MLE using mathematical approximation: use the second derivatives of -LogLik evaluated at the MLE to estimate the standard errors of all parameters (formally, use the “Hessian” matrix!).</p>
+<p>NOTE: the profile method can easily detect asymmetries in the likelihood surface. Commonly used approximations are often not able to detect these asymmetries.</p>
+<div id="exercise-1" class="section level4">
+<h4>Exercise 1</h4>
 <blockquote>
-<p>Develop a function that returns the data likelihood (<em>likelihood function</em>) for the following scenario: you visit three known-occupied wetland sites ten times and for each site you record the number of times a particular frog species is detected within a 5 minute period. Assuming that all sites are occupied continously, compute the likelihood of these data: [3,2 and 6 detections for sites 1, 2, and 3 respectively] for a given detection probability <span class="math inline">\(p\)</span>. Assume that all sites have the same (unknown) detection probability. Using this likelihood function, answer the following questions:</p>
+<p>Develop a <em>likelihood function</em> for the following scenario: you visit three known-occupied wetland sites ten times and for each site you record the number of times a particular frog species is detected within a 5-minute period. Assuming that all sites are occupied continuously, compute the likelihood of these data: [3, 2 and 6 detections for sites 1, 2, and 3 respectively] for a given detection probability <span class="math inline">\(p\)</span>. Assume that all sites have the same (unknown) detection probability. Using this likelihood function, answer the following questions:</p>
 </blockquote>
 <ol style="list-style-type: decimal">
-<li>What is the maximum likelihood estimate for the p parameter?</li>
+<li>What is the maximum likelihood estimate (MLE) for the p parameter?</li>
 <li>Using the “rule of 2”, determine the approximate 95% confidence interval for the p parameter.</li>
 </ol>
 </div>
@@ -750,37 +899,48 @@ abline(v=max(reasonable_parameter_values_B),lwd=1,col=&quot;blue&quot;)</code></
 <h4>Definition: Likelihood Ratio</h4>
 <p>The likelihood Ratio is defined as:</p>
 <p><span class="math inline">\(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}}\)</span></p>
-<p>Where $\widehat{ $ is the likelihood at the global maximum likelihood estimate and <span class="math inline">\(\mathcal{L} _{r}\)</span> is the Likelihood of a model for which some parameters have been “fixed” (determined <em>a priori</em> and therefore no longer “free” to be estimated.</p>
+<p>Where <span class="math inline">\(\widehat{\mathcal{L}\)</span> is the likelihood at the global maximum likelihood estimate and <span class="math inline">\(\mathcal{L} _{r}\)</span> is the Likelihood of a model for which some parameters have been “fixed” (determined <em>a priori</em> and therefore no longer “free parameters” to be estimated.</p>
 </div>
 <div id="definition-deviance" class="section level4">
 <h4>Definition: Deviance</h4>
-<p>Twice the negative log of the likelihood ratio, <span class="math inline">\(-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})\)</span>, is also known as the <em>deviance</em>!</p>
+<p>Twice the negative log likelihood ratio, <span class="math inline">\(-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})\)</span>, is also known as the <em>deviance</em>!</p>
 </div>
 <div id="distribution-of-the-likelihood-ratio-frequentist" class="section level4">
 <h4>Distribution of the Likelihood Ratio (frequentist!)</h4>
-<p>For some reason (which we will not dwell on) the deviance under the null hypothesis (the full model adds no useful information with respect to the restricted model) is approximately $^2 $ (“chi-squared”) distributed with <em>r</em> degrees of freedom, where <em>r</em> is the number of dimensions by which the full model has been reduced.</p>
-<p><em>r</em> is equal to the number of free parameters that have been eliminated with respect to the full model. That is, if our full model has three free parameters and we fix the value of two of these parameters, <em>r</em> is equal to 2.</p>
+<p>For some reason (which we will not dwell on) the sampling distribution of the deviance (test statistic) under the null hypothesis (H0: the full model adds no useful information with respect to the restricted model) is <em>approximately</em> <span class="math inline">\(\chi^2\)</span> (“chi-squared”) distributed with <em>r</em> degrees of freedom, where <em>r</em> is the number of dimensions by which the full model has been reduced (number of parameters “fixed”).</p>
+<p><em>r</em> is equal to the number of free parameters that have been eliminated (fixed) with respect to the full model. That is, if our full model has three free parameters and we fix the value of two of these parameters, <em>r</em> is equal to 2.</p>
 <p>We can use this to estimate the statistical significance of any difference in likelihood between a full model and a restricted model.</p>
 <p>Here is a visualization of the chi-squared distribution with 2 degrees of freedom:</p>
-<pre class="r"><code>curve(dchisq(x,2),0,10,ylab=&quot;probability density&quot;,xlab=&quot;x&quot;, main=&quot;Chi-Squared distribution, df=2&quot;)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-35-1.png" width="672" /></p>
+<pre class="r"><code>###############
+# demo: likelihood ratio test
+
+curve(dchisq(x,2),0,10,ylab=&quot;probability density&quot;,xlab=&quot;x&quot;, main=&quot;Chi-Squared distribution, df=2&quot;)</code></pre>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-36-1.png" width="672" /></p>
 <p>What is the 95% quantile of this distribution?</p>
 <pre class="r"><code>curve(dchisq(x,2),0,10,ylab=&quot;probability density&quot;,xlab=&quot;x&quot;, main=&quot;Chi-Squared distribution, df=2&quot;)
 abline(v=qchisq(0.95,2),col=&quot;red&quot;,lwd=2)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-36-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-37-1.png" width="672" /></p>
 <p>What about 1 df?</p>
 <pre class="r"><code>curve(dchisq(x,1),0,5,ylab=&quot;probability density&quot;,xlab=&quot;x&quot;, main=&quot;Chi-Squared distribution, df=1&quot;)
 abline(v=qchisq(0.95,1),col=&quot;red&quot;,lwd=2)</code></pre>
-<p><img src="LECTURE4_files/figure-html/unnamed-chunk-37-1.png" width="672" /></p>
+<p><img src="LECTURE4_files/figure-html/unnamed-chunk-38-1.png" width="672" /></p>
 <p>Okay, so now we know that the deviance, the quantity defined as <span class="math inline">\(-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})\)</span>, should be distributed according to the above probability distribution under the null hypothesis of no difference between the restricted and full model. How does this relate to confidence intervals?</p>
-<p>Remember this is a frequentist test. So we are imagining multiple alternative universes where we are collecting data and determining a maximum likelihood estimate. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different MLE. Now imagine we <em>fix</em> the value of one of our parameters at the <strong>true</strong> parameter value and collect thousands of datasets, each time maximizing the likelihood with respect to all the other parameters. The <em>deviance</em> between the restricted model and the full model should be chi-squared distributed!</p>
-<p>That is, 95% of the time, the deviance should be below 3.84</p>
-<p>So, if we want to determine a range in parameter space can plausibly contain the true parameter value, we can select the range of parameter space for which the deviance is less than or equal to 3.84.</p>
+<p>Remember this is a frequentist test. So we are imagining multiple alternative universes where we are collecting data and determining a maximum likelihood estimate. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different likelihood surface. Now imagine we <em>fix</em> the value of one of our parameters at the <strong>true</strong> parameter value and collect thousands of datasets, each time maximizing the likelihood with respect to all the other parameters. The <em>deviance</em> between the restricted model (with one parameter set at its <em>true</em> value) and the full model (where the focal parameter is also a free parameter) should be approximately chi-squared distributed (with degrees of freedom of 1 if only one parameter is fixed)!</p>
+<p>Moreover, the true parameter value can be expected to fall outside the 95% quantile of the chi-squared distribution (df=1; critical value= 3.84) for only 5% of replicate sample data sets. That is, 95% of the time, the deviance between the true parameter and the MLE for that parameter should be below <span class="math inline">\(\chi^2_{crit, df=1} = 3.84\)</span></p>
+<p>It follows that we can define the 95% confidence interval for a parameter as the region around the MLE such that the deviance is within <span class="math inline">\(\chi^2_{crit, df=1}\)</span></p>
+<p>So, if we want to determine a range in parameter space that can plausibly contain the true parameter value, we can select the range of parameter space for which the deviance is less than or equal to 3.84.</p>
 <p>$ Deviance - 3.84$<br />
 <span class="math inline">\(-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}}) \leq - 3.84\)</span><br />
 <span class="math inline">\(-2*[ln(\mathcal{L} _{r}) - ln{\widehat{\mathcal{L}}})] \leq - 3.84\)</span><br />
 <span class="math inline">\([ln(\mathcal{L} _{r}) - ln{\widehat{\mathcal{L}}})] \leq 1.92\)</span></p>
 <p>So, now what do you think about the “rule of 2”? Is it close enough???</p>
+</div>
+<div id="other-questions" class="section level4">
+<h4>Other questions</h4>
+<ul>
+<li>is the likelihood surface a <em>probability distribution</em>?</li>
+</ul>
+<p><a href="LECTURE5.html">–go to next lecture–</a></p>
 </div>
 </div>
 </div>

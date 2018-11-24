@@ -1,7 +1,7 @@
 ---
 title: "Bayesian Analysis #2: MCMC"
 author: "NRES 746"
-date: "October 18, 2016"
+date: "Fall 2018"
 output: 
   html_document: 
     theme: cerulean
@@ -13,9 +13,30 @@ output:
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
+```{r echo=FALSE}
+
+############################################################
+####                                                    ####  
+####  NRES 746, Lecture 7                               ####
+####                                                    ####
+####  Kevin Shoemaker                                   #### 
+####  University of Nevada, Reno                        ####
+####                                                    #### 
+############################################################
+
+
+############################################################
+####  Bayesian analysis #2: MCMC                        ####
+############################################################
+
+
+```
+
+For those wishing to follow along with the R-based demo in class, [click here](LECTURE7.R) for the companion R script for this lecture.
+
 ### Markov Chain Monte Carlo
 
-Now in many cases, we simply won't have the computational power to partition our parameter space into discrete pixels and completely evaluate the posterior probability for all *n*-dimensional pixels in that space. In these cases, we tend to harness ingenious algorithms known as Markov-Chain Monte Carlo. This approach uses stochastic jumps in parameter space to (eventually) settle on a stationary posterior distribution. The key to MCMC is the following:
+Now in many cases, we simply won't have the computational power to partition our parameter space into discrete pixels and completely evaluate the posterior probability for all *n*-dimensional pixels in that space. In these cases, we tend to harness ingenious procedures known as *Markov-Chain Monte Carlo* algorithms. This approach uses stochastic jumps in parameter space to (eventually) settle on a posterior distribution. The key to MCMC is the following:
 
 > The ratio of successful jump probabilities is proportional to the ratio of the posterior probabilities. 
 
@@ -23,17 +44,23 @@ The jump probability can be characterized as:
 
 $Prob(jump) * Prob(accept)$
 
+That is: in order to jump, you need to propose a specific jump (according to some probability distribution) and then accept that jump!
+
 The ratio of jump probabilities can be characterized as:
 
 $\frac{Prob(jump_{b\rightarrow a})\cdot Prob(accept a|b)}{Prob(jump_{a\rightarrow b})\cdot Prob(accept b|a)}$
 
-This ratio MUST be equal to the ratio of the posterior probabilities:
+For this procedure to (eventually) sample from the posterior distribution, _this ratio MUST be equal to the ratio of the posterior probabilities_:
 
 $\frac{Posterior(A)}{Posterior(B)}$
 
-If this rule is met, then in the long run the chain will spend a lot of time occupying high-probability parts of parameter space. With enough jumps, the long-term distribution will match the joint posterior probability distribution.
+If this rule is met, then in the long run the chain will spend a lot of time occupying high-probability parts of parameter space, essentially capturing the posterior distribution. With enough jumps, the long-term distribution will match the joint posterior probability distribution.
 
-> MCMC is essentially a type of random number generator that is designed to sample from difficult-to-describe (e.g., multivariate, hierarchical) probability distributions. In many/most cases, the posterior distribution for ecological problems is a very difficult-to-describe probability distribution.
+> MCMC is essentially a special type of random number generator that is designed to sample from difficult-to-describe (e.g., multivariate, hierarchical) probability distributions. In many/most cases, the posterior distribution for ecological problems is a very difficult-to-describe probability distribution.
+
+MCMC is kind of magical in that it allows you to sample from probability distributions that are impossible to fully define!
+
+Amazingly, MCMC at its core is not that difficult to describe or implement. Let's look at a simple MCMC algorithm.
 
 ## Metropolis-Hastings algorithm
 
@@ -41,10 +68,11 @@ This algorithm is very similar to the simulated annealing algorithm! The main di
 
 The M-H algorithm can be expressed as:
 
-$Prob(accept A|B) = min(1,\frac{Posterior(B)}{Posterior(A)}\cdot \frac{Prob(b\rightarrow a)}{Prob(a\rightarrow b)})$
+$Prob(accept B|A) = min(1,\frac{Posterior(B)}{Posterior(A)}\cdot \frac{Prob(b\rightarrow a)}{Prob(a\rightarrow b)})$
 
-Note that essentially this is the same as the Metropolis simulated-annealing algorithm, with the posterior probabilities substituted for the likelihood and the *k* parameter set to 1
+Note that essentially this is the same as the 'Metropolis' simulated annealing algorithm, with the posterior probabilities substituted for the likelihood and the *k* parameter set to 1.
 
+**Q**: Does it make sense that this algorithm meets the basic rule of MCMC, that is, that the ratio of jump probabilities to/from any two points in parameter/model space is equal to the ratio of posterior probabilities evaluated at those two points? 
 
 ## Bivariate normal example
 
@@ -55,12 +83,24 @@ Remember that MCMC samplers are just a type of random number generator. We can u
 We don't need an MCMC sampler for this simple example. One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution.
 
 ```{r}
+
+#################
+# Simple example of MCMC sampling
+#################
+
+
+#########
+# first, let's build a function that generates random numbers from a bivariate normal distribution
+
 rbvn<-function (n, rho)   #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
 {
         x <- rnorm(n, 0, 1)
         y <- rnorm(n, rho * x, sqrt(1 - rho^2))
         cbind(x, y)
 }
+
+#########
+# Now, plot the random draws from this distribution, make sure this makes sense!
 
 bvn<-rbvn(10000,0.98)
 par(mfrow=c(3,2))
@@ -72,44 +112,55 @@ hist(bvn[,1],40)
 hist(bvn[,2],40)
 par(mfrow=c(1,1))
 
+
 ```
 
 
 
 ```{r}
-library(mvtnorm)
+
+###############
+# Metropolis-Hastings implementation of bivariate normal sampler... 
+
+library(mvtnorm)    # load a package that allows us to compute probability densities for mv normal distribution 
+
 metropolisHastings <- function (n, rho=0.98){    # a MCMC sampler implementation of a bivariate random number generator
     mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
-    x <- 0
+    x <- 0   # initial values for all parameters
     y <- 0
-    prev <- dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))
+    prev <- dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
     mat[1, ] <- c(x, y)        # initialize the markov chain
     counter <- 1
     while(counter<=n) {
-      newx <- rnorm(1,x,0.5)     # make a jump
+      newx <- rnorm(1,x,0.5)     # make a jump. Note the symmetrical proposal distribution
       newy <- rnorm(1,y,0.5)
       
       newprob <- dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
-      ratio <- newprob/prev
+      ratio <- newprob/prev   # compute the ratio of probabilities at the old (jump from) and proposed (jump to) locations. 
       
-      prob.accept <- min(1,ratio)     # decide whether to accept the new jump!
+      prob.accept <- min(1,ratio)     # decide the probability of accepting the new jump!
       rand <- runif(1)
       if(rand<=prob.accept){
-        x=newx;y=newy
-        mat[counter,] <- c(x,y) 
+        x=newx;y=newy    # set x and y to the new location
+        mat[counter,] <- c(x,y)    # store this in the storage array 
         counter=counter+1
-        prev <- newprob
+        prev <- newprob    # get ready for the next iteration
       }
       
     }
     return(mat)
 }
+
 ```
 
 
 Then we can use the M-H sampler to get random samples from this known distribution...
 
 ```{r}
+
+###########
+# Test the new M-H sampler
+
 bvn<-metropolisHastings(10000,0.98)
 par(mfrow=c(3,2))
 plot(bvn,col=1:10000)
@@ -119,29 +170,48 @@ plot(ts(bvn[,2]))
 hist(bvn[,1],40)
 hist(bvn[,2],40)
 par(mfrow=c(1,1))
+
 ```
+
+**Q**: Why was it unnecessary to perform an MCMC routine to sample from this (bivariate normal) distribution?
+
 
 Okay, enough with super simple examples- let's try it for a non-trivial problem, like the Myxomatosis example from the Bolker book!
 
 ### Myxomatosis revisited (again!)
 
 ```{r}
+
+############
+# MCMC implementation of the Myxomatosis example from the Bolker book
+############
+
 library(emdbook)
 
 MyxDat <- MyxoTiter_sum
 Myx <- subset(MyxDat,grade==1)
 head(Myx)
+
 ```
 
 Recall that we are modeling the distribution of measured titers (virus loads) for Australian rabbits. Bolker chose to use a Gamma distribution. Here is the empirical distribution:
 
 ```{r}
+
+###########
+# Visualize the Myxomatosis data for the 100th time!
+
 hist(Myx$titer,freq=FALSE)
+
 ```
 
 We need to estimate the gamma rate and shape parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
 
 ```{r}
+
+#########
+# ... and overlay a proposed data-generating model (gamma distribution)
+
 hist(Myx$titer,freq=FALSE)
 curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
 
@@ -149,7 +219,8 @@ curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
 
 Recall that the 2-D (log) likelihood surface looks something like this:
 
-```{r echo=FALSE}
+```{r}
+
 ##############
 # define 2-D parameter space!
 ##############
@@ -181,17 +252,21 @@ for(i in 1:length(shapevec)){
 
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-```
 
+```
 
 
 Here is an implementation of the M-H algorithm to find the joint posterior distribution!
 
-First, we need a likelihood function (our old friend!)
+First, we need a likelihood function (our old friend!)- this time, we will return real probabilities-- NOT log-transformed probabilities 
 
 ```{r}
+
+############
+# Write a non-log-transformed likelihood function
+
 GammaLikelihoodFunction <- function(params){
-  prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=F))
+  prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=F))   
 }
 
 params <- c(shape=40,scale=0.15) 
@@ -200,14 +275,18 @@ GammaLikelihoodFunction(params)
 
 ```
 
-Then, we need a prior distribution for our parameters! Let's assign relatively flat priors for both of our parameters. In this case, let's assign a $gamma(shape=0.01,scale=100)$ for the shape parameter and a $gamma(shape=0.1,scale=10)$ distribution for the scale parameter:
+Then, we need a prior distribution for our parameters! Let's assign relatively flat priors for both of our parameters. In this case, let's assign a $gamma(shape=0.01,scale=100)$ for the shape parameter (mean of 1 and very large variance) and a $gamma(shape=0.1,scale=10)$ distribution (mean of 1 and slightly lower variance) for the scale parameter:
 
 ```{r}
+
+#############
+# Function for returning the prior probability density for any point in parameter space  
+
 GammaPriorFunction <- function(params){
   prior <- c(shape=NA,scale=NA)
   prior['shape'] <- dgamma(params['shape'],shape=0.01,scale=100)
   prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000)
-  # prior['shape'] <- dunif(params['shape'],3,100)
+  # prior['shape'] <- dunif(params['shape'],3,100)        # alternative: could use uniform prior!
   # prior['scale'] <- dunif(params['scale'],0.01,0.5)
   return(prod(prior))
 }
@@ -218,18 +297,26 @@ params <- c(shape=40,scale=0.15)
 params
 GammaPriorFunction(params)
 
+
 ```
+
 Note that we are also assuming (fairly standard assumption) that the shape and scale are *independent* in the prior (multiplicative probabilities for the joint prior).
 
-Then, we need a function that can compute the ratio of posterior probabilities for any given jump in parameter space. Because we are dealing with a *ratio* of posterior probabilities, we do NOT need to compute the normalization constant. Without the need for a normalization constant, we just need to compute the ratio of weighted likelihoods (that is, the likelihood weighted by the prior)
+Then, we need a function that can compute the ratio of posterior probabilities for any given jump in parameter space. Because we are dealing with a *ratio* of posterior probabilities, _we do NOT need to compute the normalization constant_. 
+
+Without the need for a normalization constant, we just need to compute the ratio of weighted likelihoods (that is, the likelihood weighted by the prior)
 
 ```{r}
+
+############
+# Function for computing the ratio of posterior densities between any two points in parameter space
+
 PosteriorRatio <- function(oldguess,newguess){
-  oldLik <- max(1e-90,GammaLikelihoodFunction(oldguess))
+  oldLik <- max(1e-90,GammaLikelihoodFunction(oldguess))   # compute likelihood and prior density at old guess
   oldPrior <- max(1e-90,GammaPriorFunction(oldguess))
-  newLik <- GammaLikelihoodFunction(newguess)
+  newLik <- GammaLikelihoodFunction(newguess)             # compute likelihood and prior density at new guess
   newPrior <- GammaPriorFunction(newguess)
-  return((newLik*newPrior)/(oldLik*oldPrior))
+  return((newLik*newPrior)/(oldLik*oldPrior))          # compute ratio of weighted likelihoods
 }
 
 oldguess <- params
@@ -242,6 +329,10 @@ PosteriorRatio(oldguess,newguess)
 Then we need a function for making new guesses, or jumps in parameter space:
 
 ```{r}
+
+############
+# Define proposal distribution for jumps in parameter space (use normal distribution)!
+
      # function for making new guesses
 newGuess <- function(oldguess){
   sdshapejump <- 4
@@ -252,9 +343,10 @@ newGuess <- function(oldguess){
 }
   # set a new "guess" near to the original guess
 
-newGuess(oldguess=params)     # each time is different- this is the first optimization procedure with randomness built in
+newGuess(oldguess=params)   
 newGuess(oldguess=params)
 newGuess(oldguess=params)
+
 ```
 
 Now we are ready to implement the Metropolis-Hastings MCMC algorithm:
@@ -263,12 +355,21 @@ Now we are ready to implement the Metropolis-Hastings MCMC algorithm:
 We need a starting point:
 
 ```{r}
+
+##########
+# Set a starting point in parameter spacer
+
 startingvals <- c(shape=75,scale=0.28)    # starting point for the algorithm
+
 ```
 
 Let's play with the different functions we have so far...
 
 ```{r}
+
+###########
+# Try our new functions
+
 newguess <- newGuess(startingvals)    # take a jump in parameter space
 newguess
 
@@ -277,9 +378,13 @@ PosteriorRatio(startingvals,newguess)   # difference in posterior ratio
 ```
 
 
-Now let's look at the Metropolis routine:
+Now let's look at the Metropolis-Hastings routine:
 
 ```{r}
+
+###############
+# Visualize the Metropolis-Hastings routine:
+
 chain.length <- 10
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
@@ -311,6 +416,10 @@ Let's run it for longer...
 
 
 ```{r}
+
+##########
+# Get more MCMC samples
+
 chain.length <- 100
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
@@ -334,12 +443,17 @@ while(counter <= chain.length){
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
+
 ```
 
 How about for even longer??
 
 
 ```{r}
+
+############
+# And more...
+
 chain.length <- 1000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
@@ -363,6 +477,7 @@ while(counter <= chain.length){
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
+
 ```
 
 This looks better! The search algorithm is finding the high-likelihood parts of parameter space pretty well!
@@ -370,13 +485,24 @@ This looks better! The search algorithm is finding the high-likelihood parts of 
 Now, let's look at the chain for the "shape" parameter
 
 ```{r}
+
+#############
+# Evaluate "traceplot" for the MCMC samples...
+
+##### Shape parameter
+
 plot(1:chain.length,guesses[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+
 ```
 
 And for the scale parameter...
 
 ```{r}
+
+###### Scale parameter
+
 plot(1:chain.length,guesses[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+
 ```
 
 Can we say that these chains have converged on the posterior distribution for the shape parameter??
@@ -385,12 +511,17 @@ Can we say that these chains have converged on the posterior distribution for th
 First of all, the beginning of the chain "remembers" the starting value, and is therefore not a stationary distribution. We need to remove the first part of the chain, called the **'burn-in'**.
 
 ```{r}
+
+############
+# Remove "burn-in" (allow MCMC routine some time to get to the posterior)
+
 burn.in <- 100
 MCMCsamples <- guesses[-c(1:burn.in),]
 
 chain.length=chain.length-burn.in
 plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+
 ```
 
 
@@ -398,6 +529,10 @@ But it still doesn't look all that great. Let's run it for even longer, and see 
 
 
 ```{r}
+
+##########
+# Try again- run for much longer
+
 chain.length <- 20000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
@@ -421,21 +556,28 @@ while(counter <= chain.length){
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
+
 ```
 
 
 Let's first remove the first 5000 samples as a burn-in
 
 ```{r}
+
+#############
+# Use longer "burn-in"
+
 burn.in <- 5000
 MCMCsamples <- guesses[-c(1:burn.in),]
 chain.length=chain.length-burn.in
+
 ```
 
 
 Now, let's look at the chains again
 
 ```{r}
+
 plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
 
@@ -445,9 +587,14 @@ plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="
 When evaluating these trace plots, we are hoping to see a "stationary distribution" that looks like white noise. This trace plot looks like it might have a little autocorrelation. One way to "fix" this is to thin the MCMC samples:
 
 ```{r}
+
+##########
+# "thin" the MCMC samples
+
 thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=10),]
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+
 ```
 
 
@@ -455,6 +602,9 @@ plot(1:nrow(thinnedMCMC),thinnedMCMC[,'scale'],type="l",main="scale parameter",x
 Now we can examine our posterior distribution!
 
 ```{r}
+
+# Visualize the posterior!
+
 plot(density(thinnedMCMC[,'scale']),main="scale parameter",xlab="scale")
 plot(density(thinnedMCMC[,'shape']),main="shape parameter",xlab="shape")
 
@@ -464,6 +614,10 @@ And we can visualize as before.
 
  
 ```{r}
+
+#########
+# More visual posterior checks...
+
 par(mfrow=c(3,2))
 plot(thinnedMCMC,col=1:10000)
 plot(thinnedMCMC,type="l")
@@ -472,9 +626,10 @@ plot(ts(thinnedMCMC[,2]))
 hist(thinnedMCMC[,1],40)
 hist(thinnedMCMC[,2],40)
 par(mfrow=c(1,1))
+
 ```
 
-Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm is not necessarily the most easily generalizable to a host of different model types. That award tends to go to the **Gibbs sampler**. In lab we will play around with Gibbs samplers, mostly using an amazing piece of software called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling). 
+Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most easily generalizable to a host of different model types. That award tends to go to the **Gibbs sampler**. In lab we will play around with Gibbs samplers, mostly using a remarkable modeling language called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling). 
 
 NOTE: BUGS implementations (e.g., JAGS) actually tend to use a combination of M-H and Gibbs sampling! 
 
@@ -483,7 +638,9 @@ NOTE: BUGS implementations (e.g., JAGS) actually tend to use a combination of M-
 
 The Gibbs sampler is amazingly straightforward and powerful. Basically, the algorithm successively samples from the *full conditional* probability distribution -- that is, the posterior distribution for arbitrary parameter *i* conditional on known values for all other parameters in the model.  
 
-In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is especially true if we use conjugate priors for our model specification. Even if not, the full conditional is often analytically tractable. Nonetheless, even if it's not analytically tractable, we can use a univariate M-H procedure as a "brute force" last resort!
+In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is especially true if we use conjugate priors for our model specification (what BUGS/JAGS tries to do!). Even if not, the full conditional is often analytically tractable. Nonetheless, even if it's not analytically tractable, we can use a univariate M-H procedure as a "brute force" last resort!
+
+**Q**: Why is a Gibbs sampler usually much more efficient than a pure M-H sampler?  
 
 
 ## Bivariate normal example
@@ -493,6 +650,14 @@ Again, remember that MCMC samplers are just a type of random number generator. W
 We don't need a Gibbs Sampler for this simple example. One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution.
 
 ```{r}
+
+#############
+# Simple example of a Gibbs sampler
+#############
+
+########
+# first, recall our simple bivariate normal sampler
+
 rbvn<-function (n, rho){  #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
         x <- rnorm(n, 0, 1)
         y <- rnorm(n, rho * x, sqrt(1 - rho^2))
@@ -514,6 +679,10 @@ par(mfrow=c(1,1))
 
 
 ```{r}
+
+#############
+# Now construct a Gibbs sampler alternative
+
 gibbs<-function (n, rho){    # a gibbs sampler implementation of a bivariate random number generator
     mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
     x <- 0
@@ -526,12 +695,17 @@ gibbs<-function (n, rho){    # a gibbs sampler implementation of a bivariate ran
     }
     mat
 }
+
 ```
 
 
 Then we can use the Gibbs sampler to get random samples from this known distribution...
 
 ```{r}
+
+##########
+# Test the Gibbs sampler
+
 bvn<-gibbs(10000,0.98)
 par(mfrow=c(3,2))
 plot(bvn,col=1:10000)
@@ -541,6 +715,7 @@ plot(ts(bvn[,2]))
 hist(bvn[,1],40)
 hist(bvn[,2],40)
 par(mfrow=c(1,1))
+
 ```
 
 
@@ -556,13 +731,15 @@ Finally, let's build a Gibbs sampler for our favorite Myxomatosis example! To do
 The BUGS language looks simlar to R, but there are several key differences:  
 
 * First of all, BUGS is a compiled language, so the order of operations in your code doesn't really matter
-* BUGS is not vectorized- you need to use FOR loops!
+* BUGS is not vectorized- you need to use FOR loops for just about everything!
 * Several probability distributions are parameterized very differently in BUGS. Notably, the normal distribution is parameterized with a mean and a precision ($1/Variance$).
 
 
 Here is the myxomatosis example, as implemented in the BUGS language:
 
-```{r eval=FALSE}
+NOTE: this code looks a little like R, but don't be confused- this is not R! 
+
+```
 
 model {
   
@@ -583,48 +760,61 @@ model {
 
 ```
 
-We can use the "sink" function in R to write out this model to a text file:
+We can use the "cat" function in R to write out this model to a text file in your working directory:
 
 ```{r}
 
-sink("BUGSmodel.txt")
-  cat("
-    model {
-      
-      #############
-      # LIKELIHOOD
-      ############
-      for(obs in 1:n.observations){
-        titer[obs] ~ dgamma(shape,rate)
-      }
-      
-      #############
-      # PRIORS
-      ############
-      shape ~ dgamma(0.001,0.001)
-      scale ~ dgamma(0.01,0.01)
-      rate <- 1/scale
-    }
-  ")
+###########
+# Myxomatosis example in BUGS modeling language
 
-sink()
+##########
+# Write the BUGS model to file
+
+cat("
+  model {
+    
+    #############
+    # LIKELIHOOD
+    ############
+    for(obs in 1:n.observations){
+      titer[obs] ~ dgamma(shape,rate)
+    }
+    
+    #############
+    # PRIORS
+    ############
+    shape ~ dgamma(0.001,0.001)
+    scale ~ dgamma(0.01,0.01)
+    rate <- 1/scale
+  }
+", file="BUGSmodel.txt")
+
 
 ```
 
 Now that we have the BUGS model packaged as a text file, we "package" the data into a single list object that contains all the relevant data referenced in the BUGS code:
 
 ```{r}
+
+############
+# Encapsulate the data into a single "list" object
+
 myx.data.for.bugs <- list(
   titer = Myx$titer,
   n.observations = length(Myx$titer)
 )
 
 myx.data.for.bugs
+
 ```
 
 Then we need to define the initial values for all parameters. It is convenient to define this as a function, so that each MCMC chain can be initialized with different starting values. This will become clear later!
 
 ```{r}
+
+###########
+# Function for generating random initial values for all free parameters
+
 init.vals.for.bugs <- function(){
   init.list <- list(
     shape=runif(1,20,100),
@@ -636,11 +826,17 @@ init.vals.for.bugs <- function(){
 init.vals.for.bugs()
 init.vals.for.bugs()
 init.vals.for.bugs()
+
 ```
 
 Now we can call JAGS!
 
 ```{r}
+
+###########
+# Run JAGS!!!!
+##########
+
 library(R2jags)
 
 library(coda)
@@ -671,6 +867,10 @@ One way we might be able to do a better job here is to run the chains longer and
 We can also try to reduce serial autocorrelation by thinning our chain- here we retain only 1 out of every 20 samples.
 
 ```{r}
+
+################
+# Run the chains for longer!
+
 jags.fit <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel.txt",n.chains = 3, n.burnin=10000,n.thin = 20)
 
 jagsfit.mcmc <- as.mcmc(jags.fit)   # convert to "MCMC" object (coda package)
@@ -678,6 +878,7 @@ jagsfit.mcmc <- as.mcmc(jags.fit)   # convert to "MCMC" object (coda package)
 summary(jagsfit.mcmc)
 
 plot(jagsfit.mcmc)
+
 ```
 
 Just visually, this looks better. Now we can use some more quantitative convergence metrics. 
@@ -687,12 +888,17 @@ Just visually, this looks better. Now we can use some more quantitative converge
 One simple and intuitive convergence diagnostic is the *Gelman-Rubin diagnostic*, which assesses whether chains are more different from one another than they should be on the basis of simple Monte Carlo error:
 
 ```{r}
+
+##############
+# Run convergence diagnostics
+
 gelman.diag(jagsfit.mcmc)
+
 ```
 
 In general, values of 1.1 or higher are considered poorly converged (sometimes the less stringent criterion of 1.2 is used). If so, you should try running longer chains!
 
-So this model looks pretty good!
+So this model looks pretty good!!
 
 
 
@@ -703,7 +909,7 @@ So this model looks pretty good!
 
 
 
-
+[--go to next lecture--](LECTURE8.html) 
 
 
 

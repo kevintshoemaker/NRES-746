@@ -1,7 +1,7 @@
 ---
 title: "Lab Exercise 4"
 author: "NRES 746"
-date: "October 26, 2016"
+date: "Fall 2018"
 output: 
   html_document: 
     theme: cerulean
@@ -13,25 +13,32 @@ output:
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
+
+As with all lab reports, your answers will either take the form of R functions or short written responses (submitted together in a Word document). The R functions should be stored in an R script file ('.R' extension). To allow me to evaluate your work more efficiently, please name your R script using the following convention: "[your first name]_[your last name]_lab4.R". So my submission would be "kevin_shoemaker_lab4.R". The name of your Word docuement doesn't matter, as long as you submit via WebCampus. 
+
+Please submit the R script and the Word document via WebCampus by midnight on the due date (one week after the final lab session allocated for this topic -- here, _Nov. 21, 2018_). You can work in groups but please submit the materials individually. 
+
+First, take a little time to review the [Bayesian lecture](LECTURE6.html) and [MCMC lecture](LECTURE7.html)!   
+
+**Lab 4 is due before midnight on Tuesday November 21** 
+
 # Bayesian inference (with BUGS!)
 
-NOTE: thanks to Elizabeth Hunter for putting together much of this lab!
+NOTE: thanks to Dr. Elizabeth Hunter (formerly a postdoc in the Applied Population Ecology lab) for putting together much of this lab!
 
-**Lab 4 is due before midnight on Friday November 18** 
+If you haven't already installed JAGS on your computer, use [this link](http://mcmc-jags.sourceforge.net/)            
 
 In this lab we will be applying a Bayesian approach to model fitting using the same myxomatosis dataset and model that we used in the previous likelihood lab. To do this, we’ll be using the program JAGS (**J**ust **A**nother **G**ibbs **S**ampler).
 
-JAGS is already installed in the computers here in the lab.  But if you want to install this software on your own computer, you can go to this website:
-
-[https://sourceforge.net/projects/mcmc-jags/files/JAGS/4.x/](https://sourceforge.net/projects/mcmc-jags/files/JAGS/4.x/)
-
-JAGS runs seamlessly with R, if you download the "R2jags" package!
-
-JAGS is not the only way to do Bayesian analyses, nor is it the only implementation of the BUGS (Bayesian inference Using Gibbs Sampler) language. Others that you may have heard of include WinBUGS and OpenBUGS.  
+JAGS runs seamlessly with R, if you download the "R2jags" package or the "jagsUI" package! JAGS is not the only way to do Bayesian analyses, nor is it the only implementation of the BUGS (Bayesian inference Using Gibbs Sampler) language. Others that you may have heard of include WinBUGS and OpenBUGS. STAN is another widely used software for Bayesian inference, that doesn't use the BUGS language...
 
 To familiarize ourselves with the BUGS language, let's look at some BUGS code (for our favorite myxomatosis dataset). 
 
-```{r eval=FALSE}
+```
+
+#############
+# sample BUGS code       
+
 model {
       
       #############
@@ -48,19 +55,22 @@ model {
       scale ~ dgamma(0.001,0.001)
       rate <- 1/scale   # in BUGS, gamma distribution needs a "rate" parameter rather than a scale 
     }
+    
 ```
 
-The syntax in BUGS/JAGS is very similar to R, but there are a few key differences.  Most important, *assignment must always be done by the arrow (<-) instead of an equals sign* for deterministic functions and the *tilde (~) is used to define stochastic processes*.  
+The syntax in BUGS/JAGS is very similar to R, but there are a few key differences. Most important, *assignment must always be done by the arrow (<-) instead of an equals sign* for deterministic functions and the *tilde (~) is used to define stochastic processes*.  
 
-In the model code, you must also specify your priors.  Here we are using relatively vague priors, meaning that the probability is spread out fairly evenly over parameter space.  The Gamma distribution is always parameterized as shape and rate in BUGS.  If you wanted to see what this distribution looked like, you could plot in R: 
+In the model code, you must also specify your priors. Here we are using relatively vague priors, meaning that the probability is spread out fairly evenly over parameter space. The Gamma distribution is always parameterized as shape and rate in BUGS (rate = 1/scale). If you wanted to see what this distribution looked like, you could plot in R ('dgamma()' allows you to specify a rate or a scale parameter): 
 
 ```{r}
+
 par(mfrow=c(2,1))
 curve(dgamma(x, shape=0.01, rate=0.01),3,100,ylim=c(0,0.1),xlab="shape parameter",ylab="probability density", main="Prior")
 curve(dgamma(x, shape=0.001, rate=0.001),0.01,0.5,ylim=c(0,1),xlab="scale parameter",ylab="probability density")
+
 ```
 
-In this case we want a prior distribution that has little to no information about which values of the parameter are most probable.  These distributions have no peaks within the range of parameter space of interest, and the probability for any particular x-value is very low, so it does a fairly good job of representing a vague prior for the shape and rate parameters.
+In this case we want a prior distribution that has little to no information about which values of the parameter are most probable. These distributions have no peaks within the range of parameter space of interest, and the probability for any particular x-value is very low, so it does a fairly good job of representing a vague prior for the shape and rate parameters.
 
 ## Running JAGS through R
 
@@ -70,18 +80,22 @@ We can use the R2JAGS package in R to run JAGS through R and have the output ret
 First, install and load the R2jags package. While you're at it, install and load the coda package, which has some great utilities for visualizing and working with MCMC data.
 
 ```{r}
+
+### load key packages for running Bayesian analysis in JAGS
+
 library(R2jags)
 library(coda)
+
 ```
 
 ### Writing out the model
 
-We can use the 'sink' function in R to write out a text file- it can be useful to use this functionality to embed the JAGS code within our R script!
+We can use the 'cat' function in R to write out a text file- it can be useful to use this functionality to embed the JAGS code within our R script!
 
 ```{r}
 
-sink("BUGSmodel.txt")
-  cat("
+filename <- "BUGSmodel.txt"
+cat("
     model {
       
       #############
@@ -98,9 +112,9 @@ sink("BUGSmodel.txt")
       scale ~ dgamma(0.001,0.001)
       rate <- 1/scale
     }
-  ")
+  ",file=filename
+)
 
-sink()
 
 ```
 
@@ -111,27 +125,32 @@ We will need to tell BUGS/JAGS what the data are. To be read into JAGS (via the 
 First we get the data we want into R (we know the drill!):
 
 ```{r}
+
 library(emdbook)
 
 MyxDat <- MyxoTiter_sum
 Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
 head(Myx)
+
 ```
 
-Then we package the data! 
+Then we package the data as a list, which is what JAGS wants! 
 
 ```{r}
+
 myx.data.for.bugs <- list(
   titer = Myx$titer,
   n.observations = length(Myx$titer)
 )
 
 myx.data.for.bugs
+
 ```
 
 ### Setting the initial values for our Markov chain(s)
 
 ```{r}
+
 init.vals.for.bugs <- function(){
   list(
     shape=runif(1,20,100),
@@ -146,11 +165,13 @@ init.vals.for.bugs()
 Alternatively, we can specify exact initial values for our chains (in this case, we initialize three Markov chains)
 
 ```{r}
-inits = list(list(shape=90,scale=0.1), list(shape=50,scale=0.2), list(shape=150,scale=0.04))
+
+inits = list(list(shape=90,scale=0.1), list(shape=50,scale=0.2), list(shape=150,scale=0.04))  # a list of lists!
+
 ```
 
 
-Note that we need three different sets of starting values here because we are running three different chains.  Recall that initial values are required, and you may want to use the same tricks as we have used before (e.g., method of moments) to identify reasonable starting values. JAGS will not work if you specify unreasonable initial parameters (and it won’t necessarily tell you that is the problem).  
+Note that we need three different sets of starting values here because we are running three different chains. Recall that initial values are required, and you may want to use the same tricks as we have used before (e.g., method of moments) to identify reasonable starting values. JAGS will not work if you specify unreasonable initial parameters (and it won’t necessarily tell you that is the problem).  
 
 Now we’ll run this model through JAGS:
 
@@ -164,7 +185,6 @@ jags.fit
 
 ```
 
-
 For each parameter, n.eff is a crude measure of effective sample size, and Rhat 
 is the potential scale reduction factor (at convergence, Rhat=1).
 
@@ -172,9 +192,10 @@ DIC info (using the rule, pD = Dbar-Dhat)
 pD = 3.0 and DIC = 65.3
 DIC is an estimate of expected predictive error (lower deviance is better).
 
-You can see the means and variance for the parameters as well as the DIC for the model.  We can summarize these in plots of the posterior distributions.  First, we need to define the MCMC output as a coda object that R knows how to work with.
+You can see the means and variance for the parameters as well as the DIC for the model. We can summarize these in plots of the posterior distributions. First, we define the MCMC output as a 'coda' object (for storing, visualizing and analyzing MCMC results) that R knows how to work with.
 
 ```{r}
+
 jagsfit.mcmc <- as.mcmc(jags.fit)   # convert to "MCMC" object (coda package)
 
 summary(jagsfit.mcmc)
@@ -183,6 +204,7 @@ plot(jagsfit.mcmc)
 
 library(lattice)
 densityplot(jagsfit.mcmc)
+
 ```
 
 
@@ -190,57 +212,354 @@ You can visually check for convergence here, using the trace plots – a converg
 
 #### Parameter uncertainty: credible intervals
 
-We can estimate the 95% credible interval by calling directly from the bugs output.  The “sims.list” part of the output has all of the samples that were created during the run.
+We can estimate the 95% credible interval by calling directly from the bugs output. The “sims.list” part of the output has all of the MCMC samples that were created during the run.
 
 ```{r}
+
 shape95 = quantile(jags.fit$BUGSoutput$sims.list$shape,c(0.025,0.975))
 scale95 = quantile(jags.fit$BUGSoutput$sims.list$scale,c(0.025,0.975))
 shape95
 scale95
+
 ```
 
-The probability that the a parameter is between these 2 numbers is actually 95%! 
+The probability that the *a* parameter is between these 2 numbers is actually 95%! 
 
-So, what’s so great about this?  Using a vague prior, we get almost the exact same parameter estimates that we did when we just did a straight up likelihood model.  This is usually the case with simple models like the run we ran here.  However, answers can be quite different with more complicated models, and in fact the Bayesian approach allows us to simultaneously fit complex models that we could not do effectively using likelihood-based approaches.  That said, there are 2 main advantages to the Bayesian approach, both having to do with the fact that the answer comes in the form of a probability distribution instead of a point estimate.  First, the credible interval is much nicer to interpret than a confidence interval.  There’s none of this “given that the null hypothesis is true, and we were to resample the data 100 times…”.  You can state simply that there’s a 95% probability that the value of the parameter lies within the credible interval.  Period.  Second, and more importantly from a pragmatic standpoint, you can draw from these parameter probability distributions to create simulations that include the full variability of outcomes instead of just point estimates, which will demonstrate the implications of your parameter estimates (e.g. under different management scenarios, climate change, etc.).  We’ll explore how to do this a little later.
+So, what’s so great about this?  Using a vague prior, we get almost the exact same parameter estimates that we did when we just did a straight up likelihood model. This is usually the case with simple models like the run we ran here.  However, answers can be quite different with more complicated models, and in fact the Bayesian approach allows us to simultaneously fit complex models that we could not do effectively using likelihood-based approaches. 
 
-#### QUESTION 1: Myxomatosis with Ricker
+That said, there are 2 main advantages to the Bayesian approach, both having to do with the fact that the answer comes in the form of a probability distribution instead of a point estimate. 
 
-* Run the myxomatosis/Ricker example from the previous (likelihood) lab in JAGS! Run three chains. Display the trace plots and density plots. Provide point estimates and 95% confidence intervals for all three parameters. Overlay the Ricker curve, with Bayesian point estimates, on the data to evaluate fit.
-* Can you identify any differences between the parameter estimates from the analysis in a likelihood vs Bayesian perspective?
-* Follow the procedure outlined in the MCMC lecture to assess convergence. Did your MCMC chains converge on the joint posterior distribution? Explain your reasoning! Use several lines of reasoning!
+First, the credible interval is much nicer to interpret than a confidence interval.  There’s none of this “given that the null hypothesis is true, and we were to resample the data 100 times…”.  You can state simply that there’s a 95% probability that the value of the parameter lies within the credible interval. Period.  
+
+Second, and more importantly from a pragmatic standpoint (i.e., for running simulations), you can draw from these parameter probability distributions to create simulations that include the full variability of outcomes instead of just point estimates, which will demonstrate the implications of your parameter estimates (e.g. under different management scenarios, climate change, etc.). We’ll explore how to do this a little later.
+
+#### Challenge problem 1: Myxomatosis analysis in JAGS #1: Ricker deterministic function
+
+* **Exercise 1a**. Write a function called "Myx_Ricker_JAGS()" that runs the Myxomatosis/Ricker example from the previous (likelihood) lab in JAGS. Recall that we are modeling titer levels (grade 1 only) as a function of the days since infection. Submit this function as part of your R script.  
+
+    + **input**:         
+        + data = a matrix of 2 columns and one row per observation. The first column should represent the days since infection, and the second column should represent the virus titer.
+        + JAGScode = a text string, representing the file name for your JAGS code
+        + CImethod = a text string, representing whether the CI should be computed using the quantile method ("quantile") or the HPD method ("HPD"). See the Bayesian lecture for more information.    
+        + CIlevel = a number from 0 to 1 indicating what confidence level you want for the CI: set the default value to 0.95.     
+
+    + **suggested algorithm**:  
+        + Package the data for JAGS (store as a list object)    
+        + Write a function that returns a list for initializing the MCMC chains    
+        + Run the 'jags' function with 3 chains, specifying the parameters for which you want the posterior distribution, and store the results as an object.    
+        + use the 'as.mcmc()' function to convert the results to a 'coda' object, and store the results as a separate object.
+        + Display the trace plots and density plots for the three parameters.
+        + Plot the data (days on x axis and titer on y axis), and overlay the Ricker curve, with Bayesian point estimates, on the data to evaluate fit.   
+        + compute the posterior mean for the a, b and shape params and store as a vector.
+        + compute the credible interval (CI) for the three parameters using either the quantile method or the HPD method (as requested by the user), and store as a 2x3 matrix (see below). HINT: use the 'HDInterval’ package to help compute the HPD.   
+        + compute the Gelman-Rubin diagnostic ('gelman.diag' function) using the 'coda' version of the JAGS results.    
+
+    + **return**:    
+        + a list of length 3 containing (1) a vector of point estimates (posterior mean) for parameters a, b, and shape, (2) a matrix with 2 rows and 3 columns, containing the 95% credible interval (row 1 is the lower bound, row 2 is the upper bound, columns represent parameters a, b, and shape), and (3) a scalar (floating-point number) representing the Gelman-Rubin diagnostic- a tool for assessing MCMC convergence.  
+        
+        
+```{r answer1a, echo=FALSE}
+
+########
+# 1a
 
 
-#### QUESTION 2: Myxomatosis with Michaelis-Menten function 
+library(HDInterval)
+library(emdbook)
 
-Recalling our plot (from the last lab) of the Ricker function with the maximum-likelihood parameter estimates drawn over the scatterplot of titers by day, there really isn’t much evidence in the data for that downward turn in the function after day 6. We chose a model that indicated decline in titer levels following a peak based on the behavior of other myxomytosis grades, but given the virulence of this particular grade most animals die once the titer levels reach their maximum.  Might it be more appropriate to fit a model that levels off at some asymptote instead of declining following the peak?  Repeat the myxomatosis example in BUGS, but this time use the **Michaelis-Menten function**, which has the same number of parameters as the Ricker function, but increases to an asymptote (see below). Continue to use a Gamma distribution to describe the error! Answer the following questions:  
+Ricker <- function(x,a,b){
+  a*x*exp(-b*x)
+}
 
-* Display the trace plots and density plots. Provide point estimates and 95% confidence intervals for all parameters. Overlay the M-M curve, with Bayesian point estimates, on the data to evaluate fit. 
-* Overlay both the best-fit M-M and the best-fit Ricker curves on a plot of the data. On the basis of simple visual cues, does the M-M function seem to fit better than the Ricker function to describe this relationship? Explain your reasoning.
-* Follow the procedure outlined in the MCMC lecture to assess convergence. Did your MCMC chains converge on the joint posterior distribution? Explain your reasoning! As above, use several lines of reasoning!
+
+filename <- "BUGSmodel_ricker.txt"
+cat("
+    model {
+      
+      #############
+      # LIKELIHOOD
+      ############
+      for(obs in 1:n.observations){
+        titer[obs] ~ dgamma(shape,rate[obs])
+        rate[obs] <- shape/exp.titer[obs]
+        exp.titer[obs] <- a*days[obs]*exp(-1*b*days[obs])
+      }
+      
+      #############
+      # PRIORS
+      ############
+      shape ~ dgamma(0.01,0.01)
+      a ~ dgamma(0.01,0.01)
+      b ~ dgamma(0.01,0.01)
+    }
+  ",file=filename
+)
+
+
+
+params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
+
+#jags.fit_1a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel_ricker.txt",n.chains = 3,n.burnin = 5000,n.thin = 20 )
+
+#jags.fit_1a   # test the model fit
+
+
+########
+# package into function
+
+Myx_Ricker_JAGS <- function(data=Myx[,-1],JAGScode="BUGSmodel_ricker.txt",CImethod="HPD",CIlevel=0.95){
+  myx.data.for.bugs <- list(
+    titer = data[,2],
+    days =data[,1],
+    n.observations = nrow(data)
+  )
+  
+  myx.data.for.bugs
+  
+  init.vals.for.bugs <- function(){
+    list(
+      shape=runif(1,20,30),
+      a=runif(1,0.05,0.3),
+      b=runif(1,1,1.3)
+    )
+  }
+  init.vals.for.bugs()
+  
+  params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
+  
+  jags.fit_1a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file=JAGScode,n.chains = 3,n.burnin = 5000,n.thin = 20 )
+  jags.fit_1a_coda <- as.mcmc(jags.fit_1a)
+  #summary(jagsfit.mcmc.1a)
+  plot(jags.fit_1a_coda)
+  temp <- densityplot(jags.fit_1a_coda)
+  print(temp)
+  plot(data[,1],data[,2],xlab="days",ylab="titer",ylim=c(1,13),xlim=c(0,10))
+  amean <- mean(jags.fit_1a$BUGSoutput$sims.list$a)
+  bmean <- mean(jags.fit_1a$BUGSoutput$sims.list$b)
+  shapemean <- mean(jags.fit_1a$BUGSoutput$sims.list$shape)
+  curve(Ricker(x,amean,bmean),0,10,add=T,lwd=2,col="green")
+  posterior_mean <- c(amean,bmean,shapemean)
+  
+  cintervals <- matrix(NA,nrow=2,ncol=3)
+  colnames(cintervals) <- c("a","b","shape")
+  if(CImethod=="HPD"){
+    cintervals[,"a"] <- hdi(jags.fit_1a$BUGSoutput$sims.list$a,credMass = CIlevel)
+    cintervals[,"b"] <- hdi(jags.fit_1a$BUGSoutput$sims.list$b,credMass = CIlevel)
+    cintervals[,"shape"] <- hdi(jags.fit_1a$BUGSoutput$sims.list$shape,credMass = CIlevel)
+  }else{
+    cintervals[,"a"] <- quantile(jags.fit_1a$BUGSoutput$sims.list$a,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
+    cintervals[,"b"] <- quantile(jags.fit_1a$BUGSoutput$sims.list$b,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
+    cintervals[,"shape"] <- quantile(jags.fit_1a$BUGSoutput$sims.list$shape,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
+  }
+  gelmandiag <- gelman.diag(jags.fit_1a_coda)
+
+  output = list(
+    post.mean <- posterior_mean,
+    conf.ints <- cintervals,
+    gelman.rubin <- gelmandiag$mpsrf 
+  )
+  return(output)  
+}
+
+
+```
+
+Here is an example of the results you should expect to see when running your new function:
+
+```{r test1a}
+
+Ricker_results <- Myx_Ricker_JAGS(data=Myx[,-1],JAGScode="BUGSmodel_ricker.txt",CImethod="HPD",CIlevel=0.88)
+Ricker_results
+  
+Ricker_results <- Myx_Ricker_JAGS(data=Myx[,-1],JAGScode="BUGSmodel_ricker.txt",CImethod="quantile",CIlevel=0.88)
+Ricker_results
+
+```
+    
+        
+* **Exercise 1b**. Can you identify any differences between the parameter estimates from the analysis in a likelihood vs Bayesian perspective? Compare your results from Lab 3, and briefly describe your findings in your Word document. 
+
+* **Exercise 1c**. Did your MCMC chains converge on the joint posterior distribution? Briefly explain your reasoning in your Word document! Use several lines of reasoning!   
+
+#### Challenge problem 2: Myxomatosis in JAGS with Michaelis-Menten function 
+
+Recalling our plot (from the last lab) of the Ricker function with the maximum-likelihood parameter estimates drawn over the scatterplot of titers by day, there really isn’t much evidence in the data for that downward turn in the function after day 6. We chose a model that indicated decline in titer levels following a peak based on the behavior of other myxomytosis grades, but given the virulence of this particular grade most animals die once the titer levels reach their maximum. Might it be more appropriate to fit a model that levels off at some asymptote instead of declining following the peak? Let's find out, using a little Bayesian model selection! 
+
+
+* **Exercise 2a**. Repeat the myxomatosis example in BUGS/JAGS, but this time use the **Michaelis-Menten function**, which has the same number of parameters as the Ricker function, but increases to an asymptote (see below). Continue to use a Gamma distribution to describe the error! Please name your new function "Myx_MM_JAGS()". The inputs and outputs should be the same as for "Myx_Ricker_JAGS()". Please save this new function in your R script.
+
+```{r answer2a, echo=FALSE}
+
+#####
+# 2a
+
+MMFunc <- function(x,a,b){
+  (a*x)/(b+x)
+}
+
+
+filename <- "BUGSmodel_mm.txt"
+cat("
+    model {
+      
+      #############
+      # LIKELIHOOD
+      ############
+      for(obs in 1:n.observations){
+        titer[obs] ~ dgamma(shape,rate[obs])
+        rate[obs] <- shape/exp.titer[obs]
+        exp.titer[obs] <- (a*days[obs]) / (b+days[obs])
+      }
+      
+      #############
+      # PRIORS
+      ############
+      shape ~ dgamma(0.01,0.01)
+      a ~ dgamma(0.01,0.01)
+      b ~ dgamma(0.01,0.01)
+    }
+  ",file=filename
+)
+
+MyxDat <- MyxoTiter_sum
+Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
+#head(Myx)
+
+myx.data.for.bugs <- list(
+  titer = Myx$titer,
+  days = Myx$day,
+  n.observations = nrow(Myx)
+)
+
+#myx.data.for.bugs
+
+init.vals.for.bugs2 <- function(){
+  list(
+    shape=runif(1,20,30),
+    a=runif(1,8,9),
+    b=runif(1,1,1.5)
+  )
+}
+#init.vals.for.bugs()
+
+params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
+
+#jags.fit_1a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel_mm.txt",n.chains = 3,n.burnin = 5000,n.thin = 20 )
+
+#jags.fit_1a   # test the model fit
+
+
+########
+# package into function
+
+Myx_MM_JAGS <- function(data=Myx[,-1],JAGScode="BUGSmodel_mm.txt",CImethod="HPD",CIlevel=0.95){
+  myx.data.for.bugs <- list(
+    titer = data[,2],
+    days =data[,1],
+    n.observations = nrow(data)
+  )
+  
+  init.vals.for.bugs2 <- function(){
+    list(
+      shape=runif(1,20,30),
+      a=runif(1,8,9),
+      b=runif(1,1,1.5)
+    )
+  }
+  
+  params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
+  
+  jags.fit_1a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs2,parameters.to.save=params.to.store,n.iter=50000,model.file=JAGScode,n.chains = 3,n.burnin = 5000,n.thin = 20 )
+  jags.fit_1a_coda <- as.mcmc(jags.fit_1a)
+  #summary(jagsfit.mcmc.1a)
+  plot(jags.fit_1a_coda)
+  temp <- densityplot(jags.fit_1a_coda)
+  print(temp)
+  plot(data[,1],data[,2],xlab="days",ylab="titer",ylim=c(1,13),xlim=c(0,10))
+  amean <- mean(jags.fit_1a$BUGSoutput$sims.list$a)
+  bmean <- mean(jags.fit_1a$BUGSoutput$sims.list$b)
+  shapemean <- mean(jags.fit_1a$BUGSoutput$sims.list$shape)
+  curve(MMFunc(x,amean,bmean),0,10,add=T,lwd=2,col="green")
+  posterior_mean <- c(amean,bmean,shapemean)
+  
+  cintervals <- matrix(NA,nrow=2,ncol=3)
+  colnames(cintervals) <- c("a","b","shape")
+  if(CImethod=="HPD"){
+    cintervals[,"a"] <- hdi(jags.fit_1a$BUGSoutput$sims.list$a,credMass = CIlevel)
+    cintervals[,"b"] <- hdi(jags.fit_1a$BUGSoutput$sims.list$b,credMass = CIlevel)
+    cintervals[,"shape"] <- hdi(jags.fit_1a$BUGSoutput$sims.list$shape,credMass = CIlevel)
+  }else{
+    cintervals[,"a"] <- quantile(jags.fit_1a$BUGSoutput$sims.list$a,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
+    cintervals[,"b"] <- quantile(jags.fit_1a$BUGSoutput$sims.list$b,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
+    cintervals[,"shape"] <- quantile(jags.fit_1a$BUGSoutput$sims.list$shape,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
+  }
+  gelmandiag <- gelman.diag(jags.fit_1a_coda)
+
+  output = list(
+    post.mean <- posterior_mean,
+    conf.ints <- cintervals,
+    gelman.rubin <- gelmandiag$mpsrf 
+  )
+  return(output)  
+}
+
+
+```
+
+And here is some test commands with output:  
+
+```{r test2a}
+
+MM_results <- Myx_MM_JAGS(data=Myx[,-1],JAGScode="BUGSmodel_mm.txt",CImethod="HPD",CIlevel=0.88)
+MM_results
+  
+MM_results <- Myx_MM_JAGS(data=Myx[,-1],JAGScode="BUGSmodel_mm.txt",CImethod="quantile",CIlevel=0.88)
+MM_results
+
+```
+
+* **Exercise 2b**.  In your Word document, please answer the following question: overlay both the best-fit M-M and the best-fit Ricker curves on a plot of the data. On the basis of simple visual cues, does the M-M function seem to fit better than the Ricker function to describe this relationship? Explain your reasoning.
 
 The M-M function looks like this:
 
 $\frac{a\cdot x}{b+x}$
 
-```{r echo=FALSE}
+```{r}
+
 mm = function(x,a,b) { a*x / (b+x) }
+
 ```
 
 You can plot an M-M function over the points to get some initial parameter estimates.
 
 ```{r}
+
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,10))
-curve(mm(x,a=9,b=0.7),from=0,to=10,add=T,col="red")
+curve(mm(x,a=5,b=0.8),from=0,to=10,add=T,col="red",lwd=2)
+
+```
+
+And here is an example of what your figure should look like with the best-fit M-M and Ricker functions overlaid on the same plot:  
+
+```{r answer2b, echo=FALSE}
+
+######
+# 2b
+
+plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,10))
+curve(MMFunc(x,a=MM_results[[1]][1],b=MM_results[[1]][2]),from=0,to=10,add=T,col="red",lwd=2)
+curve(Ricker(x,a=Ricker_results[[1]][1],b=Ricker_results[[1]][2]),from=0,to=10,add=T,col="green",lty=2,lwd=2)
+legend("topleft",lwd=c(2,2),lty=c(1,2),col=c("red","green"),legend=c("MM","Ricker"),bty="n")
+
 ```
 
 
-```{r echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 
 inits <- list(list(a=8, b=0.5, shape=90), list(a=10, b=1, shape=100), list(a=7, b=1.2, shape=70))
 
 #Make a model file:
 
-sink("myxomodel2.txt")
 cat("
   model {
   	for (i in 1:n) {
@@ -253,13 +572,14 @@ cat("
     b ~ dgamma (0.1, 0.1)
     shape ~ dgamma (0.01, 0.01)
   }
-")
-sink()
+", file="myxomodel2.txt")
+
 
 ```
 
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
+
 datalist <- list(
   titer=Myx$titer,
   day=Myx$day,
@@ -271,12 +591,12 @@ myxo2.bugs <- jags(data=datalist, inits=inits, parameters.to.save=c("a", "b", "s
 
 ```
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
 #Run this model through JAGS.
 
 
 myxo2.mcmc <- as.mcmc(myxo2.bugs)
-summary(myxo2.mcmc)
+ #summary(myxo2.mcmc)
 
 library(lattice)
 #plot(myxo2.mcmc)
@@ -284,47 +604,244 @@ densityplot(myxo2.mcmc)
 ```
 
 
-
 ```{r eval=FALSE, echo=FALSE}
+
 plot(titer~day,data=Myx,xlim=c(0,10),ylim=c(0,10))
 curve(Ricker(x,a=3.5612,b=0.1713),from=0,to=10,add=T,col="black")
+
 ```
 
-#### QUESTION 3. Goodness-of-fit and model comparison
+#### Challenge problem 3. Goodness-of-fit and model comparison
 
-DIC (analogous to AIC) is a model selection criterion for Baysian models fitted with MCMC. Just like for AIC, models with smaller values of DIC are favored. Which model (M-M or Ricker) is the better model based on DIC? What does the difference in DIC mean in terms of the strength of evidence in support of one of these models as the "best model"?  [You should be aware that DIC is not a perfect solution for Bayesian model selection. For one, it is only valid if the posterior is approximately multivariatge normal. Also, DIC tends to select overfitted models!]  
+Let's try a different approach for visualizing the goodness-of-fit of these two models. For each of these models, use the pseudocode provided below to evaluate goodness-of-fit. On the basis of a *posterior predictive check* (see below), how well would you say each model fits the observed data? Do you see any red flags that would indicate poor goodness of fit? Explain your reasoning. 
 
-Let's try a different approach for visualizing the fit of these two models. For each of these models, use the pseudocode provided below to evaluate goodness-of-fit. Which model appears to fit the data better? On the basis of a *posterior predictive check* (see below), how well would you say each model fits the observed data? Do you see any red flags that would indicate poor goodness of fit? Explain your reasoning. 
+* **Exercise 3a**. Write a function called "Myx_PostPredCheck()" that compares the goodness-of-fit for the two models (ricker vs M-M) using a posterior predictive check.  
 
-Compute the Bayesian p-value described below. How do you interpret this metric? What Bayesian p-value would you expect if the model fit was perfect? What would you expect if the model fit was poor? What does the Bayesian p-value tell us about how well the Ricker and M-M models fit the data? Does one model fit better than the other? 
+    + **input**:         
+        + MCMC1 = the object generated from running the 'jags()' function with the Ricker function.     
+        + MCMC2 = the object generated from running the 'jags()' function with the Michaelis-Menten function.    
 
+    + **suggested algorithm**:  
+        + For each model (Ricker, M-M), generate new data under the fitted model. For each of an arbitrarily large number (e.g., 1000) of replicates:
+            + sample from the joint posterior distribution:     
+                + pick a random integer between 1 and the number of MCMC samples (e.g., call that number "random_index")      
+                + Then, use that random index to select a single random sample from the joint posterior distribution.   
+                    + This will look something like this: 
+                        ```new.draw <- jags.fit$BUGSoutput$sims.list$a[random_index]```    
+            + Use those parameters (drawn from the joint posterior distribution) to simulate a data set: 
+                + For each titer observation, and using the params sampled from the posterior, generate a single random number under the gamma distribution defined by the Ricker or M-M model
+            + Use a standard discrepancy metric--sum of squared error-- to compute the degree to which the simulated data deviate from the expected value.
+                + For each simulated data point, compute the squared residual error- that is, the squared difference between the simulated data point and the expected value from the Ricker or M-M model.
+                + For each observed data point, compute the squared residual error- that is, the squared difference between the observed data point and the expected value from the Ricker or M-M model.
+            + Compute the sum of squared errors (across all observations) for both the observed data and the simulated data corresponding to each sample from the joint posterior distribution.  
+        + For each model (Ricker, M-M), use the 'boxplot()' function to display the range of plausible data that could be generated under the fitted model (using the simulated data). Overlay the observed data. This provides a visual goodness-of-fit evaluation. Based on a visual inspection, how well does the model fit the data?
+        + Plot the sum of squared error for the simulated data sets (Y axis) against the sum of squared error for the actual data set. Overlay a 1:1 line (that is, the line corresponding to y=x). This is called a *Posterior Predictive Check*. 
+        + Compute the percent of the time that the discrepancy metric (SSE) for the simulated data exceeds the discrepancy metric for the observed data. This quantity is often called a *Bayesian p-value*.    
 
-##### Pseudocode for Goodness-of-fit test
-
-- *Step 1*: Generate new data under the fitted model. For each of an arbitrarily large number of replicates:
-    - sample from the joint posterior distribution 
-        - pick a random integer between 1 and the number of MCMC samples (e.g., call that number "random_index")
-        - Then, use that random index to select a single random sample from the joint posterior. 
-            - This will look something like this: new.draw <- jags.fit$BUGSoutput$sims.list[random_index]
-    - use those parameters (drawn from the posterior distribution) to simulate a data set 
-        - for each titer observation, and using the params sampled from the posterior, generate a single random number under the gamma distribution defined by the Ricker or M-M model
-    - use a standard discrepancy metric--sum of squared error-- to compute the degree to which the simulated data deviate from the expected value.
-        - for each simulated data point, compute the squared residual error- that is, the squared difference between the simulated data point and the expected value from the Ricker or M-M model.
-        - for each observed data point, compute the squared residual error- that is, the squared difference between the simulated data point and the expected value from the Ricker or M-M model.
-        - compute the sum of squared errors for both the observed data and the simulated data corresponding to this sample from the joint posterior distribution. 
-
-- *Step 2*: Just like the goodness-of-fit tests we did in the "Virtual Ecologist" lab, use the boxplot function to display the range of plausible data that could be generated under the fitted model (using the data simulated under the fitted model). Overlay the observed data. This provides a visual goodness-of-fit evaluation. Based on a visual inspection, how well does the model fit the data?
-
-- *Step 3*: Plot the sum of squared error for the simulated data sets (Y axis) against the sum of squared error for the actual data set. Overlay a 1:1 line (that is, the line corresponding to y=x). This is called a *Posterior Predictive Check*. 
-
-- *Step 4*: Compute the percent of the time that the discrepancy metric (SSE) for the simulated data exceeds the discrepancy metric for the observed data. This quantity is often called a *Bayesian p-value*. 
-
-
-### QUESTION 5
-
-We are missing information on the behavior of this system in the later days because the virus is too virulent at this grade and kills the rabbits too quickly.  We do, however, have information on the late stage behavior from other grades.  How might you incorporate that information into the analysis for grade 1?  Respond in short paragraph only, no analysis or coding required (this is just a thought experiment!)
+    + **return**:    
+        + a list of length 3 containing (1) a vector of length 2 storing the Bayesian p-values for the two models (Ricker first, then M-M), computed above, (2) a data frame with number of rows equal to the number of simulation replicates and columns indicating, respectively, the samples from the joint posterior, SSE for the simulated data, and SSE for the real observations (the data used to compute the Bayesian p-value) for the Ricker model, and (3) a data frame with number of rows equal to the number of simulation replicates and columns indicating, respectively, the samples from the joint posterior, SSE for the simulated data, and SSE for the real observations (the data used to compute the Bayesian p-value) for the M-M model.  
 
 
+```{r answer3a, echo=FALSE}
+
+##########
+# 3a
+
+######
+# first set up the necessary data objects
+
+MyxDat <- MyxoTiter_sum
+Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
+#head(Myx)
+
+myx.data.for.bugs <- list(
+  titer = Myx$titer,
+  days = Myx$day,
+  n.observations = nrow(Myx)
+)
+
+#myx.data.for.bugs
+
+init.vals.for.bugs <- function(){
+  list(
+    shape=runif(1,20,30),
+    a=runif(1,0.05,0.3),
+    b=runif(1,1,1.3)
+  )
+}
+
+init.vals.for.bugs2 <- function(){
+  list(
+    shape=runif(1,20,30),
+    a=runif(1,8,9),
+    b=runif(1,1,1.5)
+  )
+}
+
+jags.fit_ricker <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel_ricker.txt",n.chains = 3,n.burnin = 5000,n.thin = 20 )
+
+jags.fit_mm <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs2,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel_mm.txt",n.chains = 3,n.burnin = 5000,n.thin = 20 )
+
+
+
+Myx_PostPredCheck <- function(MCMC1=jags.fit_ricker,MCMC2=jags.fit_mm){
+  lots <- 1000
+  nMCMC <- min(jags.fit_ricker$BUGSoutput$n.keep,jags.fit_mm$BUGSoutput$n.keep)
+  
+     # hard-code the data
+  MyxDat <- MyxoTiter_sum
+  Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data  
+  nobs <- nrow(Myx)
+  
+  SSEobs_rick <- numeric(lots)
+  SSEobs_mm <- numeric(lots)
+  SSEsim_rick <- numeric(lots)
+  SSEsim_mm <- numeric(lots)
+  
+  params_rick <- matrix(NA, nrow=lots,ncol=3)
+  params_mm <- matrix(NA, nrow=lots,ncol=3)
+  
+  colnames(params_rick) <- c("a","b","shape")
+  colnames(params_mm) <- c("a","b","shape")
+  
+  alldays <- sort(unique(Myx$day))
+  allsims_rick <- matrix(nrow=lots,ncol=length(alldays)) 
+  allsims_mm <- matrix(nrow=lots,ncol=length(alldays)) 
+  colnames(allsims_rick) <- alldays
+  colnames(allsims_mm) <- alldays
+  
+  i=2
+  for(i in 1:lots){
+    random_index <- sample(1:nMCMC,1)
+    params_rick[i,] <- c(a=MCMC1$BUGSoutput$sims.list$a[random_index],
+                     b=MCMC1$BUGSoutput$sims.list$b[random_index],
+                     shape=MCMC1$BUGSoutput$sims.list$shape[random_index])
+    params_mm[i,] <- c(a=MCMC2$BUGSoutput$sims.list$a[random_index],
+                     b=MCMC2$BUGSoutput$sims.list$b[random_index],
+                     shape=MCMC2$BUGSoutput$sims.list$shape[random_index])
+    
+    ### loop through titer observations
+    exptiter_rick <- Ricker(Myx$day,params_rick[i,"a"],params_rick[i,"b"]) 
+    exptiter_mm <- MMFunc(Myx$day,params_mm[i,"a"],params_mm[i,"b"])
+    simobs_rick <- rgamma(nobs,shape=params_rick[i,"shape"],rate=(params_rick[i,"shape"]/exptiter_rick))
+    simobs_mm <- rgamma(nobs,shape=params_mm[i,"shape"],rate=(params_mm[i,"shape"]/exptiter_mm))
+    SSEobs_rick[i] <- sum((Myx$titer-exptiter_rick)^2)
+    SSEobs_mm[i] <- sum((Myx$titer-exptiter_mm)^2)
+    SSEsim_rick[i] <- sum((simobs_rick-exptiter_rick)^2)
+    SSEsim_mm[i] <- sum((simobs_mm-exptiter_mm)^2)
+    
+    allsims_rick[i,] <- tapply(simobs_rick,Myx$day,function(t) t[sample.int(length(t))][1] )
+    allsims_mm[i,] <- tapply(simobs_mm,Myx$day,function(t) t[sample.int(length(t))][1] )
+  }
+  
+  boxplot(allsims_rick,xlab="Days",ylab="Titer",xlim=c(0,10),main="Ricker",at=as.numeric(colnames(allsims_rick)))
+  points(Myx$day,Myx$titer,col="green",pch=19,cex=2)
+  
+  boxplot(allsims_mm,xlab="Days",ylab="Titer",xlim=c(0,10),main="M-M",at=as.numeric(colnames(allsims_mm)))
+  points(Myx$day,Myx$titer,col="green",pch=19,cex=2)
+  
+  plot(SSEsim_rick~SSEobs_rick,main="Posterior Pred Check, Ricker")
+  abline(0,1,col="red")
+  
+  plot(SSEsim_mm~SSEobs_mm,main="Posterior Pred Check, M-M")
+  abline(0,1,col="red")
+  
+  pval_rick <- length(which(SSEsim_rick>SSEobs_rick))/lots
+  
+  pval_mm <- length(which(SSEsim_mm>SSEobs_mm))/lots
+  
+  output <- list()
+  output[["p-vals"]] <- c(pval_rick,pval_mm)
+  
+  output[["PPC_rick"]] <- as.data.frame(cbind(params_rick,SSEsim_rick,SSEobs_rick))
+  output[["PPC_mm"]] <- as.data.frame(cbind(params_mm,SSEsim_mm,SSEobs_mm))
+  
+  colnames <- c("a","b","shape","SSEsim","SSEobs")
+  names(output[["PPC_rick"]]) <- colnames
+  names(output[["PPC_mm"]]) <- colnames
+  
+  return(output)
+  
+}
+
+```
+
+
+And here is what the results of your function should look like!
+
+
+```{r test3a}
+
+####
+# Test the function
+
+test <- Myx_PostPredCheck(MCMC1=jags.fit_ricker,MCMC2=jags.fit_mm)
+
+test[[1]]   # p-vals
+
+head(test[[2]])    # ppc for ricker
+
+head(test[[3]])    # ppc for M-M
+
+```
+
+
+* **Exercise 3b**.  In your Word document, please explain how do you interpret the Bayesian p-value. What Bayesian p-value would you expect if the model fit was perfect? What would you expect if the model fit was poor? What does the Bayesian p-value tell us about how well the Ricker and M-M models fit the data? Does one model fit better than the other? 
+
+### Challenge Problem 4 (extra credit)
+
+DIC (analogous to AIC) is a model selection criterion for Baysian models fitted with MCMC. Just like for AIC, models with smaller values of DIC are favored. Which model (M-M or Ricker) is the better model based on DIC? What does the difference in DIC mean in terms of the strength of evidence in support of one of these models as the "best model"?  [You should be aware that DIC is not a perfect solution for Bayesian model selection. For one, it is only valid if the posterior is approximately multivariate normal. Also, DIC tends to select overfitted models!]  
+
+WAIC (also analogous to AIC) is a newer (and better) model selection criterion for Baysian models fitted with MCMC. Just like for AIC, models with smaller values of WAIC are favored. Which model (M-M or Ricker) is the better model based on WAIC? What does the difference in WAIC mean in terms of the strength of evidence in support of one of these models as the "best model"? 
+
+
+```{r answer4a, echo=FALSE}
+
+
+#######
+# Question 4
+
+### DIC
+
+DIC_ricker <- jags.fit_ricker$BUGSoutput$DIC 
+DIC_MM <- jags.fit_mm$BUGSoutput$DIC 
+
+### WAIC
+
+library(loo)    # for computing WAIC
+
+nmcmc_ricker <- jags.fit_ricker$BUGSoutput$n.keep   # number of mcmc samples
+avals <- jags.fit_ricker$BUGSoutput$sims.list$a
+bvals <- jags.fit_ricker$BUGSoutput$sims.list$b
+svals <- jags.fit_ricker$BUGSoutput$sims.list$shape
+liks_ricker <- t(sapply(1:nmcmc_ricker,function(t) dgamma(Myx$titer,svals[t],rate=(svals[t]/Ricker(Myx$day,avals[t],bvals[t])),log = T)  ) )
+
+nmcmc_mm <- jags.fit_mm$BUGSoutput$n.keep   # number of mcmc samples
+avals <- jags.fit_mm$BUGSoutput$sims.list$a
+bvals <- jags.fit_mm$BUGSoutput$sims.list$b
+svals <- jags.fit_mm$BUGSoutput$sims.list$shape
+liks_mm <- t(sapply(1:nmcmc_ricker,function(t) dgamma(Myx$titer,svals[t],rate=(svals[t]/MMFunc(Myx$day,avals[t],bvals[t])),log=T)  ) )
+
+WAIC_ricker <- waic(liks_ricker)
+
+WAIC_mm <- waic(liks_mm)
+
+
+```
+
+
+Here are the results I got:
+
+```{r test4a}
+
+DIC_ricker
+DIC_MM
+
+
+WAIC_ricker$estimates["waic",]
+WAIC_mm$estimates["waic",]
+
+```
 
 
 

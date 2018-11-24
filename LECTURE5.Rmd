@@ -1,7 +1,7 @@
 ---
 title: "Optimization!"
 author: "NRES 746"
-date: "September 27, 2016"
+date: "Fall 2018"
 output: 
   html_document: 
     theme: cerulean
@@ -13,95 +13,165 @@ output:
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
+```{r echo=FALSE}
+
+############################################################
+####                                                    ####  
+####  NRES 746, Lecture 5                               ####
+####                                                    ####
+####  Kevin Shoemaker                                   #### 
+####  University of Nevada, Reno                        ####
+####                                                    #### 
+############################################################
+
+
+############################################################
+####  Optimization
+####     Searching parameter space to identify the MLE  ####
+####     While thwarting the curse of dimensionality    ####
+############################################################
+
+
+```
+
+
+For those wishing to follow along with the R-based demo in class, [click here](LECTURE5.R) for the companion R-script for this lecture.
+
+Please sign up (on our shared Google Sheets) for a time slot (20 mins) to discuss your group project proposals with me tomorrow. The rest of lab time is yours to either work on the group projects or get started with lab 3 (if I finish revising it in time!)  
+
+# Optimization
+
 We can't maximize a likelihood function without an optimization algorithm.  
 
 We can't optimize a sampling or monitoring regime, as in the power analysis problem, without an optimization algorithm.
 
-Clearly, we need optimization algorithms!! In addition, they provide an excellent example of how computers (often via brute force algorithms) have superseded pure mathematics for performing statistical analysis. 
+Clearly, we need optimization algorithms!! In addition, they provide an excellent example of how computers (often via brute force algorithms) can supersede pure mathematics for performing statistical analysis. 
 
-You may not have built your own optimization algorithm before, but you have probably taken advantage of optimization algorithms. For example, if you have performed a glm or a non-linear regression in R, you have exploited numerical optimization algorithms!
+You may not have built your own optimization algorithm before, but you've probably taken advantage of optimization algorithms that are operating behind the scenes. For example, if you have performed a glmm or a non-linear regression in R, you have exploited numerical optimization routines!
 
-We will discuss optimization in the context of maximum likelihood estimation. Let's start with the most simple of all optimization algorithms:
+We will discuss optimization in the context of maximum likelihood estimation, and a couple lectures from now we'll discuss optimization in a Bayesian context. Let's start with the most simple of all optimization algorithms -- brute force!
 
-## Brute Force
+Note that we won't be building optimization algorithms in class- the code in this lecture is for demonstration purposes only!
 
-Just like we did for the two-dimensional likelihood surface, we could evaluate the likelihood at tiny intervals across a broad range of parameter values. Then we can just identify the parameter set that produces the maximum likelihood across all evaluated parameter sets. 
+## Brute Force!
+
+Just like we did for the two-dimensional likelihood surface, we could evaluate the likelihood at tiny intervals across a broad range of parameter space. Then we can just identify the parameter set associated with the maximum likelihood across all evaluated parameter sets. 
 
 ### Positives
 
-- Simple!! (Conceptually very straightforward)
-- Identify false peaks!
-- Undeterred by discontinuities in the likelihood surface
+- Simple!! (conceptually very straightforward)    
+- Identify false peaks! (guaranteed to find the MLE!)      
+- Undeterred by discontinuities in the likelihood surface    
 
 ### Negatives
 
-- Speed: even slower and less efficient than a typical ecologist is willing to accept!
-- Resolution: we may specify the wrong interval size. Even so, we can only get the answer to within plus or minus the interval size.
+- Speed: even slower and less efficient than a typical ecologist is willing to accept!     
+- Resolution: we may specify the wrong interval size. Even so, we can only get the answer to within plus or minus the interval size.      
 
 
 ### Example dataset: Myxomatosis titer in rabbits
 
-Let's use Bolker's myxomatosis example dataset to illustrate our optimization issues:
+Let's use Bolker's myxomatosis example dataset (an example we'll return to frequently!) to illustrate:
 
 ```{r}
-library(emdbook)
 
-MyxDat <- MyxoTiter_sum
+####################
+# Explore Bolker's myxomatosis example
+
+library(emdbook)    # this is the package provided to support the textbook!
+
+MyxDat <- MyxoTiter_sum         # load Bolker's example data
 Myx <- subset(MyxDat,grade==1)
 head(Myx)
+
 ```
 
 For this example, we are modeling the distribution of measured titers (virus loads) for Australian rabbits. Bolker chose to use a Gamma distribution. Here is the empirical distribution:
 
 ```{r}
-hist(Myx$titer,freq=FALSE)
+
+hist(Myx$titer,freq=FALSE)    # distribution of virus loads
+
 ```
 
 We need to estimate the gamma rate and shape parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
 
 ```{r}
-hist(Myx$titer,freq=FALSE)
+
+###########
+# Overlay a gamma distribution on the histogram 
+
+hist(Myx$titer,freq=FALSE)     # note the "freq=FALSE", which displays densities of observations, and therefore makes histograms comparable with probability densities
 curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
 
 ```
 
-
+This is clearly not a great fit, but perhaps this would be an okay starting point (optimization algorithms don't really require perfect starting points, just need to be in the ballpark)...
 
 Let's build a likelihood function for this problem!
 
 ```{r}
-GammaLikelihoodFunction <- function(params){
-  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))
+
+################
+# Build likelihood function
+
+GammaLikelihoodFunction <- function(params){           # only one argument (params)- the data are hard-coded here (this is often the case with simple likelihood functions)
+  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))     # use params and data to compute likelihood 
 }
 
 params <- c(40,0.15) 
 names(params) <- c("shape","scale")
 params
-GammaLikelihoodFunction(params)
+GammaLikelihoodFunction(params)    # test the function!
 
 ```
 
-Now let's optimize using 'optim' like we did before, to find the MLE!
+Now let's optimize using 'optim()' like we did before, to find the MLE!
+
+NOTE: "optim()" doesn't work that well for optimizing single parameters (R recommends using "optimize()"), but in practice we will mostly be optimizing across multiple dimensions and "optim()" is far more general and powerful then "optimize()".
 
 ```{r}
+
+############
+# USE R's 'OPTIM()' FUNCTION
+############
+
+############
+# Optimize using R's built-in "optim()" function: find the maximum likelihood estimate
+
 ctrl <- list(fnscale=-1)   # maximize rather than minimize!!
-MLE <- optim(fn=GammaLikelihoodFunction,par=params,control=ctrl,method="BFGS")
+MLE <- suppressWarnings(optim(fn=GammaLikelihoodFunction,par=params,control=ctrl,method="BFGS"))   # stop the warnings!
 
 MLE$par
+
 ```
 
+We can ignore the warnings!
 
 Let's visualize the fit of the MLE in this case...
 
 ```{r}
+
+##############
+# visualize the fit
+
 hist(Myx$titer,freq=FALSE)
 curve(dgamma(x,shape=MLE$par["shape"],scale=MLE$par["scale"]),add=T,col="red")
+
 ```
 
+Looks pretty good...
 
-Okay, now what if we want to try optimizing with the brute force method... 
+But as dangerous ecological statisticians we aren't satisfied with using a "black box" like the "optim()" function, we need to understand what is going on behind the scenes. Maybe someday we'll want to write our own optimizer!  
+
+Let's start with the conceptually simple, often computationally impossible, brute force method... 
 
 ```{r}
+
+######################
+# BRUTE FORCE ALTERNATIVE
+######################
+
 ##############
 # define 2-D parameter space!
 ##############
@@ -120,7 +190,7 @@ for(i in 1:length(shapevec)){
   newparams['shape'] <- shapevec[i]
   for(j in 1:length(scalevec)){
     newparams['scale'] <- scalevec[j]
-    surface2D[i,j] <- GammaLikelihoodFunction(newparams) 
+    surface2D[i,j] <- GammaLikelihoodFunction(newparams)   # compute likelihood for every point in 2-d parameter space
   }
 }
 
@@ -137,23 +207,41 @@ contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 Now what is the maximum likelihood estimate?
 
 ```{r}
-ndx <- which(surface==max(surface),arr.ind=T)
-shapevec[ndx[,1]]
+
+############
+# Find the MLE
+############
+
+ndx <- which(surface2D==max(surface2D),arr.ind=T)  # index of the max likelihood grid cell
+shapevec[ndx[,1]]     
 scalevec[ndx[,2]]
+
+MLE$par  # compare with the answer from "optim()"
+
 ```
 
 
 
 ## Derivative based methods!
 
-If we assume that the likelihood surface is smooth and has only one minimum, we can develop very efficient optimization algorithms. In general, derivative based methods look for the point in parameter space where the derivative of the likelihood function is zero. That is, the peak!  
+If we assume that the likelihood surface is smooth (differentiable) and has only one minimum, we can develop very efficient optimization algorithms. In general, derivative-based methods look for the point in parameter space where the derivative of the likelihood function is zero. That is, at the peak!  
 
 
-Let's imagine we are interested in determining the shape parameter, given a known scale parameter. To use derivative based methods, let's first build a function that estimates the slope of the function at any arbtrary point in parameter space:
+Let's imagine we are interested in determining the shape parameter, given a known scale parameter for a gamma distribution. To use derivative based methods, let's first build a function that estimates the slope of the function at any arbtrary point in parameter space:
 
 ```{r}
+
+###################
+# Derivative-based optimization methods
+###################
+
+######
+# function for estimating the slope of the likelihood surface at any point in parameter space....
+
+## NOTE: even here I'm using a coarse, brute force method for estimating the first and second derivative of the likelihood function
+
 params <- MLE$par
-SlopeFunc <- function(shape_guess,tiny=0.001){
+SlopeFunc <- function(shape_guess,tiny=0.001){      
   params['shape'] <- shape_guess
   high <- GammaLikelihoodFunction(params+c(tiny,0))
   low <- GammaLikelihoodFunction(params-c(tiny,0))
@@ -161,13 +249,17 @@ SlopeFunc <- function(shape_guess,tiny=0.001){
   return(slope)
 }
 
-SlopeFunc(shape_guess=30)
+SlopeFunc(shape_guess=30)    #try it!
 
 ```
 
 Now let's visualize this!
 
 ```{r}
+
+#########
+# Visualize the slope of the likelihood function at different points in parameter space
+
 shapevec <- seq(10,100,by=0.1)   
 
 ##############
@@ -193,36 +285,43 @@ lines(c(20,40),c(point-slope*10,point+slope*10),col="red")
 We also need a function to compute the second derivative, or the curvature...
 
 ```{r}
+
+########
+# function for estimating the curvature of the likelihood function at any point in parameter space
+
 params <- MLE$par
 CurvatureFunc <- function(shape_guess,tiny=0.001){
   params['shape'] <- shape_guess
   high <- SlopeFunc(shape_guess+tiny)
   low <- SlopeFunc(shape_guess-tiny)
-  curvature <- (high-low)/(tiny*2)
+  curvature <- (high-low)/(tiny*2)   # how much the slope is changing in this region of the function
   return(curvature)
 }
 
-CurvatureFunc(shape_guess=30)
+CurvatureFunc(shape_guess=30)   # try it!
+
 ```
 
 Okay, now we can implement a derivative-based optimization algorithm!
 
 Essentially, we are trying to find the point where the derivative of the likelihood function is zero (the root of the function!).
 
-The simplest derivative based optimization algorithm is the Newton-Raphson algorithm. Here is the pseudocode:
+The simplest derivative-based optimization algorithm is the *Newton-Raphson algorithm*. Here is the pseudocode:
 
-- pick a guess for a parameter value
-- compute the derivative of the likelihood function for that guess
-- compute the slope of the derivative (curvature) of the likelihood function for that guess
-- Extrapolate linearly to try to find the root (where the derivative of the likelihood function should be zero if the slope of the likelihood function were linear)
-- repeat until the derivative of the likelihood function is close enough to zero (within a specified tolerance)
+- pick a guess for a parameter value     
+- compute the derivative of the likelihood function for that guess       
+- compute the slope of the derivative (curvature) of the likelihood function for that guess      
+- Extrapolate linearly to try to find the root (where the derivative of the likelihood function should be zero if the slope of the likelihood function were linear)       
+- repeat until the derivative of the likelihood function is close enough to zero (within a specified tolerance)       
 
 Let's first visualize the shape of the first derivative of the likelihood function
 
 ```{r}
 
-firstderiv <- numeric(length(shapevec))   # initialize storage variable
+######
+# First- visualize the gradient of the likelihood function
 
+firstderiv <- numeric(length(shapevec))   # initialize storage variable
 for(i in 1:length(shapevec)){
   firstderiv[i] <- SlopeFunc(shapevec[i]) 
 }
@@ -232,12 +331,18 @@ abline(h=0,col="red")
 
 ```
 
-Let's use the Newton method to find the root. First we pick a starting value. Say we pick 80.
+Let's use the Newton method to find the *root* of the likelihood function. First we pick a starting value. Say we pick 80.
 
 First compute the derivatives:
 
 ```{r}
-firstderiv <- SlopeFunc(80)
+
+#########
+# Now we can perform a simple, derivative-based optimization!
+
+### Pick "80" as the starting value
+
+firstderiv <- SlopeFunc(80)           # evaluate the first and second derivatives
 secondderiv <- CurvatureFunc(80)
 firstderiv
 secondderiv
@@ -247,23 +352,37 @@ secondderiv
 Now let's use this linear function to extrapolate to where the first derivative is equal to zero:
 
 ```{r}
+
+#########
+# Use this info to estimate the root
+
 oldguess <- 80
-newguess <- oldguess - firstderiv/secondderiv
+newguess <- oldguess - firstderiv/secondderiv   # estimate the root (where first deriv is zero)
 newguess
+
 ```
 
 Our new guess is that the shape parameter is 41.31. Let's do it again!
 
 ```{r}
+
+##########
+# Repeat this process
+
 oldguess <- 41.31
 newguess <- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess) 
 newguess
+
 ```
 
 
 Okay, we're already getting close to our MLE of around 49.36. Let's do it again:
 
 ```{r}
+
+#######
+# again...
+
 oldguess<-newguess
 newguess <- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
 newguess
@@ -273,22 +392,35 @@ newguess
 And again!
 
 ```{r}
+
+#######
+# again...
+
 oldguess<-newguess
 newguess <- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
 newguess
+
 ```
 
 And again!!!
 
 ```{r}
+
+#######
+# again...
+
 oldguess<-newguess
 newguess <- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
 newguess
+
 ```
 
-Wow, in just a few steps we already basically found the root. Let's find the root for real, using an algorithm...
+Wow, in just a few steps we already basically found the true root. Let's find the root for real, using an algorithm...
 
 ```{r}
+
+##########
+# Implement the Newton Method as a function!
 
 NewtonMethod <- function(firstguess,tolerance=0.0000001){
   deriv <- SlopeFunc(firstguess)
@@ -310,19 +442,22 @@ NewtonMethod <- function(firstguess,tolerance=0.0000001){
 
 newMLE <- NewtonMethod(firstguess=80)
 newMLE
+
 ```
+
+In just 6 steps we successfully identified the maximum likelihood estimate to within 0.0000001 of the true value! How many computations did we have to perform to use the brute force method?
 
 Hopefully this illustrates the power of optimization algorithms!!
 
-Note that this method and other derivative-based methods can work in multiple dimensions:
+Note that this method and other derivative-based methods can work in multiple dimensions! The only constraint here is that the likelihood function is differentiable (smooth)
 
 ## Derivative-free optimization methods
 
-Derivative-free methods make no assumption about smoothness. In some ways, they represent a middle ground between the brute force method and the elegant but finnicky derivative-based methods, representing a balance between simplicity and generality.
+Derivative-free methods make no assumption about smoothness. In some ways, they represent a middle ground between the brute force method and the elegant but finnicky derivative-based methods- walking a delicate balance between simplicity and generality.
 
 ## Derivative-free method 1: simplex method
 
-This is the default opimization method for "optim"! That means that R used this method for optimizing the fuel economy example from the likelihood lecture. 
+This is the default opimization method for "optim()"! That means that R used this method for optimizing the fuel economy example from the likelihood lecture! 
 
 #### Definition: Simplex
 
@@ -330,7 +465,7 @@ A *simplex* is the multi-dimensional analog of the triangle. In two dimensions, 
 
 #### Pseudocode for Nelder-Mead simplex algorithm
 
-Set up an initial simplex in parameter space (often based on a user's initial guess). 
+Set up an initial simplex in parameter space (often based on a user's initial guess). NOTE: when you use the Nelder-Mead algorithm in "optim()" you only specify one initial value for each free parameter. "optim()"'s internal algorithm turns that initial guess into a simplex prior to starting the Nelder-Mead algorithm. 
 
 Continue the following steps until your answer is good enough:  
 
@@ -349,7 +484,14 @@ Continue the following steps until your answer is good enough:
 **Step 1:** Set up an initial simplex in parameter space
 ```{r}
 
-firstguess <- c(shape=40,scale=0.25)   # "user" first guess   # shape=80,scale=0.212
+#############
+# SIMPLEX OPTIMIZATION METHOD!
+#############
+
+########
+# set up an "initial" simplex
+
+firstguess <- c(shape=40,scale=0.25)   # "user" first guess 
 
 simplex <- list()
  
@@ -368,7 +510,7 @@ Let's plot the simplex...
 ```{r}
     ## first let's make a function to plot the simplex on a 2-D likelihood surface...
 
-addSimplex <- function(simplex,col="red"){
+addSimplex <- function(simplex,col="green"){
   temp <- as.data.frame(simplex)    # easier to work with data frame here
   points(x=temp[1,c(1,2,3,1)], y=temp[2,c(1,2,3,1)],type="b",lwd=2,col=col)
 }
@@ -383,6 +525,9 @@ addSimplex(simplex)
 Now let's evaluate the log likelihood at each vertex
 
 ```{r}
+
+########
+# Evaluate log-likelihood at each vertex of the simplex
 
 SimplexLik <- function(simplex){
   newvec <- unlist(lapply(simplex,GammaLikelihoodFunction))   # note use of apply instead of for loop...
@@ -465,7 +610,7 @@ ShrinkIt <- function(oldsimplex,BestVertex){
 }
 
 
-MoveTheSimplex <- function(oldsimplex){     # incomplete nelder-mead
+MoveTheSimplex <- function(oldsimplex){     # (incomplete) nelder-mead
   newsimplex <- oldsimplex  # 
            # Start by identifying the *worst* vertex (the one with the lowest likelihood)
   VertexLik <- SimplexLik(newsimplex)
@@ -485,11 +630,14 @@ MoveTheSimplex <- function(oldsimplex){     # incomplete nelder-mead
   return(newsimplex)
 }
 
+###########
+# Visualize the simplex
+
 oldsimplex <- simplex
 newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-addSimplex(oldsimplex,col="green")
+addSimplex(oldsimplex,col="red")
 addSimplex(newsimplex)
 
 
@@ -499,43 +647,61 @@ addSimplex(newsimplex)
 Let's try another few moves
 
 ```{r}
+
+############
+# Make another move
+
 oldsimplex <- newsimplex
 newsimplex <- MoveTheSimplex(oldsimplex)
 
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-addSimplex(oldsimplex,col="green")
+addSimplex(oldsimplex,col="red")
 addSimplex(newsimplex)
+
 ```
 
 And again!
 
 ```{r}
+
+############
+# Make another move
+
 oldsimplex <- newsimplex
 newsimplex <- MoveTheSimplex(oldsimplex)
 
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-addSimplex(oldsimplex,col="green")
+addSimplex(oldsimplex,col="red")
 addSimplex(newsimplex)
+
 ```
 
 Again:
 
 ```{r}
+
+############
+# Make another move
+
 oldsimplex <- newsimplex
 newsimplex <- MoveTheSimplex(oldsimplex)
 
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-addSimplex(oldsimplex,col="green")
+addSimplex(oldsimplex,col="red")
 addSimplex(newsimplex)
+
 ```
 
 
 And another few times:
 
 ```{r}
+
+############
+# Make another few moves
 
 par(mfrow=c(2,2))
 
@@ -545,7 +711,7 @@ for(i in 1:4){
   
   image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
   contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-  addSimplex(oldsimplex,col="green")
+  addSimplex(oldsimplex,col="red")
   addSimplex(newsimplex)
 }
 
@@ -557,7 +723,10 @@ Now we can build a function and use the algorithm for optimizing!
 
 ```{r}
 
-SimplexMethod <- function(firstguess,tolerance=0.000001){
+############
+# Build a simplex optimization function!
+
+SimplexMethod <- function(firstguess,tolerance=0.00001){
   initsimplex <- list()
   initsimplex[['vertex1']] <- firstguess + c(5,0.05)
   initsimplex[['vertex2']] <- firstguess + c(-5,-0.05)
@@ -588,11 +757,11 @@ SimplexMethod(firstguess = c(shape=39,scale=0.28))
 ```
 
 
-Okay, it doesn't seem to be optimizing very well. I probably didn't implement it perfectly yet! 
+Okay, it's close but doesn't seem to be optimizing very well compared with the other methods. I probably didn't implement it perfectly yet! 
 
 Can you see why this method is sometimes called the "amoeba" method of optimization??
 
-In general, the simplex-based methods are very good at finding the general area of the MLE, but generally less efficient than the derivative-based methods- especially as you near the MLE.   
+In general, the simplex-based methods are very good at finding the general vicinity of the MLE, but generally less efficient than the derivative-based methods- especially as you near the MLE.   
 
 
 ## Derivative-free method 2: simulated annealing (SE).  
@@ -603,8 +772,7 @@ The temperature analogy is fun too! We start out "hot"- unfocused, frenzied, bou
 
 ### SE: A "global" optimization solution
 
-Simulated annealing is called a "global" optimization solution because it can deal with false peaks and other strangenesses that can arise in optimization problems (e.g., maximizing likelihood. )
-
+Simulated annealing is called a "global" optimization solution because it can deal with false peaks and other strangenesses that can arise in optimization problems (e.g., maximizing likelihood). The price is in reduced efficiency!
 
 #### Pseudocode for the Metropolis simulated annealing routine
 
@@ -612,20 +780,24 @@ Pick an initial starting point and evaluate the likelihood.
 
 Continue the following steps until your answer is good enough:   
 
-> - Pick a new point at random near your old point and compute the (log) likelihood  
-> - If the new value is better, accept it and start again  
-> - If the new value is worse, then  
->       - Pick a random number between zero and 1  
->       - Accept the new (worse) value anyway if the random number is less than exp(change in log likelihood/k). Otherwise, go back to the previous value  
-> - Periodically (e.g. every 100 iterations) lower the value of *k* to make it harder to accept bad moves!  
+> - Pick a new point at random near your old point and compute the (log) likelihood     
+> - If the new value is better, accept it and start again      
+> - If the new value is worse, then    
+>       - Pick a random number between zero and 1      
+>       - Accept the new (worse) value anyway if the random number is less than exp(change in log likelihood/k). Otherwise, go back to the previous value     
+> - Periodically (e.g. every 100 iterations) lower the value of *k* to make it harder to accept bad moves. Eventually, the algorithm will "settle down" on a particular point in parameter space. 
 
-A variant of simulated annealing is available in the "optim" function in R (method = "SANN")
+A simulated annealing method is available in the "optim" function in R (method = "SANN")
 
 ### Example: Simulated annealing!
 
 Let's use the same familiar myxomatosis example!
  
 ```{r}
+
+################
+# Simulated annealing!
+
 startingvals <- c(shape=80,scale=0.15)
 startinglik <- GammaLikelihoodFunction(startingvals)
 startinglik
@@ -651,6 +823,10 @@ newGuess(oldguess=startingvals)
 Now let's evaluate the difference in likelihood between the old and the new guess...
 
 ```{r}
+
+############
+# evaluate the difference in likelihood between the new proposal and the old point
+
 LikDif <- function(oldguess,newguess){
   oldLik <- GammaLikelihoodFunction(oldguess)
   newLik <- GammaLikelihoodFunction(newguess)
@@ -660,11 +836,16 @@ LikDif <- function(oldguess,newguess){
 newguess <- newGuess(oldguess=startingvals)
 loglikdif <- LikDif(oldguess=startingvals,newguess)
 loglikdif
+
 ```  
 
 Now let's look at the Metropolis routine:
 
 ```{r}
+
+############
+# run and visualize a Metropolis routine
+
 k <- 100
 oldguess <- startingvals
 counter <- 0
@@ -694,12 +875,18 @@ lines(guesses,col="red")
 ```
 
 
-Clearly this is the most inefficient, brute-force method we have seen so far. And also quite clearly, in the context of this class, the best and most fun (and dangerous!)
+Clearly this is the most inefficient, brute-force method we have seen so far (aside from the actual brute force method). And also quite clearly, in the context of this class, the best and most fun (and dangerous!).
+
+NOTE: simulated annealing is way more efficient than the brute force method we saw earlier, especially with multiple dimensions!
 
 Let's run it for longer, and with a smaller value of k..
 
 
 ```{r}
+
+###########
+# Run it for longer!
+
 k <- 10
 oldguess <- startingvals
 counter <- 0
@@ -725,6 +912,8 @@ while(counter<1000){
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
+
+
 ```
 
 
@@ -733,6 +922,10 @@ This looks better! The search algorithm is finding the high-likelihood parts of 
 Now let's "cool" the temperature over time, let the algorithm settle down on a likelihood peak
 
 ```{r}
+
+#############
+# cool the "temperature" over time and let the algorithm settle down
+
 k <- 100
 oldguess <- startingvals
 counter <- 0
@@ -765,16 +958,17 @@ lines(guesses,col="red")
 points(MLE$vals[1],MLE$vals[2],col="green",pch=20,cex=3)
 
 MLE
+
 ```
 
 
-As you can see, the simulated annealing method did pretty well. However, we needed thousands of iterations to do what other methods just take a few iterations to do. But, we might feel better that we have explored parameter space more thoroughly and avoided the potential problem of false peaks. 
+As you can see, the simulated annealing method did pretty well. However, we needed thousands of iterations to do what other methods just take a few iterations to do. But, we might feel better that we have explored parameter space more thoroughly and avoided the potential problem of false peaks (although there's no guarantee that the simulated annealing method will find the true MLE). 
 
 ## Other methods
 
 As you can see, there are many ways to optimize- and the *optimal* optimization routine is not always obvious! 
 
-You can probably use some creative thinking and imagine your own optimization algorithm... For example, some have suggested combining the simplex method with the simulated annealing method! Opimization is an art!! 
+You can probably use some creative thinking and imagine your own optimization algorithm... For example, some have suggested combining the simplex method with the simulated annealing method! Optimization is an art!! 
 
 
 ## What about the confidence interval??
@@ -783,13 +977,15 @@ As you can see in the previous examples, most of the optimization techniques we 
 
 There are several techniques that are widely used to estimate and describe parameter uncertainty:
 
-1. Brute force (expose the entire likelihood surface!)
-2. Profile likelihood (the best way!)
-3. Evaluate curvature at the MLE and use that to estimate error (very crude- but the default for many MLE routines!)
+1. Brute force (expose the entire likelihood surface!) [okay, this one isn't actually used very often]
+2. Profile likelihood (the most accurate way!)
+3. Evaluate curvature at the MLE and use that to estimate error (somewhat inexact but efficient- but generally performs pretty well, and is the default for many MLE routines!)
 
 
 
 ```{r echo=FALSE, eval=FALSE}
+
+
    # archival code
 plot(0,0,xlim=c(-20,20),ylim=c(-0.2,0.2),type="n")
 addSimplex(newsimplex)
@@ -805,6 +1001,10 @@ plot(0,0,xlim=c(-10,10),ylim=c(-10,10),type="n")
 points(x=v[1],y=v[2])
 points(x=c(0,u[1]),y=c(0,u[2]),type="l")
 points(x=reflect[1],y=reflect[2])
+
 ```
 
+
+
+[--go to next lecture--](LECTURE6.html) 
 

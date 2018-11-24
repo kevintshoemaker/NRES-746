@@ -1,7 +1,7 @@
 
 ############################################################
 ####                                                    ####  
-####  NRES 470, Lecture 1                               ####
+####  NRES 746, Lecture 1                               ####
 ####                                                    ####
 ####  Kevin Shoemaker                                   #### 
 ####  University of Nevada, Reno                        ####
@@ -114,6 +114,8 @@ t.test.algorithm <- function(dat = reshape_df, group = "Treatment", value = "Mas
   indexA <- which(dat[,group]=="A")     # rows representing treatment A
   indexB <- which(dat[,group]=="B")     # rows representing treatment B
   observed_dif <- mean(dat[indexA,value]) - mean(dat[indexB,value])
+  
+  sample.size <- length(indexA)   # compute sample size
   
   #############
   # Simulate the STATISTICAL POPULATION under the null hypothesis

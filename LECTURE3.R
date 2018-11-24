@@ -17,11 +17,24 @@
 
 
 ###########
-# Random number generators (a key component of data simulation models)
+# Random number generators (a key component of data simulation models- but usually not the whole story)
 
 runif(1,0,25)   # draw random numbers from various probability distributions
 rpois(1,3.4)
 rnorm(1,22,5.4)
+
+
+#############
+# Short exercise:
+
+# Generate 50 samples from Normal(mean=10,sd=5) 
+
+
+# Generate 1000 samples from Poisson(mean=50)
+
+
+# Generate 10 samples from Beta(shape1=0.1,shape2=0.1)
+
 
 
 ############
@@ -54,7 +67,6 @@ plot(xvals,expected_vals)   # plot out the relationship
     # Arguments:
       # x: vector of expected responses
       # variance: variance of the "noise" component of your data simulation model
-
 stochastic_component <- function(x,variance){     
   sd <- sqrt(variance)       # convert variance to standard deviation       
   stochvals <- rnorm(length(x),x,sd)       # add a layer of "noise" on top of the expected response values
@@ -74,6 +86,7 @@ sim_vals <- stochastic_component(deterministic_component(xvals,175,-1.5),500)   
 ############
 # Goodness-of-fit test!
 
+    # Does the data fall into the range of plausble data produced by this fully specified model?
 
 ############
 # Imagine you have the following "real" data (e.g., tree volumes). 
@@ -83,7 +96,7 @@ plot(realdata$Girth,realdata$Volume)
 
 
 #############
-# Let's simulate many datasets from our hypothesized data generating model:
+# Let's simulate many datasets from our hypothesized data generating model (intercept=10,slope=4,variance=1000):
 
 reps <- 1000    # specify number of replicate datasets to generate
 samplesize <- nrow(realdata)    # define the number of data points we should generate for each simulation "experiment"
@@ -95,12 +108,13 @@ for(i in 1:reps){       # for each independent simulation "experiment":
 }
 
     # now make a boxplot of the results
-boxplot(lapply(1:nrow(simresults), function(i) simresults[i,]),xaxt="n")    # (repeat) make a boxplot of the simulation results
+boxplot(t(simresults),xaxt="n")    # (repeat) make a boxplot of the simulation results
 axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add x axis labels 
 
 
 #########
 # Now overlay the "real" data
+    # how well does the model fit the data?
 
 boxplot(lapply(1:nrow(simresults), function(i) simresults[i,]),xaxt="n")    # (repeat) make a boxplot of the simulation results
 axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add x axis labels 
@@ -139,9 +153,9 @@ abline(v=3.5,col="green",lwd=3)
       # days: survey duration, in days
 
 NumObserved <- function(TrueN=1000,surveyors=1,days=3){
-  probPerPersonDay <- 0.02      # define the probability of detection per person-days
-  probPerDay <- 1-(1-probPerPersonDay)^surveyors      # define the probability of detection per day (multiple surveyors)
-  probPerSurvey <- 1-(1-probPerDay)^days       # define the probability of detection for the entire survey
+  probPerPersonDay <- 0.02      # define the probability of detection per animal per person-day [hard-coded- potentially bad coding practice!]
+  probPerDay <- 1-(1-probPerPersonDay)^surveyors      # define the probability of detection per animal per day (multiple surveyors)(animal must be detected at least once)
+  probPerSurvey <- 1-(1-probPerDay)^days       # define the probability of detection per animal for the entire survey
   nobs <- rbinom(1,size=TrueN,prob=probPerSurvey)     # simulate the number of animals detected!
   return(nobs)
 }
@@ -149,7 +163,7 @@ NumObserved(TrueN=500,surveyors=2,days=7)   # test the new function
 
 
 #########
-# function for computing abundance dynamics of a declining population
+# function for computing expected abundance dynamics of a declining population (deterministic component!)
 
     # Arguments:
       # LastYearAbund: true population abundance in the previous year
@@ -161,6 +175,8 @@ ThisYearAbund <- function(LastYearAbund=1000,trend=-0.03){
   return(CurAbund)
 }
 ThisYearAbund(LastYearAbund=500,trend=-0.03)    # test the new function
+
+# NOTE: we could introduce stochastic population dynamics (or density dependence, etc!) for a more realistic model, but we are omitting this here. 
 
 
 ########
@@ -215,7 +231,7 @@ IsDecline(monitoringData=c(10,20,NA,15,1),alpha=0.05)    # test the function
 nreps <- 10000      # set number of replicate monitoring "experiments"
 initabund <- 1000    # set initial population abundance.
 
-GetPower <- function(observers=1,days=3,alpha=0.05,years=25,survint=2){
+GetPower <- function(nreps=nreps,initabund=initabund,trend=-0.03,years=25,observers=1,days=3,survint=2,alpha=0.05){
      # fill this in!
   return(Power)
 }
