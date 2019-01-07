@@ -43,30 +43,40 @@ What does it even mean to say that the model is good?
 
 Usually, we mean one or more of the following:
 
-1. **Goodness-of-fit**: The data could easily/reasonably have been generated under the best-fit model.
-2. **Predictive ability**: The model performs well at predicting observed responses that were not used to train the model. 
-3. **Generality**: The model performs well at extrapolating responses for data that are qualitatively different from those in the training set.
+1. **Goodness-of-fit**: The data could easily/reasonably have been generated under the best-fit model (the model is plausible)
+2. **Predictive performance**: The model performs well at predicting observed responses (the model is useful) 
+3. **Generality**: The model performs well at extrapolating responses for data that are qualitatively different from those in the training set (the model is really useful!)
 
 ## Goodness-of-fit
-We have already looked at a variety of methods for evaluating goodness-of-fit. In general, you can use data simulation (virtual ecology) to evaluate whether your fitted model is capable of generating the observed data. 
+We have already looked at a variety of methods for evaluating goodness-of-fit. In general, you can use data simulation (virtual ecology) to evaluate whether your fitted model is capable of generating the observed data. In a frequentist/ML context this is often called a **parametric bootstrap**     
+
+**Q**: What is the difference between a non-parametric bootstrap (usually just called a 'bootstrap') and a parametric bootstrap?
 
 For example, we can overlay the observed data on a cloud of points representing the range of data sets possibly produced under the fitted model. 
 Or, we can use a "plug-in" prediction bounds as a substitute for the cloud of data sets possibly produced under the model.
 
+Often, we compare a target summary statistic (e.g., Deviance, RMSE) for the observed data with the range of that target summary statistic produced under the inferred, stochastic data generating model.   
+
 Let's return to the Myxomatosis dataset!
 
 ```{r}
+
 library(emdbook)
 
 MyxDat <- MyxoTiter_sum
 Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
 head(Myx)
+
 ```
 
 
 Now let's use ML to fit the Ricker model with a gamma error distribution.
 
 ```{r}
+
+#######
+# Fit the model with ML
+#######
 
 Ricker <- function(a,b,predvar) a*predvar*exp(-b*predvar)
   
@@ -86,11 +96,16 @@ MaxLik
 
 How might we evaluate goodness-of-fit in this case??
 
-### Plug-in prediction bounds
+### 'Plug-in' prediction bounds
 
 The simplest way is just to plot the expected value along with "plug-in" bounds around that prediction, to represent the range of data likely to be produced under the model. We have done this before!
 
 ```{r}
+
+########
+# Plug-in prediction interval
+########
+
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15))
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
 points(1:10,expected,type="l",col="green")
@@ -100,15 +115,21 @@ lower <- qgamma(0.025,shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape
 
 points(1:10,upper,type="l",col="red",lty=2)
 points(1:10,lower,type="l",col="red",lty=2)
+
 ```
 
 This gives us a simple and useful way to visualize goodness-of-fit.
 
 ### Simulated datasets!
 
-Alternatively, we could generate simulated data sets under the best-fit model:
+Alternatively, we could generate simulated data sets under the best-fit model (parametric bootstrap!):
 
 ```{r}
+
+#########
+# Parametric bootstrap!
+#########
+
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15),type="n")
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
 points(1:10,expected,type="l",col="green")
@@ -128,11 +149,16 @@ points(uniquedays,lower,type="l",col="red",lty=2)
 
 boxplot(x=as.list(as.data.frame(simdata)),at=uniquedays,add=T,boxwex=0.25,xaxt="n",range=0,col="red")
 points(Myx$day,Myx$titer,cex=1.5,pch=20)
+
 ```
 
 Using simulated data, we can go further- we can compare the simulated data vs the observed data more quantitatively. For example, we can compute the root mean squared error (RMSE) for the simulated datasets and compare that with the root mean squared error for the observed data. 
 
 ```{r}
+
+########
+# Compare observed error statistic with expected range of error statistic as part of parametric bootstrap analysis
+
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],Myx$day)
 simdata <- array(0,dim=c(1000,length(Myx$day)))
 for(i in 1:1000){
@@ -149,26 +175,29 @@ abline(v=rmse_observed,col="green",lwd=3)
 
 So, is this a good model?
 
-
-Of course, the goodness-of-fit tests you can run with simulated data are limited only by your imagination! Be dangerous!
-
+Of course, the goodness-of-fit tests you can run with simulated data are limited only by your imagination! **Be dangerous!**
 
 NOTE: the above methods *do not account for parameter uncertainty*. This model is the maximum likelihood model- that is, the point estimates are assumed to represent the true model!!
 
-If we wanted to account for parameter uncertainty in the ML framework, we could (for example) use profile likelihood CIs to estimate parameter bounds and we could plug-in bounds that incorporate parameter uncertainty.
+If we wanted to account for parameter uncertainty in the ML framework, we could (for example) use profile-likelihood CIs to estimate parameter bounds and we could plug-in bounds that incorporate parameter uncertainty. Or we could treat the CIs for the parameter estimates as a probability distribution (e.g., uniform) and simulate datasets across this range of parameter uncertainty. 
 
 
 ### Bayesian!
 
-Accounting for parameter uncertainty is simple in a Bayesian framework... 
+Accounting for parameter uncertainty in simulations is simple in a Bayesian framework... (we did this as part of lab 4!)
 
-In general, a posterior predictive check involves generating new data under the fitted model and comparing with the observed data. 
+In general, a **posterior predictive check** involves generating new data under the fitted model and comparing with the observed data. 
 
 First we need to fit the model in JAGS.
 
 Note that we can write the predictions directly into the JAGS code
 
 ```{r}
+
+
+#########
+# Bayesian goodness-of-fit
+#########
 
 library(R2jags)
 library(lattice)
@@ -182,8 +211,7 @@ model {
   for(obs in 1:n.observations){
     expected[obs] <- a*day[obs]*exp(-b*day[obs])  # Ricker
     titer[obs] ~ dgamma(shape,shape/expected[obs])
-    titer.sim[obs] ~ dgamma(shape,shape/expected[obs])    # simulate new data (accounting for parameter uncertainty!)
-    
+    titer.sim[obs] ~ dgamma(shape,shape/expected[obs])    # simulate new data (accounting for parameter uncertainty!
   }
   
   #############
@@ -221,6 +249,7 @@ model {
 Let's run the model!
 
 ```{r}
+
 myx.data.for.bugs <- list(
   titer = Myx$titer,
   day = Myx$day,
@@ -268,6 +297,7 @@ plot(posterior$RMSE_sim~posterior$RMSE_obs, main="posterior predictive check")
 abline(0,1,col="red",lwd=2)
 p.value=length(which(as.vector(jags.fit.mcmc[,"RMSE_sim"][[1]])>as.vector(jags.fit.mcmc[,"RMSE_obs"][[1]])))/length(as.vector(jags.fit.mcmc[,"RMSE_sim"][[1]]))
 p.value
+
 ```
 
 
@@ -276,7 +306,7 @@ Okay, the fit seems more or less reasonable!
 
 ## Predictive ability
 
-In many cases, goodness-of-fit is not ultimately what we are most interested in. What we really want to know is whether the model does a good job at predicting the response variable. 
+In many cases, goodness-of-fit is not ultimately what we are most interested in. What we really want to know is whether the model does a good job at predicting the response variable. Is our model useful in some way? 
 
 One way to do this would be for us to focus on an R-squared or pseudo-R2 statistic:
 
@@ -288,11 +318,17 @@ Let's compute these metrics for the fitted data:
 
 ```{r}
 
+##########
+# Summary statistics of a models "usefulness" (e.g., R-squared)
+
 SS_res <- sum((Myx$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],Myx$day))^2)
 SS_tot <- sum((Myx$titer-mean(Myx$titer))^2)
 Rsquared <- 1-SS_res/SS_tot
 
 cat("R-squared = ", Rsquared, "\n")
+
+#########
+# Fit the null likelihood model!
 
 NegLogLik_null <- function(params){
   -sum(dgamma(Myx$titer,shape=params[2],scale=params[1]/params[2],log = T))
@@ -304,41 +340,60 @@ MaxLik_null <- optim(par=init.params, fn=NegLogLik_null)
 
 McFadden <- 1-(MaxLik$value/MaxLik_null$value)
 cat("McFadden's R-squared = ", McFadden) 
+
 ```
 
-Another way to evaluate model skill, or performance, is to use root mean squared error:
+Another way to evaluate model skill, or performance, is to use **root mean squared error (RMSE)**:
 
 $RMSE = sqrt(mean(residuals^2))$
 
-RMSE gives a good indicator of the mean error rate, which is often useful and interpretable in an absolute way. For example, the modeled temperature is usually within 1.3 degrees C of the true temperature... 
+RMSE gives a good indicator of the mean error rate, which is often useful and interpretable in an absolute way. For example, "the modeled temperature is usually within 1.3 degrees C of the true temperature"... 
 
 ```{r}
+
 RMSE = sqrt(mean((Myx$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],Myx$day))^2))
 cat("RMSE = ", RMSE, "\n")
+
 ```
 
+So the average error in units of titer (in log10 rabbit infectious doses) (whatever that means!)       
 
 So is our model *good*???  
 
-Does it really do a good job at prediction? Is the model over-fitted?
+Does it really do a good job at prediction? 
+
+**Q**: Does an over-fitted model have acceptable goodness-of-fit?     
+
+**Q**: Does an over-fitted model have acceptable performance, evaluated as R-squared or RMSE?
+
+**Q**: Will an over-fitted model perform well when predicting to new samples (that were not used in model fitting)?    
 
 ### Validation 
 
 Let's imagine we collect some new Myxomatosis titer data, and it looks like this:
 
 ```{r}
+
+####
+# Collect new data that were not used in model fitting
+
 newdata <- data.frame(
   grade = 1,
   day = c(2,3,4,5,6,7,8),
   titer = c(4.4,7.2,6.8,5.9,9.1,8.3,8.8)
 )
 newdata
+
 ```
 
 
 First we might simply visualize the new data against the cloud of data possibly produced under the fitted model...
 
 ```{r}
+
+###########
+# Validation #1
+
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15),type="n",xlab="days",ylab="titer")
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
 points(1:10,expected,type="l",col="green")
@@ -359,6 +414,7 @@ boxplot(x=as.list(as.data.frame(simdata)),at=1:10,add=T,boxwex=0.25,xaxt="n",ran
 points(newdata$day,newdata$titer,cex=1.5,pch=20,col="red")
 points(Myx$day,Myx$titer,cex=1.5,pch=20,col="black")
 legend("topleft",pch=c(20,20),col=c("black","red"),legend=c("original data","validation data"))
+
 ```
 
 
@@ -390,18 +446,24 @@ Imagine we collect some more new data, this time in which titers are measured fr
 
 
 ```{r}
-newdata <- data.frame(
+
+#########
+# Validation #2
+
+newdata <- data.frame(        # imagine these are new observations...
   grade = 1,
   day = c(10,11,12,13,14,15,16),
   titer = c(6.8,8.0,4.5,3.1,2.7,1.2,0.04)
 )
 newdata
+
 ```
 
 
 As before, let's first simply visualize the new data against the cloud of data possibly produced under the fitted model...
 
 ```{r}
+
 plot(Myx$titer~Myx$day,xlim=c(0,20),ylim=c(0,15),type="n",xlab="days",ylab="titer")
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:20)
 points(1:20,expected,type="l",col="green")
@@ -422,6 +484,7 @@ boxplot(x=as.list(as.data.frame(simdata)),at=1:20,add=T,boxwex=0.25,xaxt="n",ran
 points(newdata$day,newdata$titer,cex=1.5,pch=20,col="red")
 points(Myx$day,Myx$titer,cex=1.5,pch=20,col="black")
 legend("topleft",pch=c(20,20),col=c("black","red"),legend=c("original data","new data"))
+
 ```
 
 Now let's evaluate the skill of our model at predicting the withheld data... using our favorite measures of skill, or performance. 
@@ -447,6 +510,7 @@ Interestingly, this example shows a couple things:
 1) The model was very poor at extrapolating.   
 2) The R-squared isn't always the best measure of model performance.   
 3) The McFadden pseudo-Rsquared can go below 0!   
+4) It's really important to evaluate goodness-of-fit in addition to model performance!
 
 
 ### Cross-validation
@@ -466,6 +530,11 @@ The most common forms of cross-validation are: (1) leave-one-out (jackknife) and
 Let's go through an example using the Myxomatosis data!
 
 ```{r}
+
+#####################
+# CROSS-VALIDATION
+#####################
+
 
 ##### 
 # PARTITION THE DATA
@@ -495,6 +564,7 @@ Myx
 To assess how well the model is performing, let's compute the root mean squared error for the full model vs the cross-validation:
 
 ```{r}
+
 RMSE_full <- sqrt(mean((Myx$titer-Myx$pred_full)^2))
 RMSE_CV <- sqrt(mean((Myx$titer-Myx$pred_CV)^2))
 RMSE_full
@@ -513,6 +583,7 @@ VarExplained_full = 1 - mean((Myx$titer-Myx$pred_full)^2)/mean((Myx$titer-mean(M
 VarExplained_CV = 1 - mean((Myx$titer-Myx$pred_CV)^2)/mean((Myx$titer-mean(Myx$titer))^2)
 VarExplained_full
 VarExplained_CV
+
 ```
 
 Clearly the model performance is lower for the cross-validation, and usually will be! But this is also a more honest evaluation of model performance. 
@@ -526,8 +597,13 @@ Let's evaluate which factors were related to surviving the titanic disaster!
 
 
 ```{r}
+
+##########
+# Cross-validation: titanic disaster example!
+
 titanic <- read.csv("titanic.csv",header=T)
 head(titanic)
+
 ```
 
 Our goal is to model the probability of surviving the titanic disaster as a function of covariates like sex, age, number of siblings or spouses onboard, number of parents or children, passenger fare, etc.
@@ -535,14 +611,17 @@ Our goal is to model the probability of surviving the titanic disaster as a func
 Let's first build a simple logistic regression model for this problem. 
 
 ```{r}
-model1 <- glm(Survived ~ Sex + Age + SibSp + Parch + Fare, data=titanic, family="binomial")
+
+model1 <- glm(Survived ~ Sex + Age + SibSp + Parch + Fare, data=titanic, family="binomial")    #logistic regression
 summary(model1)
+
 ```
 
 
 Alternatively, we could write our own likelihood function!!
 
 ```{r}
+
 params <- c(
   int=1,
   male = -3,
@@ -688,11 +767,14 @@ For binary responses, the ROC curve (and area under the curve statistic) is a go
 First let's prepare the workspace- load the packages!
 
 ```{r}
+
 library(ROCR)
 library(rms)
+
 ```
 
 ```{r echo=FALSE}
+
 model1 <- glm(Survived ~ Sex + SibSp + Parch + Fare, data=titanic, family="binomial")
 
 ```
@@ -702,7 +784,7 @@ Then, we set the number of "folds" for cross-validation
 ```{r}
 
 ###################################
-#################### CROSS VALIDATION CODE
+#################### CROSS VALIDATION CODE FOR BINARY RESPONSE
 
 n.folds = 10       # set the number of "folds"
 foldVector = rep(c(1:n.folds),times=floor(length(titanic$Survived)/9))[1:length(titanic$Survived)]
@@ -750,7 +832,9 @@ ROC is a useful *threshold-independent* metric for evaluating the performance of
 What does it mean to be threshold independent? It helps to look at the data we have for evaluating model performance
 
 ```{r}
+
 head(CV_df)
+
 ```
 
 To effectively compare our predictions with the observation we have to pick some threshold above which we call the prediction a "1" and below which it is a zero. 
@@ -782,6 +866,7 @@ Now, let's consider the meaning of the area under the ROC curve. This is an impo
 Okay, back to the example! Let's plot out the ROC curves!
 
 ```{r}
+
 par(mfrow=c(2,1))
 pred <- prediction(CV_df$CVprediction,CV_df$realdata)     # for holdout samples in cross-validation
 perf <- performance(pred,"tpr","fpr")
@@ -794,7 +879,6 @@ perf <- performance(pred,"tpr","fpr")
 auc <- performance(pred,"auc")
 plot(perf, main="All data")
 text(.9,.1,paste("AUC = ",round(auc@y.values[[1]],2),sep=""))
-
 
 ```
 

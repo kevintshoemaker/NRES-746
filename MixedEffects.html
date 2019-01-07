@@ -388,6 +388,15 @@ div.tocify {
     <li>
       <a href="MixedEffects.html">Mixed Effects Models</a>
     </li>
+    <li>
+      <a href="Ordination.html">Ordination</a>
+    </li>
+    <li>
+      <a href="QuantileRegression.html">Quantile Regression</a>
+    </li>
+    <li>
+      <a href="RSFs.html">Resource Selection Functions</a>
+    </li>
   </ul>
 </li>
 <li class="dropdown">
@@ -433,7 +442,7 @@ div.tocify {
 <p>Also, <a href="20181120_Mixed%20Effects.pptx">click here</a> for the PPT slides!</p>
 <div id="load-the-data" class="section level4">
 <h4>Load the data!</h4>
-<p>Sloth data provided by Neam KD, Lacher Jr. TE (2018) Multi-scale effects of habitat structure and landscape context on a vertebrate with limited dispersal ability (the brown-throated sloth, Bradypus variegatus ). Biotropica 50(4): 684-693. <a href="https://doi.org/10.1111/btp.12540" class="uri">https://doi.org/10.1111/btp.12540</a></p>
+<p>Sloth data provided by Neam KD, Lacher Jr. TE (2018) Multi-scale effects of habitat structure and landscape context on a vertebrate with limited dispersal ability (the brown-throated sloth, <em>Bradypus variegatus</em>). Biotropica 50(4): 684-693. <a href="https://doi.org/10.1111/btp.12540" class="uri">https://doi.org/10.1111/btp.12540</a></p>
 <p>Dryad data package: Neam KD, Lacher Jr. TE (2018) Data from: Multi-scale effects of habitat structure and landscape context on a vertebrate with limited dispersal ability (the brown-throated sloth, Bradypus variegatus). Dryad Digital Repository. <a href="https://doi.org/10.5061/dryad.n8tt5" class="uri">https://doi.org/10.5061/dryad.n8tt5</a></p>
 <p>Download Zuur et al. data <a href="http://highstat.com/Books/Book2/ZuurDataMixedModelling.zip">here</a><br />
 Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_point5only_withPatchGroup.csv?dl=0">here</a>.</p>
@@ -453,16 +462,34 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 </div>
 <div id="install-packages" class="section level3">
 <h3>Install packages</h3>
-<pre><code>## Warning: package &#39;lme4&#39; was built under R version 3.5.1</code></pre>
+<pre class="r"><code>
+library(Matrix)
+library(lme4)
+## Warning: package &#39;lme4&#39; was built under R version 3.5.1
+library(MASS)
+library(arm)
+library(sjstats)
+library(ResourceSelection)</code></pre>
 </div>
 </div>
 <div id="zuur-et-al.-data" class="section level2">
 <h2>Zuur et al. Data</h2>
 <p>First, let’s start with some nice neat data to show you what mixed effect models can do for you.</p>
+<pre class="r"><code># load in
+df.rikz &lt;- read.table(&quot;RIKZ.txt&quot;,header=T)
+
+# test for correlation
+abs(cor(df.rikz[,c(2,5)]))</code></pre>
 <pre><code>##           Richness     Beach
 ## Richness 1.0000000 0.4435666
 ## Beach    0.4435666 1.0000000</code></pre>
+<pre class="r"><code># define the model
+lme.rikz &lt;- lmer(Richness ~ NAP + (1 | Beach), data = df.rikz)
+
+# residual vs fitted plot
+plot(lme.rikz, xlab = &quot;Fitted&quot;, ylab = &quot;Residual&quot;)</code></pre>
 <p><img src="MixedEffects_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<pre class="r"><code>summary(lme.rikz)</code></pre>
 <pre><code>## Linear mixed model fit by REML [&#39;lmerMod&#39;]
 ## Formula: Richness ~ NAP + (1 | Beach)
 ##    Data: df.rikz
@@ -491,6 +518,10 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 <div id="sloth-data" class="section level2">
 <h2>Sloth Data</h2>
 <p>Now… let’s get into a real ecological dataset.</p>
+<pre class="r"><code>rm(list=ls())
+
+df.sloth &lt;- read.csv(&quot;sloth_point5only_withPatchGroup.csv&quot;, header = TRUE, sep = &quot;,&quot;)
+str(df.sloth) # 25 variables with 25 observations</code></pre>
 <pre><code>## &#39;data.frame&#39;:    25 obs. of  25 variables:
 ##  $ SITE_ID   : Factor w/ 25 levels &quot;CH01_A&quot;,&quot;CH01_P&quot;,..: 2 3 5 7 10 12 13 14 15 16 ...
 ##  $ LONGITUDE : num  10.4 10.4 10.4 10.4 10.4 ...
@@ -518,9 +549,28 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 ##  $ SIDI      : num  0.7009 0.6432 0 0.0152 0.6459 ...
 ##  $ SIEI      : num  0.8761 0.8576 0 0.0304 0.9688 ...</code></pre>
 <p>Before we can use this data, we need to subset the data to include numeric variables only. This subsetted data will be used to run a for loop with a Shapiro-Wilk test to test for normality.</p>
+<pre class="r"><code># drop metadata, response, random effect, categorical data
+df.sloth2 &lt;- subset.data.frame(df.sloth, select = -c(SITE_ID, LONGITUDE, LATITUDE, LAND_USE, patch_grou, OCCURRENCE))
+df.sloth2$PR &lt;- as.numeric(df.sloth2$PR)
+str(df.sloth2)</code></pre>
 <div id="testing-data-for-normality" class="section level3">
 <h3>Testing Data for Normality</h3>
 <p>Shapiro-Wilk test to test for normality. Variables that don’t pass will need to be transformed before we can use them.</p>
+<pre class="r"><code>IsItNormal &lt;- function(df, save = F) { ### should be able to accept any dataframe of arbitrary size &amp; names, if all columns contain data that Shapiro-Wilk test likes
+  slothtest &lt;- list()
+  for(i in seq(dim(df)[2])) { 
+    slothtest &lt;- append(slothtest, shapiro.test(df[[i]]))
+  }
+  mx.slothtest &lt;- matrix(slothtest, byrow = T, ncol = 4)
+  df.slothtest &lt;- data.frame(var = as.character(colnames(df)),
+                             W = as.numeric(mx.slothtest[,1]),
+                             p = as.numeric(mx.slothtest[,2]),
+                             row.names = NULL)
+  if(save == T) {write.table(df.slothtest, file = paste0(&quot;IsItNormal&quot;, round(as.numeric(Sys.time())), &quot;.csv&quot;), row.names = F, sep = &quot;,&quot;)}
+  return(df.slothtest)
+}
+
+IsItNormal(df.sloth2)</code></pre>
 <pre><code>##           var         W            p
 ## 1  PATCH_AREA 0.9165077 4.268389e-02
 ## 2  PATCH_GYRA 0.9502612 2.541452e-01
@@ -542,9 +592,51 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 ## 18       SIDI 0.8472424 1.561934e-03
 ## 19       SIEI 0.7671132 6.745032e-05</code></pre>
 <p>We will also transform the data three ways and run the normality test. This method allows us to see if non-normal data prior to transformtion can be normalized through transforming it.</p>
+<pre class="r"><code>df.sloth.log &lt;- as.data.frame(apply(df.sloth2, 2, log))
+df.sloth.sqrt &lt;- as.data.frame(apply(df.sloth2, 2, sqrt))
+df.sloth.squared &lt;- as.data.frame(apply(df.sloth2, 2, function(x) x^2))
+
+df.slothtest.transformed &lt;- cbind(IsItNormal(df.sloth2),
+                                  IsItNormal(df.sloth.log)[,2:3],
+                                  IsItNormal(df.sloth.sqrt)[,2:3],
+                                  IsItNormal(df.sloth.squared)[,2:3])
+
+colnames(df.slothtest.transformed)[4:5] &lt;- paste0(&quot;log.&quot;, c(&quot;W&quot;, &quot;p&quot;))
+colnames(df.slothtest.transformed)[6:7] &lt;- paste0(&quot;sqrt.&quot;, c(&quot;W&quot;, &quot;p&quot;))
+colnames(df.slothtest.transformed)[8:9] &lt;- paste0(&quot;squared.&quot;, c(&quot;W&quot;, &quot;p&quot;))
+
+# Table defining the normality at different transformations saved to your drive
+
+write.table(df.slothtest.transformed, file = paste0(&quot;AreTransformedSlothsNormal_&quot;, round(as.numeric(Sys.time())), &quot;.csv&quot;), row.names = F, sep = &quot;,&quot;)</code></pre>
 <p>If you open the table we wrote above, you will find that 5 variables are never normal, 5 variables that are normal if log transformed, 7 variables that are normal without transformation, 1 variable that’s normal if square rooted, and 1 variable that is normal if squared.</p>
 <p>Below we have transformed the necessary variables and saved them as their own object to be combined in the subsequent code.</p>
+<pre class="r"><code># data subsetted removing &quot;never normal columns&quot; based on normality tests 
+df.sloth3 &lt;- subset.data.frame(df.sloth2, select = -c(CONTAG, DIST_SEC_F, PATCH_SHAP, PLAND_SF, SIEI))
+
+# Log transform &quot;PATCH_AREA&quot;, &quot;DIST_ROAD&quot;,&quot;PD&quot;, &quot;LPI&quot;,&quot;AREA_WM&quot;
+df.sloth4 &lt;- subset.data.frame(df.sloth2, select = c(PATCH_AREA, DIST_ROAD,PD, LPI,AREA_WM))
+df.sloth4.log &lt;- log(df.sloth4)
+colnames(df.sloth4.log) &lt;- paste0(&quot;log&quot;, colnames(df.sloth4.log))
+
+# data subset with only normal non-transformed variables
+df.sloth.normal &lt;- subset.data.frame(df.sloth3, select = c(DIST_RIP_F,ECON_AM,EDGE,GYRATE_WM,PATCH_GYRA,PR,SHAPE_WM))
+
+# sqrt CWED
+df.sloth3.sqrt &lt;- sqrt(df.sloth3[&quot;CWED&quot;])
+colnames(df.sloth3.sqrt) &lt;- paste0(&quot;sqrt&quot;, colnames(df.sloth3.sqrt))
+
+# squared SIDI
+sq &lt;- function(x){
+  x^2
+}
+
+df.sloth3sq &lt;- sq(df.sloth3[&quot;SIDI&quot;])
+colnames(df.sloth3sq) &lt;- paste0(&quot;square&quot;, colnames(df.sloth3sq))</code></pre>
 <p>Combine all the transformed and normal data into one along with the categorical variables and metadata we removed originally in the beginning. The “allsloth” data will be the dataset we work from.</p>
+<pre class="r"><code># Working Dataset
+allsloth &lt;- cbind(df.sloth[,1:6], df.sloth4.log, df.sloth3.sqrt, df.sloth.normal)
+
+str(allsloth)</code></pre>
 <pre><code>## &#39;data.frame&#39;:    25 obs. of  19 variables:
 ##  $ SITE_ID      : Factor w/ 25 levels &quot;CH01_A&quot;,&quot;CH01_P&quot;,..: 2 3 5 7 10 12 13 14 15 16 ...
 ##  $ LONGITUDE    : num  10.4 10.4 10.4 10.4 10.4 ...
@@ -569,11 +661,31 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 <div id="lets-visualize-our-data" class="section level3">
 <h3>Let’s visualize our data</h3>
 <p>Boxplots for all variables in relation to Sloth Presence/Absence</p>
-<p><img src="MixedEffects_files/figure-html/unnamed-chunk-11-1.png" width="672" /><img src="MixedEffects_files/figure-html/unnamed-chunk-11-2.png" width="672" /></p>
+<pre class="r"><code>par(mfrow=c(3,3))
+boxplot(logPATCH_AREA ~ OCCURRENCE, data = allsloth, xlab=&#39;Absence/Presence&#39;, ylab = &#39;Patch Area&#39;)
+boxplot(logDIST_ROAD ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Distance to road&quot;) 
+boxplot(logPD ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Patch Density&quot;) #per 100 ha
+boxplot(logLPI ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Prop of landscape in patch&quot;) #Proportion of landscape in largest patch (%)
+boxplot(logAREA_WM ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Mean Area&quot;) #Mean area of all patches, weighted by area
+boxplot(sqrtCWED ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Density of edge (contrast)&quot;) #Density of edge weighted by edge contrast; approaches 0 when contrast is low (m/ha)
+boxplot(DIST_RIP_F ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Dist to nearest riparian&quot;) #Distance to nearest patch of riparian forest
+boxplot(ECON_AM ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;relative prop of edge contrast&quot;)
+boxplot(EDGE ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Length of edge&quot;) #Total length of edge in landscape (m)</code></pre>
+<p><img src="MixedEffects_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<pre class="r"><code>par(mfrow=c(3,3))
+boxplot(GYRATE_WM ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Mean extent all patches&quot;) # Mean extent of all patches, weighted by area
+boxplot(PATCH_GYRA ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Exent of patch&quot;) #Extent of patch (m)
+boxplot(PR ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;# of patch types&quot;) #Number of different patch types
+boxplot(SHAPE_WM ~ OCCURRENCE, data = allsloth, xlab= &quot;Absence/Presence&quot;, ylab = &quot;Mean shape complexity&quot;) #Mean shape complexity of all patches, weighted by area</code></pre>
+<p><img src="MixedEffects_files/figure-html/unnamed-chunk-11-2.png" width="672" /></p>
 </div>
 <div id="using-glm-general-linear-model" class="section level3">
 <h3>Using GLM (General Linear Model)</h3>
 <p>We want to know if any of these variables have an effect on presence/absence of sloths. Let’s start with a general linear model to explore how sloth presence is a function of all our numeric variables.</p>
+<pre class="r"><code># GLM
+glm.sloth &lt;- glm(OCCURRENCE ~ logPATCH_AREA + LAND_USE + logDIST_ROAD + logPD + logLPI + logAREA_WM + sqrtCWED + DIST_RIP_F + ECON_AM + EDGE + GYRATE_WM + PATCH_GYRA + PR + SHAPE_WM, data=allsloth, family=binomial)
+
+summary(glm.sloth)</code></pre>
 <pre><code>## 
 ## Call:
 ## glm(formula = OCCURRENCE ~ logPATCH_AREA + LAND_USE + logDIST_ROAD + 
@@ -610,19 +722,34 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 ## AIC: 50.578
 ## 
 ## Number of Fisher Scoring iterations: 8</code></pre>
+<pre class="r"><code>par(mfrow=c(2,2))
+plot(glm.sloth)</code></pre>
 <p><img src="MixedEffects_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
 </div>
 <div id="hosmer-lemeshow-goodness-of-fit-test" class="section level3">
 <h3>Hosmer-Lemeshow Goodness of Fit Test</h3>
 <p>This test will allow us to evaluate our glm and defines how well our model fits depending on the difference between the model and the observed data.</p>
 <p>This is one approach for binary data. Based on our p-value, this model appears to be “ok” and shows that some of our covariates could potentially be significant. But, we haven’t accounted for random effects to explain any variance in the response, and the way we can do this with our binary sloth data is to implement a mixed effects model.</p>
+<pre class="r"><code># Test Fit of Selected GLM
+hoslem.test(allsloth$OCCURRENCE, fitted(glm.sloth))</code></pre>
 <pre><code>## 
 ##  Hosmer and Lemeshow goodness of fit (GOF) test
 ## 
 ## data:  allsloth$OCCURRENCE, fitted(glm.sloth)
 ## X-squared = 14.472, df = 8, p-value = 0.07025</code></pre>
 <p>To fit a model for the presence or absence of sloths, we will use glmer with family=binomial from the “lmer” package. Using a lmer function would not allow us to define family as “binomial”– which is what we are looking at with sloth presence/absence. But first, we need to scale the data and identify any collinearity among the variables.</p>
+<pre class="r"><code># Sloth Data is scaled to make sure models run
+
+allslothnotscaled &lt;- allsloth
+str(allsloth)
+
+sc &lt;- scale(allsloth[7:19])
+allsloth &lt;- cbind(allsloth[1:6], sc)</code></pre>
 <p>Identifying collinearity for our numeric variables only</p>
+<pre class="r"><code>headers &lt;- colnames(allsloth)[7:19]
+cor.m &lt;- abs(cor(allsloth[,headers]))
+cor.m.above75 &lt;- cor.m &gt; 0.75
+cor.m.above75</code></pre>
 <pre><code>##               logPATCH_AREA logDIST_ROAD logPD logLPI logAREA_WM sqrtCWED
 ## logPATCH_AREA          TRUE        FALSE  TRUE   TRUE       TRUE     TRUE
 ## logDIST_ROAD          FALSE         TRUE FALSE  FALSE      FALSE    FALSE
@@ -658,16 +785,53 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 <blockquote>
 <p>Singularity is often a problem with mixed effect models with highly correlated data or not enough data.</p>
 </blockquote>
+<pre class="r"><code># bootstrap an additional 100 samples
+
+set.seed(537)
+vec.boots &lt;- sample(1:25, 100, replace = T)
+allsloth &lt;- allsloth[vec.boots,]</code></pre>
 <p>Now we run a loop for all of the following iterations</p>
+<pre class="r"><code># create formulae to define models
+
+ls.formulae.aov &lt;- paste(&quot;OCCURRENCE ~&quot;, c( # prefix for all model formulae
+                        &quot;logDIST_ROAD * DIST_RIP_F&quot;,
+                        &quot;logDIST_ROAD + DIST_RIP_F&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F + logAREA_WM&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F * logAREA_WM&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F + EDGE&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F * GYRATE_WM&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F + GYRATE_WM&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F * PATCH_GYRA&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F + PATCH_GYRA&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F * PR&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F + PR&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F * SHAPE_WM&quot;,
+                        &quot;logDIST_ROAD * DIST_RIP_F + SHAPE_WM&quot;
+                      ))
+
+ls.formulae &lt;- paste(ls.formulae.aov, &quot;+ (1 | LAND_USE)&quot;)</code></pre>
 <p>We create a function to run all of our interested formulas. Warning for running this formula– if data comes back with errors, it will crash the loop and need to address those formulas or write them out.</p>
 <blockquote>
 <p>Keep in mind, this is considered “data mining.” Investigating this many models at once will usually return variables that are “significant.” This is bad practice in science.</p>
 </blockquote>
+<pre class="r"><code># make the glmer
+
+ls.glmer &lt;- lapply(ls.formulae, function(x) {print(x); glmer(x, data = allsloth, family = binomial)})</code></pre>
 </div>
 <div id="aic-model-comparison" class="section level3">
 <h3>AIC Model Comparison</h3>
 <p>Extract AIC values to identify best fit models from our iteration.</p>
+<pre class="r"><code># extract AIC
+ls.aic &lt;- sapply(ls.glmer, function(x) summary(x)$AICtab[1])</code></pre>
 <p>Convert the list to a dataframe for ease of use and identification of model.</p>
+<pre class="r"><code># convert to df, pull out the good models
+
+df.modeleval &lt;- data.frame(model = ls.formulae.aov, aic = ls.aic, index = 1:length(ls.formulae.aov), random = &quot;PatchGroup&quot;)
+df.modeleval$model &lt;- as.character(df.modeleval$model)
+
+df.modeleval$daic &lt;- df.modeleval$aic - min(df.modeleval$aic)
+df.modeleval &lt;- df.modeleval[order(df.modeleval$daic),]
+head(df.modeleval)</code></pre>
 <pre><code>##                                                  model       aic index
 ## 10         OCCURRENCE ~ logDIST_ROAD * DIST_RIP_F * PR  48.29438    10
 ## 6   OCCURRENCE ~ logDIST_ROAD * DIST_RIP_F * GYRATE_WM  80.25776     6
@@ -683,6 +847,10 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 ## 8  PatchGroup 40.56032
 ## 11 PatchGroup 55.51833</code></pre>
 <p>So what does the best model look like?</p>
+<pre class="r"><code>topmodel &lt;- ls.glmer[[10]]
+nexttopmodel &lt;- ls.glmer[[6]]
+
+summary(topmodel)</code></pre>
 <pre><code>## Generalized linear mixed model fit by maximum likelihood (Laplace
 ##   Approximation) [glmerMod]
 ##  Family: binomial  ( logit )
@@ -733,6 +901,7 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 ## lDIST_ROAD:DIST_RIP_F:  0.081                  0.037       -0.013     
 ## convergence code: 0
 ## Model failed to converge with max|grad| = 0.0610467 (tol = 0.001, component 1)</code></pre>
+<pre class="r"><code>summary(nexttopmodel)</code></pre>
 <pre><code>## Generalized linear mixed model fit by maximum likelihood (Laplace
 ##   Approximation) [glmerMod]
 ##  Family: binomial  ( logit )
@@ -782,7 +951,10 @@ Download sloth data <a href="https://www.dropbox.com/s/ewh3l1rjy8ivi9j/sloth_poi
 ## lDIST_ROAD:G           -0.769                                         
 ## DIST_RIP_F:            -0.920                  0.734                  
 ## lDIST_ROAD:DIST_RIP_F:  0.407                 -0.442       -0.525</code></pre>
-<p><img src="MixedEffects_files/figure-html/unnamed-chunk-21-1.png" width="672" /><img src="MixedEffects_files/figure-html/unnamed-chunk-21-2.png" width="672" /></p>
+<pre class="r"><code>plot(topmodel)</code></pre>
+<p><img src="MixedEffects_files/figure-html/unnamed-chunk-21-1.png" width="672" /></p>
+<pre class="r"><code>plot(nexttopmodel)</code></pre>
+<p><img src="MixedEffects_files/figure-html/unnamed-chunk-21-2.png" width="672" /></p>
 </div>
 </div>
 

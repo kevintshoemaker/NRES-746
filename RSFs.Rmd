@@ -1,0 +1,231 @@
+---
+title: "Resource Selection Functions - NRES 746"
+author: "S. Hromada, A. Parandhaman, A. Xiong"
+date: "11/25/2018"
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,cache = TRUE)
+```
+
+```{r echo=FALSE}
+
+############################################################
+####                                                    ####  
+####  NRES 746, Student-led topic #8                    ####
+####                                                    ####
+############################################################
+
+
+############################################################
+####  RSFs!                                             ####
+############################################################
+
+
+```
+
+For those wishing to follow along with the R-based demo in class, [click here](RSFs.R) for the companion R script for this lecture.
+
+Follow along with our powerpoint presentation [here](https://docs.google.com/presentation/d/1oT8zsYhlCYqr819nL53tgg_2_efumI72ToeSETS3Ci4/edit?usp=sharing)
+
+
+#Logistic Regression
+adapted from https://stats.idre.ucla.edu/r/dae/logit-regression/
+
+```{r}
+
+mydata <- read.csv("https://stats.idre.ucla.edu/stat/data/binary.csv")
+## view the first few rows of the data
+head(mydata)
+
+mydata$rank <- factor(mydata$rank)
+mylogit <- glm(admit ~ gre + gpa + rank, data = mydata, family = "binomial")
+
+summary(mylogit)
+
+```
+For every unit increase of gre/gpa, log odds of admission increase by 0.002/0.8
+"Rank" variables show relative log odds of admission
+
+We can use a Wald test to determine if "rank" is significant, with the chisquared portion
+```{r}
+
+aod::wald.test(b = coef(mylogit), Sigma = vcov(mylogit), Terms = 4:6)
+
+```
+
+Then we can turn them into odds-ratio (more interpretable)
+
+```{r}
+
+exp(cbind(OR = coef(mylogit), confint(mylogit)))
+
+```
+Then we can also perform a goodness of fit test, tests whether is a better fit than null model by deviance of both
+
+```{r}
+
+with(mylogit, null.deviance - deviance) #test statistic 
+with(mylogit, df.null - df.residual) #degrees of freedom
+with(mylogit, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE)) #p-value
+logLik(mylogit)
+
+```
+
+
+## Resource Selection
+
+## Goats
+
+Picture of mtn Goats here
+
+Dataset (provided in ResourceSelection package) collected on Mountain goats in Coast Mtns, BC (Lele & Keim, 2006)
+
+```{r pressure}
+
+library(ResourceSelection)
+data(goats)
+head(goats)
+
+```
+19014 locations of 10 goats
+
+Collected Variables:
+STATUS a numeric vector, 1: used, 0: available 
+ID a numeric vector, individuals
+ELEVATION a numeric vector (m)
+SLOPE a numeric vector (degrees, steep)
+ET a numeric vector, access to escape terrain (distance from steep slopes, m)
+ASPECT a numeric vector (degrees)
+HLI a numeric vector, heat load index (0-1) 
+TASP a numeric vector, transformed aspect
+
+some data processing:
+
+```{r}
+
+goats$exp.HLI <- exp(goats$HLI)
+goats$sin.SLOPE <- sin(pi * goats$SLOPE / 180)
+goats$ELEVATION <- scale(goats$ELEVATION)
+goats$ET <- scale(goats$ET)
+goats$TASP <- scale(goats$TASP)
+head(goats)
+
+```
+
+Now we fit the models. "m" describes the matching of use and available points, "0" will give us an unmatched design while other values will allow us to relate certain points. "B" is the number of bootstrap iterations
+```{r}
+
+m1 <- rspf(STATUS ~ TASP + sin.SLOPE + ELEVATION, goats, m=0, B = 99)
+m2 <- rspf(STATUS ~ TASP + ELEVATION, goats, m=0, B = 99)
+summary(m1)
+summary(m2)
+CAIC(m1, m2)
+
+```
+
+```{r}
+
+#plot(m1)
+ResourceSelection::mep(m1) # marginal effects similar to plot but with CIs
+ResourceSelection::kdepairs(m1) # 2D kernel density estimates
+plot(m2)
+ResourceSelection::kdepairs(m2)
+ResourceSelection::mep(m2)
+
+```
+
+
+Let's create our own, using raw telemetry data. This dataset comes from the "amt" package, and contains locations of one red deer in Germany. 
+
+```{r}
+
+library(lubridate, quietly = T)
+library(amt, quietly = T)
+library(raster, quietly = T)
+data(deer)
+head(deer)
+
+```
+
+Each point (n=826) is just a coordinate and time. Let's plot the raw telemetry data:
+
+```{r}
+
+plot(deer$x_, deer$y_)
+
+```
+
+Now we load in our environmental variable (a raster also provided in the amt package). A value of 1 indicates a forest pixel, while 2 indicates a non forest pixel.
+```{r}
+
+data("sh_forest")
+(sh_forest)
+plot(sh_forest)
+points(deer$x_, deer$y_)
+
+```
+
+To make it more interesting (and allow the rspf function from ResourceSelection to work), lets make a continuous variable
+```{r}
+
+set.seed(3)
+hab <- raster(nrows = sh_forest@nrows, ncol = sh_forest@ncols, ext = sh_forest@extent)
+hab <- setValues(hab, rnorm(ncell(hab), mean=15, sd=3))
+plot(hab)
+points(deer$x_, deer$y_)
+
+```
+
+
+
+Next we will create a random sampling of the area around where the deer was observed,  designating "available" habitat. There are many ways you can go about this (and is an area of considerable debate), but we will simply create random points within the minimum convex hull of the deer locations.
+```{r}
+
+avail <- random_points(deer)
+plot(avail$x_, avail$y_)
+points(deer$x_, deer$y_, col="red", pch=19)
+
+```
+Now let's extract the habitat values for each point in the deer's use and the random use
+
+
+```{r}
+
+deer <- deer %>% extract_covariates(sh_forest) 
+avail <- avail %>% extract_covariates(sh_forest)
+deer <- deer %>% extract_covariates(hab) 
+avail <- avail %>% extract_covariates(hab)
+
+deer$use <- 1
+avail$use <- 0
+deer.c <- plyr::rbind.fill(deer, avail)
+
+deer.c <- deer.c %>% 
+  mutate(forest = factor(sh.forest, levels = 1:2, labels = c("forest", "non-forest"))) 
+
+head(deer.c)
+tail(deer.c)
+
+```
+Now let's fit the model
+```{r}
+
+deer.rsf <- rspf(use ~ forest + layer, data=deer.c, m=0, B=99)
+summary(deer.rsf)
+mep(deer.rsf) # marginal effects similar to plot but with CIs
+kdepairs(deer.rsf) # 2D kernel density estimates
+plot(deer.rsf)
+
+```
+
+
+
+
+
+
