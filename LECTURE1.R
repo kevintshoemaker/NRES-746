@@ -79,7 +79,7 @@ difference
 #################
 
 reps <- 1000                 # set the number of replicates
-null_difs <- numeric(reps)       # initialize a storage structure to hold one anomaly (sampling error) per replicate
+null_difs <- numeric(reps)       # initialize a storage vector
 
 for(i in 1:reps){            # for each replicate... 
   sampleA <- sample(popData_null,size=sample.size)      # draw a sample of body masses assuming no treatment effect       
