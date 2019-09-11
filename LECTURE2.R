@@ -70,6 +70,9 @@ Prob_Shape
 Prob_Color <- apply(allTypes,2,sum)/sum(allTypes)    # marginal probabilities of color
 Prob_Color
 
+allprobs <- (allTypes/sum(allTypes))
+allprobs
+
 
 Prob_Color["red"]      # marginal probability of drawing a red object
 
@@ -85,16 +88,21 @@ as.numeric( Prob_Color["blue"] + Prob_Shape["cube"])        # probability of dra
 
 
 
-allTypes["cube","blue"] / sum(allTypes["cube",])   # probability of drawing a blue object, given it is a cube
+allprobs["cube","blue"] / Prob_Shape["cube"]   # probability of drawing a blue object, given it is a cube
 
 
-as.numeric( allTypes["cube","blue"] / sum(allTypes[,"blue"]) * Prob_Color["blue"])   # probability of drawing a blue cube... using conditional probabilities
+as.numeric( (allprobs["cube","blue"] / Prob_Color["blue"]) * Prob_Color["blue"])   # probability of drawing a blue cube... using conditional probabilities
+
+allprobs["cube","blue"]   # check answer to make sure it's right
 
 
-uncond_prob_blue <- (allTypes["cube","blue"] / sum(allTypes["cube",])) * Prob_Shape["cube"] + 
-              (allTypes["sphere","blue"] / sum(allTypes["sphere",])) * Prob_Shape["sphere"]       # unconditional probability of drawing a blue item..  Seems too complicated, but this method of computing unconditional probabilities will prove useful when getting into Bayesian statistics!
+# unconditional probability of drawing a blue item..  Seems too complicated, but this method of computing unconditional probabilities will prove useful when getting into Bayesian statistics!
+uncond_prob_blue <- (allprobs["cube","blue"] /  Prob_Shape["cube"]) * Prob_Shape["cube"] + 
+              (allprobs["sphere","blue"] / Prob_Shape["sphere"]) * Prob_Shape["sphere"]       
 
 as.numeric(uncond_prob_blue)
+
+Prob_Color["blue"]   # check to make sure we get the right answer!
 
 
 ##########
