@@ -36,6 +36,12 @@ rnorm(1,22,5.4)
 # Generate 10 samples from Beta(shape1=0.1,shape2=0.1)
 
 
+# Try some other distributions and parameters.  NOTE: you can visualize probability densities easily using the "curve" function:
+
+curve(dnorm(x,0,2),-10,10)
+
+# What happens when you try to use a discrete distribution?
+
 
 ############
 # SIMULATE DATA GENERATION: decompose into deterministic and stochastic components 
@@ -60,6 +66,8 @@ expected_vals
 
 plot(xvals,expected_vals)   # plot out the relationship
 
+# plot(xvals,expected_vals,type="l")    # alternatively, plot as a line
+
 
 ##########
 # Stochastic component: define a function for transforming an expected (deterministic) response and adding a layer of "noise" on top!
@@ -72,6 +80,13 @@ stochastic_component <- function(x,variance){
   stochvals <- rnorm(length(x),x,sd)       # add a layer of "noise" on top of the expected response values
   return(stochvals)
 }
+
+           # alternative: add the "residuals" onto the expected values. 
+# stochastic_component <- function(x,variance){     
+#   sd <- sqrt(variance)       # convert variance to standard deviation       
+#   stochvals <- rnorm(length(x),0,sd)       # generate the 'residuals'    
+#   return(x+stochvals)             # add a layer of "noise" on top of the expected response values
+# }
 
     ### Simulate stochastic data!!
 sim_vals <- stochastic_component(expected_vals,variance=500)   # try it- run the function to add noise to your expected values. 
@@ -119,6 +134,25 @@ axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add 
 boxplot(lapply(1:nrow(simresults), function(i) simresults[i,]),xaxt="n")    # (repeat) make a boxplot of the simulation results
 axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add x axis labels 
 points(c(1:samplesize),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # this time, overlay the "real" data 
+
+
+#############
+# Let's simulate many datasets from our hypothesized data generating model (intercept=100,slope=0,variance=75000):
+
+reps <- 1000    # specify number of replicate datasets to generate
+samplesize <- nrow(realdata)    # define the number of data points we should generate for each simulation "experiment"
+simresults <- array(0,dim=c(samplesize,reps))   # initialize a storage array for results 
+for(i in 1:reps){       # for each independent simulation "experiment":
+  exp_vals <- deterministic_component(realdata$Girth,a=100,b=0)          # simulate the expected tree volumes for each measured girth value
+  sim_vals <- stochastic_component(exp_vals,75000)  # add stochastic noise
+  simresults[,i] <- sim_vals   # store the simulated data for later
+}
+
+    # now make a boxplot of the results
+boxplot(lapply(1:nrow(simresults), function(i) simresults[i,]),xaxt="n")    # (repeat) make a boxplot of the simulation results
+axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add x axis labels 
+points(c(1:samplesize),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # this time, overlay the "real" data 
+
 
 
 ###########
@@ -192,7 +226,7 @@ ThisYearAbund(LastYearAbund=500,trend=-0.03)    # test the new function
 
 SimulateMonitoringData <- function(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2){
   prevabund <- initabund        # initialize "previous-year abundance" at initial abundance 
-  detected <- numeric(years)     # set up storage variable
+  detected <- numeric(years)    # set up storage variable
   for(y in 1:years){            # for each year of the simulation:
     thisAbund <- ThisYearAbund(prevabund,trend)             # compute the current abundance on the basis of the trend
     detected[y] <- NumObserved(thisAbund,observers,days)     # sample the current population using this monitoring scheme

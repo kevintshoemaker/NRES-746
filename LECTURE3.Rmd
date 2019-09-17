@@ -41,13 +41,19 @@ NOTE: some of this demo borrows from Hadley wickham's presentation: [Simulation]
 
 ## Why simulate 'fake data'?  
 
-* Formalize your understanding of the data generating process (make your assumptions *explicit*)  
+* Formalize your understanding of the data generating process (make your assumptions *explicit*) 
+    * if you can tell a computer how to do it, you REALLY understand it! 
+    * it forces you to confront any underlying assumptions head-on 
+    * it allows you to better understand the implications of your hypotheses (every model you build is essentially a hypothesis) 
 * Assess how sampling methods potentially affect information recovery
     * Power Analysis! (how likely am I to pick up important signals from this sampling design?)    
     * Sampling design! (what sampling design(s) will most effectively allow me to address my research question?)  
     * Generate sampling distributions (e.g., CLT exercise, brute force t-test)
 * Assess goodness of fit (could your data have been produced by this model?)     
-* Test whether (novel) model fitting algorithms and statistical tests do what you think they should (e.g., estimate parameters correctly)! (test for bias, precision, etc.)
+* Test whether model-fitting algorithms and statistical tests do what you think they should (e.g., estimate parameters correctly)! (test for bias, precision, etc.)
+* Simulating a massive number of replicate datasets under a range of hypotheses provides the basis for performing Approximate Bayesian Computation, which is a brute-force inference method commonly used by geneticists. 
+* Build up and intuition and proficiency for building data-generating models and get ready for the next lecture (likelihood functions!)
+
 
 We have simulated data already (e.g., CLT, brute-force t-test)! Even bootstrapping is a form of data simulation...
 
@@ -90,22 +96,28 @@ Subsequent arguments: **parameters** of the distribution
 # Generate 10 samples from Beta(shape1=0.1,shape2=0.1)
 
 
+# Try some other distributions and parameters.  NOTE: you can visualize probability densities easily using the "curve" function:
+
+curve(dnorm(x,0,2),-10,10)
+
+# What happens when you try to use a discrete distribution?
+
 ```
 
 
 ## Building a data simulation model
 
-For our purposes, a **simulation model** is any fully specified, (usually) stochastic, computer-programmed data-generating process. 
+For our purposes, a **simulation model** is any fully specified, (usually) stochastic, data-generating process that has been programmed into a computer. 
 
-Your data simulation model could be as simple as the random numbers you were just generating. For example, we could assume that our sample data were generated from a Poisson process with constant mean ($\lambda$). 
+Your data simulation model could be as simple as the random numbers you were just generating. For example, we could make a (strong) assumption that our sample data were independently generated from a random Poisson process with constant mean ($\lambda$). 
 
 In general, our simulation models will comprise both **deterministic** and **stochastic** components.   
 
-For example, ordinary linear regression consists of a *deterministic component* ($y = ax + b$) and a *stochastic component* (residuals are normally distributed). 
+For example, the data generating model underlying ordinary linear regression consists of a *deterministic component* ($y = ax + b$) and a *stochastic component* (the residual error is independently drawn from a normal distribution). 
 
 ### decomposing ordinary linear regression:
 
-First, let's look at the **deterministic component**. The deterministic component maps covariate (predictor variable, or independent variable) values to the expected response. It is deterministic because the answer will be the same every time, provided your input (covariate) values are the same.   
+First, let's look at the **deterministic component**. The deterministic component maps covariate (predictor variable, or independent variable) values to an expected response. It is deterministic because the answer will be the same every time, given any specific input (covariate) value(s).   
 
 ```{r}
 
@@ -132,6 +144,8 @@ expected_vals
 
 plot(xvals,expected_vals)   # plot out the relationship
 
+# plot(xvals,expected_vals,type="l")    # alternatively, plot as a line
+
 ```
 
 Now, let's look at the **stochastic component** (also known as the "noise"). Recall that a normal distribution is defined by a mean and a variance (or standard deviation). We can consider the deterministic component as representing the **mean** (expected) value of the response for any given value(s) of relevant covariates. Therefore, if we assume the "noise" is normally distributed, all we need to generate stochastic data for any given covariate value(s) is a **variance**, or standard deviation (the mean is already defined). 
@@ -150,6 +164,13 @@ stochastic_component <- function(x,variance){
   return(stochvals)
 }
 
+           # alternative: add the "residuals" onto the expected values. 
+# stochastic_component <- function(x,variance){     
+#   sd <- sqrt(variance)       # convert variance to standard deviation       
+#   stochvals <- rnorm(length(x),0,sd)       # generate the 'residuals'    
+#   return(x+stochvals)             # add a layer of "noise" on top of the expected response values
+# }
+
     ### Simulate stochastic data!!
 sim_vals <- stochastic_component(expected_vals,variance=500)   # try it- run the function to add noise to your expected values. 
 
@@ -163,6 +184,7 @@ sim_vals <- stochastic_component(deterministic_component(xvals,175,-1.5),500)   
 
 You can think of the deterministic component as the **"signal"** and the stochastic component as the **"noise"**. Most data-generating processes that we will consider have both components!
 
+Much of statistics and machine learning involves trying to tease apart these components-- i.e., to detect signals from 'noisy' data. This is especially true - and difficult - in the age of big data 
 
 ------------
 ## Replication! 
@@ -192,14 +214,17 @@ plot(realdata$Girth,realdata$Volume)
 
 ```
 
-Is the following fully specified linear regression model a good fit to the data?
+The following parameters together fully specify a data-generating model that we hypothesize is the model that generated our data. Is this fully specified linear regression model a good fit to our data?
 
 ```
-intercept (a) = 10   
+intercept (a) = 10         # these parameters together specify a data-generating model that we hypothesize is the model that generated our data
 slope (b) = 4
 variance(var) = 1000
 
 ```
+
+We can evaluate this question by brute force programming. First we specify the data generating model. Then we simulate multiple datasets under this model that are comparable to our observed dataset (same sample size). Then we evaluate (visually for now) whether our data generating model is capable of generating our observed data. 
+
 
 ```{r}
 
@@ -221,7 +246,7 @@ axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add 
 
 ```
 
-Now let's overlay the "real" data.
+Now let's overlay the "real" data. This gives us a visual goodness-of-fit test!
 
 ```{r}
 
@@ -239,7 +264,43 @@ How well does this model fit the data?
 
 Is this particular model likely to produce these data? (we will revisit this concept more quantitatively when we get to likelihood-based model fitting!)
 
+
+What about if we try an intercept-only null model with expected Volume of 100 and variance of 75000 ? What happens now?
+
+```{r}
+
+#############
+# Let's simulate many datasets from our hypothesized data generating model (intercept=100,slope=0,variance=75000):
+
+reps <- 1000    # specify number of replicate datasets to generate
+samplesize <- nrow(realdata)    # define the number of data points we should generate for each simulation "experiment"
+simresults <- array(0,dim=c(samplesize,reps))   # initialize a storage array for results 
+for(i in 1:reps){       # for each independent simulation "experiment":
+  exp_vals <- deterministic_component(realdata$Girth,a=100,b=0)          # simulate the expected tree volumes for each measured girth value
+  sim_vals <- stochastic_component(exp_vals,75000)  # add stochastic noise
+  simresults[,i] <- sim_vals   # store the simulated data for later
+}
+
+    # now make a boxplot of the results
+boxplot(lapply(1:nrow(simresults), function(i) simresults[i,]),xaxt="n")    # (repeat) make a boxplot of the simulation results
+axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add x axis labels 
+points(c(1:samplesize),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # this time, overlay the "real" data 
+
+
+```
+
+Could this model have generated the data?
+
+Is this model **likely** to be the model that generated the data? What's your intuition? 
+
+Is this model **useful**?
+
+
 ### Generating *sampling distributions* (i.e., simulate the distribution of test statistics under a null hypothesis)
+
+A null hypothesis can usually be expressed as a data-generating model.
+
+If so, you should be able to generate sampling distributions of any test statistic under your null distribution. 
 
 For example, the 'brute force' t-test from the first lecture:
 
@@ -273,14 +334,14 @@ When designing experiments or field monitoring protocols, we often ask questions
 * What is the smallest effect size I can reliably detect with my sampling design?
 * What sources of sampling or measurement error should I make the greatest effort to minimize?
 
-In such cases, probably the most straightforward way to address these questions is to simulate data under various sampling strategies and error structures, and see how well we can recover the "true" signal through the noise!
+In such cases, probably the most straightforward way to address these questions is to simulate data under various sampling strategies and signal/noise ratios, and see how well we can recover the "true" signal through the noise!
 
 ### Power analysis, example
 
-Imagine we are designing a monitoring program for a population of an at-risk species, and we want to have *at least a 75% chance of detecting a decline of 25% or more over a 25 year period*. Let's assume that we are using visual counts, and that the probability of encountering each organism visually is 2% per person-day. The most recent population estimate was 1000.    [NOTE: this used to say "10 year period", but I think the question is more interesting if we take a more long-term approach]  
+Imagine we are designing a monitoring program for a population of an at-risk species, and we want to have *at least a 75% chance of detecting a decline in abundance of 25% or more over a 25 year period*. Let's assume that we are using visual counts, and that the probability of encountering each organism is 2% per person-day. The most recent population estimate was 1000: here we will assume that is known with certainty.    
 
 >What we know:   
->* A single person has a 2% chance of detecting each animal in the population in a day of surveying    
+>* A single person has a 2% chance of detecting each animal in the population in a single day of surveying    
 >* The initial abundance is 1000    
 >* We want to be able to detect a decline as small as 25% over 25 years with at least 75% probability.    
 
@@ -354,7 +415,7 @@ This function will simulate a single dataset (time series of observations over a
 
 SimulateMonitoringData <- function(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2){
   prevabund <- initabund        # initialize "previous-year abundance" at initial abundance 
-  detected <- numeric(years)     # set up storage variable
+  detected <- numeric(years)    # set up storage variable
   for(y in 1:years){            # for each year of the simulation:
     thisAbund <- ThisYearAbund(prevabund,trend)             # compute the current abundance on the basis of the trend
     detected[y] <- NumObserved(thisAbund,observers,days)     # sample the current population using this monitoring scheme
