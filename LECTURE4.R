@@ -17,17 +17,27 @@
 
 
 
+###############
+# Demo: using data simulation to make inferences
+
+data(mtcars)    # use the 'mtcars' data set as an example 
+
+# ?mtcars
+
+plot(mpg~disp, data = mtcars, las = 1, pch = 16, xlab = "Displacement (cu. in.)", ylab = "Miles/Gallon")   # visualize the relationship
+
+
 #########
 # try an exponential model
 
 Deterministic_component <- function(xvals,a,b){
-  yexp <- a*exp(b*xvals)        # deterministic exponential decay (assuming b is negative)
+  yexp <- a*exp(b*xvals)        # deterministic exponential decline (assuming b is negative)
   return(yexp)
 }
 
 DataGenerator_exp <- function(xvals,params){
   yexp <- Deterministic_component(xvals,params$a,params$b)  # get signal
-  yvals <- rnorm(length(yexp),yexp,sqrt(params$c))     # add noise
+  yvals <- rnorm(length(yexp),yexp,sqrt(params$c))     # add noise (normally distributed)
   return(yvals)
 }
 
@@ -36,11 +46,11 @@ DataGenerator_exp <- function(xvals,params){
 ###########
 # generate data under an assumed process model
 
-xvals=mtcars$disp    # xvals same as data (this is a "fixed effect", so there is no random component here- we can't really "sample" x values)
+xvals=mtcars$disp    # xvals same as data (there is no random component here- we can't really "sample" x values)
 params <- list()  
-params$a=30             # set model parameters arbitrarily (eyeballing to the data)
+params$a=30             # set model parameters arbitrarily (eyeballing to the data) (see Bolker book)
 params$b=-0.005   # = 1/200
-params$c=1
+params$c=5
 
 yvals <- DataGenerator_exp(xvals,params)
 
@@ -94,8 +104,8 @@ points(xvals,real_yvals,pch=20,cex=3,col="green")    # overlay the real data
 # try again- select a new set of parameters
 
 params$a=33       # was 40
-params$b=-0.002   # was 0.001
-
+params$b=-0.004   # was 0.001
+params$c=0.5
     
 PlotRangeOfPlausibleData(xvals,params,reps)
 points(xvals,real_yvals,pch=20,cex=3,col="green")    # overlay the real data
@@ -113,7 +123,7 @@ obs.data
 ############
 
 params <- list()    # set up empty list to store parameters
-params$a=33            # fill the list with the "best fit" parameter set from above    
+params$a=33            # fill the list with the "best fit" parameter set from above (this is still just an educated guess)   
 params$b=-0.002   
 params$c=1
 
@@ -368,7 +378,7 @@ profile_A <- apply(loglikelihood_surface,1,max)
 reasonable_parameter_values_A <- allvals_a[profile_A >=(MLE$value-qchisq(0.95,1)/2)]
 min(reasonable_parameter_values_A)
 max(reasonable_parameter_values_A)
-plot(allvals_a,profile_A,type="l",main="Log Likelihood profile",xlab="Parameter Slice for \'a\'",ylab="Log-Likelihood")
+plot(allvals_a,profile_A,type="l",main="Log Likelihood profile",xlab="Parameter \'a\'",ylab="Log-Likelihood")
 abline(v=MLE$par["a"],lwd=3,col="blue")
 abline(v=min(reasonable_parameter_values_A),lwd=1,col="blue")
 abline(v=max(reasonable_parameter_values_A),lwd=1,col="blue")
@@ -381,10 +391,46 @@ profile_B <- apply(loglikelihood_surface,2,max)
 reasonable_parameter_values_B <- allvals_b[profile_B >=(MLE$value-qchisq(0.95,1)/2)]
 min(reasonable_parameter_values_B)
 max(reasonable_parameter_values_B)
-plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter \'b\'",ylab="Log-Likelihood")
 abline(v=MLE$par["b"],lwd=3,col="blue")
 abline(v=min(reasonable_parameter_values_B),lwd=1,col="blue")
 abline(v=max(reasonable_parameter_values_B),lwd=1,col="blue")
+
+
+#################
+# Compare profile and slice intervals
+
+par(mfrow=c(1,2))
+reasonable_parameter_values <- allvals[loglikelihood_slice>=(MLE$value-2)]
+plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood slice",xlab="Parameter \'b\'",ylab="Log-Likelihood",xlim=c(-0.0035,-0.0013))
+abline(v=bestVal,lwd=3,col="blue")
+abline(h=(MLE$value-2),lty=2)
+abline(v=min(reasonable_parameter_values),lwd=1,col="blue")
+abline(v=max(reasonable_parameter_values),lwd=1,col="blue")
+
+
+profile_B <- apply(loglikelihood_surface,2,max)
+reasonable_parameter_values_B <- allvals_b[profile_B >=(MLE$value-2)]
+plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter \'b\'",ylab="Log-Likelihood",xlim=c(-0.0035,-0.0013))
+abline(v=MLE$par["b"],lwd=3,col="blue")
+abline(h=(MLE$value-2),lty=2)
+abline(v=min(reasonable_parameter_values_B),lwd=1,col="blue")
+abline(v=max(reasonable_parameter_values_B),lwd=1,col="blue")
+
+
+###### Practice exercise: develop a likelihood function for estimating the probability of detection of a rare frog species
+
+ncaps <- c(3,2,6)   # number of times out of 10 that a frog is detected at 3 known-occupided wetland sites
+
+#### construct a likelihood function
+
+
+#### find the MLE using 'optim()' in R
+
+
+#### find the approximate 95% confidence interval using the "rule of 2"
+
+
 
 
 ###############

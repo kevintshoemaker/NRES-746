@@ -280,7 +280,7 @@ curve(dbeta(x,1,1))  # uniform prior on "p"
 
 # ?integrate
 binom2 <- function(x) dbinom(x=2,size=10,prob=x)
-marginal_likelihood <- integrate(f=binom2,0,1)$value    # use "integrate" function
+marginal_likelihood <- integrate(f=binom2,0,1)$value    # use "integrate" function in R
 marginal_likelihood  # equal to 0.0909 = 1/11
 
 
@@ -384,7 +384,7 @@ Likelihood_complex
 
 qchisq(0.95,1)
 
-pchisq(1.64,1)    # very high p value
+pchisq(1.64,1)    # very high p value, simpler model is preferred
 
 
 #########
@@ -409,8 +409,8 @@ AICc_complex
 ######
 # Alternatively, try BIC
 
-BIC_simple <- -2*log(Likelihood_simple) + 0
-BIC_complex <-  -2*log(Likelihood_complex) + log(3)*1
+BIC_simple <- -2*log(Likelihood_simple) + log(10)*0
+BIC_complex <-  -2*log(Likelihood_complex) + log(10)*1
 
 BIC_simple
 BIC_complex    
@@ -486,7 +486,7 @@ jagsfit1.mcmc <- as.mcmc(jags.fit1)   # convert to "MCMC" object (coda package)
 
 summary(jagsfit1.mcmc)
 
-plot(jagsfit1.mcmc)
+#plot(jagsfit1.mcmc)
 
 
 
@@ -673,8 +673,8 @@ loglik_red <- jags.fit2$BUGSoutput$sims.list$LogLik
 waic_full <- waic(loglik_full)
 waic_red <- waic(loglik_red)
 
-waic_full$waic
-waic_red$waic
+waic_full$estimates["waic",]
+waic_red$estimates["waic",]
 
 compare(waic_full, waic_red)
 
@@ -769,7 +769,7 @@ model  {
   
     # model selection...
   prior[1] <- 1/3
-  prior[2] <- 1/3     # put substantially more weight because fewer parameters (there are more rigorous ways to do this!!)
+  prior[2] <- 1/3     # you can put substantially more weight because fewer parameters (there are more rigorous ways to do this!!)
   prior[3] <- 1/3
   selected ~ dcat(prior[])   
   

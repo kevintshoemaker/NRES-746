@@ -45,15 +45,15 @@ In this class, we will talk about *inference* using the method of **maximum like
 
 $Data \rightarrow Model$
 
-In many ways, these two processes -- *simulation* and *inference* -- are inter-related. Simulation can help us to make better inferences, and inference can help us to construct better simulation models!
+In many ways, these two processes -- *simulation* and *inference* -- are interrelated. Simulation can help us to make better inferences, and inference can help us to construct better simulation models!
 
-First let's see how simulation can help us to make inference. This leads directly into the core idea of maximum likelihood!
+First let's see how simulation can help us to make inferences. This leads directly into the core idea of maximum likelihood!
 
 ## Using data simulation to make inferences
 
 Let's use the built-in "mtcars" data for this example: (note: some code borrowed from [here](http://stats.stackexchange.com/questions/142443/simple-non-linear-regression-problem))
 
-```{r echo=FALSE}
+```{r}
 
 ###############
 # Demo: using data simulation to make inferences
@@ -87,13 +87,13 @@ Take a minute to visualize the negative exponential functional relationship - e.
 # try an exponential model
 
 Deterministic_component <- function(xvals,a,b){
-  yexp <- a*exp(b*xvals)        # deterministic exponential decay (assuming b is negative)
+  yexp <- a*exp(b*xvals)        # deterministic exponential decline (assuming b is negative)
   return(yexp)
 }
 
 DataGenerator_exp <- function(xvals,params){
   yexp <- Deterministic_component(xvals,params$a,params$b)  # get signal
-  yvals <- rnorm(length(yexp),yexp,sqrt(params$c))     # add noise
+  yvals <- rnorm(length(yexp),yexp,sqrt(params$c))     # add noise (normally distributed)
   return(yvals)
 }
 
@@ -107,11 +107,11 @@ Let's test this function to see if it does what we want:
 ###########
 # generate data under an assumed process model
 
-xvals=mtcars$disp    # xvals same as data (this is a "fixed effect", so there is no random component here- we can't really "sample" x values)
+xvals=mtcars$disp    # xvals same as data (there is no random component here- we can't really "sample" x values)
 params <- list()  
-params$a=30             # set model parameters arbitrarily (eyeballing to the data)
+params$a=30             # set model parameters arbitrarily (eyeballing to the data) (see Bolker book)
 params$b=-0.005   # = 1/200
-params$c=1
+params$c=5
 
 yvals <- DataGenerator_exp(xvals,params)
 
@@ -195,8 +195,8 @@ Oops- we overshot!! Let's find something in the middle!
 # try again- select a new set of parameters
 
 params$a=33       # was 40
-params$b=-0.002   # was 0.001
-
+params$b=-0.004   # was 0.001
+params$c=0.5
     
 PlotRangeOfPlausibleData(xvals,params,reps)
 points(xvals,real_yvals,pch=20,cex=3,col="green")    # overlay the real data
@@ -204,15 +204,22 @@ points(xvals,real_yvals,pch=20,cex=3,col="green")    # overlay the real data
 ```
 
 
-Much better! This model could plausibly generate most of these data!
+Keep trying. See if you can find a model that could plausibly generate most of these data!
+
+Q: Why did you NOT just increase the "noise" parameter until the data were consistent with the model?
 
 So, we have used simulation, along with trial and error, to infer the most **likely** parameter values for our model! 
 
-A _likelihood function_, very generally, is a function that:
-+ takes the **data** and a **hypothesized data-generating model** as input arguments and:
-+ returns the relative plausibility that *this* model could have produced *these* data. 
+A _likelihood function_, very generally, is a *function* that has 2 input arguments:
++ the **data**
++ a **hypothesized data-generating model**
+The likelihood function takes these inputs and produces a single output:
++ the *data likelihood*
 
-The higher the plausibility, the higher the value the likelihood function returns. 
+
+The data likelihood is a single number representing the relative plausibility that *this* model could have produced *these* data. 
+
+The higher the relative plausibility of generating the data, the higher the value the likelihood function returns. 
 
 **Q:**  What is the likelihood function we have used in this example?
 
@@ -221,13 +228,13 @@ The higher the plausibility, the higher the value the likelihood function return
 
 First of all, what does "data likelihood" really mean, in a formal sense?      
 
-$\mathcal{L}  (Model|obs.data) \equiv  Prob(obs.data|Model)$
+$\mathcal{L_{model}}  (obs.data) \equiv  Prob(obs.data|Model)$
 
 ### Definition, in plain English!
 
-The likelihood of a fully-specified model with a set of parameters $\theta$, given some observed data, is equal to the *probability* of observing these data, given the defined model with those specific parameter values. In this way, likelihood is a quantitative measure of *goodness-of-fit*. Higher likelihoods correspond to a higher probability of the model producing the observed data. 
+The likelihood of a fully-specified model with a set of parameters $\theta$, given some observed data, is equal to the *probability* of observing these data, given the defined model with those specific parameter values. In this way, likelihood is a quantitative measure of *model fit*. Higher likelihoods correspond to a higher probability of the model producing the observed data (the data "fit" the model well). 
 
-But remember, we generally use likelihood as a *relative* rather than an *absolute* metric. Therefore, the model with the highest likelihood (out of a set of candidate models) doesn't necessarily mean the model would pass a basic goodness-of-fit test!
+But remember, we use likelihood as a *relative* rather than an *absolute* metric. Therefore, the model with the highest likelihood (out of a set of candidate models) doesn't necessarily mean the model would pass a basic goodness-of-fit test!
 
 ### Worked example
 
@@ -258,7 +265,7 @@ Let's assume for a second that the parameters we selected in our trial-and-error
 ############
 
 params <- list()    # set up empty list to store parameters
-params$a=33            # fill the list with the "best fit" parameter set from above    
+params$a=33            # fill the list with the "best fit" parameter set from above (this is still just an educated guess)   
 params$b=-0.002   
 params$c=1
 
@@ -405,7 +412,7 @@ $log(a\cdot b\cdot c)=log(a)+log(b)+log(c)$
 
 Log transformations just make it easier to work with likelihoods! 
 
-In fact, the probability distribution functions in R make it extra easy for us to work with log likelihoods, using the 'log=TRUE' option!
+In fact, the probability density functions in R make it extra easy for us to work with log likelihoods, using the 'log=TRUE' option!
 
 ```{r}
 
@@ -421,27 +428,28 @@ exp(Log.Likelihood)   # we can convert back to likelihood if we want...
 ## Maximum Likelihood Estimation (MLE)
 Maximum likelihood estimation is a general, flexible method for drawing *inference* about models from data.
 
-The basic idea is simple: given a data generating model and a set of free parameters, search for the set of parameters that maximizes the data likelihood!
+The basic idea is simple: given a data generating model and a set of 'free parameters', search for the set of parameters that maximizes the data likelihood!
 
 Like any function, a *likelihood function* has inputs and outputs. 
 
 The **inputs** are:
 + A set of **free parameters**, which are the parameters we are trying to estimate!    
 + A dataset for which we want to compute the likelihood!        
-+ Any fixed, ancillary parameters you want!        
++ [optional] Any additional fixed parameters you want!        
 
 The **algorithm** is:
 + A data generating model, often constructed by combining a deterministic and stochastic component. Likelihood is computed by adding together the log-likelihoods of all observations.        
 
 The **output** is:    
-+ The [scalar] likelihood of the data, given the model and specific values for the free parameters.     
++ The likelihood of the dataset, given the model     
+
 
 NOTE: instead of likelihood, we often use the log-likelihood
 NOTE: instead of log-likelihood, we often use the *negative log-likelihood* (it is more common to identify the minimum rather than the maximum of an objective function- this is the default for the native optimization function in R, "optim()")
 
 **Q**: What are the free parameters in the mtcars example?
 
-It is important to note that the likelihood function (or more accurately, the likelihood *surface*) essentially contains all the information in the data that can be used to make inference about the model. The problem then becomes, how can we search for the maximum-likelihood estimate (MLE) and characterize the likelhood surface around the MLE? We will discuss the mechanics of this in the [next lecture (optimization)](LECTURE5.html).
+It is important to note that the likelihood function, when evaluated for every point in *parameter space* (likelihood *surface*) essentially contains all the information in the data that can be used to make inference about the model. The problem then becomes, how can we search for the maximum-likelihood estimate (MLE) and characterize the likelhood surface around the MLE? We will discuss the mechanics of this in the [next lecture (optimization)](LECTURE5.html).
  
 The steps of a typical MLE analysis are as follows:
 
@@ -519,20 +527,20 @@ points(xvals,yvals,pch=20,cex=3,col="green")
 
 Now this isn't such a bad looking model! 
 
-Using this same strategy, we can fit countless models to data. We just performed a standard non-linear regression. But we could just as well have fit any number of alternative model formulations. Maximum Likelihood is a powerful and flexible framework. We will have plenty of more opportunities to work with likelihood functions, both in a frequentist and a Bayesian context.
+Using this same strategy, we can fit countless models to data. We just performed a non-linear regression. But we could just as well have fit any number of alternative model formulations (different deterministic functions and "noise" distributions). Maximum Likelihood is a powerful and flexible framework. We will have plenty of more opportunities to work with likelihood functions, both in a frequentist and a Bayesian context.
 
 ### Aside: generating initial values
 
 Note that the 'optim' function requires specification of initial values for every free parameter in your model. In general, it is not critical that the initial values fit the data very well. However, we need to put serious thought into our initial values. Using values that are too far away from the best-fit parameter estimates can cause our optimization algorithms to fail! The strategy I recommend for setting initial values is:
 
 * If possible, use general understanding of the meaning of the parameters to "eyeball" an approximate value for each parameter           
-* Write a data-generation function (sometimes just the deterministic component might be enough) and plot out this function against the observed data. If the fit is "close-ish" then you should be able to use these values for your initial values. If not, tweak the parameters until you find something that is "close-ish".        
+* Write a data-generation function and compare the data generated by this function against the observed data. If the fit is "close-ish" then you should be able to use these values for your initial values (really it doesn't need to be that close! If not, continue to tweak the parameters until you find something that is "close-ish".        
 
 ## Estimating parameter uncertainty
 
 We have now identified the parameter values that maximize the likelihood function. These are now our "best" estimates of the parameter values (MLE). But we usually want to know something about how certain we are about our estimate, often in the form of confidence intervals. 
 
-Fortunately, likelihood theory offers us a strategy for estimating confidence intervals around our parameter estimates. The idea is that the *shape* of the likelihood function tells us something about the range of parameter values under which the true parameter value may potentially fall.
+Fortunately, likelihood theory offers us a strategy for estimating confidence intervals around our parameter estimates. The idea is that the *shape* of the likelihood function around the MLE tells us something about the plausibility of these parameter values.
 
 For instance, let's plot out the shape of the likelihood function across a **slice** of parameter space (vary one parameter and hold all others constant). In this case, let's look at the "decay rate" term (the 'b' parameter). We can vary that parameter over a range of possible values and see how the likelihood changes over that parameter space. Let's hold the other parameters at their maximum likelihood values:
 
@@ -557,7 +565,7 @@ plot(allvals,likelihood_slice,type="l",main="Likelihood Slice",xlab="Parameter S
 
 Again, we generally want to work with log-likelihoods. And here we have an even better reason to use log-likelihoods. This reason: the "rule of 2", and (more formally) the **likelihood ratio test**. 
 
-For now, suffice it to say that all parameter values within 2 log-likelihood units of the best-fit parameter value are *plausible*.  Therefore, a *reasonable* confidence interval (approximate 95% conf int) can be obtained by idenfifying the set of possible parameter values for which the log-likelihood is within two of the maximum likelihood...
+For now, suffice it to say that all parameter values within 2 log-likelihood units of the best-fit parameter value are *plausible*. Therefore, a *reasonable* confidence interval (approximate 95% conf int) can be obtained by idenfifying the set of possible parameter values for which the log-likelihood is within two of the maximum likelihood...
 
 Let's plot out the log-likelihood slice:
 
@@ -703,7 +711,7 @@ contour(x=allvals_a,y=allvals_b,z=loglikelihood_surface,levels=(MLE$value-conf95
 
 So, what is the "**profile likelihood**" confidence interval for the a parameter?
 
-By "profile likelihood" confidence interval, we mean this: we have a parameter of interest, and one or more "nuisance parameter(s)" (free parameters that we want to factor out of the equation for now). For every value of the parameter of interest, we find the highest likelihood value across all possible values of all the other parameters (parameter of interest is a sequence of fixed points across its range, other parameter(s) are free to vary.  
+By "profile likelihood" confidence interval, we mean this: we have a parameter of interest, and one or more free parameters that we also have some uncertainty about. For every value of the parameter of interest, we find the highest likelihood value across all possible values of all the other uncertain parameters (parameter of interest is a sequence of fixed points across its range, other parameter(s) are free to vary. This way we can define a likelihood surface that accounts for our uncertainty about the other parameters, and therefore we get a more honest description of the uncertainty we have about the parameter of interest.   
 
 ```{r}
 
@@ -715,7 +723,7 @@ profile_A <- apply(loglikelihood_surface,1,max)
 reasonable_parameter_values_A <- allvals_a[profile_A >=(MLE$value-qchisq(0.95,1)/2)]
 min(reasonable_parameter_values_A)
 max(reasonable_parameter_values_A)
-plot(allvals_a,profile_A,type="l",main="Log Likelihood profile",xlab="Parameter Slice for \'a\'",ylab="Log-Likelihood")
+plot(allvals_a,profile_A,type="l",main="Log Likelihood profile",xlab="Parameter \'a\'",ylab="Log-Likelihood")
 abline(v=MLE$par["a"],lwd=3,col="blue")
 abline(v=min(reasonable_parameter_values_A),lwd=1,col="blue")
 abline(v=max(reasonable_parameter_values_A),lwd=1,col="blue")
@@ -734,7 +742,7 @@ profile_B <- apply(loglikelihood_surface,2,max)
 reasonable_parameter_values_B <- allvals_b[profile_B >=(MLE$value-qchisq(0.95,1)/2)]
 min(reasonable_parameter_values_B)
 max(reasonable_parameter_values_B)
-plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter \'b\'",ylab="Log-Likelihood")
 abline(v=MLE$par["b"],lwd=3,col="blue")
 abline(v=min(reasonable_parameter_values_B),lwd=1,col="blue")
 abline(v=max(reasonable_parameter_values_B),lwd=1,col="blue")
@@ -743,14 +751,14 @@ abline(v=max(reasonable_parameter_values_B),lwd=1,col="blue")
 
 So,what happens if we compare the profile likelihood confidence interval with the "slice" method we used earlier??
 
-```{r echo=FALSE}
+```{r}
 
 #################
 # Compare profile and slice intervals
 
 par(mfrow=c(1,2))
 reasonable_parameter_values <- allvals[loglikelihood_slice>=(MLE$value-2)]
-plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood",xlim=c(-0.0035,-0.0013))
+plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood slice",xlab="Parameter \'b\'",ylab="Log-Likelihood",xlim=c(-0.0035,-0.0013))
 abline(v=bestVal,lwd=3,col="blue")
 abline(h=(MLE$value-2),lty=2)
 abline(v=min(reasonable_parameter_values),lwd=1,col="blue")
@@ -759,7 +767,7 @@ abline(v=max(reasonable_parameter_values),lwd=1,col="blue")
 
 profile_B <- apply(loglikelihood_surface,2,max)
 reasonable_parameter_values_B <- allvals_b[profile_B >=(MLE$value-2)]
-plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood",xlim=c(-0.0035,-0.0013))
+plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter \'b\'",ylab="Log-Likelihood",xlim=c(-0.0035,-0.0013))
 abline(v=MLE$par["b"],lwd=3,col="blue")
 abline(h=(MLE$value-2),lty=2)
 abline(v=min(reasonable_parameter_values_B),lwd=1,col="blue")
@@ -776,37 +784,57 @@ In R and other software packages you may have worked with, you will have the opt
 
 NOTE: the profile method can easily detect asymmetries in the likelihood surface. Commonly used approximations are often not able to detect these asymmetries. 
 
-#### Exercise 1
+#### Exercise 3.1
 
-> Develop a *likelihood function* for the following scenario: you visit three known-occupied wetland sites ten times and for each site you record the number of times a particular frog species is detected within a 5-minute period. Assuming that all sites are occupied continuously, compute the likelihood of these data: [3, 2 and 6 detections for sites 1, 2, and 3 respectively] for a given detection probability $p$. Assume that all sites have the same (unknown) detection probability. Using this likelihood function, answer the following questions: 
+Develop a *likelihood function* for the following scenario: you visit three known-occupied wetland sites ten times and for each site you record the number of times a particular frog species is detected within a 5-minute period. Assuming that all sites are occupied continuously, compute the likelihood of these data: [3, 2 and 6 detections for sites 1, 2, and 3 respectively] for a given detection probability $p$. Assume that all sites have the same (unknown) detection probability. Using this likelihood function, answer the following questions: 
 
 1. What is the maximum likelihood estimate (MLE) for the p parameter? 
-2. Using the "rule of 2", determine the approximate 95% confidence interval for the p parameter.     
+2. Using the "rule of 2", determine the approximate 95% confidence interval for the p parameter.
+
+
+```{r}
+
+###### Practice exercise: develop a likelihood function for estimating the probability of detection of a rare frog species
+
+ncaps <- c(3,2,6)   # number of times out of 10 that a frog is detected at 3 known-occupided wetland sites
+
+#### construct a likelihood function
+
+
+#### find the MLE using 'optim()' in R
+
+
+#### find the approximate 95% confidence interval using the "rule of 2"
+
+
+
+```
+
 
 
 ### The likelihood ratio test (LRT)
 
-Q: In what ways is the likelihood surface likely to change if you were to collect more data?
+Q: In what ways is the likelihood surface *shape* likely to change if you were to collect more data?
 
 Steeper gradients (slopes) in the likelihood surface near the maximum likelihood estimate correspond to narrower confidence intervals. But how can we determine the cutoff for where the edge of the confidence interval is?  
 
 #### Definition: Likelihood Ratio
-The likelihood Ratio is defined as:
+The *likelihood Ratio* is defined as:
 
 $\frac{\mathcal{L}_{r}}{\widehat{\mathcal{L}}}$
 
-Where $\widehat{\mathcal{L}}$ is the likelihood at the global maximum likelihood estimate and $\mathcal{L} _{r}$ is the Likelihood of a model for which some parameters have been 'fixed' (determined *a priori* and therefore no longer 'free parameters' to be estimated.  
+Where $\widehat{\mathcal{L}}$ is the likelihood at the global maximum likelihood estimate and $\mathcal{L} _{r}$ is the Likelihood of a model for which some parameters have been 'fixed' (determined *a priori* and therefore no longer 'free parameters' to be estimated.
 
-#### Definition: Deviance
+#### Likelihood Ratio Test
 
-Twice the negative log likelihood ratio, $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$, is also known as the *deviance*!
+Twice the negative log likelihood ratio, $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$, sometimes known as the *deviance*, is an important test statistic with a known sampling distribution!
 
-#### Distribution of the Likelihood Ratio (frequentist!)
-For some reason (which we will not dwell on) the sampling distribution of the deviance (test statistic) under the null hypothesis (H0: the full model adds no useful information with respect to the restricted model) is *approximately* $\chi^2$ ("chi-squared") distributed with *r* degrees of freedom, where *r* is the number of dimensions by which the full model has been reduced (number of parameters "fixed").  
+##### Distribution of the Likelihood Ratio (frequentist!)
+For some reason (which we will not dwell on) the sampling distribution of the deviance (test statistic) under the null hypothesis (H0: the reduced model is in fact the true model) is *approximately* $\chi^2$ ("chi-squared") distributed with *r* degrees of freedom, where *r* is the number of dimensions by which the full model has been reduced (number of parameters "fixed").  
 
-*r* is equal to the number of free parameters that have been eliminated (fixed) with respect to the full model. That is, if our full model has three free parameters and we fix the value of two of these parameters, *r* is equal to 2. 
+*r* is equal to the number of free parameters that have been eliminated (fixed) with respect to the full model. That is, if our full model has three free parameters and we fix the value of two of these parameters to build a reduced model, *r* is equal to 2. 
 
-We can use this to estimate the statistical significance of any difference in likelihood between a full model and a restricted model. 
+We can use this property to estimate the statistical significance of any difference in log-likelihood between a full model and a restricted model.  
 
 Here is a visualization of the chi-squared distribution with 2 degrees of freedom:
 
@@ -837,17 +865,16 @@ abline(v=qchisq(0.95,1),col="red",lwd=2)
 
 ```
 
-Okay, so now we know that the deviance, the quantity defined as $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$, should be distributed according to the above probability distribution under the null hypothesis of no difference between the restricted and full model. How does this relate to confidence intervals?
+Okay, so now we know that the quantity defined as $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$, should be distributed according to the above probability distribution under the null hypothesis of the reduced model being true (the deviance between the full and reduced model is simply a result of random chance). How does this relate to confidence intervals?
 
-Remember this is a frequentist test. So we are imagining multiple alternative universes where we are collecting data and determining a maximum likelihood estimate. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different likelihood surface. Now imagine we *fix* the value of one of our parameters at the **true** parameter value and collect thousands of datasets, each time maximizing the likelihood with respect to all the other parameters. The *deviance* between the restricted model (with one parameter set at its *true* value) and the full model (where the focal parameter is also a free parameter) should be approximately chi-squared distributed (with degrees of freedom of 1 if only one parameter is fixed)! 
+Remember this is a frequentist test. So we are imagining multiple alternative universes where we are collecting data and determining a maximum likelihood estimate. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different likelihood surface. Now imagine we *fix* the value of one of our parameters at the **true** parameter value and collect thousands of datasets, each time maximizing the likelihood with respect to all the other parameters. The *deviance* between the restricted model (with one parameter set at its *true* value) and the full model (where the focal parameter is also a free parameter) should be approximately chi-squared distributed (with degrees of freedom of 1 if only one parameter differs between the true model and the "extra parameter" model)! 
 
 Moreover, the true parameter value can be expected to fall outside the 95% quantile of the chi-squared distribution (df=1; critical value= 3.84) for only 5% of replicate sample data sets. That is, 95% of the time, the deviance between the true parameter and the MLE for that parameter should be below $\chi^2_{crit, df=1} = 3.84$
 
-It follows that we can define the 95% confidence interval for a parameter as the region around the MLE such that the deviance is within $\chi^2_{crit, df=1}$   
+It follows that we can define the 95% confidence interval for a parameter as the region around the MLE such that $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$ is within $\chi^2_{crit, df=1}$   
 
-So, if we want to determine a range in parameter space that can plausibly contain the true parameter value, we can select the range of parameter space for which the deviance is less than or equal to 3.84. 
+So, if we want to determine a range in parameter space that can plausibly contain the true parameter value, we can select the range of parameter space for which $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$ is less than or equal to 3.84. 
 
-$Deviance \leq - 3.84$  
 $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}}) \leq - 3.84$  
 $-2*[ln(\mathcal{L} _{r}) - ln{\widehat{\mathcal{L}}})] \leq - 3.84$  
 $[ln(\mathcal{L} _{r}) - ln{\widehat{\mathcal{L}}})] \leq  1.92$  
@@ -858,6 +885,9 @@ So, now what do you think about the 'rule of 2'? Is it close enough??
 
 #### Other questions
 - is the likelihood surface a *probability distribution*?
+
+
+![](curve_fitting.png)
 
 
 [--go to next lecture--](LECTURE5.html) 

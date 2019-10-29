@@ -10,7 +10,7 @@
 
 
 ############################################################
-####  Optimization
+####  Optimization                                      ####
 ####     Searching parameter space to identify the MLE  ####
 ####     While thwarting the curse of dimensionality    ####
 ############################################################
@@ -33,7 +33,7 @@ hist(Myx$titer,freq=FALSE)    # distribution of virus loads
 ###########
 # Overlay a gamma distribution on the histogram 
 
-hist(Myx$titer,freq=FALSE)     # note the "freq=FALSE", which displays densities of observations, and therefore makes histograms comparable with probability densities
+hist(Myx$titer,freq=FALSE)     # note the "freq=FALSE", which displays densities of observations, and therefore makes histograms comparable with probability density functions
 curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
 
 
@@ -58,7 +58,7 @@ GammaLikelihoodFunction(params)    # test the function!
 # Optimize using R's built-in "optim()" function: find the maximum likelihood estimate
 
 ctrl <- list(fnscale=-1)   # maximize rather than minimize!!
-MLE <- suppressWarnings(optim(fn=GammaLikelihoodFunction,par=params,control=ctrl,method="BFGS"))   # stop the warnings!
+MLE <- optim(fn=GammaLikelihoodFunction,par=params,control=ctrl,method="BFGS")   # stop the warnings!
 
 MLE$par
 
@@ -269,14 +269,14 @@ newMLE
 ########
 # set up an "initial" simplex
 
-firstguess <- c(shape=40,scale=0.25)   # "user" first guess 
+firstguess <- c(shape=70,scale=0.22)   # "user" first guess 
 
 simplex <- list()
  
            # set up the initial simplex based on the first guess...
-simplex[['vertex1']] <- firstguess + c(5,0.05)
-simplex[['vertex2']] <- firstguess + c(-5,-0.05)
-simplex[['vertex3']] <- firstguess + c(5,-0.05)
+simplex[['vertex1']] <- firstguess + c(3,0.04)
+simplex[['vertex2']] <- firstguess + c(-3,-0.04)
+simplex[['vertex3']] <- firstguess + c(3,-0.04)
 
 simplex
 
@@ -309,7 +309,7 @@ SimplexLik(simplex)
 # Helper Functions
 #####
 
-## this function relects the worst vertex across the remaining vector
+## this function reflects the worst vertex across the remaining vector
 ReflectIt <- function(oldsimplex,WorstVertex){
   
     ## re-arrange simplex- worst must be first
@@ -317,38 +317,34 @@ ReflectIt <- function(oldsimplex,WorstVertex){
   otherndx <- c(1:3)[-worstndx]
   newndx <- c(worstndx,otherndx) 
   
-    ## translate so that vertex 2 is the origin (0,0)
-  translate <- oldsimplex[[newndx[2]]]
+    ## translate so that vertex 1 is the origin (0,0)
+  oldsimplex <- oldsimplex[newndx] 
+  translate <- oldsimplex[[1]]
   newsimplex <- list(oldsimplex[[1]]-translate,oldsimplex[[2]]-translate,oldsimplex[[3]]-translate)
   
-    ## use vector reflection (reflect vertex 1 over a vector containing the origin and vertex 3) to find the reflection across a vector that includes the origin
-  vdotl <- sum(newsimplex[[newndx[1]]]*newsimplex[[newndx[3]]])
-  ldotl <- sum(newsimplex[[newndx[3]]]*newsimplex[[newndx[3]]])
-  
-  projection <- (vdotl/ldotl)*newsimplex[[newndx[3]]]
-  
-  reflected <- 2*projection-newsimplex[[newndx[1]]]
+  reflected <- c(newsimplex[[2]]["shape"]+newsimplex[[3]]["shape"],newsimplex[[2]]["scale"]+newsimplex[[3]]["scale"])
+  names(reflected) <- c("shape","scale") 
   
     ## translate back to the likelihood surface
-  newsimplex[[newndx[1]]] <- reflected
+  newsimplex[[1]] <- reflected
   newsimplex <- list(newsimplex[[1]]+translate,newsimplex[[2]]+translate,newsimplex[[3]]+translate)
     ## return the new simplex
   names(newsimplex) <- names(oldsimplex)
   
     ## generate some alternative jumps (or "oozes"!)...
-  oldpoint <- oldsimplex[[worstndx]]
-  newpoint <- newsimplex[[worstndx]]
+  oldpoint <- oldsimplex[[1]]
+  newpoint <- newsimplex[[1]]
   
   newpoint2 <- newpoint-oldpoint
-  double <- newpoint2 * 2
-  half <- newpoint2 * 0.25
+  double <- newpoint2 * 3
+  half <- newpoint2 * 0.24
   
   alternates <- list()
   alternates$reflected <- newsimplex
   alternates$double <- newsimplex 
   alternates$half <- newsimplex 
-  alternates$double[[worstndx]] <- double + oldpoint
-  alternates$half[[worstndx]] <- half + oldpoint
+  alternates$double[[1]] <- double + oldpoint
+  alternates$half[[1]] <- half + oldpoint
   return(alternates)
 }
 
@@ -373,25 +369,42 @@ ShrinkIt <- function(oldsimplex,BestVertex){
 }
 
 
-MoveTheSimplex <- function(oldsimplex){     # (incomplete) nelder-mead
+MoveTheSimplex <- function(oldsimplex){     # (incomplete) nelder-mead algorithm
   newsimplex <- oldsimplex  # 
            # Start by identifying the *worst* vertex (the one with the lowest likelihood)
   VertexLik <- SimplexLik(newsimplex)
   WorstLik <- min(VertexLik)
+  BestLik <- max(VertexLik)
   WorstVertex <- names(VertexLik[which.min(VertexLik)])    # identify vertex with lowest likelihood
   candidates <- ReflectIt(oldsimplex=newsimplex,WorstVertex)      # reflect across the remaining edge
   CandidateLik <- sapply(candidates,SimplexLik)                          # re-evaluate likelihood at the vertices...
   CandidateLik <- apply(CandidateLik,c(1,2), function(t) ifelse(is.nan(t),-99999,t))
   bestCandidate <- names(which.max(CandidateLik[WorstVertex,]))
   bestCandidateLik <- CandidateLik[WorstVertex,bestCandidate]
-  if(bestCandidateLik>=WorstLik){
-    newsimplex <- candidates[[bestCandidate]]
-  } else{
+  if(CandidateLik[WorstVertex,"reflected"]>=WorstLik){
+    if(CandidateLik[WorstVertex,"reflected"]>BestLik){    
+      if(CandidateLik[WorstVertex,"double"]>CandidateLik[WorstVertex,"reflected"]){
+        newsimplex <- candidates[["double"]]    # expansion
+      }else{
+        newsimplex <- candidates[["reflected"]]
+      }
+    }else if(CandidateLik[WorstVertex,"half"]>CandidateLik[WorstVertex,"reflected"]){   # contraction
+      newsimplex <- candidates[["half"]]
+    }else{
+      newsimplex <- candidates[["reflected"]]
+    }
+  }else{
     BestVertex <- names(VertexLik[which.max(VertexLik)])
     newsimplex <- ShrinkIt(oldsimplex,BestVertex)
   }
   return(newsimplex)
 }
+
+# image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+# contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+# addSimplex(oldsimplex,col="red")
+# addSimplex(candidates$reflected,col="green")
+# addSimplex(candidates$half,col="green")
 
 ###########
 # Visualize the simplex

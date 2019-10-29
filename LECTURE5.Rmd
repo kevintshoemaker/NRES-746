@@ -1,7 +1,7 @@
 ---
 title: "Optimization!"
 author: "NRES 746"
-date: "Fall 2018"
+date: "Fall 2019"
 output: 
   html_document: 
     theme: cerulean
@@ -26,7 +26,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 
 ############################################################
-####  Optimization
+####  Optimization                                      ####
 ####     Searching parameter space to identify the MLE  ####
 ####     While thwarting the curse of dimensionality    ####
 ############################################################
@@ -37,7 +37,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 For those wishing to follow along with the R-based demo in class, [click here](LECTURE5.R) for the companion R-script for this lecture.
 
-Please sign up (on our shared Google Sheets) for a time slot (20 mins) to discuss your group project proposals with me tomorrow. The rest of lab time is yours to either work on the group projects or get started with lab 3 (if I finish revising it in time!)  
+If you haven't already done this, please sign up (on our shared Google Sheets) for a time slot (30 mins) to discuss your group project proposals with me on Tues Oct 1. The rest of lab time is yours to either work on the group projects or get started with lab 3 (if I finish revising it in time!)  
 
 # Optimization
 
@@ -51,7 +51,7 @@ You may not have built your own optimization algorithm before, but you've probab
 
 We will discuss optimization in the context of maximum likelihood estimation, and a couple lectures from now we'll discuss optimization in a Bayesian context. Let's start with the most simple of all optimization algorithms -- brute force!
 
-Note that we won't be building optimization algorithms in class- the code in this lecture is for demonstration purposes only!
+Note: you won't need to build your own optimization routines for this class- the code in this lecture is for demonstration purposes only!
 
 ## Brute Force!
 
@@ -94,14 +94,14 @@ hist(Myx$titer,freq=FALSE)    # distribution of virus loads
 
 ```
 
-We need to estimate the gamma rate and shape parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
+We need to estimate the gamma 'rate' and 'shape' parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
 
 ```{r}
 
 ###########
 # Overlay a gamma distribution on the histogram 
 
-hist(Myx$titer,freq=FALSE)     # note the "freq=FALSE", which displays densities of observations, and therefore makes histograms comparable with probability densities
+hist(Myx$titer,freq=FALSE)     # note the "freq=FALSE", which displays densities of observations, and therefore makes histograms comparable with probability density functions
 curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
 
 ```
@@ -128,7 +128,8 @@ GammaLikelihoodFunction(params)    # test the function!
 
 Now let's optimize using 'optim()' like we did before, to find the MLE!
 
-NOTE: "optim()" doesn't work that well for optimizing single parameters (R recommends using "optimize()"), but in practice we will mostly be optimizing across multiple dimensions and "optim()" is far more general and powerful then "optimize()".
+NOTE: "optim()" will throw some warnings here because it will try to find the data likelihood for certain impossible parameter combinations!
+
 
 ```{r}
 
@@ -140,7 +141,7 @@ NOTE: "optim()" doesn't work that well for optimizing single parameters (R recom
 # Optimize using R's built-in "optim()" function: find the maximum likelihood estimate
 
 ctrl <- list(fnscale=-1)   # maximize rather than minimize!!
-MLE <- suppressWarnings(optim(fn=GammaLikelihoodFunction,par=params,control=ctrl,method="BFGS"))   # stop the warnings!
+MLE <- optim(fn=GammaLikelihoodFunction,par=params,control=ctrl,method="BFGS")   # stop the warnings!
 
 MLE$par
 
@@ -162,9 +163,9 @@ curve(dgamma(x,shape=MLE$par["shape"],scale=MLE$par["scale"]),add=T,col="red")
 
 Looks pretty good...
 
-But as dangerous ecological statisticians we aren't satisfied with using a "black box" like the "optim()" function, we need to understand what is going on behind the scenes. Maybe someday we'll want to write our own optimizer!  
+But as dangerous ecological statisticians we aren't satisfied with using a "black box" like the "optim()" function, we need to understand what is going on behind the scenes. Let's write our own optimizer!  
 
-Let's start with the conceptually simple, often computationally impossible, brute force method... 
+We start with the conceptually simple, often computationally impossible, brute force method... 
 
 ```{r}
 
@@ -457,11 +458,11 @@ Derivative-free methods make no assumption about smoothness. In some ways, they 
 
 ## Derivative-free method 1: simplex method
 
-This is the default opimization method for "optim()"! That means that R used this method for optimizing the fuel economy example from the likelihood lecture! 
+This is the default opimization method for "optim()"! That means that R used this method for optimizing the fuel economy example from the previous lecture! 
 
 #### Definition: Simplex
 
-A *simplex* is the multi-dimensional analog of the triangle. In two dimensions, the triangle is the simplest shape possible. It has one more vertex than there are dimensions! In *n* dimensions, a simplex is defined by *n+1* vertices. 
+A *simplex* is the multi-dimensional analog of the triangle. In two dimensions, the triangle is the simplest shape possible. It has just one more vertex than there are dimensions! In *n* dimensions, a simplex is defined by *n+1* vertices. 
 
 #### Pseudocode for Nelder-Mead simplex algorithm
 
@@ -469,11 +470,12 @@ Set up an initial simplex in parameter space (often based on a user's initial gu
 
 Continue the following steps until your answer is good enough:  
 
-> - Start by identifying the *worst* vertex (the one with the lowest likelihood)  
-> - Take the worst vertex and reflect it across the shape represented by the other vertices.  
-> - If the likelihood is higher for the reflected point, double the length of the jump!  
-> - If this jump was bad (lower likelihood) then try a point that's only half as far out as the initial try.  
-> - If this jump was also bad, then contract the simplex around the current highest-likelihood vertex.   
+* Start by identifying the *worst* vertex (the one with the lowest likelihood)  
+* Take the worst vertex and reflect it across the center of the shape represented by the other vertices.
+* If the likelihood is higher for the reflected point, but not the highest of all vertices, then accept the new vertex.
+* If the likelihood is highest for the reflected point, increase the length of the jump! If it's better, accept the new point.   
+* If this jump was bad (lower likelihood) then try a point that's only a smaller step away from the initial try. If it's better, accept the new point. If not, accept the original reflected point.
+* If all reflections were worse than any other vertex, then contract the simplex around the current highest-likelihood vertex.   
 
 **Q**: What does the simplex look like for a one-dimensional optimization problem?
 
@@ -491,14 +493,14 @@ Continue the following steps until your answer is good enough:
 ########
 # set up an "initial" simplex
 
-firstguess <- c(shape=40,scale=0.25)   # "user" first guess 
+firstguess <- c(shape=70,scale=0.22)   # "user" first guess 
 
 simplex <- list()
  
            # set up the initial simplex based on the first guess...
-simplex[['vertex1']] <- firstguess + c(5,0.05)
-simplex[['vertex2']] <- firstguess + c(-5,-0.05)
-simplex[['vertex3']] <- firstguess + c(5,-0.05)
+simplex[['vertex1']] <- firstguess + c(3,0.04)
+simplex[['vertex2']] <- firstguess + c(-3,-0.04)
+simplex[['vertex3']] <- firstguess + c(3,-0.04)
 
 simplex
 
@@ -538,7 +540,7 @@ SimplexLik(simplex)
 
 ```
 
-Now let's develop a function to implement our first move through parameter space, according to the rules defined above... 
+Now let's develop a function (or functions as the case may be) to implement our first move through parameter space, according to the rules defined above... 
 
 ```{r}
 
@@ -546,7 +548,7 @@ Now let's develop a function to implement our first move through parameter space
 # Helper Functions
 #####
 
-## this function relects the worst vertex across the remaining vector
+## this function reflects the worst vertex across the remaining vector
 ReflectIt <- function(oldsimplex,WorstVertex){
   
     ## re-arrange simplex- worst must be first
@@ -554,38 +556,34 @@ ReflectIt <- function(oldsimplex,WorstVertex){
   otherndx <- c(1:3)[-worstndx]
   newndx <- c(worstndx,otherndx) 
   
-    ## translate so that vertex 2 is the origin (0,0)
-  translate <- oldsimplex[[newndx[2]]]
+    ## translate so that vertex 1 is the origin (0,0)
+  oldsimplex <- oldsimplex[newndx] 
+  translate <- oldsimplex[[1]]
   newsimplex <- list(oldsimplex[[1]]-translate,oldsimplex[[2]]-translate,oldsimplex[[3]]-translate)
   
-    ## use vector reflection (reflect vertex 1 over a vector containing the origin and vertex 3) to find the reflection across a vector that includes the origin
-  vdotl <- sum(newsimplex[[newndx[1]]]*newsimplex[[newndx[3]]])
-  ldotl <- sum(newsimplex[[newndx[3]]]*newsimplex[[newndx[3]]])
-  
-  projection <- (vdotl/ldotl)*newsimplex[[newndx[3]]]
-  
-  reflected <- 2*projection-newsimplex[[newndx[1]]]
+  reflected <- c(newsimplex[[2]]["shape"]+newsimplex[[3]]["shape"],newsimplex[[2]]["scale"]+newsimplex[[3]]["scale"])
+  names(reflected) <- c("shape","scale") 
   
     ## translate back to the likelihood surface
-  newsimplex[[newndx[1]]] <- reflected
+  newsimplex[[1]] <- reflected
   newsimplex <- list(newsimplex[[1]]+translate,newsimplex[[2]]+translate,newsimplex[[3]]+translate)
     ## return the new simplex
   names(newsimplex) <- names(oldsimplex)
   
     ## generate some alternative jumps (or "oozes"!)...
-  oldpoint <- oldsimplex[[worstndx]]
-  newpoint <- newsimplex[[worstndx]]
+  oldpoint <- oldsimplex[[1]]
+  newpoint <- newsimplex[[1]]
   
   newpoint2 <- newpoint-oldpoint
-  double <- newpoint2 * 2
-  half <- newpoint2 * 0.25
+  double <- newpoint2 * 3
+  half <- newpoint2 * 0.24
   
   alternates <- list()
   alternates$reflected <- newsimplex
   alternates$double <- newsimplex 
   alternates$half <- newsimplex 
-  alternates$double[[worstndx]] <- double + oldpoint
-  alternates$half[[worstndx]] <- half + oldpoint
+  alternates$double[[1]] <- double + oldpoint
+  alternates$half[[1]] <- half + oldpoint
   return(alternates)
 }
 
@@ -610,25 +608,42 @@ ShrinkIt <- function(oldsimplex,BestVertex){
 }
 
 
-MoveTheSimplex <- function(oldsimplex){     # (incomplete) nelder-mead
+MoveTheSimplex <- function(oldsimplex){     # (incomplete) nelder-mead algorithm
   newsimplex <- oldsimplex  # 
            # Start by identifying the *worst* vertex (the one with the lowest likelihood)
   VertexLik <- SimplexLik(newsimplex)
   WorstLik <- min(VertexLik)
+  BestLik <- max(VertexLik)
   WorstVertex <- names(VertexLik[which.min(VertexLik)])    # identify vertex with lowest likelihood
   candidates <- ReflectIt(oldsimplex=newsimplex,WorstVertex)      # reflect across the remaining edge
   CandidateLik <- sapply(candidates,SimplexLik)                          # re-evaluate likelihood at the vertices...
   CandidateLik <- apply(CandidateLik,c(1,2), function(t) ifelse(is.nan(t),-99999,t))
   bestCandidate <- names(which.max(CandidateLik[WorstVertex,]))
   bestCandidateLik <- CandidateLik[WorstVertex,bestCandidate]
-  if(bestCandidateLik>=WorstLik){
-    newsimplex <- candidates[[bestCandidate]]
-  } else{
+  if(CandidateLik[WorstVertex,"reflected"]>=WorstLik){
+    if(CandidateLik[WorstVertex,"reflected"]>BestLik){    
+      if(CandidateLik[WorstVertex,"double"]>CandidateLik[WorstVertex,"reflected"]){
+        newsimplex <- candidates[["double"]]    # expansion
+      }else{
+        newsimplex <- candidates[["reflected"]]
+      }
+    }else if(CandidateLik[WorstVertex,"half"]>CandidateLik[WorstVertex,"reflected"]){   # contraction
+      newsimplex <- candidates[["half"]]
+    }else{
+      newsimplex <- candidates[["reflected"]]
+    }
+  }else{
     BestVertex <- names(VertexLik[which.max(VertexLik)])
     newsimplex <- ShrinkIt(oldsimplex,BestVertex)
   }
   return(newsimplex)
 }
+
+# image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+# contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+# addSimplex(oldsimplex,col="red")
+# addSimplex(candidates$reflected,col="green")
+# addSimplex(candidates$half,col="green")
 
 ###########
 # Visualize the simplex
@@ -759,16 +774,16 @@ SimplexMethod(firstguess = c(shape=39,scale=0.28))
 
 Okay, it's close but doesn't seem to be optimizing very well compared with the other methods. I probably didn't implement it perfectly yet! 
 
-Can you see why this method is sometimes called the "amoeba" method of optimization??
+I like to call this the "amoeba" method of optimization??
 
-In general, the simplex-based methods are very good at finding the general vicinity of the MLE, but generally less efficient than the derivative-based methods- especially as you near the MLE.   
+In general, the simplex-based methods are less efficient than the derivative-based methods at finding the MLE- especially as you near the MLE.   
 
 
 ## Derivative-free method 2: simulated annealing (SE).  
 
 Simulated annealing is one of my favorite optimization techniques. I think it serves as a good metaphor for problem-solving in general. When solving a problem, the first step is to think big, try to imagine whether we might be missing possible solutions. Then we settle (focus) on a general solution, learn more about how that solution applies to our problem, and ultimately get it done!
 
-The temperature analogy is fun too! We start out "hot"- unfocused, frenzied, bouncing around - and we end up cold - crystal clear and focused! 
+The temperature analogy is fun too! We start out "hot"- unfocused, frenzied, bouncing around - and we end up "cold" - crystal clear and focused on a solution! 
 
 ### SE: A "global" optimization solution
 
@@ -979,7 +994,7 @@ There are several techniques that are widely used to estimate and describe param
 
 1. Brute force (expose the entire likelihood surface!) [okay, this one isn't actually used very often]
 2. Profile likelihood (the most accurate way!)
-3. Evaluate curvature at the MLE and use that to estimate error (somewhat inexact but efficient- but generally performs pretty well, and is the default for many MLE routines!)
+3. Evaluate curvature at the MLE and use that to estimate sampling error (somewhat inexact but efficient- but generally performs pretty well, and is the default for many MLE routines!)
 
 
 

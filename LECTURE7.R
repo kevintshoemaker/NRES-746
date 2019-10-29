@@ -21,7 +21,7 @@
 
 
 #########
-# first, let's build a function that generates random numbers from a bivariate normal distribution
+# first, let's build a function that generates random numbers from a bivariate standard normal distribution
 
 rbvn<-function (n, rho)   #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
 {
@@ -50,7 +50,7 @@ par(mfrow=c(1,1))
 
 library(mvtnorm)    # load a package that allows us to compute probability densities for mv normal distribution 
 
-metropolisHastings <- function (n, rho=0.98){    # a MCMC sampler implementation of a bivariate random number generator
+metropolisHastings <- function (n, rho=0.98){    # an MCMC sampler implementation of a bivariate random number generator
     mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
     x <- 0   # initial values for all parameters
     y <- 0
@@ -156,9 +156,14 @@ GammaLikelihoodFunction <- function(params){
   prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=F))   
 }
 
+GammaLogLikelihoodFunction <- function(params){
+  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))   
+}
+
 params <- c(shape=40,scale=0.15) 
 params
 GammaLikelihoodFunction(params)
+GammaLogLikelihoodFunction(params)
 
 
 #############
@@ -173,11 +178,39 @@ GammaPriorFunction <- function(params){
   return(prod(prior))
 }
 
+GammaLogPriorFunction <- function(params){
+  prior <- c(shape=NA,scale=NA)
+  prior['shape'] <- dgamma(params['shape'],shape=0.01,scale=100,log=T)
+  prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000,log=T)
+  # prior['shape'] <- dunif(params['shape'],3,100)        # alternative: could use uniform prior!
+  # prior['scale'] <- dunif(params['scale'],0.01,0.5)
+  return(sum(prior))
+}
+
 curve(dgamma(x,shape=0.01,scale=1000),3,100)
 
 params <- c(shape=40,scale=0.15) 
 params
 GammaPriorFunction(params)
+
+prior2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
+
+newparams <- c(shape=50,scale=0.2)
+for(i in 1:length(shapevec)){
+  newparams['shape'] <- shapevec[i]
+  for(j in 1:length(scalevec)){
+    newparams['scale'] <- scalevec[j]
+    prior2D[i,j] <- GammaPriorFunction(newparams) 
+  }
+}
+
+############
+# Visualize the likelihood surface
+############
+
+image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.0000001,0.001),col=topo.colors(12))
+#contour(x=shapevec,y=scalevec,z=prior2D,levels=c(-30,-40,-80,-500),add=T)
+
 
 
 
@@ -192,10 +225,19 @@ PosteriorRatio <- function(oldguess,newguess){
   return((newLik*newPrior)/(oldLik*oldPrior))          # compute ratio of weighted likelihoods
 }
 
+PosteriorRatio2 <- function(oldguess,newguess){
+  oldLogLik <- GammaLogLikelihoodFunction(oldguess)   # compute likelihood and prior density at old guess
+  oldLogPrior <- GammaLogPriorFunction(oldguess)
+  newLogLik <- GammaLogLikelihoodFunction(newguess)             # compute likelihood and prior density at new guess
+  newLogPrior <- GammaLogPriorFunction(newguess)
+  return(exp((newLogLik+newLogPrior)-(oldLogLik+oldLogPrior)))          # compute ratio of weighted likelihoods
+}
+
 oldguess <- params
 newguess <- c(shape=39,scale=0.15)
 
 PosteriorRatio(oldguess,newguess)
+PosteriorRatio2(oldguess,newguess)
 
 
 ############
@@ -228,21 +270,21 @@ startingvals <- c(shape=75,scale=0.28)    # starting point for the algorithm
 newguess <- newGuess(startingvals)    # take a jump in parameter space
 newguess
 
-PosteriorRatio(startingvals,newguess)   # difference in posterior ratio
+PosteriorRatio2(startingvals,newguess)   # difference in posterior ratio
 
 
 ###############
 # Visualize the Metropolis-Hastings routine:
 
-chain.length <- 10
+chain.length <- 11
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
-
-counter <- 1
+guesses[1,] <- startingvals
+counter <- 2
 while(counter <= chain.length){
   newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio(oldguess,newguess)
+  post.rat <- PosteriorRatio2(oldguess,newguess)
   prob.accept <- min(1,post.rat)
   rand <- runif(1)
   if(rand<=prob.accept){
@@ -266,11 +308,12 @@ chain.length <- 100
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
+guesses[1,] <- startingvals
 
-counter <- 1
+counter <- 2
 while(counter <= chain.length){
   newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio(oldguess,newguess)
+  post.rat <- PosteriorRatio2(oldguess,newguess)
   prob.accept <- min(1,post.rat)
   rand <- runif(1)
   if(rand<=prob.accept){
@@ -294,11 +337,12 @@ chain.length <- 1000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
+guesses[1,] <- startingvals
 
-counter <- 1
+counter <- 2
 while(counter <= chain.length){
   newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio(oldguess,newguess)
+  post.rat <- PosteriorRatio2(oldguess,newguess)
   prob.accept <- min(1,post.rat)
   rand <- runif(1)
   if(rand<=prob.accept){
@@ -346,11 +390,12 @@ chain.length <- 20000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
+guesses[1,] <- startingvals
 
-counter <- 1
+counter <- 2
 while(counter <= chain.length){
   newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio(oldguess,newguess)
+  post.rat <- PosteriorRatio2(oldguess,newguess)
   prob.accept <- min(1,post.rat)
   rand <- runif(1)
   if(rand<=prob.accept){
@@ -382,7 +427,7 @@ plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="
 ##########
 # "thin" the MCMC samples
 
-thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=10),]
+thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=5),]
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
 
@@ -503,11 +548,10 @@ myx.data.for.bugs
 # Function for generating random initial values for all free parameters
 
 init.vals.for.bugs <- function(){
-  init.list <- list(
+  list(
     shape=runif(1,20,100),
     scale=runif(1,0.05,0.3)
   )
-  return(init.list)
 }
 
 init.vals.for.bugs()
@@ -520,14 +564,16 @@ init.vals.for.bugs()
 ##########
 
 library(R2jags)
+library(runjags)
+library(modeest)
 
 library(coda)
 
 params.to.store <- c("shape","scale")
 
-jags.fit <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=5000,model.file="BUGSmodel.txt",n.chains = 3,n.burnin = 0 )
+jags.fit <- run.jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,monitor=params.to.store,sample=5000,n.chains = 3,adapt = 100,burnin = 0,summarise = FALSE )
 
-jagsfit.mcmc <- as.mcmc(jags.fit)   # convert to "MCMC" object (coda package)
+jagsfit.mcmc <- as.mcmc.list(jags.fit)   # convert to "MCMC" object (coda package)
 
 summary(jagsfit.mcmc)
 
@@ -537,9 +583,11 @@ plot(jagsfit.mcmc)
 ################
 # Run the chains for longer!
 
-jags.fit <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel.txt",n.chains = 3, n.burnin=10000,n.thin = 20)
+jags.fit <- run.jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,monitor=params.to.store,
+                     sample = 10000,n.chains = 3,adapt = 1000,burnin = 1000,
+                     summarise = FALSE,thin=20,method = "parallel" )
 
-jagsfit.mcmc <- as.mcmc(jags.fit)   # convert to "MCMC" object (coda package)
+jagsfit.mcmc <- as.mcmc.list(jags.fit)   # convert to "MCMC" object (coda package)
 
 summary(jagsfit.mcmc)
 

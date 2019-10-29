@@ -1,0 +1,856 @@
+---
+title: "Lab 2"
+author: "NRES 746"
+date: "Fall 2019"
+output: learnr::tutorial
+runtime: shiny_prerendered
+---
+
+```{r setup, include=FALSE}
+library(learnr)
+library(checkr)
+tutorial_options(exercise.timelimit = 60, exercise.checker = checkr::check_for_learnr)
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+
+```{r echo=FALSE}
+
+############################################################
+####                                                    ####  
+####  NRES 746, Lab 2                                   ####
+####                                                    ####
+####  Kevin Shoemaker                                   #### 
+####  University of Nevada, Reno                        ####
+####                                                    #### 
+############################################################
+
+
+############################################################
+####  The virtual ecologist                             ####
+############################################################
+
+
+```
+
+## The Virtual Ecologist
+
+As with all lab reports, your answers will either take the form of R functions or short written responses (submitted together in a Word document). The R functions should be stored in an R script file ('.R' extension). To allow me to evaluate your work more efficiently, please name your R script using the following convention: "[your first name]_[your last name]_lab2.R". So my submission would be "kevin_shoemaker_lab2.R". The name of your Word document doesn't matter, as long as you submit via WebCampus. 
+
+Please submit the R script and the Word document via WebCampus by midnight on the due date (one week after the final lab session allocated for this topic -- here, _Oct. 8_). You can work in groups but please submit the materials individually. 
+
+When writing functions, it's often easiest to start off by writing a script, and then when you have everything working properly, wrap the script into a function. But don't forget to test your function!
+
+Please comment your code thoroughly. Don't be afraid of *for* loops and inefficient coding practices... And of course *be dangerous*!
+
+## Final Projects
+
+If you haven't already, please list your final project information (project title, group members etc.) on our [shared Google sheets document](https://docs.google.com/spreadsheets/d/1aZa31yLtxN5_El95SrbqXFT5eDgm0EmtrJmNcY2jEKA/edit?usp=sharing)
+
+## Simulating Data in R
+
+First, review the basic approach to simulating data in the ["Virtual Ecologist" lecture](https://kevintshoemaker.github.io/NRES-746/LECTURE3.html). Recall that a data simulation model can be constructed as a *deterministic component* (defining underlying relationships between the process of interest and a set of covariates), with a *stochastic component* wrapped around it (defining the "noise", or "error" associated with each observation from the process of interest).   
+
+## Exercise 2.1: model verification, part 1
+
+Simulate data that meet the standard assumptions of univariate linear regression (homoskedasticity, Gaussian/independent residual errors). Then run the "lm()" function on your simulated data and examine how closely the parameter estimates match the "true" parameter value. 
+
+
+## Exercise 2.1a 
+
+Write a function called "LMDataSim()" for drawing a set of random observations from a defined data generating model that meets all the assumptions of ordinary linear regression. This function should be specified as follows:
+
++ **input**:         
+    + sample.size = a scalar (integer) specifying the number of observations to simulate
+    + xlimits = a vector of length 2 specifying the minimum and maximum values of the covariate "x"       
+    + coefs = a vector of length 2 specifying (in order) the intercept and slope of the deterministic relationship defining the expected response as a function of "x".    
+    + stdev = a scalar specifying the standard deviation of the residual errors.
+
++ **suggested algorithm**:   
+    + sample random values (size="sample.size") from a uniform distribution (min and max defined by "xlimits") to represent the covariate (use the "runif()" function)    
+    + Use the defined linear model (defined by "coefs") to determine the expected value of the response. 
+    + Add "noise" to the expected values according to the "stdev" parameter (use the "rnorm()" function)
+
++ **return**:    
+    + out = a data frame with number of rows equal to "sample.size", and two columns. The first column should represent the values of the "x" variable and the second column should represent stochastic observations from the *known* model defined by "coefs" and "stdev"    
+
+```{r answer2.1a, echo=FALSE, context='data'}
+
+#############
+## exercise 2.1a
+
+LMDataSim <- function(sample.size,xlimits,coefs,stdev){
+  xvals <- runif(sample.size,xlimits[1],xlimits[2])
+  yvals <- coefs[1] + coefs[2]*xvals
+  yvals <- rnorm(sample.size,yvals,stdev)
+  out <- data.frame(x=xvals,y=yvals)
+  return(out)
+}
+
+```
+
+
+
+Test your function- for example, using the following code: 
+
+```{r test2.1a}
+
+LMDataSim(sample.size=10,xlimits=c(40,120),coefs=c(55,-0.09),stdev=6.8)
+
+```
+
+
+```{r test2.1a1, context="data",echo=FALSE}
+
+temp <- LMDataSim(sample.size=20,xlimits=c(40,120),coefs=c(5,0.3),stdev=1)
+answer1a <- coef(lm(temp$y~temp$x))
+
+```
+
+
+Include your function in your submitted r script!
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q2.1a, exercise=TRUE}
+LMDataSim <- function(sample.size,xlimits,coefs,stdev){
+    # [add code here!]
+}
+LMDataSim(sample.size=20,xlimits=c(40,120),coefs=c(5,0.3),stdev=1)
+
+```
+
+<div id="q2.1a-hint">
+**Hint:** No hints ... yet!
+</div>
+
+```{r q2.1a-check, echo=F}
+check_q2.1a <- function(USER_CODE){
+    code <- checkr::for_checkr(USER_CODE)
+    func_call <- checkr::line_where(code,checkr::insist(F== "LMDataSim","Use LMDataSim() function!"))
+    t1 <- checkr::line_where(func_call, 
+        checkr::insist(abs(sum(coef(lm(V$y~V$x))-c(5,0.3)))<=1.3, 
+        "Sorry, that's not correct"),
+        checkr::passif(TRUE, "Very nice!"))
+}
+check_q2.1a(USER_CODE)
+```
+
+
+
+
+## Exercise 2.1b
+
+Write a function called "LMVerify_pt1()" for computing how well the coefficients and variance from R's "lm()" function match the known coefficients of the model used to generate the data. This function should be specified as follows:
+
++ **input**:         
+    + sim.dataset = a data frame representing data simulated from a linear model with known coefficients (and known residual variance).  The first column should represent the values of the "x" variable and the second column should represent stochastic observations from the *known* model defined by "trueparams"
+    + trueparams = a vector of length 3 specifying the intercept, slope, and standard deviation of the residual errors of the known relationship between "x" and the response 
+    + plot = a logical (TRUE/FALSE) indicating whether or not to produce a plot with regression line and confidence interval 
+
++ **suggested algorithm**:   
+    + Use the "lm()" function to estimate the coefficients and residual standard deviation of the relationships between column 1 and column 2 of "sim.dataset" (regress column 2 on column 1)      
+    + Extract and store the regression coefficients (intercept and slope parameter)     
+    + Extract an estimate of the residual standard deviation of the regression relationship. 
+    + Subtract the known parameter values (intercept, slope, error sd) from the regression parameters.
+    + [if plot=TRUE] Plot the estimated regression line with a 95% confidence interval around the estimated regression line (e.g., computed using the "predict()" function). Overlay the "true" linear relationship (from the known data generating model). Add a legend to differentiate the true linear relationship from the estimated regression line.
+    + Use an "ifelse()" statement to record whether or not the 95% confidence interval around the slope parameter estimate (estimated from the data) contains the "true" parameter value (if the 95% confidence interval contains the true value, then TRUE, otherwise FALSE)
+
++ **return**:    
+    + out = a list of length 2 with the following elements:   
+        + a vector of length 3 representing (in order) the differences between the known parameters (intercept, slope, error sd) and the estimates from a linear regression model
+        + a logical (TRUE/FALSE) representing whether or not the 95% confidence interval around the slope parameter estimate (estimated from the data) contains the "true" parameter value.
+
+```{r answer2.1b, echo=FALSE}
+
+#############
+## exercise 2.1b
+
+LMVerify_pt1 <- function(sim.dataset,trueparams,plot=T){
+  names <- names(sim.dataset)
+  form <- as.formula(sprintf("%s ~ %s",names[2],names[1]) )   # note: this is to make sure the function runs for whatever your column names are!
+  mod <- lm(form,data=sim.dataset)
+  coefs <- coefficients(mod)
+  sdest <- sd(residuals(mod))
+  difs <- c(coefs,sdest)-trueparams
+  names(difs) <- c("intercept",names[1],"stdev")
+  if(plot==T){
+    xl <- range(sim.dataset[,1])*c(0.75,1.25)
+    yl <- range(sim.dataset[,2])*c(0.75,1.25)
+    newdata <- data.frame(temp=seq(xl[1],xl[2],0.1))
+    names(newdata) <- names[1]
+    ci <- predict(mod,newdata,interval="confidence")
+    plot(sim.dataset,ylim=yl,xlim=xl)
+    abline(mod,col="green",lwd=3)
+    lines(newdata[,1],ci[,"lwr"],col="blue",lty=2)
+    lines(newdata[,1],ci[,"upr"],col="blue",lty=2)
+  }
+  cislope <- confint(mod,names[1])
+  trueslope <- trueparams[2]
+  is.inside <- ifelse((trueslope>=cislope[1])&(trueslope<=cislope[2]),TRUE,FALSE)
+  out <- list()
+  out$difs <- difs
+  out$inside <- is.inside
+  return(out)
+}
+
+```
+
+
+Test your function- for example, using the following code: 
+
+```{r test2.1b}
+
+simdat <- LMDataSim(sample.size=10,xlimits=c(40,120),coefs=c(55,-0.09),stdev=6.8)
+
+LMVerify_pt1(sim.dataset = simdat, trueparams = c(55,-0.09,6.8))
+
+```
+
+
+Include your function in your submitted r script!
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q2.1b, exercise=TRUE}
+simdat <- LMDataSim(sample.size=1000,xlimits=c(0,10),coefs=c(0,1),stdev=1)
+LMVerify_pt1 <- function(sim.dataset,trueparams,plot=TRUE){
+    # [add code here!]
+}
+LMVerify_pt1(sim.dataset = simdat, trueparams = c(0,1,1),plot=FALSE)
+
+```
+
+<div id="q2.1b-hint">
+**Hint:** No hints ... yet!
+</div>
+
+
+```{r q2.1b-check,echo=F}
+check_q2.1b <- function(USER_CODE){
+    code <- checkr::for_checkr(USER_CODE)
+    func_call <- checkr::line_where(code,checkr::insist(F== "LMVerify_pt1","Use LMVerify_pt1() function!"))
+    t1 <- checkr::line_where(func_call, 
+        checkr::insist(dplyr::near(0,sum(V[[1]]),tol=0.09), "Sorry, that's not correct"),
+        checkr::passif(TRUE, "Hallelujah!"))
+}
+check_q2.1b(USER_CODE)
+```
+
+
+
+## Aside: plotting confidence intervals
+
+You can use the 'predict' function to compute confidence intervals and prediction intervals:
+
+```{r, eval=FALSE}
+
+predict.lm(yourmodel, interval = c("confidence"), level = 0.95)   # for confidence interval
+predict.lm(yourmodel, interval = c("prediction"), level = 0.95)   # for prediction interval
+
+```
+
+The predict function allows you to predict a response (and estimate confidence intervals) for any arbitrary covariate values. To do this you need to add a "newdata" argument to the predict function. For example:
+
+```{r, eval=FALSE}
+
+nd <- data.frame(x=seq(lb,ub,1))  # note that the predictor names need to match the predictor names in the model object! 
+predict.lm(yourmodel, newdata=nd, interval = c("confidence"), level = 0.95)   # for confidence interval
+
+```
+
+Note that the prediction interval code may occasionally return some warnings- which you may safely ignore!
+
+## **Exercise 2.1c**. 
+
+Does the 95% confidence interval around the slope estimate (estimated from simulated data with a sample size of 10) contain the "true" slope parameter value 95% of the time (a frequentist question!). In your Word document, explain how you addressed this question. Did you need more than 100 simulated data sets to answer this question? 
+
+```{r answer1c, eval=FALSE, echo=FALSE}
+
+#############
+## exercise 1c
+
+reps=1000
+trueparams <- c(55,-0.09,6.8)
+is.inside <- logical(reps)
+
+i=1   # for debugging
+for(i in 1:reps){
+  simdat <- LMDataSim(sample.size=10,xlimits=c(40,120),coefs=trueparams[c(1:2)],stdev=trueparams[3])
+  lmv <- LMVerify_pt1(sim.dataset = simdat, trueparams = trueparams,plot=FALSE)
+  is.inside[i] <- lmv[[2]]
+}
+
+sum(is.inside)/reps
+
+
+```
+
+
+## ASIDE: review of conditional statements in R
+
+NOTE: The previous exercise requires the use of "conditional" statements. That is, if a condition is true, do something. If the condition is false, do something else. The syntax for doing this in R is:
+
+```
+if(TRUE){
+  do something
+}else{
+  do something else
+}
+
+```
+
+Let's say I want to determine the number of vector elements that are cleanly divisible by 3. I could write the following code:
+
+```{r}
+
+inputvector <- c(1:100) # vector of interest
+div_by_three <- 0
+
+for(i in 1:length(inputvector)){
+  if(i%%3==0){  # if there is zero remainder after dividing by three
+    div_by_three <- div_by_three+1   # then increment the storage variable
+  }
+}
+
+div_by_three
+
+```
+
+An alternative way to do this would be to do use the "which()" function. This tells you which indices in a vector correspond to "TRUE" conditions. 
+
+For example,
+
+```{r}
+
+which(c(FALSE,TRUE,TRUE,FALSE))
+
+```
+
+Using "which", we could re-write the above code to take up just one line!
+
+```{r}
+
+div_by_three <- length(which(inputvector%%3==0))
+
+```
+
+
+## Exercise 2.2: model verification, part 2
+
+How might your results from part 2.1 change if your data simulations DID NOT meet the assumptions of ordinary linear regression- e.g., if the variances were not homogeneous? 
+
+To test this, you are asked to write an R function to generate data that violates a basic assumption regarding the error distribution of standard linear regression. Specifically, your function should generate "heteroskedastic" data, such that the variance of the residuals depends on the magnitude of the covariate "x". For this exercise, you'll still need to specify a linear relationship (y=ax+b) between your response and predictor - the only difference is that the residual variance is no longer homogeneous.
+
+Some other potential violations of standard assumtions we could also introduce into our data simulations if we wanted to: 
+
+* use a non-normal error distribution      
+* introduce temporal autocorrelation     
+* introduce other types of correlation structure among the observations      
+* use a mixture of two error distributions
+* use a non-linear functional form
+
+## **Exercise 2.2a**. 
+
+In your Word document, please explain how biological or sampling processes could yield data that violate (1) the standard regression assumption of normally distributed residuals and (2) the standard regression assumption of independent observations. Be as brief as possible in your response!   
+
+## **Exercise 2.2b**. 
+
+Write a function called "LMDataSim2()" for drawing a set of random observations from a defined linear relationship that meets all the assumptions of ordinary linear regression *except for homoskedasticity*. This function should be specified as follows:
+
++ **input**:         
+    + sample.size = a scalar (integer) specifying the number of observations to simulate
+    + xlimits = a vector of length 2 specifying the minimum and maximum values of the covariate "x"       
+    + coefs = a vector of length 2 specifying (in order) the intercept and slope of the relationship between "x" and the expected response   -
+    + sd_coefs = a vector of length 2 specifying (in order) coefficients for a "heteroskedasticity" model specifies standard deviation as a linear function of the covariate "x"
+
++ **suggested algorithm**:   
+    + sample random values (size="sample.size") from a uniform distribution (min and max defined by "xlimits") to represent the covariate (use the "runif()" function)    
+    + Use the defined linear model (defined by "coefs") to determine the expected value of the response. 
+    + Use the defined linear model (defined by "sd_coefs") to determine the expected value of the standard deviation of the response.
+    + Add "noise" to the expected values according to the "stdev" parameter (use the "rnorm()" function). Note that this should now depend on the covariate "x".
+
++ **return**:    
+    + out = a data frame with number of rows equal to "sample.size", and two columns. The first column should represent the values of the "x" variable and the second column should represent stochastic observations from the *known* model defined by "coefs" and "stdev"  
+    
+
+NOTE: make sure that your linear model for stdev does not go negative - this will return "NaN" values (not a number!). 
+
+
+```{r answer2.2b, echo=FALSE, context='data'}
+
+#############
+## exercise 2.2b
+
+LMDataSim2 <- function(sample.size,xlimits,coefs,sd_coefs){
+  xvals <- runif(sample.size,xlimits[1],xlimits[2])
+  yvals <- coefs[1] + coefs[2]*xvals
+  sds <- sd_coefs[1] + sd_coefs[2]*xvals
+  yvals <- rnorm(sample.size,yvals,sds)
+  out <- data.frame(x=xvals,y=yvals)
+  return(out)
+}
+
+```
+
+
+
+Test your function- for example, using the following code: 
+
+```{r test2.2b}
+
+test <- LMDataSim2(sample.size=35,xlimits=c(40,120),coefs=c(55,-0.09),sd_coefs=c(-0.2,0.04))
+plot(test$x,test$y)
+
+```
+
+Include your function in your submitted r script!
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q2.2b, exercise=TRUE}
+LMDataSim2 <- function(sample.size,xlimits,coefs,sd_coefs){
+    # [add code here!]
+}
+LMDataSim2(sample.size=1000,xlimits=c(0,10),coefs=c(0,0.5),sd_coefs=c(0,0.2))
+
+```
+
+<div id="q2.2b-hint">
+**Hint:** No hints ... yet!
+</div>
+
+```{r q2.2b-check, echo=F}
+check_q2.2b <- function(USER_CODE){
+    code <- checkr::for_checkr(USER_CODE)
+    func_call <- checkr::line_where(code,checkr::insist(F== "LMDataSim2","Use LMDataSim2() function!"))
+    t1 <- checkr::line_where(func_call, 
+        checkr::insist(dplyr::near(0.16,coefficients( lm( abs(residuals( lm(V[,2]~V[,1]) ))~V[,1]) )[2],tol=0.06), "Sorry, that's not correct"),
+        checkr::passif(TRUE, "Hot Damn!"))
+}
+check_q2.2b(USER_CODE)
+```
+
+
+
+
+## **Exercise 2.2c**. 
+
+Write a function called "LMVerify_pt2()" for computing how well the coefficients from R's "lm()" function match the known coefficients of the model used to generate the data. This function should be specified as follows:
+
++ **input**:          
+    + sim.dataset = a data frame representing data simulated from a linear model with known coefficients (and known residual variance, with variance dependent on the covariate "x").  The first column should represent the values of the "x" variable and the second column should represent stochastic observations from the *known* model defined by "trueparams"
+    + trueparams = a vector of length 2 specifying the intercept and slope of the known relationship between "x" and the response 
+    + plot = a logical (T/F) indicating whether or not to produce a plot
+
++ **suggested algorithm**:   
+    + Use the "lm()" function to estimate the coefficients of the relationships between column 1 and column 2 of "sim.dataset" (regress column 2 on column 1)      
+    + Extract and store the regression coefficients (intercept and slope parameter)     
+    + Subtract the known parameter values (intercept, slope) from the regression parameters.
+    + [if plot=T] Plot the estimated regression line with a *95% prediction interval* around the estimated regression line (e.g., computed using the "predict()" function). Overlay the "observations" from the known data generating model. 
+    + Use an "ifelse()" statement to record whether or not the 95% confidence interval around the slope parameter estimate (estimated from the data) contains the "true" parameter value (if the 95% confidence interval contains the true value, then TRUE, otherwise FALSE)
+
++ **return**:    
+    + out = a list of length 2 with the following elements:   
+        + a vector of length 2 representing (in order) the differences between the known parameters (intercept, slope) and the estimates from a linear regression model
+        + a logical (TRUE/FALSE) representing whether or not the 95% confidence interval around the slope parameter estimate (estimated from the data) contains the "true" parameter value.
+            
+```{r answer2.2c, echo=FALSE}
+
+#############
+## exercise 2.2c
+
+LMVerify_pt2 <- function(sim.dataset,trueparams,plot=T){
+  names <- names(sim.dataset)
+  form <- as.formula(sprintf("%s ~ %s",names[2],names[1]) )   # note: this is to make sure the function runs for whatever your column names are!
+  mod <- lm(form,data=sim.dataset)
+  coefs <- coefficients(mod)
+  difs <- coefs-trueparams
+  names(difs) <- c("intercept",names[1])
+  if(plot==T){
+    xl <- range(sim.dataset[,1])*c(0.75,1.25)
+    yl <- range(sim.dataset[,2])*c(0.75,1.25)
+    newdata <- data.frame(temp=seq(xl[1],xl[2],0.1))
+    names(newdata) <- names[1]
+    ci <- predict(mod,newdata,interval="prediction")
+    plot(sim.dataset,ylim=yl,xlim=xl)
+    abline(mod,col="green",lwd=3)
+    lines(newdata[,1],ci[,"lwr"],col="blue",lty=2)
+    lines(newdata[,1],ci[,"upr"],col="blue",lty=2)
+  }
+  cislope <- confint(mod,names[1])
+  trueslope <- trueparams[2]
+  is.inside <- ifelse((trueslope>=cislope[1])&(trueslope<=cislope[2]),TRUE,FALSE)
+  out <- list()
+  out$difs <- difs
+  out$inside <- is.inside
+  return(out)
+}
+
+```
+
+
+Test your function- for example, using the following code: 
+
+
+```{r test2.2c}
+
+simdat <- LMDataSim2(sample.size=35,xlimits=c(40,120),coefs=c(55,-0.09),sd_coefs=c(-0.3,0.05))
+LMVerify_pt2(sim.dataset = simdat, trueparams = c(55,-0.09))
+
+```
+
+Include your function in your submitted r script!
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q2.2c, exercise=TRUE}
+simdat <- LMDataSim2(sample.size=1000,xlimits=c(0,10),coefs=c(0,0.5),sd_coefs=c(0,0.2))
+LMVerify_pt2 <- function(sim.dataset,trueparams,plot=TRUE){
+    # [add code here!]
+}
+LMVerify_pt2(sim.dataset = simdat, trueparams = c(0,0.5),plot=FALSE)
+
+```
+
+<div id="q2.2c-hint">
+**Hint:** No hints ... yet!
+</div>
+
+
+```{r q2.2c-check, echo=F}
+check_q2.2c <- function(USER_CODE){
+    code <- checkr::for_checkr(USER_CODE)
+    func_call <- checkr::line_where(code,checkr::insist(F== "LMVerify_pt2","Use LMVerify_pt2() function!"))
+    t1 <- checkr::line_where(func_call, 
+        checkr::insist(dplyr::near(0,sum(V[[1]]),tol=0.075), "Sorry, that's not correct"),
+        checkr::passif(TRUE, "Rock and Roll!"))
+}
+check_q2.2c(USER_CODE)
+```
+
+
+
+## **Exercise 2.2d**. 
+
+In your Word document, please answer the following questions:      
+
+1. Is the estimate of the slope parameter (obtained using the 'lm()' function) *biased*? [note: statistical bias of an estimator is the difference between the estimator's expected value and the true value of the parameter being estimated]. Ideally, an estimator should be *unbiased* (bias=0). Briefly explain how you got your answer. 
+
+```{r answer2.2d1, echo=FALSE}
+
+##########
+#  Exercise 2.2d
+
+### pt 1.
+
+reps=1000
+difs <- numeric(reps)
+i=1
+for(i in 1:reps){
+  simdat <- LMDataSim2(sample.size=20,xlimits=c(40,120),coefs=c(55,-0.09),sd_coefs=c(-0.3,0.05))
+  temp <- LMVerify_pt2(sim.dataset = simdat, trueparams = c(55,-0.09),plot=F)
+  difs[i] <- temp$difs["x"]
+}
+
+hist(difs,xlab="difs between est and true slope")
+mean(difs)  ## this test seems relatively robust to violations of homoskedasticity in this case!
+
+```
+
+
+2. Evaluate *goodness-of-fit* by visualizing the range of data produced by the true model against the prediction interval from the estimated model (generated using the 'lm()' function). In your Word document, please include this figure and describe very briefly how this figure helps you to evaluate goodness-of-fit (could your observed data have been generated by the model?) 
+
+Here is an example of a goodness-of-fit visualization:
+
+```{r answer2.2d2, echo=FALSE}
+
+##  Part 2
+
+simdat_lots <- LMDataSim2(sample.size=10000,xlimits=c(40,120),coefs=c(55,-0.09),sd_coefs=c(-0.3,0.05))
+simdat_sample <- LMDataSim2(sample.size=10,xlimits=c(40,120),coefs=c(55,-0.09),sd_coefs=c(-0.3,0.05))
+temp <- LMVerify_pt2(sim.dataset = simdat_sample, trueparams = c(55,-0.09),plot=T)
+points(simdat_lots$x,simdat_lots$y,pch=19,cex=0.5,col=gray(0.5))
+
+
+```
+
+
+## Exercise 2.3: Power analysis!
+
+Review the "power analysis" section of the [Virtual Ecologist lecture](LECTURE3.html), and complete the following exercises. Recall that we are designing a monitoring program for a population of an at-risk species, and we want to have *at least a 75% chance of detecting a decline of 25% or more over a 25 year period*. Let's assume that we are using visual counts, and that the probability of encountering each organism visually is 2% per person-day. The most recent population estimate was 1000 (assume that we know that with certainty).  
+
+## **Exercise 2.3a** 
+
+Develop a function called "GetPower()" that evaluates the statistical power to detect a decline under user-specified types of monitoring designs (e.g., varying numbers of observers, intervals between successive surveys). This function should be specified as follows:    
+
++ **input**:          
+    + initabund: initial population abundance (default=1000)
+    + nreps: number of replicated long-term monitoring data sets to generate in order to evaluate power    
+    + trend: proportional change in population size each year    
+    + years: duration of simulation (in years)
+    + days: survey duration, in days
+    + observers: number of survey participants each day of each survey year   
+    + survint: survey interval, in years (e.g., 2 means surveys are conducted every other year, 3 means surveys are conducted every 3 years)
+    + alpha: acceptable type-I error rate below which we are confident to make the call that a population is declining.  
+
++ **suggested algorithm**:   
+    + Up to you!!!  You can make use of the functions in the "Virtual Ecologist" lecture. 
+
++ **return**:    
+    + A single floating point (real number) value representing the statistical power to detect a decline under the specified default parameters and alpha level. This represents the percent of replicate data sets for which you correctly reject the null hypothesis of "no decline".  
+
+```{r answer2.3a0, echo=FALSE, context='data'}
+
+############
+# Exercise 2.3: power analysis
+
+
+####### first, read in the functions from the "virtual ecologist" lecture. 
+
+########
+# function for computing the number of observed/detected animals in a single survey
+
+    # Arguments:
+      # TrueN: true population abundance
+      # surveyors: number of survey participants each day
+      # days: survey duration, in days
+
+NumObserved <- function(TrueN=1000,surveyors=1,days=3){
+  probPerPersonDay <- 0.02      # define the probability of detection per animal per person-day [hard-coded- potentially bad coding practice!]
+  probPerDay <- 1-(1-probPerPersonDay)^surveyors      # define the probability of detection per animal per day (multiple surveyors)(animal must be detected at least once)
+  probPerSurvey <- 1-(1-probPerDay)^days       # define the probability of detection per animal for the entire survey
+  nobs <- rbinom(1,size=TrueN,prob=probPerSurvey)     # simulate the number of animals detected!
+  return(nobs)
+}
+# NumObserved(TrueN=500,surveyors=2,days=7)   # test the new function
+
+
+#########
+# function for computing expected abundance dynamics of a declining population (deterministic component!)
+
+    # Arguments:
+      # LastYearAbund: true population abundance in the previous year
+      # trend: proportional change in population size from last year
+
+ThisYearAbund <- function(LastYearAbund=1000,trend=-0.03){
+  CurAbund <- LastYearAbund + trend*LastYearAbund    # compute abundance this year
+  CurAbund <- floor(CurAbund)  # can't have fractional individuals!
+  return(CurAbund)
+}
+
+
+########
+# develop a function for simulating monitoring data from a declining population
+
+    # Arguments:
+      # initabund: true initial population abundance
+      # trend: proportional change in population size from last year
+      # years: duration of simulation
+      # observers: number of survey participants each day
+      # days: survey duration, in days
+      # survint: survey interval, in years (e.g., 2 means surveys are conducted every other year)
+
+SimulateMonitoringData <- function(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2){
+  prevabund <- initabund        # initialize "previous-year abundance" at initial abundance 
+  detected <- numeric(years)     # set up storage variable
+  for(y in 1:years){            # for each year of the simulation:
+    thisAbund <- ThisYearAbund(prevabund,trend)             # compute the current abundance on the basis of the trend
+    detected[y] <- NumObserved(thisAbund,observers,days)     # sample the current population using this monitoring scheme
+    prevabund <- thisAbund   # set this years abundance as the previous years abundance (to set up the simulation for next year)
+  }
+  surveyed <- c(1:years)%%survint==0    # which years were surveys actually performed?
+  detected[!surveyed] <- NA            # if the survey is not performed that year, return a missing value
+  return(detected)       # return the number of individuals detected
+}
+
+
+#########
+# finally, develop a function for assessing whether or not a decline was detected:
+
+    # Arguments:
+      # monitoringData: simulated results from a long-term monitoring study
+      # alpha: define acceptable type-I error rate (false positive rate)
+
+IsDecline <- function(monitoringData,alpha=0.05){
+  time <- 1:length(monitoringData)      # vector of survey years
+  model <- lm(monitoringData~time)    # for now, let's use ordinary linear regression (perform linear regression on simulated monitoring data)
+  p_value <- summary(model)$coefficients["time","Pr(>|t|)"]      # extract the p-value  
+  isdecline <- ifelse(summary(model)$coefficients["time","Estimate"]<0,TRUE,FALSE)     # determine if the simulated monitoring data determined a "significant" decline
+  sig_decline <- ifelse((p_value<=alpha)&(isdecline),TRUE,FALSE)    # if declining and significant trend, then the monitoring protocol successfully diagnosed a decline
+  return(sig_decline)
+}
+
+
+
+
+```
+
+
+
+```{r answer2.3a, echo=FALSE}
+
+###########
+# Lab exercise 2.3a: develop a "power" function to return the statistical power to detect a decline under alternative monitoring schemes...
+
+GetPower <- function(initabund=1000,nreps=1000,trend=-0.03,years=25,days=3,observers=1,survint=2,alpha=0.05,verbose=T){
+  decline <- logical(nreps)
+  for(i in 1:nreps){
+    detected <- SimulateMonitoringData(initabund,trend,years,observers,days,survint)
+    decline[i] <- IsDecline(detected,alpha)
+  }
+  Power <- sum(decline)/nreps 
+  #if(verbose) cat((sprintf("The statistical power to detect a decline for the default parameters is: %s \n",Power)))    # for default
+  return(Power)
+}
+
+```
+
+And we can test our new function using a command like this:
+
+```{r test2.3a}
+
+GetPower(survint=3)         # test the new function
+
+```
+
+
+Include your function in your submitted r script!
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q2.3a, exercise=TRUE}
+GetPower <- function(initabund=1000,nreps=1000,trend=-0.03,years=25,days=3,observers=1,survint=2,alpha=0.05){
+    # [add code here!]
+}
+GetPower(initabund=1000,nreps=1000,trend=-0.03,years=25,days=1,observers=1,survint=2,alpha=0.1)
+
+```
+
+
+```{r q2.3a-check, echo=F}
+check_q2.3a <- function(USER_CODE){
+    code <- checkr::for_checkr(USER_CODE)
+    func_call <- checkr::line_where(code,checkr::insist(F== "GetPower","Use GetPower() function!"))
+    t1 <- checkr::line_where(func_call, 
+        checkr::insist(dplyr::near(0.84,sum(V),tol=0.07), "Sorry, that's not correct"),
+        checkr::passif(TRUE, "Wunderbar!"))
+}
+check_q2.3a(USER_CODE)
+```
+
+
+
+
+## **Exercise 2.3b**.  
+
+For each variable element of the survey design (survey interval, number of observers, days per survey bout), evaluate how statistical power changes across a range of plausible values. Plot out these relationships. In your Word document, provide ONE of these plots, describe (briefly!) how you produced the plot, and how this information might help managers to develop effective survey protocols for this species. 
+
+```{r answer2.3b, echo=FALSE}
+
+########
+# exercise 2.3b
+
+########  survey intervals
+
+initabund = 1000
+survints <- c(1:5)
+powers <- numeric(length(survints))
+for(i in 1:length(survints)){
+  powers[i] <- GetPower(survint=survints[i],verbose=F)
+}
+  
+plot(powers~survints,xlab="Survey interval(years)",ylab="Statistical Power",main="Power to detect trend, by sampling interval") 
+  
+#######  number of observers
+
+initabund = 1000
+observers <- c(1:10)
+powers <- numeric(length(observers))
+for(i in 1:length(observers)){
+  powers[i] <- GetPower(observers=observers[i],days=1,survint=3,verbose=F)
+}
+  
+plot(powers~observers,xlab="# observers",ylab="Statistical Power",main="Power to detect trend, by observers") 
+
+####### days per survey bout  
+
+initabund = 1000
+days <- c(1:5)
+powers <- numeric(length(days))
+for(i in 1:length(days)){
+  powers[i] <- GetPower(days=days[i],verbose=F)
+}
+  
+plot(powers~days,xlab="days per bout",ylab="Statistical Power",main="Power to detect trend, by days per sampling bout") 
+  
+
+```
+
+
+## **Exercise 2.3c**
+
+Let's factor in dollar amounts. Let's assume each observer is paid \$200 per day. In addition, let's assume that the site is fairly remote and it costs \$2000 to mount a field expedition (regardless of the number of field technicians). Can you identify a survey strategy to minimize cost while meeting the objective??? What is the optimal survey design in your opinion? Briefly describe how you arrived at this conclusion.  [NOTE: don't overthink this one- you don't need to find the true optimal solution, just find a solution that meets the objective at relatively low cost and justify your answer!]
+
+
+
+```{r answer2.3b0, echo=FALSE}
+
+########
+# exercise 2.3c
+
+## there are many correct answers here!  Here is one way to evaluate multiple scenarios:
+
+
+# GetPower(observers=1,days=3,alpha=0.05,years=25,survint=2,trend=-0.03,verbose=T)
+
+scenarios <- data.frame(
+  observers = rep(rep(c(1:5),times=5),times=4),
+  days = rep(rep(1:5,each=5),times=4),
+  survint = rep(4:1,each=25)
+)
+powers <- numeric(nrow(scenarios))
+costs <- numeric(nrow(scenarios))
+
+i=1
+for(i in 1:nrow(scenarios)){
+  nyears <- 25
+  powers[i] <- GetPower(observers=scenarios$observers[i],days=scenarios$days[i],alpha=0.05,years=nyears,survint=scenarios$survint[i],trend=-0.03,verbose=F)
+  nsurveys <- floor(nyears/scenarios$survint[i])
+  costs[i] <- nsurveys*2000 + nsurveys*scenarios$observers[i]*scenarios$days[i]*200
+}
+
+successful <- which(powers>=0.75)
+
+leastcost <- which.min(costs[successful])
+
+bestscenario <- successful[leastcost]   # find the successful scenario with minimum cost... 
+
+scenarios[bestscenario,]    # identify the params for the best scenario!    Here, it's 4 observers surveying for 1 day every 4 years!
+
+##########
+#  END LAB 2
+##########
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

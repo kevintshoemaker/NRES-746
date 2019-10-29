@@ -47,7 +47,7 @@ data = 3
 param.space <- seq(0,1,by=0.001)
 likelihood <- dbinom(data,size=10,prob=param.space)
 par(mai=c(1,1,0,1))
-curve(dbeta(x,1,1),ylim=c(0,2),col="blue",lty=2,ylab="Probability density (prior)",xlab="param.space")
+curve(dbeta(x,1,1),ylim=c(0,2),col="blue",lty=2,ylab="Probability density (prior)",xlab="parameter (p)")
 points(param.space,likelihood*5,type="l",col="red",lwd=2,lty=2)
 axis(4,at=seq(0,2,by=0.4),labels = seq(0,0.5,by=.1))
 mtext("Likelihood (relative plausibility)", side=4, col="red",line=3)
@@ -235,7 +235,7 @@ abline(v=c(mean,mode),col=gray(0.5),lwd=3,lty=2)   # add to plot
 ############
 # Do the same for the frog detection example from above
 
-graphics.off()
+#graphics.off()
 ### POSTERIOR
 posterior <- dbeta(param.space,1+data,1+(10-data))
 mean <- mean(rbeta(10000,1+data,1+(10-data)))
@@ -424,9 +424,9 @@ samples<-SampleFromPosterior(n=10000)
 par(mfrow=c(3,2))
 plot(samples,col=1:10000)
 plot(samples,type="l")
-plot(ts(samples[,1]))
-plot(ts(samples[,2]))
-hist(samples[,1],40)
-hist(samples[,2],40)
+plot(ts(samples[,1]),xlab="sample",ylab="shape")
+plot(ts(samples[,2]),xlab="sample",ylab="scale")
+hist(samples[,1],40,xlab="shape",main="histogram of shape param")
+hist(samples[,2],40,xlab="scale",main="histogram of scale param")
 par(mfrow=c(1,1))
 
