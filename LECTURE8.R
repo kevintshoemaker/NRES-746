@@ -43,9 +43,9 @@ legend("topleft",pch=c(1,4),col=c("black","red"),legend=c("Wave","Non-wave"),bty
    
 NegBinomLik_full <- function(params){
   wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos    # note: we are hard-coding the data into our likelhood function here!
-  a <- c(params[1],params[2])[wave.code]     # a parameters (one for wave and one for non-wave)
-  b <- c(params[3],params[4])[wave.code]      # b parameter (one for wave and one for non-wave)
-  k <- c(params[5],params[6])[wave.code]       # over-dispersion parameters (one for wave and one for non-wave)
+  a <- c(params[1],params[2])[wave.code]     # a parameters (two for wave and one for non-wave)
+  b <- c(params[3],params[4])[wave.code]      # b parameter (two for wave and one for non-wave)
+  k <- c(params[5],params[6])[wave.code]       # over-dispersion parameters (two for wave and one for non-wave)
   expcones <- a*fir$DBH^b   # expected number of cones (deterministic component)
   -sum(dnbinom(fir$TOTCONES,mu=expcones,size=k,log=TRUE))     # add stochastic component: full data likelihood
 }
@@ -295,8 +295,10 @@ marginal_likelihood   # equal to 0.0909 = 1/11
 #########
 # simulate data from the model across all possible values of the parameter "p"
 
-lots=100000
-hist(rbinom(lots,10,prob=rbeta(lots,1,1)),freq = F,xlab="potential observations")   # no particular observation is favored
+lots=1000000
+a_priori_data <- rbinom(lots,10,prob=rbeta(lots,1,1))   # no particular observation is favored
+for_hist <- table(a_priori_data)/lots
+barplot(for_hist,xlab="Potential Observation",ylab="Marginal likelihood")
 
 
 #########
@@ -676,7 +678,7 @@ waic_red <- waic(loglik_red)
 waic_full$estimates["waic",]
 waic_red$estimates["waic",]
 
-compare(waic_full, waic_red)
+loo_compare(waic_full, waic_red)
 
 
 #############

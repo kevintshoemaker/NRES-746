@@ -526,9 +526,9 @@ legend(&quot;topleft&quot;,pch=c(1,4),col=c(&quot;black&quot;,&quot;red&quot;),l
    
 NegBinomLik_full &lt;- function(params){
   wave.code &lt;- as.numeric(fir$WAVE_NON)      # convert to ones and twos    # note: we are hard-coding the data into our likelhood function here!
-  a &lt;- c(params[1],params[2])[wave.code]     # a parameters (one for wave and one for non-wave)
-  b &lt;- c(params[3],params[4])[wave.code]      # b parameter (one for wave and one for non-wave)
-  k &lt;- c(params[5],params[6])[wave.code]       # over-dispersion parameters (one for wave and one for non-wave)
+  a &lt;- c(params[1],params[2])[wave.code]     # a parameters (two for wave and one for non-wave)
+  b &lt;- c(params[3],params[4])[wave.code]      # b parameter (two for wave and one for non-wave)
+  k &lt;- c(params[5],params[6])[wave.code]       # over-dispersion parameters (two for wave and one for non-wave)
   expcones &lt;- a*fir$DBH^b   # expected number of cones (deterministic component)
   -sum(dnbinom(fir$TOTCONES,mu=expcones,size=k,log=TRUE))     # add stochastic component: full data likelihood
 }
@@ -537,7 +537,7 @@ params &lt;- c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1)
 
 NegBinomLik_full(params)</code></pre>
 <pre><code>## [1] 1762.756</code></pre>
-<p>We can fit the full model using “optim” (using a quasi-newton optimization routine), just like we have done before:</p>
+<p>We can fit the full model using “optim” (using a derivative based optimization routine), just like we have done before:</p>
 <pre class="r"><code>#### Find the MLE
 
 MLE_full &lt;- optim(fn=NegBinomLik_full,par=c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1),method=&quot;L-BFGS-B&quot;)
@@ -550,7 +550,7 @@ MLE_full$par</code></pre>
 </div>
 <div id="reduced-models" class="section level4">
 <h4>REDUCED MODELS</h4>
-<p>Let’s run a simpler model now. This time, let’s model the b parameter as equal for wave and nonwave population:</p>
+<p>Let’s run a simpler model now. This time, let’s model the b parameter as equal for wave and nonwave populations:</p>
 <pre class="r"><code>########
 # build likelihood function for a reduced model: CONES ~ negBINOM( a(wave)*DBH^b, dispersion(wave))
 
@@ -674,7 +674,7 @@ curve(dchisq(x,df=3),0,15)
 abline(v=Deviance,col=&quot;red&quot;,lwd=4)</code></pre>
 <p><img src="LECTURE8_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
 <p>Again, the difference in deviance does not justify the additional parameters. This difference in deviance between the full and restricted model could be produced easily by random chance.</p>
-<p>Remember <em>this is a frequentist test</em>. The null hypothesis is that there is no difference between the restricted model and the more complex model. So we are imagining multiple alternative universes where we are collecting thousands of datasets under the null hypothesis (simpler model is correct) and determining a maximum likelihood estimate for the full model (with meaningless free params) and a reduced model where we <em>fix</em> the value of one or more of our meaningless free parameters at the <strong>true</strong> parameter value of zero. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different MLE for the full model and the reduced model. The deviance (-2*log likelihood ratio) between the restricted model and the full model (under the null hypothesis) should be chi-squared distributed with df = number of dimensions that were “fixed”!</p>
+<p>Remember <em>this is a frequentist test</em>. The null hypothesis is that there is no difference between the restricted model and the more complex model. So we are imagining multiple alternative universes where we are collecting thousands of datasets under the null hypothesis (simpler model is correct– that is, the extra parameters are junk) and determining a maximum likelihood estimate for the full model (with meaningless free params) and a reduced model where we <em>fix</em> the value of one or more of our junk free parameters at the <strong>true</strong> parameter value of zero. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different MLE for the full model and the reduced model. The deviance (-2*log likelihood ratio) between the restricted model and the full model (under the null hypothesis) should be chi-squared distributed with df = number of dimensions that were “fixed”!</p>
 <p>As you can imagine, there are a lot of pairwise comparisons that could be generated, even in this simple example. For instance, there are 15 pairwise comparisons that could be produced from even this simple example. What about more complex models? Clearly this can get a bit unwieldy!</p>
 <p>In addition, not all models we wish to compare will necessarily be nested. For example, consider the model selection exercise we were performing in lab- comparing the M-M fit to the Ricker fit. Since these models aren’t nested, there is not clearly a “reduced” and a “full” model and we can’t perform a LRT.</p>
 </div>
@@ -868,12 +868,14 @@ binom3 &lt;- function(x) dbinom(x=3,size=10,prob=x)
 marginal_likelihood &lt;- integrate(f=binom3,0,1)$value    # use &quot;integrate&quot; function
 marginal_likelihood   # equal to 0.0909 = 1/11</code></pre>
 <pre><code>## [1] 0.09090909</code></pre>
-<p>Basically, the way our model is written, no particular observation is favored over any other:</p>
+<p>Basically, if p could be anything between 0 and 1, no particular observation is favored over any other prior to observing any real data:</p>
 <pre class="r"><code>#########
 # simulate data from the model across all possible values of the parameter &quot;p&quot;
 
-lots=100000
-hist(rbinom(lots,10,prob=rbeta(lots,1,1)),freq = F,xlab=&quot;potential observations&quot;)   # no particular observation is favored</code></pre>
+lots=1000000
+a_priori_data &lt;- rbinom(lots,10,prob=rbeta(lots,1,1))   # no particular observation is favored
+for_hist &lt;- table(a_priori_data)/lots
+barplot(for_hist,xlab=&quot;Potential Observation&quot;,ylab=&quot;Marginal likelihood&quot;)</code></pre>
 <p><img src="LECTURE8_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
 <p>Therefore, since there are 11 possible observations (outcomes of the binomial distribution of size=10), the marginal likelihood of any particular data observation under the model with p as a free parameter should be 1/11 = 0.0909091.</p>
 <p>Here is a visualization of the marginal likelihood across all possible data observations:</p>
@@ -1377,9 +1379,10 @@ waic_full$estimates[&quot;waic&quot;,]</code></pre>
 <pre class="r"><code>waic_red$estimates[&quot;waic&quot;,]</code></pre>
 <pre><code>##   Estimate         SE 
 ## 2278.56351   29.86572</code></pre>
-<pre class="r"><code>compare(waic_full, waic_red)</code></pre>
-<pre><code>## elpd_diff        se 
-##       2.3       2.0</code></pre>
+<pre class="r"><code>loo_compare(waic_full, waic_red)</code></pre>
+<pre><code>##        elpd_diff se_diff
+## model2  0.0       0.0   
+## model1 -2.3       2.0</code></pre>
 </div>
 <div id="explicit-bayesian-model-selection" class="section level3">
 <h3>Explicit Bayesian model selection</h3>
