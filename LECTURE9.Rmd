@@ -43,19 +43,20 @@ What does it even mean to say that the model is good?
 
 Usually, we mean one or more of the following:
 
-1. **Goodness-of-fit**: The data could easily/reasonably have been generated under the best-fit model (the model is plausible)
-2. **Predictive performance**: The model performs well at predicting observed responses (the model is useful) 
-3. **Generality**: The model performs well at extrapolating responses for data that are qualitatively different from those in the training set (the model is really useful!)
+1. **Goodness-of-fit**: The data could easily/reasonably have been generated under the fitted model (the model is adequate)
+2. **Predictive performance**: The fitted model performs well at predicting responses for out-of-sample data (the model is useful) 
+3. **Generality**: The model performs well at extrapolating responses for out-of-sample data that are outside the range of those in the training set (the model is really useful!)
 
 ## Goodness-of-fit
 We have already looked at a variety of methods for evaluating goodness-of-fit. In general, you can use data simulation (virtual ecology) to evaluate whether your fitted model is capable of generating the observed data. In a frequentist/ML context this is often called a **parametric bootstrap**     
 
 **Q**: What is the difference between a non-parametric bootstrap (usually just called a 'bootstrap') and a parametric bootstrap?
 
-For example, we can overlay the observed data on a cloud of points representing the range of data sets possibly produced under the fitted model. 
+For example, we can overlay the observed data (or a model perforance statistic like R-squared) on a cloud of points representing the range of data sets (or performance statistics) possibly produced under the fitted model. 
+
 Or, we can use a "plug-in" prediction bounds as a substitute for the cloud of data sets possibly produced under the model.
 
-Often, we compare a target summary statistic (e.g., Deviance, RMSE) for the observed data with the range of that target summary statistic produced under the inferred, stochastic data generating model.   
+Often, we compare a target summary statistic (e.g., Deviance, RMSE, R-squared) for the observed data with the range of that target summary statistic produced under the inferred, stochastic data generating model.   
 
 Let's return to the Myxomatosis dataset!
 
@@ -177,16 +178,16 @@ So, is this a good model?
 
 Of course, the goodness-of-fit tests you can run with simulated data are limited only by your imagination! **Be dangerous!**
 
-NOTE: the above methods *do not account for parameter uncertainty*. This model is the maximum likelihood model- that is, the point estimates are assumed to represent the true model!!
+NOTE: the above methods *do not account for parameter uncertainty*. This model is the maximum likelihood model- that is, the point estimates are assumed to represent the true model!
 
-If we wanted to account for parameter uncertainty in the ML framework, we could (for example) use profile-likelihood CIs to estimate parameter bounds and we could plug-in bounds that incorporate parameter uncertainty. Or we could treat the CIs for the parameter estimates as a probability distribution (e.g., uniform) and simulate datasets across this range of parameter uncertainty. 
+If we wanted to account for parameter uncertainty in the ML framework, we could (for example) use profile-likelihood CIs to estimate parameter bounds and we could plug-in bounds that incorporate parameter uncertainty. Or we could treat the CIs for the parameter estimates as a probability distribution (e.g., uniform) and simulate datasets across this range of parameter uncertainty (but what would a frequentist statistician say about this?). 
 
 
 ### Bayesian!
 
 Accounting for parameter uncertainty in simulations is simple in a Bayesian framework... (this is part of lab 4!)
 
-In general, a **posterior predictive check** involves generating new data under the fitted model and comparing with the observed data. 
+In general, a **posterior predictive check** involves generating new data sets under the fitted model that are equivalent to the observed data set (i.e., same sample size and covariate values) and comparing with the observed data. 
 
 First we need to fit the model in JAGS.
 
@@ -306,7 +307,7 @@ Okay, the fit seems more or less reasonable!
 
 ## Predictive ability
 
-In many cases, goodness-of-fit is not ultimately what we are most interested in. What we really want to know is whether the model does a good job at predicting the response variable. Is our model useful in some way? 
+In many cases, goodness-of-fit is not ultimately what we are most interested in. What we really want to know is whether the model does a good job at predicting the response. Is our model useful in some way? 
 
 One way to do this would be for us to focus on an R-squared or pseudo-R2 statistic:
 
@@ -347,7 +348,7 @@ Another way to evaluate model skill, or performance, is to use **root mean squar
 
 $RMSE = sqrt(mean(residuals^2))$
 
-RMSE gives a good indicator of the mean error rate, which is often useful and interpretable in an absolute way. For example, "the modeled temperature is usually within 1.3 degrees C of the true temperature"... 
+RMSE gives a good indicator of the mean error rate, which is often useful and interpretable in an absolute way. For example, "the predicted temperature is usually within 1.3 degrees C of the true temperature"... 
 
 ```{r}
 
@@ -356,11 +357,11 @@ cat("RMSE = ", RMSE, "\n")
 
 ```
 
-So the average error in units of titer (in log10 rabbit infectious doses) (whatever that means!)       
+So the average error in units of titer (in log10 rabbit infectious doses)       
 
 So is our model *good*???  
 
-Does it really do a good job at prediction? 
+Does it do a good job at prediction? 
 
 **Q**: Does an over-fitted model have acceptable goodness-of-fit?     
 
@@ -495,7 +496,7 @@ SS_res <- sum((newdata$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day)
 SS_tot <- sum((newdata$titer-mean(newdata$titer))^2)
 Rsquared_validation <- 1-SS_res/SS_tot
 
-cat("R-squared = ", Rsquared, "\n")
+cat("R-squared = ", Rsquared_validation, "\n")
 
 expected <- Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day)
 McFadden_validation <- 1-(sum(dgamma(newdata$titer,shape=MaxLik$par["shape"],scale=expected/MaxLik$par["shape"], log = T))/sum(dgamma(newdata$titer,shape=MaxLik_null$par["shape"],scale=MaxLik_null$par["mean"]/MaxLik_null$par["shape"],log=T)))
@@ -507,7 +508,7 @@ cat("RMSE = ", RMSE, "\n")
 ```
 
 Interestingly, this example shows a couple things:    
-1) The model was very poor at extrapolating.   
+1) Models are often not very good at extrapolation.   
 2) The R-squared isn't always the best measure of model performance.   
 3) The McFadden pseudo-Rsquared can go below 0!   
 4) It's really important to evaluate goodness-of-fit in addition to model performance!
@@ -612,7 +613,8 @@ Let's first build a simple logistic regression model for this problem.
 
 ```{r}
 
-model1 <- glm(Survived ~ Sex + Age + SibSp + Parch + Fare, data=titanic, family="binomial")    #logistic regression
+titanic2 <- na.omit(titanic)
+model1 <- glm(Survived ~ Sex + scale(Age) + scale(SibSp) + scale(Parch) + scale(Fare), data=titanic2, family="binomial")    #logistic regression
 summary(model1)
 
 ```
@@ -624,20 +626,22 @@ Alternatively, we could write our own likelihood function!!
 
 params <- c(
   int=1,
-  male = -3,
+  male = -1,
+  age = 0,
   sibsp = 0,
   parch = 0,
-  fare = 0.02
+  fare = 0
 )
 
 LikFunc <- function(params){
   linear <- params['int'] + 
-    params['male']*as.numeric(titanic$Sex=="male") +
-    params['sibsp']*titanic$SibSp +
-    params['parch']*titanic$Parch +
-    params['fare']*titanic$Fare
+    params['male']*as.numeric(titanic2$Sex=="male") +
+    params['age']*scale(titanic2$Age) +
+    params['sibsp']*scale(titanic2$SibSp) +
+    params['parch']*scale(titanic2$Parch) +
+    params['fare']*scale(titanic2$Fare)
   logitlinear <-  1/(1+exp(-(linear)))
-  -sum(dbinom(titanic$Survived,size=1,prob = logitlinear,log=T))
+  -sum(dbinom(titanic2$Survived,size=1,prob = logitlinear,log=T))
 }
 
 LikFunc(params)
@@ -648,11 +652,11 @@ MLE$par
 
 ```
 
-Interesting- the results are very slightly different from the glm results...!
+Interesting- the results are very slightly different from the glm results...! (I'm not sure why...)
 
 ### Univariate relationships
 
-Let's visualize the univariate relationships in this model! To do this, we will hold all other variables at their mean value...
+Let's visualize the univariate relationships in this model! One way to do this is to hold all other variables at their mean value...
 
 ```{r}
 
@@ -762,7 +766,7 @@ First of all, we will use cross-validation to evaluate model predictive performa
 
 BUT... since the response is binary, our model skill metrics don't really work too well!
 
-For binary responses, the ROC curve (and area under the curve statistic) is a good way of evaluating model performance!
+For binary responses (0 or 1), the ROC curve (and area under the curve statistic) is a good way of evaluating model performance!
 
 First let's prepare the workspace- load the packages!
 
@@ -773,7 +777,7 @@ library(rms)
 
 ```
 
-```{r echo=FALSE}
+```{r}
 
 model1 <- glm(Survived ~ Sex + SibSp + Parch + Fare, data=titanic, family="binomial")
 
@@ -848,11 +852,11 @@ Here are some example ROC curves:
 
 The ROC curve is generated by plotting the true positive rate against the false positive rate for all possible thresholds. For example, take the extremes:
 
-Imagine the threshold is zero, so we predict all outcomes are a 1-- that is, all people are predicted to survive the titanic disaster. In this case, the true positive rate is exactly 1, and the false positive rate (the rate at which mortalities were incorrectly classified as survival) is also 1! 
+Imagine the threshold is zero, so we predict all outcomes are a 1; that is, all people are predicted to survive the titanic disaster. In this case, the true positive rate is exactly 1 (all those that survived were predicted to survive), and the false positive rate (the rate at which mortalities were incorrectly classified as survival) is also 1! 
 
-Imagine the opposite case: we predict everyone died. In this case, the true positive rate is 0, as is the false positive rate (all mortalities are correctly classified!)
+Imagine the opposite case: we predict everyone died. In this case, the true positive rate is 0 (all those that survived were predicted to not survive), as is the false positive rate (all mortalities are correctly classified!)
 
-Now imagine a threshold of around 0.25- we call everything above this a "1". Now we HOPE that the observations with predictions above 0.25 are 
+Now imagine a threshold of around 0.5- we call everything above this a "1". Now we HOPE that the observations with predictions above 0.5 are 
 *enriched* in true positives relative to false positives. Maybe we get 80% correct classification of survivors and say 10 incorrect classification of mortalities (false positives). 
 
 **Q** What would a perfect classifier look like?

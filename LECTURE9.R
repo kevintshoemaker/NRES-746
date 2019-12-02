@@ -301,7 +301,7 @@ SS_res <- sum((newdata$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day)
 SS_tot <- sum((newdata$titer-mean(newdata$titer))^2)
 Rsquared_validation <- 1-SS_res/SS_tot
 
-cat("R-squared = ", Rsquared, "\n")
+cat("R-squared = ", Rsquared_validation, "\n")
 
 expected <- Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$day)
 McFadden_validation <- 1-(sum(dgamma(newdata$titer,shape=MaxLik$par["shape"],scale=expected/MaxLik$par["shape"], log = T))/sum(dgamma(newdata$titer,shape=MaxLik_null$par["shape"],scale=MaxLik_null$par["mean"]/MaxLik_null$par["shape"],log=T)))
@@ -358,26 +358,29 @@ titanic <- read.csv("titanic.csv",header=T)
 head(titanic)
 
 
-model1 <- glm(Survived ~ Sex + Age + SibSp + Parch + Fare, data=titanic, family="binomial")    #logistic regression
+titanic2 <- na.omit(titanic)
+model1 <- glm(Survived ~ Sex + scale(Age) + scale(SibSp) + scale(Parch) + scale(Fare), data=titanic2, family="binomial")    #logistic regression
 summary(model1)
 
 
 params <- c(
   int=1,
-  male = -3,
+  male = -1,
+  age = 0,
   sibsp = 0,
   parch = 0,
-  fare = 0.02
+  fare = 0
 )
 
 LikFunc <- function(params){
   linear <- params['int'] + 
-    params['male']*as.numeric(titanic$Sex=="male") +
-    params['sibsp']*titanic$SibSp +
-    params['parch']*titanic$Parch +
-    params['fare']*titanic$Fare
+    params['male']*as.numeric(titanic2$Sex=="male") +
+    params['age']*scale(titanic2$Age) +
+    params['sibsp']*scale(titanic2$SibSp) +
+    params['parch']*scale(titanic2$Parch) +
+    params['fare']*scale(titanic2$Fare)
   logitlinear <-  1/(1+exp(-(linear)))
-  -sum(dbinom(titanic$Survived,size=1,prob = logitlinear,log=T))
+  -sum(dbinom(titanic2$Survived,size=1,prob = logitlinear,log=T))
 }
 
 LikFunc(params)
@@ -466,6 +469,9 @@ lines(seq(SibSp_range[1],SibSp_range[2],0.01),probSurv)
 
 library(ROCR)
 library(rms)
+
+
+model1 <- glm(Survived ~ Sex + SibSp + Parch + Fare, data=titanic, family="binomial")
 
 
 ###################################
