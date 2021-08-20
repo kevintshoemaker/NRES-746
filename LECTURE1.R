@@ -15,36 +15,52 @@
 
 
 
-#############
-# Start with a made-up data frame!
-#############
+###################
+# SALMON EXAMPLE (made-up!)
 
-df <- data.frame(
-  TreatmentA = c(175, 168, 168, 190, 156, 181, 182, 175, 174, 179),
-  TreatmentB = c(185, 169, 173, 173, 188, 186, 175, 174, 179, 180) 
-)
+population.mean = 4.5
+population.sd = 0.9
 
-summary(df)    # summarize! 
+my.sample = c(3.14,3.27,2.56,3.77,3.34,4.32,3.84,2.19,5.24,3.09)
 
-sample.size <- length(df$TreatmentA)     # determine sample size    
+sample.size <- length(my.sample)     # determine sample size   
 
-reshape_df <- data.frame(                # "reshape" the data frame so each observation gets its own row (standard format)
-  Treatment = rep(c("A","B"),each=sample.size),
-  Mass = c(df$TreatmentA,df$TreatmentB)
-)
-plot(Mass~Treatment, data=reshape_df)    # explore/visualize the data
+obs.samplemean = mean(my.sample)     # note the equal sign as assignment operator
 
-# boxplot(df$TreatmentA,df$TreatmentB,names=c("TreatmentA","TreatmentB"))  # (alternative method!)
+## visualize the population of conventional-raised salmon
 
-observed_dif <- mean(df$TreatmentA) - mean(df$TreatmentB)     # compute sample statistic
-observed_dif
+curve(dnorm(x,population.mean,population.sd),0,10,
+      xlab="Body mass (kg)",ylab="Probability density")
+
+## now overlay this on the observed data
+
+hist(my.sample,freq=F,
+     xlab="Body mass (kg)",ylab="Probability density",main="",
+     xlim=c(0,10))
+curve(dnorm(x,population.mean,population.sd),0,10,
+      col="red",lwd=2,add=T)
+abline(v=obs.samplemean,col="blue",lwd=3)
 
 
 ################
-# Perform standard t-test
+# Perform standard z-test
 ################
 
-t.test(df$TreatmentA,df$TreatmentB, var.equal=TRUE, paired=FALSE)
+library(BSDA)
+z.test(x=my.sample,mu=population.mean, sigma.x=population.sd,alternative = "less")
+
+
+############
+# alternative z-test
+
+std.err = population.sd/sqrt(sample.size)
+
+curve(dnorm(x,population.mean,std.err),0,10,     # visualize the sampling distribution under null hypothesis
+      xlab="Body mass (kg)",ylab="Probability density")     # versus the observed sample mean
+abline(v=obs.samplemean,col="blue",lwd=3)
+
+p.val = pnorm(obs.samplemean,population.mean,std.err)
+p.val     # this is the same as the p value from the z-test above...
 
 
 ######################
@@ -55,135 +71,132 @@ t.test(df$TreatmentA,df$TreatmentB, var.equal=TRUE, paired=FALSE)
 # Simulate the STATISTICAL POPULATION under the null hypothesis
 #############
 
-lots <- 1000000  # large number approximating infinity 
+infinity <- 1000000  # large number approximating infinity 
 
-popMean_null <- mean(reshape_df$Mass)        # assume groups A and B come from a population with common mean 
-popSD_null <- sd(reshape_df$Mass)                      # and common standard deviation... 
-popData_null <- rnorm(n=lots,mean=popMean_null,sd=popSD_null)    # the statistical "population" of interest (under null model w no treatment effect)
+popData_null <- rnorm(n=infinity,mean=population.mean,sd=population.sd)    # the statistical "population" of interest (under null model w no 'treatment' effect)
 
 
 #############
-# Draw a SAMPLE from that population
+# Draw a SAMPLE from that null data
 #############
 
-sampleA <- sample(popData_null,size=sample.size)    # use R's native "sample()" function
-sampleB <- sample(popData_null,size=sample.size)
+null.sample <- sample(popData_null,size=sample.size)    # use R's native "sample()" function to sample from the null distribution
 
-round(sampleA)
-difference <- mean(sampleA)-mean(sampleB)   # sample statistic = difference between sample means
-difference
+round(null.sample,2)
+null.samplemean <- mean(null.sample)  
+null.samplemean    # here is one sample mean that we can generate under the null hypothesis
 
 
 #################
 # Repeat this process using a FOR loop
 #################
 
-reps <- 1000                 # set the number of replicates
-null_difs <- numeric(reps)       # initialize a storage vector
+n.samples <- 1000                 # set the number of replicate samples to generate
+null.samplemeans <- numeric(n.samples)       # initialize a storage vector for sample means under the null hypothesis
 
-for(i in 1:reps){            # for each replicate... 
-  sampleA <- sample(popData_null,size=sample.size)      # draw a sample of body masses assuming no treatment effect       
-  sampleB <- sample(popData_null,size=sample.size)      # draw a sample of body masses assuming no treatment effect (again!)
-  null_difs[i] <- mean(sampleA)-mean(sampleB)           # compute and store the sampling error produced under the null hypothesis
+for(i in 1:n.samples){            # for each replicate... 
+  this.nullsample <- sample(popData_null,size=sample.size)      # draw a sample of body masses assuming no treatment effect       
+  null.samplemeans[i] <- mean(this.nullsample)           # compute and store the sampling distribution produced under the null hypothesis
 }
 
-hist(null_difs)       # plot out all the sampling errors under the null hypothesis as a histogram
-abline(v=observed_dif,col="green",lwd=3)     # indicate the observed sample statistic. 
+hist(null.samplemeans,xlim=c(0,10))       # plot out the sampling distribution
+abline(v=obs.samplemean,col="green",lwd=3)     # overlay the observed sample statistic. 
 
 
 ############
 # Generate a p-value algorithmically!!
 ############
 
-ordered_difs <- sort(abs(null_difs))       # sort the vector of (absolute) anomalies (sampling errors) 
-higher_anomaly <- length(which(ordered_difs>=abs(observed_dif)))       # how many of these sampling errors equal or exceed the "error" represented by the observed statistic?
-p_value <- higher_anomaly/reps       # compute a p-value! 
-p_value
+ordered_means <- sort(null.samplemeans)       # sort the vector of null sample means
+more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "error" represented by the observed statistic?
+p_value <- more_extreme/n.samples       # compute a p-value! 
+p_value    
 
 
 #############
 # Develop a function that wraps up all the above steps into one!
 #############
 
-t.test.algorithm <- function(dat = reshape_df, group = "Treatment", value = "Mass" ){
+z.test.algorithm <- function(sample, pop.mean, pop.sd){
   
   #############
   # Compute the sample statistic
   #############
   
-  indexA <- which(dat[,group]=="A")     # rows representing treatment A
-  indexB <- which(dat[,group]=="B")     # rows representing treatment B
-  observed_dif <- mean(dat[indexA,value]) - mean(dat[indexB,value])
+  observed_mean <- mean(sample)
   
-  sample.size <- length(indexA)   # compute sample size
-  
-  #############
-  # Simulate the STATISTICAL POPULATION under the null hypothesis
-  #############
-  
-  lots <- 1000000  # large number approximating infinity 
-  
-  popMean_null <- mean(dat[,value])           # assume groups A and B come from a population with common mean 
-  popSD_null <- sd(dat[,value])                      # and common standard deviation... 
-  popData_null <- rnorm(n=lots,mean=popMean_null,sd=popSD_null)    # the statistical "population" of interest (under null model w no treatment effect)
+  sample.size <- length(observed_mean)   # compute sample size
 
   #################
-  # Repeat sampling process (sampling from population) using a FOR loop
+  # Generate SAMPLING DISTRIBUTION
   #################
   
-  reps <- 1000                 # set the number of replicates
-  null_difs <- numeric(reps)       # initialize a storage structure to hold one anomaly (sampling error) per replicate
+  reps <- 1000                 # set the number of replicate samples
+  null_dist <- numeric(reps)       # initialize a storage structure for sampling distribution
   
   for(i in 1:reps){            # for each replicate... 
-    sampleA <- sample(popData_null,size=sample.size)      # draw a sample assuming no treatment effect       
-    sampleB <- sample(popData_null,size=sample.size)      # draw a sample assuming no treatment effect (again!)
-    null_difs[i] <- mean(sampleA)-mean(sampleB)           # compute and store the sampling error produced under the null hypothesis
+    nullsamp <- rnorm(10,pop.mean,pop.sd)      # draw a sample assuming no treatment effect       
+    null_dist[i] <- mean(nullsamp)           # compute and store the sampling error produced under the null hypothesis
   }
   
-  ordered_difs <- sort(abs(null_difs))       # sort the vector of sampling errors 
-  higher_anomaly <- length(which(ordered_difs>=abs(observed_dif)))       # how many of these sampling errors equal or exceed the sample statistic?
-  p_value <- higher_anomaly/reps
+  more.extreme <- length(which(null_dist<=observed_mean))       # how many of these sampling errors equal or exceed the sample statistic?
+  p_value <- more.extreme/reps
   
   to_return <- list()   # initialize object to return
   
-  to_return$null_difs <- null_difs
+  to_return$null_dist <- null_dist
   to_return$p_value <- p_value
-  to_return$observed_dif <- observed_dif
+  to_return$observed_mean <- observed_mean
   
   return(to_return)
 
 }
 
-ttest <- t.test.algorithm(dat = reshape_df, group = "Treatment", value = "Mass" )   # try to run the new function
+ztest <- z.test.algorithm(sample = my.sample, pop.mean=population.mean, pop.sd=population.sd )   # try to run the new function
 
-ttest$p_value     # get the p_value
+ztest$p_value     # get the p_value
 
-hist(ttest$null_difs)       # plot out all the sampling errors under the null hypothesis as a histogram
-abline(v=ttest$observed_dif,col="green",lwd=3)     # indicate the observed sample statistic. 
+hist(ztest$null_dist)       # plot out all the sampling errors under the null hypothesis as a histogram
+abline(v=ztest$observed_mean,col="green",lwd=3)     # indicate the observed sample statistic. 
 
 
-###########
-# Test data for unequal variances...
+#############
+# Start with a made-up data frame!
+#############
 
-df.vardif <- data.frame(
-  TreatmentA = c(135, 128, 139, 122, 126, 121, 128, 135, 134, 129),
-  TreatmentB = c(215, 69, 143, 153, 218, 186, 125, 98, 271, 340) 
+df <- data.frame(
+  A = c(175, 168, 168, 190, 156, 181, 182, 175, 174, 179),
+  B = c(185, 169, 173, 173, 188, 186, 175, 174, 179, 180) 
 )
 
-summary(df.vardif)    # summarize! 
+summary(df)    # summarize! 
 
+sample.size <- length(df$A)     # determine sample size    
 
-###########
-# Test data for unequal sample sizes...
+#######
+# Get data in proper format
 
-# NOTE: we use R's missing data designation "NA" to fill in missing data for treatment B here... 
-
-df.ndif <- data.frame(
-  TreatmentA = c(135, 128, 139, 122, 126, 121, 128, 135, 134, 129, 134, 125, 130, 132, 125),
-  TreatmentB = c(98, 271, 340, rep(NA,12)) 
+reshape_df <- data.frame(                # "reshape" the data frame so each observation gets its own row (standard 'tidy' format)
+  Treatment = rep(c("A","B"),each=sample.size),
+  Mass = c(df$A,df$B),
+  stringsAsFactors = T
 )
 
-summary(df.ndif)    # summarize!    
+
+########
+# Alternative (commented out)- using the 'tidyverse'
+
+# library(tidyr)
+# reshape_df <- pivot_longer(df,everything(),names_to = "Treatment",values_to="Mass")
+
+
+plot(Mass~Treatment, data=reshape_df)    # explore/visualize the data
+
+#######
+# Compute the observed difference between group means
+
+observed_dif <- mean(reshape_df$Mass[reshape_df$Treatment=="A"])	- mean(reshape_df$Mass[reshape_df$Treatment=="B"])
+
 
 
 ##################
@@ -202,11 +215,11 @@ abline(v=observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to 
 
 
 ########
-# Compute a p-value based on the permutation test, just like we did before!
+# Compute a p-value based on the permutation test, just like we did before (except now 2-tailed)!
 ########
 
-higher_anomaly <- length(which(abs(null_difs)>=abs(observed_dif)))
-p_value <- higher_anomaly/reps  
+more_extreme <- length(which(abs(null_difs)>=abs(observed_dif)))
+p_value <- more_extreme/reps  
 p_value
 
 
@@ -232,8 +245,8 @@ t.test.permutation <- function(dat = reshape_df, group = "Treatment", value = "M
   	null_difs[i] <- dif	    # store this value in a vector
   }
   
-  higher_anomaly <- length(which(abs(null_difs)>=abs(observed_dif)))
-  p_value <- higher_anomaly/reps  
+  more_extreme <- length(which(abs(null_difs)>=abs(observed_dif)))
+  p_value <- more_extreme/reps  
   
   to_return <- list()   # initialize object to return
   
@@ -245,12 +258,12 @@ t.test.permutation <- function(dat = reshape_df, group = "Treatment", value = "M
   
 }
 
-ttest2 <- t.test.permutation()
+my.ttest <- t.test.permutation()   # use default values for all function arguments
 
-ttest2$p_value
+my.ttest$p_value
 
-hist(ttest2$null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
-abline(v=ttest2$observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
+hist(my.ttest$null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
+abline(v=my.ttest$observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
 
 
 
