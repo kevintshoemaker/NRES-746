@@ -92,7 +92,7 @@ abline(v=obs.samplemean,col="blue",lwd=3)
 
 ```
 
-You may recognize this as the kind of problem that you would address using a standard z-test; we are assuming for now that the samples are independently drawn from a normally distributed population with known variance. In the z-test, we are testing whether our sample could plausibly have been drawn from the **null distribution** (fish raised on conventional diet), which in this case has known variance. If we did not know the population variance (the population variance was uncertain) we would use a t-test instead of a z-test. We can run a z-test in R easily using the 'BSDA' package, using just one line of code!  
+You may recognize this as the kind of problem that you would address using a standard z-test; we are assuming for now that the samples are independently drawn from a normally distributed population with known variance. In the z-test, we are testing whether our sample could plausibly have been drawn from the **null distribution** (fish raised on conventional diet), which in this case is a normal distribution with known mean and variance. If we did not know the population variance (the population variance was uncertain) we would use a t-test instead of a z-test. We can run a z-test in R easily using the 'BSDA' package, using just one line of code!  
 
 ```{r}
 
@@ -127,7 +127,7 @@ p.val     # this is the same as the p value from the z-test above...
 
 ### Brute-force z-test
 
-But imagine that we didn't know about the t-test. Let's build a solution to the same problem from the ground up, using our statistical intuition and R! Of course this is *totally unnecessary* in this case, but you will quickly run into problems with no simple, "canned" solution. That's where you might really need to develop an algorithm from scratch!
+But imagine that we didn't know about the z-test. Let's build a solution to the same problem from the ground up, using our statistical intuition and R! Of course this is *totally unnecessary* in this case, but you will quickly run into problems with no simple, "canned" solution. That's where you might really need to develop an algorithm from scratch!
 
 First, let's state the problem:
 
@@ -183,15 +183,15 @@ null.samplemean    # here is one sample mean that we can generate under the null
 
 Try it! What did you get? It may differ quite a bit from what I got!
 
-This null sample mean represents the mean of 10 fish sampled under a *null hypothesis* where there is no underlying difference in body mass between the conventional diet and the new diet. The fact that this sample mean is not equal to 4.5 (the known population mean) represents **sampling error**.    
+This null sample mean represents the mean of 10 fish sampled under a *null hypothesis* where there is no underlying difference in body mass between the conventional diet and the new diet. Of course, under the null hypothesis, the fish we measured were basically drawn from the null distribution- just like the random sample we just drew. The fact that this sample mean is not equal to 4.5 (the known population mean) represents **sampling error**.    
 
 Our ultimate goal is to determine how likely it is that the observed difference between the sample mean (the mean body mass of the fish we actually measured) and the known population mean is just a meaningless artifact of sampling error! This is exactly what the **p-value** tells us!
 
-**Q** Given that our main goal is to **falsify** our null hypothesis about the population of interest, can you think of an algorithmic way to do this?
+**Q** To begin to **falsify** our null hypothesis about the population of interest, we need to determine the probability that random sampling error could produce a result at least as extreme as our observed sample statistic. Can you think of an algorithmic way to do this?
 
-Let's generate a **sampling distribution** (distribution of sample means generated under the null hypothesis). 
+Let's generate a **sampling distribution** (distribution of sample statistics generated under the null hypothesis). 
 
-Here, we repeat this sampling process many times (using a "FOR" loop in R), each time drawing a different random sample of body masses from our statistical population.   
+Here, we repeat this sampling process many times (using a "FOR" loop in R), each time drawing a different random sample of body masses from our null data population.   
 
 ```{r}
 
@@ -221,13 +221,38 @@ Now, all we need to do to compute a p-value is to compare this vector of samplin
 ############
 
 ordered_means <- sort(null.samplemeans)       # sort the vector of null sample means
-more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "error" represented by the observed statistic?
+more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "extremeness" of the observed statistic?
 p_value <- more_extreme/n.samples       # compute a p-value! 
 p_value    
 
 ```
 
-Now, for convenience, let's collapse this all into a *function* for conducting our algorithmic t-test:
+Now, for convenience, let's collapse this all into a *function* for conducting our algorithmic t-test.
+
+Here is the pseudocode:
+
+Function inputs:    
+    sample: the sampled data      
+    pop.mean: the known population mean under the null hypothesis     
+    pop.sd: the known population std deviation under the null hypothesis      
+    
+Function algorithm:     
+    compute the sample mean    
+    determine the sample size    
+    do the following 1000 times:    
+        obtain a sample from the null data distribution of the same size as the observed data     
+        store the result     
+    determine how many of the null samples were more extreme than the observed sample statistic     
+    compute the p-value    
+
+Function returns:      
+    a list object with:     
+        null_dist: the sampling distribution under the null hypothesis     
+        p_value: the p-value!     
+        observed_mean: the sample mean    
+
+Now let's write the function in R!    
+        
 
 ```{r eval=FALSE}
 
@@ -392,7 +417,7 @@ p_value
 ```
 
 
-Again, for convenience, let's package this new permutation-based t test into an R function:
+Again, for convenience, let's package this new permutation-based t test into an R function:    
 
 ```{r eval=FALSE}
 

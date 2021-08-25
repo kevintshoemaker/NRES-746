@@ -108,7 +108,7 @@ abline(v=obs.samplemean,col="green",lwd=3)     # overlay the observed sample sta
 ############
 
 ordered_means <- sort(null.samplemeans)       # sort the vector of null sample means
-more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "error" represented by the observed statistic?
+more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "extremeness" of the observed statistic?
 p_value <- more_extreme/n.samples       # compute a p-value! 
 p_value    
 
