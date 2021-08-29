@@ -108,7 +108,7 @@ abline(v=obs.samplemean,col="green",lwd=3)     # overlay the observed sample sta
 ############
 
 ordered_means <- sort(null.samplemeans)       # sort the vector of null sample means
-more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "error" represented by the observed statistic?
+more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "extremeness" of the observed statistic?
 p_value <- more_extreme/n.samples       # compute a p-value! 
 p_value    
 
@@ -136,10 +136,10 @@ z.test.algorithm <- function(sample, pop.mean, pop.sd){
   
   for(i in 1:reps){            # for each replicate... 
     nullsamp <- rnorm(10,pop.mean,pop.sd)      # draw a sample assuming no treatment effect       
-    null_dist[i] <- mean(nullsamp)           # compute and store the sampling error produced under the null hypothesis
+    null_dist[i] <- mean(nullsamp)           # compute and store the sample produced under the null hypothesis
   }
   
-  more.extreme <- length(which(null_dist<=observed_mean))       # how many of these sampling errors equal or exceed the sample statistic?
+  more.extreme <- length(which(null_dist<=observed_mean))       # how many of these are more extreme than the sample statistic?
   p_value <- more.extreme/reps
   
   to_return <- list()   # initialize object to return
@@ -156,7 +156,7 @@ ztest <- z.test.algorithm(sample = my.sample, pop.mean=population.mean, pop.sd=p
 
 ztest$p_value     # get the p_value
 
-hist(ztest$null_dist)       # plot out all the sampling errors under the null hypothesis as a histogram
+hist(ztest$null_dist)       # plot out all the samples under the null hypothesis as a histogram
 abline(v=ztest$observed_mean,col="green",lwd=3)     # indicate the observed sample statistic. 
 
 
@@ -311,9 +311,9 @@ stat
 ############
 # new function to generate "bootstrap" samples from a data frame
 
-boot_sample <- function(df,statfunc,n_samples,n_stats,responsevar="Volume"){
+boot_sample <- function(df,statfunc,n_samples,responsevar="Volume"){
   indices <- c(1:nrow(df))
-  output <- matrix(NA,nrow=n_samples,ncol=n_stats)        # storage object- to store a single bootstrapped sample from the original data
+  output <- matrix(NA,nrow=n_samples,ncol=ncol(df)-1)        # storage object- to store a single bootstrapped sample from the original data
   
   for(i in 1:n_samples){              # for each bootstrap replicate:
     boot_rows <- sample(indices,size=nrow(df),replace=T)         # randomly sample observations with replacement
@@ -327,7 +327,7 @@ boot_sample <- function(df,statfunc,n_samples,n_stats,responsevar="Volume"){
 ##########
 # Generate a few bootstrapped samples!
 
-boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=10,n_stats=2)       # generate test stats from lots of bootstrapped samples
+boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=10)       # generate test stats from lots of bootstrapped samples
 colnames(boot) <- names(stat)         # name the columns to recall which predictor variables they represent
 
 boot
@@ -337,7 +337,7 @@ stat
 #############
 # use bootstrapping to generate confidence intervals for R-squared statistic!
 
-boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=1000,n_stats=2)   # generate test statistics (Rsquared vals) for 1000 bootstrap samples
+boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=1000)   # generate test statistics (Rsquared vals) for 1000 bootstrap samples
 confint <- apply(boot,2,function(t)  quantile(t,c(0.025,0.5,0.975)))       # summarize the quantiles to generate confidence intervals for each predictor variable
 colnames(confint) <- names(stat)
 t(confint)
