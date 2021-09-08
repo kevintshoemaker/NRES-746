@@ -45,7 +45,9 @@ as.numeric( Prob["blue"] + Prob["red"] + Prob["green"] )      # P(blue OR green)
 #[your command here]    # P(blue AND THEN red)
 
 
-as.numeric( (Prob["blue"] * Prob["red"]) + (Prob["red"] * Prob["blue"]) )    # P(blue then red OR red then blue)
+#### Question: What is the probability of drawing a blue and a red sphere in two consecutive draws (but in no particular order)? 
+
+#[your command here]    # P(blue AND THEN red)
 
 
 ##########
@@ -91,7 +93,7 @@ as.numeric( Prob_Color["blue"] + Prob_Shape["cube"])        # probability of dra
 allprobs["cube","blue"] / Prob_Shape["cube"]   # probability of drawing a blue object, given it is a cube
 
 
-as.numeric( (allprobs["cube","blue"] / Prob_Color["blue"]) * Prob_Color["blue"])   # probability of drawing a blue cube... using conditional probabilities
+as.numeric( (allprobs["cube","blue"] / Prob_Shape["cube"]) * Prob_Shape["cube"])   # probability of drawing a blue cube... using conditional probabilities
 
 allprobs["cube","blue"]   # check answer to make sure it's right
 
@@ -122,8 +124,6 @@ as.numeric( 1*Prob_Disease["yes"] + 0.01*Prob_Disease["no"] )    # Prob(+test|Di
 ##### Monty Hall simulation code (code by Corey Chivers 2012)
 #####################################################
 # Simulation of the Monty Hall Problem
-# Demonstrates that switching is always better
-# than staying with your initial guess
 #
 # Corey Chivers, 2012
 #####################################################
