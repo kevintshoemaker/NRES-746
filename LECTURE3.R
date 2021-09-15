@@ -155,23 +155,6 @@ points(c(1:samplesize),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # th
 
 
 
-###########
-# Using data simulation to flesh out sampling distributions for frequentist inference 
-
-    # e.g., the "brute force t test" example:
-
-reps <- 1000                    # number of replicate samples to generate
-null_difs <- numeric(reps)              # storage vector for the test statistic for each sample
-for(i in 1:reps){
-  sampleA <- rnorm(10,10,4)        # sample representing "groups" A and B under the null hypothesis
-  sampleB <- rnorm(10,10,4)
-  null_difs[i] <- mean(sampleA)-mean(sampleB)         # test statistic (model result)
-}
-
-hist(null_difs)           # plot out the sampling distribution
-abline(v=3.5,col="green",lwd=3)
-
-
 ###############
 # Power analysis example: designing a monitoring program for a rare species
 
