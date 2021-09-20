@@ -144,7 +144,7 @@ samplesize <- nrow(realdata)    # define the number of data points we should gen
 simresults <- array(0,dim=c(samplesize,reps))   # initialize a storage array for results 
 for(i in 1:reps){       # for each independent simulation "experiment":
   exp_vals <- deterministic_component(realdata$Girth,a=100,b=0)          # simulate the expected tree volumes for each measured girth value
-  sim_vals <- stochastic_component(exp_vals,75000)  # add stochastic noise
+  sim_vals <- stochastic_component(exp_vals,200000)  # add stochastic noise
   simresults[,i] <- sim_vals   # store the simulated data for later
 }
 
