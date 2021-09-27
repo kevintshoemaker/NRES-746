@@ -61,7 +61,7 @@ plot(yvals~xvals)      # plot the simulated data
 ##########
 # assess goodness-of-fit of a known data-generating model
 
-PlotRangeOfPlausibleData <- function(xvals,params,reps){ 
+PlotRangeOfPlausibleData <- function(xvals,params,reps=100){ 
   samplesize <- length(xvals)
   results <- array(0,dim=c(samplesize,reps))   # storage array for results
   for(i in 1:reps){
@@ -103,9 +103,9 @@ points(xvals,real_yvals,pch=20,cex=3,col="green")    # overlay the real data
 #######
 # try again- select a new set of parameters
 
-params$a=33       # was 40
-params$b=-0.004   # was 0.001
-params$c=0.5
+params$a=35       # was 40
+params$b=-0.0029   # was 0.001
+params$c=0.95
     
 PlotRangeOfPlausibleData(xvals,params,reps)
 points(xvals,real_yvals,pch=20,cex=3,col="green")    # overlay the real data
@@ -123,9 +123,9 @@ obs.data
 ############
 
 params <- list()    # set up empty list to store parameters
-params$a=33            # fill the list with the "best fit" parameter set from above (this is still just an educated guess)   
-params$b=-0.002   
-params$c=1
+params$a=35            # fill the list with the "best fit" parameter set from above (this is still just an educated guess)   
+params$b= -0.0029   
+params$c=0.95
 
 params
 
@@ -259,7 +259,7 @@ points(xvals,yvals,pch=20,cex=3,col="green")
 
 
 ##############
-# Visualize a "slice" of the likeihood function
+# Visualize a "slice" of the likelihood function
 
 upperval <- -1/1000
 lowerval <- -1/200
@@ -371,7 +371,7 @@ contour(x=allvals_a,y=allvals_b,z=loglikelihood_surface,levels=(MLE$value-conf95
 
 
 #############
-# visualize likelhood profile!
+# visualize likelihood profile!
 
               ### A parameter
 profile_A <- apply(loglikelihood_surface,1,max)
