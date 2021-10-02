@@ -1,7 +1,7 @@
 ---
-title: "Machine Learning"
-author: "NRES 746"
-date: "Fall 2019"
+title: "Machine Learning: Random Forest"
+author: "Kevin Shoemaker"
+date: "Fall 2021"
 output: 
   html_document: 
     theme: cerulean
@@ -36,49 +36,87 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 For those wishing to follow along with the R-based demo in class, [click here](LECTURE10.R) for the companion R script for this lecture.
 
-Now we will run the same titanic analysis, but using a machine learning method- in this case, Random Forest. Just for kicks!
+## Machine learning
 
+Machine learning may seem similar to statistics, but there are some important differences. 
 
-Let's set up the workspace with the functions and packages we need!
+In statistics, we attempt to draw inferences about a (statistical) population from a sample. In essence, we are using sample data we collected to gain *understanding* about our study system. We may also use our new understanding to make predictions and forecasts. In statistics, prediction is often secondary to building understanding of our system.  
+
+In machine learning, we attempt to use available data to detect generalizable predictive patterns. In machine learning we often don't care as much about building our understanding of the system, we simply want to be able to make better predictions. Machine learning is generally not going to allow us to make inference about population parameters of interest using confidence bounds, p-values etc. However, the predictions we make using machine learning can be more accurate than the predictions we make using statistical models. 
+
+Machine-learning tends to impose fewer assumptions on the data than statistical models. For example, we don't need to assume normal residuals, or even linearity!
+
+### Decision trees
+
+A decision tree is essentially a bunch of branching rules for determining an expected response from a set of predictor variables (features). 
+
+First, we use one of the features to divide our data such that the response variables are as similar as possible within the two resulting *branches* of the tree. For each of the resulting branches, we repeat this procedure, dividing the resulting branches again and again (recursively) until some endpoint is reaches (e.g., 3 or fewer observations remaining in the branch). Each decision point in the tree are called *nodes*. The final branches in the tree are called *leaves*. 
+
+Here is an example:
+
+![](Decision_Tree1.jpg)
+
+### Random forest
+
+Random forest is one of the older and still most popular machine learning methods. It is relatively easy to understand, and tends to make very good predictions. A random forest consists of a large set of decision trees!
+
+The basic algorithm is as follows:    
+
+For each of a large number of iterations (e.g., 500) do the following:
+
+1. Draw a small bootstrap sample from the original dataset- generally much smaller than the original dataset.    
+2. Using this bootstrap sample, build a *decision tree*. At each node of the decision tree, select splitting rules from a small subset of the available predictor variables (features).    
+
+Once you have the full set of trees, you make predictions by using a weighted average or majority-voting rule based on all the component trees in the forest:
+
+![](Random_forest1.png)
+
+In random forest, each tree is meant to be somewhat independent from one another- in machine learning, each tree is a "weak learner". All of the trees (the 'committee') will generally be a much better and more robust (generalizable) predictor than any single tree in the forest. The use of bootstrapping and random sampling of features within the random forest algorithm ensures that each tree is a weak predictor and is relatively independent from other trees in the forest. However, the collection of trees becomes a better predictor than any single tree could be! 
+
+Random forest is not only a good way of making predictions, it also helps us:
+
+1. *Identify which features are most important for prediction*: By keeping track of which features tend to yield the biggest improvements in prediction accuracy across all trees in the forest (generally we keep track of the ability to predict observations that were not used for fitting each tree- these are called 'out of bag' observations), we can produce robust indicators of variable importance. 
+2. *Identify non-linear relationships*. By plotting out our predicted response across a range of each predictor variable, we can see if any non-linear patterns emerge!
+3. *Identify important interactions*. By comparing how predicted responses for one feature change across a range of another feature, we can assess the degree to which features interact to determine the expected response.  
+
+## Example: the titanic disaster
+
+Let's evaluate which factors were related to surviving the titanic disaster!
+
+You can load the titanic data example [here](titanic.csv). Alternatively you can use the 'titanic' package in R!
+
 
 ```{r}
 
-suppressMessages(suppressWarnings(library(party)))
+##########
+# titanic disaster example  (load data)
 
-source_github <- function(baseurl,scriptname) {
-  # load package
-   suppressMessages(suppressWarnings(require(RCurl)))
- 
-  # read script lines from website
-  url <- sprintf("%s%s",baseurl,scriptname)
-  script <- getURL(url, ssl.verifypeer = FALSE)
-  
-  script <- gsub("\r\n", "\n", script)     # get rid of carriage returns (not sure why this is necessary...)
- 
-  # parse lines and evaluate in the global environement
-  eval(parse(text = script), envir= .GlobalEnv)
-}
-
-baseurl = "https://raw.githubusercontent.com/kevintshoemaker/Random-Forest-Functions/master/"				 
-source_github(baseurl,"RF_Extensions.R")
-
-```
-
-First, we read in the data
-
-```{r}
 titanic <- read.csv("titanic.csv",header=T)
 head(titanic)
+
+library(titanic)            # alternative!
+titanic <- titanic_train
+
 ```
 
+Let's first load a package that implements a fast/efficient version of random forest
 
+While we're at it, let's load another package for running a single decision tree
 
+```{r message=FALSE, warning=FALSE}
 
+library(ranger)    # fast implementation of random forest
+library(party)     # good package for running decision tree analysis (and random forest- just slower)
+
+```
 
 When using categorical variables, we should make sure they are encoded as factors, not as numeric. Use class(data\$Resp) to check the encoding, and use as.factor(data\$Resp) to encode your vector as a factor.
 
 ```{r}
-titanic$Survived <- as.factor(titanic$Survived)
+
+titanic$Survived <- as.factor(titanic$Survived)    # code response variable as a factor variable (categorical)
+titanic$Sex <- as.factor(titanic$Sex)
+
 ```
 
 Now let's define the predictors and response:
@@ -109,9 +147,9 @@ formula1 <- as.formula(paste(response,"~",paste(pred.names,collapse="+")))    # 
 ```
 
 
-## Run a conditional inference tree 
+## Run a decision tree 
 
-This is also known as a CART analysis- single tree!
+This is also known as a CART analysis (classification and regression tree) - a single tree, not a forest!
 
 ```{r}
 TerrMamm.tr <- ctree(formula=formula1, data=titanic, controls = ctree_control(mincriterion = 0.85,maxdepth = 3))
@@ -119,16 +157,17 @@ TerrMamm.tr <- ctree(formula=formula1, data=titanic, controls = ctree_control(mi
 plot(TerrMamm.tr)
 ```
 
-But remember that a single tree is not very robust- these are very liable to over-fitting! Random forest gets around this using random sampling in several creative ways! 
+But remember that a single tree is not very robust- these are very likely to over-fit to the data! Random forest gets around this issue and is much more robust than CART analysis! 
 
-Like most machine learning algorithms, we can "tune" the algorithm in several different ways. If this were a "real" analysis, I would try several alternative tunings.  
+Like most machine learning algorithms, we can "tune" the algorithm in several different ways. If this were a "real" analysis, I would try several alternative parameter tunings.  
 
 ```{r}
-cforestControl <- cforest_unbiased(ntree=500,mtry=3)   # change back to 500!!
-cforestControl@fraction <- 0.75
-cforestControl@gtctrl@mincriterion <- 0.75
 
-rf_model1 <- cforest(formula1, controls=cforestControl, data=titanic)
+####### Run a random forest model!
+
+titanic2 <- na.omit(titanic)   # remove missing data (ranger does not handle missing data- 'party' implementation does...)
+
+thismod <- ranger(formula1, data=titanic2, probability=T,importance = 'permutation' )
 
 ```
 
@@ -140,80 +179,152 @@ One thing we can easily get from a RF analysis is an index of the relative impor
 ```{r}
 
     # get the importance values
-model1_importance<-varimp((rf_model1), conditional= FALSE)
+varimp <- importance(thismod)
 
-lengthndx <- length(model1_importance)
+
+lengthndx <- length(varimp)
 #par(mai=c(0.95,3.1,0.6,0.4))
-par(mai=c(1.4,3.4,0.6,0.9))
+par(mai=c(1.2,3.4,0.6,0.9))
 col <- rainbow(lengthndx, start = 3/6, end = 4/6)      
-barplot(height=model1_importance[order(model1_importance,decreasing = FALSE)],
+barplot(height=varimp[order(varimp,decreasing = FALSE)],
         horiz=T,las=1,main="Order of Importance of Predictor Variables",
         xlab="Index of overall importance",col=col,           
-        names.arg=predictorNames[match(names(model1_importance),pred.names)][order(model1_importance,decreasing = FALSE)])
+        names.arg=predictorNames[match(names(varimp),pred.names)][order(varimp,decreasing = FALSE)])
 
 ```
 
-## Univariate plots
+## Univariate predictions
 
-We can also generate univariate plots, also known as "partial dependence plots":
+We can also generate univariate predictive plots, also known as "partial dependence plots". Note the use of the 'predict' function!
 
 ```{r}
 ##### Make univariate plots of the relationships- plot one relationship at a time
 
-RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=titanic,  #   
-                   predictors=pred.names[1], labels=predictorNames[1], allpredictors=pred.names,plot.layout=c(1,1))
-
-RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=titanic,  #   
-                   predictors=pred.names[3], labels=predictorNames[3], allpredictors=pred.names,plot.layout=c(1,1))
-
-RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=titanic,  #   
-                   predictors=pred.names[5], labels=predictorNames[5], allpredictors=pred.names,plot.layout=c(1,1))
-
-RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=titanic,  #   
-                   predictors=pred.names[2], labels=predictorNames[2], allpredictors=pred.names,plot.layout=c(1,1))
+par(mai=c(1,1,.8,.1))
+p=1
+for(p in 1:length(pred.names)){
+  thisvar <- pred.names[p]
+  
+  if(is.factor(titanic2[[thisvar]])){
+    nd <- data.frame(x=as.factor(levels(titanic2[[thisvar]])))
+  }else{
+    nd <- data.frame(x=seq(min(titanic2[[thisvar]]),max(titanic2[[thisvar]]),length=50))
+  }
+  names(nd) <- thisvar
+  
+  othervars <- setdiff(pred.names,thisvar)
+  temp <- sapply(othervars,function(t){ if(is.factor(titanic2[[t]])){ nd[[t]] <<- titanic2[[t]][1]}else{ nd[[t]] <<- mean(titanic2[[t]]) }} )
+  #nd
+  
+  pred = predict(thismod,data=nd,type="response")$predictions[,2]
+  
+  plot(pred~nd[,1],type="l",xlab=thisvar,main=predictorNames[p])
+  if(!is.factor(nd[,1])) rug(jitter(titanic2[[thisvar]]))
+  
+}
 ```
-
-Finally, and perhaps most importantly, we can find and plot the most important interactions!
-
-```{r}
-# NOTE: this one can take a very long time   ...
-rf_findint <- RF_FindInteractions(object=rf_model1,data=titanic,predictors=pred.names)
-
-rf_findint$interactions1
-
-rf_findint$rank.list1
-```
-
 
 ## Interactions
 
-```{r}
-### plot interaction strength
+Finally, we can find and plot the most important interactions!
 
-lengthndx <- min(9,nrow(rf_findint$rank.list1))
-par(mai=c(0.95,3.1,0.6,0.4))
-barplot(height=(rf_findint$rank.list1[c(1:min(9,nrow(rf_findint$rank.list1))),5][c(lengthndx:1)]),
-        horiz=T,las=1,main=paste(response, sep=""),
-        xlab="Index of interaction strength",col=brewer.pal(lengthndx,"Blues"),           
-        names.arg=paste("",predictorNames[match(rf_findint$rank.list1[,2][c(lengthndx:1)],pred.names)],"\n",predictorNames[match(rf_findint$rank.list1[,4][c(lengthndx:1)],pred.names)],sep="") )
+In the following code block we assess the strength of all possible two-way interactions, by measuring the difference between the RF predictions across each 2-D parameter space and a fully additive model. Don't worry if this doesn't make sense- see me another time if you'd like me to explain the code in more detail!
+
+
+```{r}
+
+allcomb <- as.data.frame(t(combn(pred.names,2)))
+names(allcomb) <- c("var1","var2")
+
+allcomb$int1 <- NA
+allcomb$int2 <- NA
+
+p=1
+for(p in 1:nrow(allcomb)){
+  var1 = allcomb$var1[p]
+  var2 = allcomb$var2[p]
+
+  if(!is.factor(titanic2[[var1]])){ 
+    all1= seq(min(titanic2[[var1]]),max(titanic2[[var1]]),length=10)
+  }else{
+    all1=as.factor(levels(titanic2[[var1]]))
+  }
+  if(!is.factor(titanic2[[var2]])){ 
+    all2 = seq(min(titanic2[[var2]]),max(titanic2[[var2]]),length=10)
+  }else{
+    all2=as.factor(levels(titanic2[[var2]]))
+  }
+
+  nd <- expand.grid(all1,all2)
+  names(nd) <- c(var1,var2)
+  
+  othervars <- setdiff(pred.names,c(var1,var2))
+  temp <- sapply(othervars,function(t){ if(is.factor(titanic2[[t]])){ nd[[t]] <<- titanic2[[t]][1]}else{ nd[[t]] <<- mean(titanic2[[t]]) }}   )
+  
+  pred = predict(thismod,data=nd,type="response")$predictions[,2]
+  
+  additive_model <- lm(pred~nd[[var1]]+nd[[var2]])
+  
+  pred_add = predict(additive_model)
+  
+  allcomb$int1[p] <- sqrt(mean((pred-pred_add)^2))
+  
+  maximp <- mean(varimp[c(var1,var2)])
+  
+  allcomb$int2[p] <- allcomb$int1[p]/maximp
+  
+}
+
+allcomb <- allcomb[order(allcomb$int1,decreasing = T),]
+allcomb
+
+
+```
+Next, we visualize our top interactions!
+
+```{r}
+### visualize interactions
+ints.torun <- 1:2
+int=2
+for(int in 1:length(ints.torun)){
+  thisint <- ints.torun[int]
+  var1 = allcomb$var1[thisint]
+  var2 = allcomb$var2[thisint]
+ 
+  if(!is.factor(titanic2[[var1]])){ 
+    all1= seq(min(titanic2[[var1]]),max(titanic2[[var1]]),length=10)
+  }else{
+    all1=as.factor(levels(titanic2[[var1]]))
+  }
+  if(!is.factor(titanic2[[var2]])){ 
+    all2 = seq(min(titanic2[[var2]]),max(titanic2[[var2]]),length=10)
+  }else{
+    all2=as.factor(levels(titanic2[[var2]]))
+  }
+  
+  nd <- expand.grid(all1,all2)
+  names(nd) <- c(var1,var2)
+  
+  othervars <- setdiff(pred.names,c(var1,var2))
+  temp <- sapply(othervars,function(t)if(is.factor(titanic2[[t]])){ nd[[t]] <<- titanic2[[t]][1]}else{ nd[[t]] <<- mean(titanic2[[t]]) }  )
+  
+  pred = predict(thismod,data=nd,type="response")$predictions[,2]
+  
+  predmat = matrix(pred,nrow=length(all1),ncol=length(all2))
+  
+  if(!is.factor(titanic2[[var1]])){
+    persp(all1,all2,predmat,theta=25,phi=25,xlab=var1,ylab=var2,zlab="prob surv")
+  }else{
+    plot(predmat[1,]~all2,xlab=var2,ylab="prob surv",type="l",ylim=c(0,1),col="green",lwd=2)
+    lines(all2,predmat[2,],col="blue",lwd=2)
+    legend("bottomright",bty="n",lty=c(1,1),col=c("green","blue"),lwd=c(2,2),legend=c("Female","Male"))
+  }
+  
+}
 
 
 ```
 
-
-Now let's visualize the interactions:
-
-```{r}
-rf_findint$rank.list1
-fam="binomial"
-
-RF_InteractionPlots(x=1,y=4,object=rf_model1,data=titanic,predictors=pred.names,family=fam) 
-
-RF_InteractionPlots(x=1,y=3,object=rf_model1,data=titanic,predictors=pred.names,family=fam) 
-
-RF_InteractionPlots(x=2,y=4,object=rf_model1,data=titanic,predictors=pred.names,family=fam) 
-
-```
 
 
 ## Model performance
@@ -228,7 +339,7 @@ Finally, let's bring this home by looking at model performance!
 #################### CROSS VALIDATION CODE
 
 n.folds = 10       # set the number of "folds"
-foldVector = rep(c(1:n.folds),times=floor(length(titanic$Survived)/9))[1:length(titanic$Survived)]
+foldVector = rep(c(1:n.folds),times=floor(length(titanic2$Survived)/9))[1:length(titanic2$Survived)]
 
 ```
 
@@ -238,24 +349,18 @@ Then, we do the cross validation, looping through each fold of the data, leaving
 ```{r}
 counter = 1
 CV_df <- data.frame(
-  CVprediction = numeric(nrow(titanic)),      # make a data frame for storage
+  CVprediction = numeric(nrow(titanic2)),      # make a data frame for storage
   realprediction = 0,
   realdata = 0
 )
-
+i=1
 for(i in 1:n.folds){
   fit_ndx <- which(foldVector!=i)
   validate_ndx <- which(foldVector==i)
-  model <- cforest(formula1, data = titanic[fit_ndx,], controls=cforestControl) 
-  predict_CV  <- predict(model,newdata=titanic[validate_ndx,],type="prob") 
-  predict_real  <-  predict(rf_model1,newdata=titanic[validate_ndx,],type="prob")
-  REAL <- titanic$Survived[validate_ndx]
-  for(j in 1:length(which(foldVector==i))){
-    CV_df$CVprediction[counter] <- as.numeric(predict_CV[[j]][,2])
-    CV_df$realprediction[counter] <- as.numeric(predict_real[[j]][,2])   
-    CV_df$realdata[counter] <- REAL[j]         
-    counter = counter + 1  
-  }
+  model <- ranger(formula1, data = titanic2[fit_ndx,],probability=T,importance = 'permutation') 
+  CV_df$CVprediction[validate_ndx]  <- predict(model,data=titanic2[validate_ndx,],type="response")$predictions[,2] 
+  CV_df$realprediction[validate_ndx]  <-  predict(thismod,data=titanic2[validate_ndx,],type="response")$predictions[,2]
+  CV_df$realdata[validate_ndx] <- titanic2$Survived[validate_ndx]
 }
 
 fact=TRUE
@@ -276,7 +381,7 @@ cat("The RMSE for the model using all data for training is: ", real_RMSE, "\n")
 
 Let's plot out the ROC curves!
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 
 library(ROCR)
 library(rms)
@@ -325,7 +430,9 @@ cat("The McFadden R2 for the model using all data for training is: ", deviance_e
 ```
 
 
- [--this is the final regular lecture--]
+
+
+
 
 
 
