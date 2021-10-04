@@ -23,7 +23,7 @@
 library(emdbook)    # this is the package provided to support the textbook!
 
 MyxDat <- MyxoTiter_sum         # load Bolker's example data
-Myx <- subset(MyxDat,grade==1)
+Myx <- subset(MyxDat,grade==1)    # subset: most virulent
 head(Myx)
 
 

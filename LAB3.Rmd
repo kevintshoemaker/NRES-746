@@ -1,16 +1,27 @@
 ---
 title: "Lab 3"
 author: "NRES 746"
-date: "Fall 2019"
-output: learnr::tutorial
-runtime: shiny_prerendered
+date: "Fall 2021"
+output: 
+  html_document: 
+    theme: cerulean
+    toc: yes
+    toc_float: yes
 ---
 
 ```{r setup, include=FALSE}
 library(learnr)
-library(checkr)
-tutorial_options(exercise.timelimit = 60, exercise.checker = checkr::check_for_learnr)
-knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(gradethis)
+library(dplyr)
+tutorial_options(
+  exercise.reveal_solution = FALSE
+)
+gradethis_setup(
+  pass.praise = TRUE,
+  fail.encourage = TRUE,
+  fail.hint = TRUE
+)
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r echo=FALSE}
@@ -35,17 +46,17 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 ## Maximum likelihood and optimization
 
-These next few weeks are focused on fitting models, specifically estimating model parameters and confidence intervals, using likelihood techniques.  Estimating model parameters means finding the values of a set of parameters that best 'fit' the data. *Likelihood* is a metric that represents the probability of drawing your particular data set given a fully specified model (e.g., a particular set of parameter values for a particular data-generating model). This lab is designed to take two lab sessions to complete.
+These next few weeks are focused on fitting models, specifically estimating model parameters and confidence intervals, using likelihood-based techniques (maximum likelihood and Bayesian model fitting). Estimating model parameters means finding the values of a set of parameters that best 'fit' the data. *Likelihood* is a metric that represents the probability of drawing your particular data set given a fully specified model (e.g., a particular data-generating model with a particular set of parameter values). This lab is designed to take two lab sessions to complete.
 
-As with all lab reports, your answers will either take the form of R functions or short written responses (submitted together in a Word document). The R functions (and only the functions- not your testing code) should be stored in an R script file ('.R' extension). To allow me to evaluate your work more efficiently, please name your R script using the following convention: "[your first name]_[your last name]_lab3.R". So my submission would be "kevin_shoemaker_lab3.R". The name of your Word docuement doesn't matter, as long as you submit via WebCampus. 
+As with all lab reports, your answers will either take the form of R functions (submitted as an R script) or short written responses (submitted together in a Word document). The R functions (and only the functions- not your testing code) should be stored in an R script file ('.R' extension). You don't need to follow any naming convention for your R script as long as you submit via WebCampus.
 
-Please submit the R script and the Word document via WebCampus by midnight on the due date (one week after the final lab session allocated for this topic -- here, _Oct. 23, 2018_). You can work in groups but please submit the materials individually. 
+Please submit the R script and the Word document via WebCampus by midnight on the due date (one week after the final lab session allocated for this topic -- here, _Oct. 25, 2021_). You can work in groups but please submit the materials individually. 
 
-First, take a little time to review the [likelihood lecture](http://naes.unr.edu/shoemaker/teaching/NRES-746/LECTURE4.html)!
+First, take a little time to review the [likelihood lecture](http://kevintshoemaker.github.io/NRES-746/LECTURE4.html)!
 
 ## Example: reed frog predation data
 
-First, load the reed frog predation data from the Bolker book- it can be found [here](http://naes.unr.edu/shoemaker/teaching/NRES-746/ReedfrogPred.csv). Save this file to your working directory.
+First, load the reed frog predation data from the Bolker book- it can be found [here](http://kevintshoemaker.github.io/NRES-746/ReedfrogPred.csv). Save this file to your working directory.
 
 This dataset represents predation data for *Hyperolius spinigularis* (Vonesh and Bolker 2005). You can read more about this data set in the Bolker book.   
 
@@ -53,11 +64,17 @@ This dataset represents predation data for *Hyperolius spinigularis* (Vonesh and
 
 ###### Read in the reed frog data set
 
-rfp <- read.csv("ReedfrogPred.csv")
+#rfp <- read.csv("ReedfrogPred.csv")
+
+########
+# alternatively, load the data using the 'emdbook' package:
+
+library(emdbook)
+rfp <- ReedfrogPred
+
 head(rfp)
 
 ```
-
 
 Parameter estimation is simplest when the data represent a collection of independent observations, with each observation having the same set of parameters. Because predation on tadpoles is size and density-dependent, we will subset these data to a single size class ('small') and density (10) for all treatments including a predator. Subset your data now:
 
@@ -90,11 +107,11 @@ In R this would be
 killed <- rfp_sub$density-rfp_sub$surv
 N=rfp_sub$density
 p=0.5
-sum(dbinom(killed, size=N, prob=p, log=TRUE))    # expression of data likelihood
+sum(dbinom(killed, size=N, prob=p, log=TRUE))    # expression of data likelihoodb(log scale)
 
 ```
 
-There is only one parameter in this calculation, *p*, because we know how many individuals we started with (*N* = 10 for each trial) and how many survived in each trial (k = 7, 5, 9, and 9).  So we want to solve for the most likely value of *p* given our observations of *N* and *surv*.  In essence we do this by picking a possible value of *p* (which can only range from 0 to 1), calculating the log-likelihood (LL) using the equation above, picking another value of p, completing the equation, etc. until we exhaust all possible values of p and identify the one having the highest likelihood value. Of course R has useful built in functions to help us!  
+There is only one parameter in this calculation, *p*, because we know how many individuals we started with (*N* = 10 for each trial) and how many survived in each trial (k = 7, 5, 9, and 9).  So we want to solve for the most likely value of *p* given our observations of *N* and *surv*. In essence we do this by picking a possible value of *p* (which can only range from 0 to 1), calculating the log-likelihood using the equation above, picking another value of p, completing the equation, etc. until we exhaust all possible values of p and identify the one having the highest likelihood value. Of course R has useful built in functions to help us optimize the likelihood function!  
 
 The "dbinom()" function calculates the binomial likelihood for a specified data set, specifically a vector of the number of successes (or events) k, probability p, and number of trials N. Specify your vector of successes (here a success means being eaten by a predator!):
 
@@ -126,7 +143,7 @@ prod(dbinom(num_killed,size=10,prob=0.5))    # joint data likelihood
 
 ```
 
-The joint likelihood values will be less than 1, and gets smaller and smaller each time we add more data (can you see why?). This is why we prefer to work with log-likelihoods (which yield larger numbers having better mathematical properties). And taking the log of value <1 yields a negative number, which is why we often see that our log likelihood values are negative.      
+The joint likelihood values will be less than 1, and gets smaller and smaller each time we add more data (can you see why?). This is why we prefer to work with log-likelihoods (which yield larger numbers having better mathematical properties). And taking the log of a value <1 yields a negative number, which is why we often see that our log likelihood values are negative.      
 
 For now, we can build on this above process to estimate the likelihood function over the entire possible parameter space (probability of being eaten- which can range from 0 to 1).
 
@@ -134,7 +151,7 @@ First we make a sequence of 100 possible parameter values from 0.01 to 1.
 
 ```{r}
 
-p <- seq(0.01, 1, by=0.01)     # prepare for visualizing the likelihood across parameter space
+p <- seq(0.01, 1, length=100)     # prepare for visualizing the likelihood across parameter space
 
 ```
 
@@ -179,7 +196,7 @@ plot(LogLik~p,lty="solid",type="l", xlab="Predation Probability", ylab="Log Like
 ```
 
 
-We can ask R to tell us at which value of p the LL is maximized:
+We can ask R to tell us at which value of p the Log-Likelihood is maximized:
 
 ```{r}
 
@@ -246,6 +263,7 @@ opt1$convergence
 Here a value of 0 means convergence has been achieved, a value of 1 means the process failed to converge.  There is more info about convergence and alternative optimization options in Chapter 7 of the Bolker book.  
 
 Your best fit estimate of p is:
+
 ```{r}
 
 opt1$par  # MLE
@@ -260,7 +278,7 @@ opt1$value     # max. likelihood (actually minimum negative-log-likelihood)
 
 ```
 
-which is the negative log-likelihood for the model.  And, as we already know, the absolute likelihood of this particular outcome (5, 3, 1 and 1 out of 10 tadpoles eaten in four replicates) is quite low:
+which is the negative log-likelihood for the model.  And, as we already know, the absolute likelihood of this particular outcome (5, 3, 1 and 1 out of 10 tadpoles eaten in four replicates) is quite low, even for this simple four-observation scenario:
 
 ```{r}
 
@@ -281,26 +299,37 @@ Note that "freq=F" scales the y-axis of a histogram to "density", which allows u
 
 ## Exercise 3.1
 
-NOTE: we went through this simple example as part of the MLE lecture, so you may already have this one done! 
-
-> Develop a function that returns the data likelihood (*likelihood function*) for the following scenario: you visit three known-occupied wetland sites ten times and for each site you record the number of visits for which a particular frog species is detected (at least one call within a 5 minute period). Assuming that all sites are occupied continously, compute the likelihood of these data: [3,2 and 6 detections for sites 1, 2, and 3 respectively] for a given detection probability $p$. Assume that all sites have the same unknown detection probability (*p*, which is our free parameter). Using this likelihood function, answer the following questions: 
+Develop a function that returns the data likelihood (*likelihood function*) for the following scenario (introduced in lecture): you visit three known-occupied wetland sites ten times and for each site you record the number of visits for which a particular frog species is detected (at least one call within a 5 minute period). Assuming that all sites are occupied continuously, compute the likelihood of these data: [3,2 and 6 detections for sites 1, 2, and 3 respectively] for a given detection probability $p$. Assume that all sites have the same detection probability (*p*, which is our free parameter). Using this likelihood function, answer the following questions: 
 
 ## **Exercise 3.1a**. 
 
-Write a function called "NLL_frogOccupancy()" for computing the data likelihood for the above scenario.
+Write a function called "NLL_frogOccupancy()" for computing the data likelihood (actually, negative log-likelihood) for the above scenario.
 
 + **input**:         
-    + params = a scalar (floating point) specifying a proposal for the parameter "p" (probability of detection for a single visit)      
-    + data = a vector of integers with number of elements equal to the number of sites, representing the number of times the species was detected out of N visits.
+    + params = a scalar (floating point) specifying a proposed value (initial value) for the parameter "p" (probability of detection for a single visit -- which happens to be the only free parameter in this model)      
+    + data = a vector of integers with number of elements (length) equal to the number of sites, representing the number of times the species was detected out of N visits.
     + N = an integer representing the total number of visits conducted at each site (default= 10 visits)
 
 + **suggested algorithm**:   
-    + up to you!  
+    + up to you!  (HINT: use binomial distribution)
 
 + **return**:    
-    + the negative log likehood of all observations (use binomial distribution)   
+    + the negative log likelihood of all observations    
         
-```{r answer3.1a, echo=FALSE}
+Include your function in your submitted r script!
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q3_1a, exercise=TRUE}
+NLL_frogOccupancy <- function(params,data,N){
+    # [add code here!]
+}
+#NLL_frogOccupancy(params=0.5,data=c(3,2,6),N=10)
+
+```
+
+
+```{r q3_1a-solution, echo=FALSE, context='data'}
 
 #########
 # Exercise 3.1a
@@ -311,37 +340,36 @@ NLL_frogOccupancy <- function(params=0.5,data=c(3,2,6),N=10){
 
 ```
 
-And test your function!
 
-```{r test3.1a}
+```{r dataq3_1a, echo=FALSE, context='data'}
+
+NLL_frogOccupancy <- function(params=0.5,data=c(3,2,6),N=10){
+  -sum(dbinom(data,prob=params,size = N,log=T))
+}
+
+```
+
+
+And test your function! For example:
+
+```{r testq3_1a}
 
 NLL_frogOccupancy(params=0.5,data=c(3,2,6),N=10)   # test your function
 
 ```
 
 
-Include your function in your submitted r script!
 
-You can use this "sandbox" (below) to develop and test your function!
+```{r q3_1a-check, echo=F}
 
-```{r q3.1a, exercise=TRUE}
-NLL_frogOccupancy <- function(params,data,N){
-    # [add code here!]
-}
-NLL_frogOccupancy(params=0.5,data=c(3,2,6),N=10)
-
-```
+grade_this({
+  fail_if(!length(.result(params=0.25,data=c(3,1,3,4),N=10))==1, "your function output should be a single number")
+  pass_if(near(.result(params=0.25,data=c(3,1,3,4),N=10),
+              .solution(params=0.25,data=c(3,1,3,4),N=10),0.0000001))
+  fail()
+})
 
 
-```{r q3.1a-check, echo=F}
-check_q3.1a <- function(USER_CODE){
-    code <- checkr::for_checkr(USER_CODE)
-    func_call <- checkr::line_where(code,checkr::insist(F== "NLL_frogOccupancy","Use NLL_frogOccupancy() function!"))
-    t1 <- checkr::line_where(func_call, 
-        checkr::insist(any(dplyr::near(6.853154,V,tol=0.01)), "Sorry, that's not correct"),
-        checkr::passif(TRUE, "Excelente!"))
-}
-check_q3.1a(USER_CODE)
 ```
 
 
@@ -351,10 +379,10 @@ check_q3.1a(USER_CODE)
 
 In your Word document, respond briefly to the following questions:
 
-1. What is the maximum likelihood estimate for the *p* (detection probability) parameter?      
-2. Using the "rule of 2", what is the approximate 95% confidence interval for the *p* parameter. Include a figure illustrating how you got your answer.     
+1. What is the maximum likelihood estimate for the *p* (detection probability) parameter? How did you use your likelihood function to get your answer (briefly)?     
+2. Using the "rule of 2", what is the approximate 95% confidence interval for the *p* parameter. Include a figure (plot) in your Word document illustrating how you got your answer.     
 
-```{r answer3.1b, echo=FALSE}
+```{r answerq3_1b, echo=FALSE, eval=FALSE}
 
 ###########
 # 3.1b
@@ -380,7 +408,7 @@ abline(v=CI95,col="green",lty=2)
 
 So we’ve looked at how to obtain the likelihood of getting our dataset given a stochastic model (the binomial distribution), but now we want to consider more interesting ecological questions like when the mean or variance of the model parameters vary among groups or depend upon covariates. Recall that we subset our data above because we expected survival to be (in part) density-dependent.  Here we’ll consider how to model the probability of tadpole survival as a function of the initial density of tadpoles in the population. To do so, we need to incorporate a deterministic function into our stochastic model.  
 
-Save the reed frog functional response dataset to your working directory- it can be found [here](http://naes.unr.edu/shoemaker/teaching/NRES-746/ReedfrogFuncresp.csv). 
+Save the reed frog functional response dataset to your working directory- it can be found [here](http://kevintshoemaker.github.io/NRES-746/ReedfrogFuncresp.csv). 
 
 First, examine the first few lines:
 
@@ -389,8 +417,9 @@ First, examine the first few lines:
 #####
 # 3.2a
 
-rffr <- read.csv("ReedfrogFuncResp.csv",row.names = 1)
-  # alternative: data(ReedfrogFuncresp)     # from Bolker's "emdbook" package
+#rffr <- read.csv("ReedfrogFuncResp.csv",row.names = 1)
+  # alternative: 
+rffr <- emdbook::ReedfrogFuncresp     # from Bolker's "emdbook" package
   # ?Reedfrog      # learn more about this dataset
 head(rffr)
 
@@ -410,7 +439,7 @@ Based on what we know mechanistically about the data, we’ll use a binomial dis
 Plot the number killed by the initial density (using plot()) to see what sort of deterministic function would describe the pattern. It looks like it could be linear, but because we know that this is a predation response, and that predators become handling-limited (saturated) at high prey densities. On page 182 Bolker indicates that if predation rate= $aN/(1+ahN)$ (Holling Type II functional response), this means that the per-capita predation rate of tadpoles decreases hyperbolically with tadpole density $(= a/(1 + ahN))$. We’ll use this deterministic function for our data.     
 First, let’s see what that curve would look like over our data points with an initial guess at the parameters (we always need an initial guess to seed our optimization algorithms). Recall that the a parameter of this hyperbolic function indicates the initial slope, which we’ll guess to be around 0.5, and the h parameter indicates 1/asymptote, which we fiddled around with to match the data (so try 1/80).
 
-```{r answer3.2a2, context='data'}
+```{r dataq3_2a0, echo=FALSE, context='data'}
 
 #########
 # define a Holling type II functional response, with an initial guess about parameter values
@@ -422,9 +451,38 @@ curve(Holl2(x, a=0.5, h=1/80), add=TRUE,col="red")
 ```
 
 
-This looks pretty good, but we want to actually fit the line to the data instead of making guesses, and we’ll use likelihood to do that. Just like before, we’ll write a *negative log likelihood function*, but this time we’ll incorporate the deterministic model.
+This looks pretty good, but we want to actually fit the line to the data instead of making guesses, and we’ll use likelihood to do that. Just like before, we’ll write a *negative log likelihood function*, but this time we’ll incorporate the deterministic model!
 
-```{r answer3.2a3, context='data'}
+## **Exercise 3.2a**. 
+
+Reed frog functional response challenge #1: write a likelihood function for the Holling-II functional response!
+
+Write a function called "binomNLL2()" for computing the data likelihood for this model. This likelihood function should reflect that the data are drawn from a binomial distribution (either killed or not), and that the probability of predation (the number killed divided by the initial number) is explained by the Holling type II equation.
+
++ **input**:         
+    + params = vector of initial values for the params to estimate (length 2: a and h from the Holling type II functional response- in that order)       
+    + N = a vector of the initial tadpole densities
+    + k = a vector representing the number of tadpoles killed (eaten by dragonfly larvae).
+
++ **suggested algorithm**:   
+    + up to you! Make sure you use the Holling type II deterministic function to represent the expected number killed at each density level. Use the 'dbinom()' function to represent the stochastic process that generated these data. Note that the probability of being eaten (p parameter in the binomial distribution) can be computed as the expected number killed divided by the total initial density. 
+
++ **return**:    
+    + the negative log-likelihood of the data under this model    
+       
+Include your function in your submitted r script!
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q3_2a, exercise=TRUE}
+binomNLL2 <- function(params,N,k){
+    # [add code here!]
+}
+# binomNLL2(c(a=0.4,h=1/200),c(5,10,15),c(3,5,6))
+
+```
+
+```{r q3_2a-solution, echo=FALSE, context='data'}
 
 ###########
 # Write a likelihood function
@@ -442,9 +500,26 @@ binomNLL2<-function(params,N,k){
 
 ```
 
-This likelihood function says that the structure of the data is described by a binomial distribution (either killed or not), and that the probability of predation (the number killed divided by the initial number) is explained by the Holling type II equation.
+```{r dataq3_2a1, echo=FALSE, context='data'}
 
-Now we’ll find the parameter values that best describe these data using 'optim()'. We’ll use the same initial values for a and h that we used to plot the curve.  N is the initial number of tadpoles, and k is the number of tadpoles killed.
+binomNLL2<-function(params,N,k){
+	a=params[1]
+	h=params[2]
+	predprob=a/(1+a*h*N)	
+	-sum(dbinom(k,prob=predprob,size=N,log=TRUE))
+}
+
+```
+
+
+You can test your function using something like the following:
+
+```{r testq3_2a}
+binomNLL2(c(a=0.4,h=1/200),c(5,10,15),c(3,5,6))
+```
+
+
+Now we can find the parameter values that best describe these data using 'optim()'. We’ll use the same initial values for a and h that we used to plot the curve.  N is the initial number of tadpoles, and k is the number of tadpoles killed.
 
 
 ```{r}
@@ -455,32 +530,54 @@ opt2
 ```
 
  
-The results are not that different from our starting values, so we made a good guess.  
+The results are not that different from our starting values, so we made a good guess!
 
-## **Exercise 3.2a**. 
+```{r q3_2a-check, echo=F}
 
-Reed frog functional response challenge: fit a Holling type II relationship!
+grade_this({
+  fail_if(!length(.result(params=c(0.25,0.01),N=c(5,10,15,20),k=c(4,5,8,9)))==1, "your function output should be a single number")
+  pass_if(near(.result(params=c(0.25,0.01),N=c(5,10,15,20),k=c(4,5,8,9)),
+              .solution(params=c(0.25,0.01),N=c(5,10,15,20),k=c(4,5,8,9)),0.0000001))
+  fail()
+})
 
-Write a function called "Rffuncresp()" for computing the data likelihood and plotting the goodness-of-fit for this model.
+
+```
+
+
+## **Exercise 3.2b**. 
+
+Write a function called "Rffuncresp()" for computing the maximum-likelihood estimates and plotting the goodness-of-fit for this model.
 
 + **input**:         
-    + params = vector of initial values for the params to estimate (length 2: a and h from the Holling type II functional response)       
+    + params = vector of initial values for the params to estimate (length 2: a and h from the Holling type II functional response- in that order)       
     + data = a matrix of 2 columns and one row per observation. The first column should represent the initial tadpole densities, and the second column should represent the number killed (eaten by dragonfly larvae).     
 
 + **suggested algorithm**:   
     + Compute the MLE for the a and h parameters of the Holling Type II relationship.   
     + Plot the observed number killed (y axis) vs the initial densities      
-    + Overlay a line to visualize your initial guess (initial values)    
-    + Overlay another line to visualize the predictions based on the MLE parameters.
-    + Finally, visualize "prediction intervals" around your MLE line to make a plot like Figure 6.5a in the Bolker book. You can use "qbinom()" to define the 95% quantiles of the binomial distribution for every point along your curve (see below). 
+    + Overlay a line to visualize the predictions based on the MLE parameters.
+    + Finally, visualize "plug-in prediction intervals" around your MLE line to make a plot like Figure 6.5a in the Bolker book. You can use "qbinom()" to define the 95% quantiles of the binomial distribution for every point along your curve (see below). 
 
 + **return**:    
-    + a vector of length 2 containing the MLE for the a and h parameters    
-        
+    + a named vector of length 2 containing the MLEs for the a and h parameters, in that order (with names "a" and "h").    
+       
+       
+Include your function in your submitted r script!
 
-```{r answer3.2a4, echo=FALSE}
+You can use this "sandbox" (below) to develop and test your function!
 
-quantilefunc <- function(x,pars,q){
+```{r q3_2b, exercise=TRUE}
+Rffuncresp <- function(params,data){
+    # [add code here!]
+}
+#Rffuncresp(params=c(a=0.5,h=(1/30)),data=rffr)
+
+``` 
+
+```{r q3_2b-solution, echo=FALSE}
+
+quantilefunc <- function(x,pars,q){    # helper function for plotting quantiles
   ifelse(x>0.5,
     qbinom(q,prob=Holl2(round(x),pars["a"],pars["h"])/round(x),size=round(x)),
     0
@@ -492,7 +589,7 @@ Rffuncresp <- function(params=inits,data=rffr){
   temp <- suppressWarnings( optim(fn=binomNLL2,  par=inits, N=data[,1], k=data[,2])   )
   MLE <- temp$par
   plot(data[,2]~data[,1],ylab="Killed",xlab="Init Density")
-  curve(Holl2(x,inits["a"],inits["h"]),add=T,col="red")
+  #curve(Holl2(x,inits["a"],inits["h"]),add=T,col="red")  # overlay initial values?
   curve(Holl2(x,MLE["a"],MLE["h"]),add=T,col="green",lwd=2)
   curve(quantilefunc(x,pars=MLE,0.975),add=T,col="green",lty=2)
   curve(quantilefunc(x,pars=MLE,0.025),add=T,col="green",lty=2)
@@ -501,8 +598,33 @@ Rffuncresp <- function(params=inits,data=rffr){
 
 ```
 
+```{r dataq3_2b0, echo=FALSE, context="data"}
 
-```{r test3.2a}
+quantilefunc <- function(x,pars,q){    # helper function for plotting quantiles
+  ifelse(x>0.5,
+    qbinom(q,prob=Holl2(round(x),pars["a"],pars["h"])/round(x),size=round(x)),
+    0
+  )
+}
+
+inits <- c(a=0.6,h=(1/60))
+Rffuncresp <- function(params=inits,data=rffr){
+  temp <- suppressWarnings( optim(fn=binomNLL2,  par=inits, N=data[,1], k=data[,2])   )
+  MLE <- temp$par
+  plot(data[,2]~data[,1],ylab="Killed",xlab="Init Density")
+  #curve(Holl2(x,inits["a"],inits["h"]),add=T,col="red")    # overlay initial values?
+  curve(Holl2(x,MLE["a"],MLE["h"]),add=T,col="green",lwd=2)
+  curve(quantilefunc(x,pars=MLE,0.975),add=T,col="green",lty=2)
+  curve(quantilefunc(x,pars=MLE,0.025),add=T,col="green",lty=2)
+  return(MLE)
+}
+
+```
+
+You can test the function using something like this:
+
+
+```{r test3.2b}
 
 inits <- c(a=0.6,h=(1/60))    # test the function
 Rffuncresp(params=inits,data=rffr)
@@ -510,7 +632,7 @@ Rffuncresp(params=inits,data=rffr)
 ```
 
 
-NOTE: the "prediction interval" you are asked to generate here is sometimes called a *"plug-in" prediction interval*, and is a quick and dirty way to assess goodness-of-fit. Essentially, you just take the best-fit model (with parameter values at their MLE values) and use the 0.025 and 0.975 quantiles of the "noise" process to define the range of data that would generally be produced under this model. NOTE: In "qbinom()", for the "prob" argument, you can use the ratio of the x and y values to get a probability value from 0-1. For example:
+NOTE: the "prediction interval" you are asked to generate here is sometimes called a *"plug-in" prediction interval*, and is a quick and dirty way to assess goodness-of-fit. Essentially, you just take the best-fit model (with parameter values at their MLE values) and use the 0.025 and 0.975 quantiles of the stochastic process (here, the binomial distribution) to define the range of data that would generally be produced under this model. NOTE: In "qbinom()", for the "prob" argument, you can use the ratio of the x and y values to get a probability value from 0-1. For example:
 
 ```{r eval=FALSE}
 
@@ -527,40 +649,28 @@ lower
 
 ```
 
+```{r q3_2b-check, echo=F}
 
-Include your function in your submitted r script!
+grade_this({
+  fail_if(!length(.result(params=inits,data=rffr))==2, "your function output should be a named vector with two elements")
+  fail_if(!names(.result(params=inits,data=rffr))==c("a","h"), "your function output should be a named vector with two elements")
+  pass_if(near(.result(params=inits,data=rffr[-4,]),
+              .solution(params=inits,data=rffr[-4,]),0.0000001))
+  fail()
+})
 
-You can use this "sandbox" (below) to develop and test your function!
-
-```{r q3.2a, exercise=TRUE}
-Rffuncresp <- function(params,data){
-    # [add code here!]
-}
-Rffuncresp(params=c(a=0.5,h=(1/30)),data=rffr)
 
 ```
 
 
-```{r q3.2a-check, echo=F}
-check_q3.2a <- function(USER_CODE){
-    code <- checkr::for_checkr(USER_CODE)
-    func_call <- checkr::line_where(code,checkr::insist(F=="Rffuncresp","Use Rffuncresp() function!"))
-    t1 <- checkr::line_where(func_call, 
-        checkr::insist(any(dplyr::near(0.01660342,V,tol=0.01)), "Sorry, that's not correct"),
-        checkr::passif(TRUE, "Bravo!"))
-}
-check_q3.2a(USER_CODE)
-```
 
-
-
-## **Exercise 3.2b**. 
+## **Exercise 3.2c**. 
 
 In your Word document, respond briefly to the following questions:
 
 1. Try some different starting values for the *a* and *h* parameters. Can you find any starting values that are so bad they cause the optimization algorithm (default algorithm used by "optim()" function in R) to fail?      
 
-2. Bolker calls the prediction interval you generated above a *plug-in prediction interval*. In what way(s) is this interval different than a *true* prediction interval? (hint: are there are any sources of error that the plug in interval ignores?)   
+2. Bolker calls the prediction interval you generated above a *plug-in prediction interval*. In what way(s) is this interval different than a *true* prediction interval? (hint: are there are any sources of error that the plug-in prediction interval ignores?)   
 
 
 ## Review of the MLE process
@@ -577,16 +687,16 @@ In your Word document, respond briefly to the following questions:
 
 **Step 6**. Estimate the best-fit parameters using maximum likelihood. We used optim() to search through all possible value combinations of parameters *a* and *h* to estimates for those parameters that correspond to the minimum negative log-likelihood.
 
-**Step 7**. Add confidence intervals around your estimates. We calculated some *plug-in estimates* to put "pseudo-prediction intervals" around our estimates based on the stochastic distribution.  
+**Step 7**. Add confidence or prediction intervals around your estimates to represent uncertainty. We calculated some *plug-in estimates* to put "pseudo-prediction intervals" around our estimates based on the stochastic distribution.  
 
 
 ## Exploring Likelihood Surfaces and Confidence Regions
 
-Let's continue the myxomatosis virus titer example from the [optimization lecture](LECTURE5.html). The difference is that this time we'll model a deterministic process (decay of viral loads over time) in addition to the stochastic process. Our goal is to fit a model to data on viral titers through time for the viruses that are grade 1. Biological common sense, and data from other titer levels, tells us to expect titer levels to start at zero, increase over time to a peak, and then to decline. Given those expectations, we’ll fit a Ricker model to these data, following Bolker’s example and extending it just a bit.  
+Let's continue the myxomatosis virus titer example from the [optimization lecture](LECTURE5.html). The difference is that this time we'll model a deterministic process (decay of viral loads over time) in addition to the stochastic process. Our goal is to fit a model to data on viral titers through time for the viruses that are grade 1 (highest virulence). Biological common sense, and data from other titer levels, tells us to expect titer levels to start at zero, increase over time to a peak, and then to decline. Given those expectations, we’ll fit a Ricker model to these data, following Bolker’s example and extending it just a bit.  
 
 Our goals are to:   
 
--	Find the maximum likelihood estimates of the parameters of the Ricker model fit to the myxomytosis data.
+-	Find the maximum likelihood estimates of the parameters of the Ricker model fit to the myxomytosis data.      
 -	Visualize the fit of this model to the data by:
     -	Plotting the data
     - Adding the predicted Ricker curve 
@@ -595,7 +705,7 @@ Our goals are to:
 
 You can add the data from the 'emdbook' package:
 
-```{r answer3.3a1}
+```{r answerq3_3a1, context="data"}
 
 #######
 # Exercise 3.3a
@@ -611,21 +721,19 @@ head(MyxoTiter_sum)
 
 Select just the grade 1 titers:
 
-```{r answer3.3a2, context='data'}
+```{r answerq3_3a2, context='data'}
 
-myxdat <- subset(MyxoTiter_sum, grade==1)    # select just the least virulent strain
+myxdat <- subset(MyxoTiter_sum, grade==1)    # select just the most virulent strain
 
 plot(myxdat$titer~myxdat$day,xlim=c(0,10))    # visualize the relationship
 
 ```
 
 
+## **Exercise 3.3a**. 
 
-#### Exercise 3.3:
 
 **Fit a Ricker model to the myxomatosis data** (see below for step-by step instructions)
-
-## **Exercise 3.3a**. 
 
 Write a function called "NLL_myxRicker()" for computing the data likelihood and plotting the goodness-of-fit for this model.
 
@@ -634,15 +742,45 @@ Write a function called "NLL_myxRicker()" for computing the data likelihood and 
     + data = a matrix of 2 columns and one row per observation. The first column should represent the days since infection, and the second column should represent the virus titer.     
 
 + **suggested algorithm**:   
-    + Compute the deterministic function: use a Ricker equation to model the expected (mean) virus titer as a function of days since infection
-    + Compute the "scale" parameter of the Gamma distribution as a function of (1) mean virus titer and (2) the "shape" parameter of the Gamma distribution [NOTE: the variance and the mean of the Gamma distribution are dependent- so we can't simply model the expected value and the noise separately! See below for more detals]
+    + Compute the deterministic function: use a Ricker deterministic equation to model the expected (mean) virus titer as a function of days since infection
+    + Compute the "scale" parameter of the Gamma distribution as a function of (1) mean virus titer and (2) the "shape" parameter of the Gamma distribution [NOTE: the variance and the mean of the Gamma distribution are dependent- so we can't simply model the expected value and the noise separately! See below for more details]
     + Compute the sum of the negative log-likelihoods of all observations (use the "dgamma()" function)
 
 + **return**:    
-    + the sum of the negative log-likelihoods of all observations
+    + the sum of the negative log-likelihoods of all observations (a single number representing the data likelihood)
         
+This task (develop likelihood function) can be broken down into a few steps, just like we did above!
 
-```{r answer3.3a3, echo=FALSE}
+Our question is: how does a virus titer change in rabbits as a function of time since infection? This is almost exactly the same problem as we just did (above), but we’re using different distributions and functions.  To solve the problem, you’ll need to go through the same steps outlined above.
+
+**Step 1**. *Identify the response and explanatory variables*. The response is the virus titer and the explanatory variable is the days since infection.
+ 
+**Step 2**. *Determine the stochastic distribution.*   
+Start by plotting the histogram of the response variable. Bolker suggests a gamma distribution – does it look like a gamma would work?  Write down the parameters for the gamma distribution (page 133). (For the gamma distribution, use with the shape and scale parameters (not the rate)). 
+
+**Step 3**. *Specify the deterministic function*.  
+Plot the data points (hint: look at figure 6.5b).  Bolker suggests the Ricker curve – does it look like the Ricker curve would work? Write down the equation and parameters for the Ricker curve (page 94).
+
+**Step 4**. *Specify the likelihood of the data given our deterministic expectations and the stochastic distribution.*
+Take a moment to think how the parameters of the stochastic distribution are determined by the parameters of the deterministic function. For the gamma distribution, both the shape and scale parameters are related to the mean of the distribution, i.e., mean =  shape × scale (page 133). So how will you specify that the deterministic function (the Ricker model) should represent the mean? What parameters do you need your (negative) log-likelihood function to estimate? Write out your negative log-likelihood function to solve for the likelihood.
+
+ASIDE: the mean and variance of the gamma distribution are inter-related: the shape parameter can be specified as: $\frac{mean^2}{var}$ and the scale parameter can be specified as $\frac{var}{mean}$!
+
+
+Include your function in your submitted r script!
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q3_3a, exercise=TRUE}
+NLL_myxRicker <- function(params,data){
+    # [add code here!]
+}
+#NLL_myxRicker(params=c(a=2,b=0.1,shape=80),data=myxdat[,-1])
+
+```
+
+
+```{r q3_3a-solution, echo=FALSE, context="data"}
 
 
 Ricker <- function(x,a,b){
@@ -657,54 +795,41 @@ NLL_myxRicker <- function(params=c(a=1,b=0.2,shape=1),data=myxdat[,-1]){
 
 ```
 
-```{r test3.3a}
+```{r dataq3_3a0, echo=FALSE, context="data"}
+
+
+Ricker <- function(x,a,b){
+  a*x*exp(-b*x)
+}
+
+NLL_myxRicker <- function(params=c(a=1,b=0.2,shape=1),data=myxdat[,-1]){
+  exp_titer <- Ricker(data[,1],params["a"],params["b"])
+  scale <- exp_titer/params["shape"]
+  -sum(dgamma(data[,2],shape=params["shape"],scale=scale,log=TRUE))
+}
+
+```
+
+You can test your function using something like this:
+
+```{r testq3_3a}
 
 NLL_myxRicker(params=c(a=4,b=0.2,shape=40),data=myxdat[,-1])   # test the function
 
 ```
 
+```{r q3_3a-check, echo=F}
 
-This task (develop likelihood function) can be broken down into a few steps, just like we did above!
+grade_this({
+  fail_if(!length(.result(params=c(a=4,b=0.2,shape=40),data=myxdat[,-1]))==1, "your function output should be a single number")
+  pass_if(near(.result(params=c(a=4,b=0.3,shape=41),data=myxdat[,-1]),
+              .solution(params=c(a=4,b=0.3,shape=41),data=myxdat[,-1]),0.0000001))
+  fail()
+})
 
-Our question is: how does a virus titer change in rabbits as a function of time since infection? This is almost exactly the same problem as we just did (above), but we’re using different distributions and functions.  To solve the problem, you’ll need to go through the same steps outlined above.
-
-**Step 1**. *Identify the response and explanatory variables*. The response is the virus titer and the explanatory variable is the days since infection.
- 
-**Step 2**. *Determine the stochastic distribution.*   
-Start by plotting the histogram of the response variable. Bolker suggests a gamma distribution – does it look like a gamma would work?  Write down the parameters for the gamma distribution (page 133). (For the gamma distribution, use with the shape and scale parameters (not the rate)). 
-
-**Step 3**. *Specify the deterministic function*.  
-Plot the data points (hint: look at figure 6.5b).  Bolker suggests the Ricker curve – does it look like the Ricker curve would work?  (Note that grade 1 virus is so virulent that most rabbits die before the titer has a chance to drop off entirely) Write down the equation and parameters for the Ricker curve (page 94).
-
-**Step 4**. *Specify the likelihood of the data given our deterministic expectations and the stochastic distribution.*
-Take a moment to think how the parameters of the stochastic distribution are determined by the parameters of the deterministic function. For the gamma distribution, both the shape and scale parameters are related to the mean of the distribution, i.e., mean =  shape × scale (page 133). So how will you specify that the deterministic function (the Ricker model) should represent the mean? What parameters do you need your (negative) log-likelihood function to estimate? Write out your negative log-likelihood function to solve for the likelihood.
-
-ASIDE: the mean and variance of the gamma distribution are inter-related: the shape parameter can be specified as: $\frac{mean^2}{var}$ and the scale parameter can be specified as $\frac{var}{mean}$!
-
-
-Include your function in your submitted r script!
-
-You can use this "sandbox" (below) to develop and test your function!
-
-```{r q3.3a, exercise=TRUE}
-NLL_myxRicker <- function(params,data){
-    # [add code here!]
-}
-NLL_myxRicker(params=c(a=2,b=0.1,shape=80),data=myxdat[,-1])
 
 ```
 
-
-```{r q3.3a-check, echo=F}
-check_q3.3a <- function(USER_CODE){
-    code <- checkr::for_checkr(USER_CODE)
-    func_call <- checkr::line_where(code,checkr::insist(F== "NLL_myxRicker","Use NLL_myxRicker() function!"))
-    t1 <- checkr::line_where(func_call, 
-        checkr::insist(any(dplyr::near(113.6802,V,tol=0.01)), "Sorry, that's not correct"),
-        checkr::passif(TRUE, "Bravissimo!"))
-}
-check_q3.3a(USER_CODE)
-```
 
 
 ## **Exercise 3.3b**. 
@@ -722,34 +847,8 @@ Write a function called "MyxRicker()" for computing the maximum likelihood estim
     + Finally, visualize "plug-in prediction intervals" around your MLE line to make a plot like Figure 6.5a in the Bolker book. Hint: use "qgamma()" to define the 95% quantiles of the Gamma distribution for every point along your curve (see below). 
 
 + **return**:    
-    + a vector of length 3 containing the MLE for the a, b, and shape parameters    
+    + a named vector of length 3 containing the MLE for the a, b, and shape parameters, in that order (with names "a","b", and "shape" )   
     
-
-```{r answer3.3b, echo=FALSE}
-
-##########
-# 3.3b
-
-MyxRicker <- function(params=c(a=2,b=0.2,shape=30),data=myxdat[,-1]){
-  temp <- optim(NLL_myxRicker,par = params,data=data)
-  MLE <- temp$par
-  plot(data[,2]~data[,1],xlab="days",ylab="titer",xlim=c(0,10),ylim=c(0,10))
-  curve(Ricker(x,MLE["a"],MLE["b"]),add=T,col="green",lwd=2)
-  curve(qgamma(0.975,shape=MLE["shape"],scale=Ricker(x,MLE["a"],MLE["b"])/MLE["shape"]),0.01,10,add=T,col="green",lty=2)
-  curve(qgamma(0.025,shape=MLE["shape"],scale=Ricker(x,MLE["a"],MLE["b"])/MLE["shape"]),0.01,10,add=T,col="green",lty=2)
-  return(MLE)
-}
-
-```
-
-
-```{r test3b}
-
-MyxRicker(params=c(a=2,b=0.2,shape=30),data=myxdat[,-1])   # test the function
-
-```
-
-
 To complete this exercise will involve going through the final steps (5-7) in the process outlined above: 
 
 **Step 5**.  *Make a guess for the initial parameters*.
@@ -760,6 +859,7 @@ Now use 'optim()' to get your maximum likelihood parameter estimates.
 
 **Step 7**.  *Add confidence/prediction intervals around your estimates*.  
 After your run of 'optim()' (did you achieve convergence?), plot your fitted Ricker curve to your data. Revisit the earlier prediction interval code to add *plug-in* prediction intervals around your predicted curve based on gamma distributed errors (should resemble Figure 6.5b on page 184 of text).  
+
 
 Use the "qgamma()" function to build your plug-in intervals!
 
@@ -778,58 +878,115 @@ Include your function in your submitted r script!
 
 You can use this "sandbox" (below) to develop and test your function!
 
-```{r q3.3b, exercise=TRUE}
+```{r q3_3b, exercise=TRUE}
 MyxRicker <- function(params,data){
     # [add code here!]
 }
-MyxRicker(params=c(a=1,b=0.1,shape=30),data=myxdat[,-1])
+#MyxRicker(params=c(a=1,b=0.1,shape=30),data=myxdat[,-1])
+
+```
+
+    
+```{r q3_3b-solution, echo=FALSE, context="data"}
+
+##########
+# 3.3b
+
+MyxRicker <- function(params=c(a=2,b=0.2,shape=30),data=myxdat[,-1]){
+  temp <- optim(NLL_myxRicker,par = params,data=data)
+  MLE <- temp$par
+  plot(data[,2]~data[,1],xlab="days",ylab="titer",xlim=c(0,10),ylim=c(0,10))
+  curve(Ricker(x,MLE["a"],MLE["b"]),add=T,col="green",lwd=2)
+  curve(qgamma(0.975,shape=MLE["shape"],scale=Ricker(x,MLE["a"],MLE["b"])/MLE["shape"]),0.01,10,add=T,col="green",lty=2)
+  curve(qgamma(0.025,shape=MLE["shape"],scale=Ricker(x,MLE["a"],MLE["b"])/MLE["shape"]),0.01,10,add=T,col="green",lty=2)
+  return(MLE)
+}
+
+```
+
+```{r dataq3_3b0, echo=FALSE, context="data"}
+
+MyxRicker <- function(params=c(a=2,b=0.2,shape=30),data=myxdat[,-1]){
+  temp <- optim(NLL_myxRicker,par = params,data=data)
+  MLE <- temp$par
+  plot(data[,2]~data[,1],xlab="days",ylab="titer",xlim=c(0,10),ylim=c(0,10))
+  curve(Ricker(x,MLE["a"],MLE["b"]),add=T,col="green",lwd=2)
+  curve(qgamma(0.975,shape=MLE["shape"],scale=Ricker(x,MLE["a"],MLE["b"])/MLE["shape"]),0.01,10,add=T,col="green",lty=2)
+  curve(qgamma(0.025,shape=MLE["shape"],scale=Ricker(x,MLE["a"],MLE["b"])/MLE["shape"]),0.01,10,add=T,col="green",lty=2)
+  return(MLE)
+}
+
+```
+
+And as always, make sure to test your function code using something like this:
+
+```{r testq3_3b}
+
+MyxRicker(params=c(a=2,b=0.2,shape=30),data=myxdat[,-1])   # test the function
 
 ```
 
 
-```{r q3.3b-check, echo=F}
-check_q3.3b <- function(USER_CODE){
-    code <- checkr::for_checkr(USER_CODE)
-    func_call <- checkr::line_where(code,checkr::insist(F== "MyxRicker","Use MyxRicker() function!"))
-    t1 <- checkr::line_where(func_call, 
-        checkr::insist(any(dplyr::near(90.5465792,V,tol=0.01)), "Sorry, that's not correct"),
-        checkr::passif(TRUE, "Niiiice!"))
-}
-check_q3.3b(USER_CODE)
+```{r q3_3b-check, echo=F}
+
+grade_this({
+  fail_if(!length(.result(params=c(a=2,b=0.2,shape=30),data=myxdat[-5,-1]))==3, "your function output should be a named vector with three elements")
+  fail_if(!names(.result(params=c(a=2,b=0.2,shape=30),data=myxdat[-5,-1]))==c("a","b","shape"), "your function output should be a named vector with three elements")
+  pass_if(near(.result(params=c(a=2,b=0.22,shape=31),data=myxdat[-5,-1]),
+              .solution(params=c(a=2,b=0.22,shape=31),data=myxdat[-5,-1]),0.0000001))
+  fail()
+})
+
+
 ```
 
 
 
 ## Exercise 3.4: 2-dimensional likelihood surface
 
-Making "plug-in" confidence intervals looks nice on the plot (and is a useful, quick-and-dirty way to assess goodness-of-fit), but if we also want to visualize parameter uncertainty (and not just uncertainty arising from the stochastic component) we need to consider other plausible parameter values from our *n*-dimensional likelihood surface (with as many dimensions as there are free parameters). 
+Making "plug-in" confidence intervals looks nice on the plot (and is a useful, quick-and-dirty way to assess goodness-of-fit), but if we also want to visualize parameter uncertainty (and not just uncertainty arising from the randomness of the stochastic or residual error component) we need to consider other plausible parameter values from our *n*-dimensional likelihood surface (with as many dimensions as there are free parameters). 
 
 ## **Exercise 3.4a**. 
 
-Make a function called "MyxRicker_ci()" that takes any two parameters from your myxomatosis model as inputs (holding any remaining parameters constant) and visualizes how the likelihood changes across this 2D parameter space. What we’ll end up with will look something like Figure 6.7 in the Bolker book.
+Make a function called "MyxRicker_ci()" that takes any two parameters from your myxomatosis model as inputs (holding any remaining parameters constant) and visualizes how the likelihood changes across this 2-dimensional parameter space. What we’ll end up with will look something like Figure 6.7 in the Bolker book.
+
+NOTE: my testing code will only test your function with the parameters "a" and "b", so you can hard-code your function with these parameters as the ones defining your 2-D parameter space (holding the 'shape' parameter constant)
 
 + **input**:
     + LikFunc = a likelihood function for the Myxomatosis data (use the function you developed for Exercise 3a [NLL_myxRicker()])
     + params = vector of initial values for the params to estimate (length 3: *a* and *b* params from the Ricker model [see below], and the "shape" parameter of the Gamma distribution)
-    + params_selected = character vector of length 2 (character strings) indicating which two parameters to visualize (holding the other one constant) (the vector should contain two of the following text strings: "a", "b", and "shape")             
+    + params_selected = character vector of length 2 (character strings) indicating which two parameters to visualize (holding the other one constant) (the vector should contain two of the following text strings: "a", "b", and "shape") (note that my testing code will set this argument as c("a","b"))              
     + data = a matrix of 2 columns and one row per observation. The first column should represent the days since infection, and the second column should represent the virus titer.
-    + param1_lims = a vector of length 2 specifying the lower and upper bounds of the first parameter specified in "params_selected"
-    + param2_lims = a vector of length 2 specifying the lower and upper bounds of the second parameter specified in "params_selected"
+    + param1_lims = a vector of length 2 specifying the lower and upper bounds of the first parameter specified in "params_selected" (range over which you want to evaluate the likelihood)
+    + param2_lims = a vector of length 2 specifying the lower and upper bounds of the second parameter specified in "params_selected" (range over which you want to evaluate the likelihood)
 
 + **suggested algorithm**:   
     + Compute the MLE for the *a*, *b*, and *shape* parameters for the Ricker/Gamma model (use "optim()" with the likelhood function and the initial values in "params")   
     + Set the "constant/fixed" variable (the one not in "params_selected") to its maximum likelihood estimate (which you just computed).    
     + For each of the two parameters in "parameters_selected", develop a vector of length 50 that ranges from the lower to the upper bound. 
-    + Loop over the two dimensions specified in "params_selected" (e.g., using a nested 'for' loop, iterating through both vectors computed in the previous step), characterizing all of parameter space from the lower to upper bounds of both parameters. For each "chunk/pixel" of parameter space, compute and store the likelhood (holding the third parameter at its MLE).   
+    + Loop over the two dimensions specified in "params_selected" (e.g., using a nested 'for' loop, iterating through both vectors computed in the previous step), characterizing all of parameter space from the lower to upper bounds of both parameters. For each "chunk/pixel" of parameter space, compute and store the likelihood (holding the third parameter at its MLE).   
     + Use the "image()" function to visualize 2D parameter space, using "topo.colors" to define the colors.     
     + Use the "contour()" function to draw contour lines at 2, 4, 6, 8, and 10 log-likelihood units from the MLE point.
-    + For each parameter in "params_selected", compute the approximate 95% "profile likelihood", using the "rule of 2". For each parameter, loop across possible parameter values and store the maximum log-likelihood value across all possible values of the other parameter. Record the range of parameter values that fall within approximately 2 log-likelihood units of the maximum log-likelihood.     
+    + For each parameter in "params_selected", compute the approximate 95% "profile likelihood", using the "rule of 2". For each parameter, loop across possible parameter values and store the maximum log-likelihood value across all possible values of the other parameter. Record the range of parameter values that fall within approximately 2 log-likelihood units of the maximum log-likelihood value.     
 
 + **return**:    
     + a data frame with two columns (for each parameter in "params_selected") and two rows (representing the lower bound and the upper bound of the approximate 95% profile likelihood interval for each parameter (respectively).
 
+Include your function in your submitted r script!
 
-```{r answer3.4a, echo=FALSE}
+
+You can use this "sandbox" (below) to develop and test your function!
+
+```{r q3_4a, exercise=TRUE}
+MyxRicker_ci <- function(LikFunc,params,params_selected,data,param1_lims,param2_lims){
+    # [add code here!]
+}
+# MyxRicker_ci(LikFunc = NLL_myxRicker, params=c(a=1,b=0.3,shape=50), params_selected = c("a","b"), 
+#                                  data=myxdat[,-1], param1_lims= c(0.1,9),param2_lims=c(0.01,0.5))
+
+```
+
+```{r q3_4a-solution, echo=FALSE, context="data"}
 
 ###############
 # exercise 3.4
@@ -869,55 +1026,86 @@ MyxRicker_ci <- function(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), 
 
 ```
 
-```{r test3.4a}
+```{r dataq3_4a, echo=FALSE, context="data"}
 
-#  test: Ricker params "a" and "b"
+###############
+# exercise 3.4
+
+MyxRicker_ci <- function(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","b"), data=myxdat[,-1], param1_lims= c(0.1,10),param2_lims=c(0.01,1)){
+  temp <- optim(LikFunc,par = params,data=data)
+  MLE <- temp$par
+  ML <- temp$value
+  notselected <- setdiff(names(MLE),params_selected)
+  notselected_ndx <- which(names(MLE)==notselected)
+  param_ndx <- match(params_selected,names(MLE))
+  
+  var1 <- seq(param1_lims[1],param1_lims[2],length=100)
+  var2 <- seq(param2_lims[1],param2_lims[2],length=100)
+  
+  pars <- params
+  pars[notselected_ndx] <- MLE[notselected]
+  likarr <- matrix(NA,nrow=length(var1),ncol=length(var2))
+  v1=1;v2=1
+  for(v1 in 1:length(var1)){
+    pars[param_ndx[1]] <- var1[v1]
+    for(v2 in 1:length(var2)){
+      pars[param_ndx[2]] <- var2[v2]
+      likarr[v1,v2] <- -NLL_myxRicker(params=pars,data=data)
+    }
+  }
+  
+  image(x=var1,y=var2,z=likarr,zlim=c(-130,-29),col=topo.colors(12))
+  contour(x=var1,y=var2,z=likarr,levels=(-ML-c(2,4,6,8,10)),add=TRUE,lwd=1,col=gray(0.3))
+  
+  ci1 <- range(var1[apply(likarr,1,max)>(-ML-2)])
+  ci2 <- range(var2[apply(likarr,2,max)>(-ML-2)])
+  
+  out<- data.frame(var1 = ci1,var2=ci2)
+  return(out)
+}
+
+```
+
+Try testing your code- something like this:
+
+```{r testq3_4a}
+
+#  test: Ricker params "a" and "b"   [make sure this one works]
 testab <- MyxRicker_ci(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","b"), data=myxdat[,-1], param1_lims= c(0.1,9),param2_lims=c(0.01,0.5))
 
-# test: Ricker param "a" and gamma "shape" 
+# test: Ricker param "a" and gamma "shape"  [if this works, you fully implemented the suggested algorithm!]
 testas <- MyxRicker_ci(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","shape"), data=myxdat[,-1], param1_lims= c(1,8),param2_lims=c(10,150))
 
 ```
 
+And here is the output from the functions (approximate profile likelihood confidence intervals):
 
-```{r test3.4a2}
+```{r testq3_4a2}
 
 testab
 testas
 
 ```
 
-Include your function in your submitted r script!
 
-You can use this "sandbox" (below) to develop and test your function!
+```{r q3_4a-check, echo=F}
 
-```{r q3.4b, exercise=TRUE}
-MyxRicker_ci <- function(LikFunc,params,params_selected,data,param1_lims,param2_lims){
-    # [add code here!]
-}
-MyxRicker_ci(LikFunc = NLL_myxRicker, params=c(a=1,b=0.3,shape=50), params_selected = c("a","b"), 
-                                 data=myxdat[,-1], param1_lims= c(0.1,9),param2_lims=c(0.01,0.5))
-
+grade_this({
+  fail_if(!dim(.result(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","b"), data=myxdat[,-1], param1_lims= c(0.1,9),param2_lims=c(0.01,0.5)))==c(2,2), "your function output should be a data frame with two rows and two columns")
+  pass_if(near(.result(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","b"), data=myxdat[,-1], param1_lims= c(0.1,9),param2_lims=c(0.01,0.5)),
+              .solution(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","b"), data=myxdat[,-1], param1_lims= c(0.1,9),param2_lims=c(0.01,0.5)),0.1))
+  fail()
+})
 ```
-
-
-```{r q3.4b-check, echo=F}
-check_q3.4b <- function(USER_CODE){
-    code <- checkr::for_checkr(USER_CODE)
-    func_call <- checkr::line_where(code,checkr::insist(F== "MyxRicker_ci","Use MyxRicker_ci() function!"))
-    t1 <- checkr::line_where(func_call, 
-        checkr::insist(any(dplyr::near(3.875758,V,tol=0.05)|dplyr::near(3.33636,V,tol=0.05)), "Sorry, that's not correct"),
-        checkr::passif(TRUE, "You got it!"))
-}
-check_q3.4b(USER_CODE)
-```
-
 
 
 
 ## Optional exercise 5: profile likelihood using "optim()"
 
-Construct *profile likelihood* confidence intervals for any one selected parameter. You will need to modify your likelihood functions and "optim()" commands to estimate only the parameters *other than* the one you are trying to get a CI for (because you’ll be fixing the selected parameter). 
+Construct *profile likelihood* confidence intervals for any one selected parameter using repeated calls to the "optim()" function. You will need to modify your likelihood functions and "optim()" commands to estimate only the parameters *other than* the one you are trying to get a CI for (because you’ll be fixing that parameter at many values on either side of the MLE).
+
+
+--End of lab 3--
 
 
 
