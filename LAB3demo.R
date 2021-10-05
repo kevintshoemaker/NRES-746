@@ -37,7 +37,7 @@ rfp_sub
 killed <- rfp_sub$density-rfp_sub$surv
 N=rfp_sub$density
 p=0.5
-sum(dbinom(killed, size=N, prob=p, log=TRUE))    # expression of data likelihoodb(log scale)
+sum(dbinom(killed, size=N, prob=p, log=TRUE))    # expression of data likelihood (log scale)
 
 
 num_killed <- rfp_sub$density-rfp_sub$surv     # specify vector of "successes" (being eaten!)
