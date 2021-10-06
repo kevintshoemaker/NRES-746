@@ -15,28 +15,23 @@
 
 
 
-suppressMessages(suppressWarnings(library(party)))
-
-source_github <- function(baseurl,scriptname) {
-  # load package
-   suppressMessages(suppressWarnings(require(RCurl)))
- 
-  # read script lines from website
-  url <- sprintf("%s%s",baseurl,scriptname)
-  script <- getURL(url, ssl.verifypeer = FALSE)
-  
-  script <- gsub("\r\n", "\n", script)     # get rid of carriage returns (not sure why this is necessary...)
- 
-  # parse lines and evaluate in the global environement
-  eval(parse(text = script), envir= .GlobalEnv)
-}
-
-baseurl = "https://raw.githubusercontent.com/kevintshoemaker/Random-Forest-Functions/master/"				 
-source_github(baseurl,"RF_Extensions.R")
+##########
+# titanic disaster example  (load data)
 
 titanic <- read.csv("titanic.csv",header=T)
 head(titanic)
-titanic$Survived <- as.factor(titanic$Survived)
+
+library(titanic)            # alternative!
+titanic <- titanic_train
+
+
+library(ranger)    # fast implementation of random forest
+library(party)     # good package for running decision tree analysis (and random forest- just slower)
+
+
+titanic$Survived <- as.factor(titanic$Survived)    # code response variable as a factor variable (categorical)
+titanic$Sex <- as.factor(titanic$Sex)
+
 
 predictorNames <- c(  "Sex",       # nice readable names
                       "Age",
@@ -61,90 +56,159 @@ formula1 <- as.formula(paste(response,"~",paste(pred.names,collapse="+")))    # 
 TerrMamm.tr <- ctree(formula=formula1, data=titanic, controls = ctree_control(mincriterion = 0.85,maxdepth = 3))
 
 plot(TerrMamm.tr)
-cforestControl <- cforest_unbiased(ntree=500,mtry=3)   # change back to 500!!
-cforestControl@fraction <- 0.75
-cforestControl@gtctrl@mincriterion <- 0.75
 
-rf_model1 <- cforest(formula1, controls=cforestControl, data=titanic)
+####### Run a random forest model!
+
+titanic2 <- na.omit(titanic)   # remove missing data (ranger does not handle missing data- 'party' implementation does...)
+
+thismod <- ranger(formula1, data=titanic2, probability=T,importance = 'permutation' )
 
 
     # get the importance values
-model1_importance<-varimp((rf_model1), conditional= FALSE)
+varimp <- importance(thismod)
 
-lengthndx <- length(model1_importance)
+
+lengthndx <- length(varimp)
 #par(mai=c(0.95,3.1,0.6,0.4))
-par(mai=c(1.4,3.4,0.6,0.9))
+par(mai=c(1.2,3.4,0.6,0.9))
 col <- rainbow(lengthndx, start = 3/6, end = 4/6)      
-barplot(height=model1_importance[order(model1_importance,decreasing = FALSE)],
+barplot(height=varimp[order(varimp,decreasing = FALSE)],
         horiz=T,las=1,main="Order of Importance of Predictor Variables",
         xlab="Index of overall importance",col=col,           
-        names.arg=predictorNames[match(names(model1_importance),pred.names)][order(model1_importance,decreasing = FALSE)])
+        names.arg=predictorNames[match(names(varimp),pred.names)][order(varimp,decreasing = FALSE)])
 
 ##### Make univariate plots of the relationships- plot one relationship at a time
 
-RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=titanic,  #   
-                   predictors=pred.names[1], labels=predictorNames[1], allpredictors=pred.names,plot.layout=c(1,1))
+par(mai=c(1,1,.8,.1))
+p=1
+for(p in 1:length(pred.names)){
+  thisvar <- pred.names[p]
+  
+  if(is.factor(titanic2[[thisvar]])){
+    nd <- data.frame(x=as.factor(levels(titanic2[[thisvar]])))
+  }else{
+    nd <- data.frame(x=seq(min(titanic2[[thisvar]]),max(titanic2[[thisvar]]),length=50))
+  }
+  names(nd) <- thisvar
+  
+  othervars <- setdiff(pred.names,thisvar)
+  temp <- sapply(othervars,function(t){ if(is.factor(titanic2[[t]])){ nd[[t]] <<- titanic2[[t]][1]}else{ nd[[t]] <<- mean(titanic2[[t]]) }} )
+  #nd
+  
+  pred = predict(thismod,data=nd,type="response")$predictions[,2]
+  
+  plot(pred~nd[,1],type="l",xlab=thisvar,main=predictorNames[p])
+  if(!is.factor(nd[,1])) rug(jitter(titanic2[[thisvar]]))
+  
+}
 
-RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=titanic,  #   
-                   predictors=pred.names[3], labels=predictorNames[3], allpredictors=pred.names,plot.layout=c(1,1))
+allcomb <- as.data.frame(t(combn(pred.names,2)))
+names(allcomb) <- c("var1","var2")
 
-RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=titanic,  #   
-                   predictors=pred.names[5], labels=predictorNames[5], allpredictors=pred.names,plot.layout=c(1,1))
+allcomb$int1 <- NA
+allcomb$int2 <- NA
 
-RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=titanic,  #   
-                   predictors=pred.names[2], labels=predictorNames[2], allpredictors=pred.names,plot.layout=c(1,1))
-# NOTE: this one can take a very long time   ...
-rf_findint <- RF_FindInteractions(object=rf_model1,data=titanic,predictors=pred.names)
+p=1
+for(p in 1:nrow(allcomb)){
+  var1 = allcomb$var1[p]
+  var2 = allcomb$var2[p]
 
-rf_findint$interactions1
+  if(!is.factor(titanic2[[var1]])){ 
+    all1= seq(min(titanic2[[var1]]),max(titanic2[[var1]]),length=10)
+  }else{
+    all1=as.factor(levels(titanic2[[var1]]))
+  }
+  if(!is.factor(titanic2[[var2]])){ 
+    all2 = seq(min(titanic2[[var2]]),max(titanic2[[var2]]),length=10)
+  }else{
+    all2=as.factor(levels(titanic2[[var2]]))
+  }
 
-rf_findint$rank.list1
-### plot interaction strength
+  nd <- expand.grid(all1,all2)
+  names(nd) <- c(var1,var2)
+  
+  othervars <- setdiff(pred.names,c(var1,var2))
+  temp <- sapply(othervars,function(t){ if(is.factor(titanic2[[t]])){ nd[[t]] <<- titanic2[[t]][1]}else{ nd[[t]] <<- mean(titanic2[[t]]) }}   )
+  
+  pred = predict(thismod,data=nd,type="response")$predictions[,2]
+  
+  additive_model <- lm(pred~nd[[var1]]+nd[[var2]])
+  
+  pred_add = predict(additive_model)
+  
+  allcomb$int1[p] <- sqrt(mean((pred-pred_add)^2))
+  
+  maximp <- mean(varimp[c(var1,var2)])
+  
+  allcomb$int2[p] <- allcomb$int1[p]/maximp
+  
+}
 
-lengthndx <- min(9,nrow(rf_findint$rank.list1))
-par(mai=c(0.95,3.1,0.6,0.4))
-barplot(height=(rf_findint$rank.list1[c(1:min(9,nrow(rf_findint$rank.list1))),5][c(lengthndx:1)]),
-        horiz=T,las=1,main=paste(response, sep=""),
-        xlab="Index of interaction strength",col=brewer.pal(lengthndx,"Blues"),           
-        names.arg=paste("",predictorNames[match(rf_findint$rank.list1[,2][c(lengthndx:1)],pred.names)],"\n",predictorNames[match(rf_findint$rank.list1[,4][c(lengthndx:1)],pred.names)],sep="") )
+allcomb <- allcomb[order(allcomb$int1,decreasing = T),]
+allcomb
 
 
-rf_findint$rank.list1
-fam="binomial"
+### visualize interactions
+ints.torun <- 1:2
+int=2
+for(int in 1:length(ints.torun)){
+  thisint <- ints.torun[int]
+  var1 = allcomb$var1[thisint]
+  var2 = allcomb$var2[thisint]
+ 
+  if(!is.factor(titanic2[[var1]])){ 
+    all1= seq(min(titanic2[[var1]]),max(titanic2[[var1]]),length=10)
+  }else{
+    all1=as.factor(levels(titanic2[[var1]]))
+  }
+  if(!is.factor(titanic2[[var2]])){ 
+    all2 = seq(min(titanic2[[var2]]),max(titanic2[[var2]]),length=10)
+  }else{
+    all2=as.factor(levels(titanic2[[var2]]))
+  }
+  
+  nd <- expand.grid(all1,all2)
+  names(nd) <- c(var1,var2)
+  
+  othervars <- setdiff(pred.names,c(var1,var2))
+  temp <- sapply(othervars,function(t)if(is.factor(titanic2[[t]])){ nd[[t]] <<- titanic2[[t]][1]}else{ nd[[t]] <<- mean(titanic2[[t]]) }  )
+  
+  pred = predict(thismod,data=nd,type="response")$predictions[,2]
+  
+  predmat = matrix(pred,nrow=length(all1),ncol=length(all2))
+  
+  if(!is.factor(titanic2[[var1]])){
+    persp(all1,all2,predmat,theta=25,phi=25,xlab=var1,ylab=var2,zlab="prob surv")
+  }else{
+    plot(predmat[1,]~all2,xlab=var2,ylab="prob surv",type="l",ylim=c(0,1),col="green",lwd=2)
+    lines(all2,predmat[2,],col="blue",lwd=2)
+    legend("bottomright",bty="n",lty=c(1,1),col=c("green","blue"),lwd=c(2,2),legend=c("Female","Male"))
+  }
+  
+}
 
-RF_InteractionPlots(x=1,y=4,object=rf_model1,data=titanic,predictors=pred.names,family=fam) 
-
-RF_InteractionPlots(x=1,y=3,object=rf_model1,data=titanic,predictors=pred.names,family=fam) 
-
-RF_InteractionPlots(x=2,y=4,object=rf_model1,data=titanic,predictors=pred.names,family=fam) 
 
 
 ###################################
 #################### CROSS VALIDATION CODE
 
 n.folds = 10       # set the number of "folds"
-foldVector = rep(c(1:n.folds),times=floor(length(titanic$Survived)/9))[1:length(titanic$Survived)]
+foldVector = rep(c(1:n.folds),times=floor(length(titanic2$Survived)/9))[1:length(titanic2$Survived)]
 
 counter = 1
 CV_df <- data.frame(
-  CVprediction = numeric(nrow(titanic)),      # make a data frame for storage
+  CVprediction = numeric(nrow(titanic2)),      # make a data frame for storage
   realprediction = 0,
   realdata = 0
 )
-
+i=1
 for(i in 1:n.folds){
   fit_ndx <- which(foldVector!=i)
   validate_ndx <- which(foldVector==i)
-  model <- cforest(formula1, data = titanic[fit_ndx,], controls=cforestControl) 
-  predict_CV  <- predict(model,newdata=titanic[validate_ndx,],type="prob") 
-  predict_real  <-  predict(rf_model1,newdata=titanic[validate_ndx,],type="prob")
-  REAL <- titanic$Survived[validate_ndx]
-  for(j in 1:length(which(foldVector==i))){
-    CV_df$CVprediction[counter] <- as.numeric(predict_CV[[j]][,2])
-    CV_df$realprediction[counter] <- as.numeric(predict_real[[j]][,2])   
-    CV_df$realdata[counter] <- REAL[j]         
-    counter = counter + 1  
-  }
+  model <- ranger(formula1, data = titanic2[fit_ndx,],probability=T,importance = 'permutation') 
+  CV_df$CVprediction[validate_ndx]  <- predict(model,data=titanic2[validate_ndx,],type="response")$predictions[,2] 
+  CV_df$realprediction[validate_ndx]  <-  predict(thismod,data=titanic2[validate_ndx,],type="response")$predictions[,2]
+  CV_df$realdata[validate_ndx] <- titanic2$Survived[validate_ndx]
 }
 
 fact=TRUE
