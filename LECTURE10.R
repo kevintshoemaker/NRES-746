@@ -16,21 +16,25 @@
 
 
 ##########
-# titanic disaster example  (load data)
+# Titanic disaster example  (load data)
 
 titanic <- read.csv("titanic.csv",header=T)
 head(titanic)
 
-library(titanic)            # alternative!
-titanic <- titanic_train
+# library(titanic)            # alternative: load titanic data from package
+# titanic <- titanic_train
 
 
 library(ranger)    # fast implementation of random forest
 library(party)     # good package for running decision tree analysis (and random forest- just slower)
 
 
+class(titanic$Survived)
+
 titanic$Survived <- as.factor(titanic$Survived)    # code response variable as a factor variable (categorical)
 titanic$Sex <- as.factor(titanic$Sex)
+
+class(titanic$Survived)   # make sure it's a factor
 
 
 predictorNames <- c(  "Sex",       # nice readable names
@@ -40,7 +44,7 @@ predictorNames <- c(  "Sex",       # nice readable names
                       "Fare"
 )
 
-pred.names=c(  "Sex",      
+pred.names=c(  "Sex",      # the actual names from the data frame
                "Age",
                "SibSp",
                "Parch",
@@ -78,42 +82,42 @@ barplot(height=varimp[order(varimp,decreasing = FALSE)],
         names.arg=predictorNames[match(names(varimp),pred.names)][order(varimp,decreasing = FALSE)])
 
 ##### Make univariate plots of the relationships- plot one relationship at a time
-
+varstoplot <- names(sort(varimp,decreasing = T))   # plot in order of decreasing importance
 par(mai=c(1,1,.8,.1))
 p=1
-for(p in 1:length(pred.names)){
-  thisvar <- pred.names[p]
+for(p in 1:length(pred.names)){            # loop through all predictor variables
+  thisvar <- varstoplot[p]    
   
-  if(is.factor(titanic2[[thisvar]])){
+  if(is.factor(titanic2[[thisvar]])){                    # make 'newdata' that spans the range of the predictor variable
     nd <- data.frame(x=as.factor(levels(titanic2[[thisvar]])))
   }else{
     nd <- data.frame(x=seq(min(titanic2[[thisvar]]),max(titanic2[[thisvar]]),length=50))
   }
   names(nd) <- thisvar
   
-  othervars <- setdiff(pred.names,thisvar)
+  othervars <- setdiff(pred.names,thisvar)    # set other variables at their mean value (or for factors, use first observation- I was lazy here)
   temp <- sapply(othervars,function(t){ if(is.factor(titanic2[[t]])){ nd[[t]] <<- titanic2[[t]][1]}else{ nd[[t]] <<- mean(titanic2[[t]]) }} )
   #nd
   
-  pred = predict(thismod,data=nd,type="response")$predictions[,2]
+  pred = predict(thismod,data=nd,type="response")$predictions[,2]    # use 'predict' function to make predictions across the param of interest
   
-  plot(pred~nd[,1],type="l",xlab=thisvar,main=predictorNames[p])
-  if(!is.factor(nd[,1])) rug(jitter(titanic2[[thisvar]]))
+  plot(pred~nd[,1],type="l",xlab=thisvar,main=thisvar)         # plot the predictions
+  if(!is.factor(nd[,1])) rug(jitter(titanic2[[thisvar]]))   # with 'rug' for quantitative vars
   
 }
 
-allcomb <- as.data.frame(t(combn(pred.names,2)))
+allcomb <- as.data.frame(t(combn(pred.names,2)))    # all bivariate combinations of the predictor variables 
 names(allcomb) <- c("var1","var2")
 
-allcomb$int1 <- NA
+allcomb$int1 <- NA    # for storing relative interaction intensity
 allcomb$int2 <- NA
 
 p=1
-for(p in 1:nrow(allcomb)){
+for(p in 1:nrow(allcomb)){     # loop through all bivariate combinations
   var1 = allcomb$var1[p]
   var2 = allcomb$var2[p]
 
-  if(!is.factor(titanic2[[var1]])){ 
+  if(!is.factor(titanic2[[var1]])){        # break each variable into bins for making predictions
     all1= seq(min(titanic2[[var1]]),max(titanic2[[var1]]),length=10)
   }else{
     all1=as.factor(levels(titanic2[[var1]]))
@@ -124,23 +128,23 @@ for(p in 1:nrow(allcomb)){
     all2=as.factor(levels(titanic2[[var2]]))
   }
 
-  nd <- expand.grid(all1,all2)
+  nd <- expand.grid(all1,all2)     # make 'newdata' data frame for making predictions across the 2-D parameter space
   names(nd) <- c(var1,var2)
   
-  othervars <- setdiff(pred.names,c(var1,var2))
+  othervars <- setdiff(pred.names,c(var1,var2))      # set all other vars at their mean value (or use first obs for factors-I was lazy)
   temp <- sapply(othervars,function(t){ if(is.factor(titanic2[[t]])){ nd[[t]] <<- titanic2[[t]][1]}else{ nd[[t]] <<- mean(titanic2[[t]]) }}   )
   
-  pred = predict(thismod,data=nd,type="response")$predictions[,2]
+  pred = predict(thismod,data=nd,type="response")$predictions[,2]   # make predictions using 'predict()'
   
-  additive_model <- lm(pred~nd[[var1]]+nd[[var2]])
+  additive_model <- lm(pred~nd[[var1]]+nd[[var2]])     # fit a fully additive model from RF predictions using 'lm()'
   
-  pred_add = predict(additive_model)
+  pred_add = predict(additive_model)    # generate predictions using the additive model (for comparison with RF predictions)
   
-  allcomb$int1[p] <- sqrt(mean((pred-pred_add)^2))
+  allcomb$int1[p] <- sqrt(mean((pred-pred_add)^2))   # metric of interaction strength (dif between RF and additive model)
   
-  maximp <- mean(varimp[c(var1,var2)])
+  maximp <- mean(varimp[c(var1,var2)])    # for weighted interaction importance
   
-  allcomb$int2[p] <- allcomb$int1[p]/maximp
+  allcomb$int2[p] <- allcomb$int1[p]/maximp   # weighted measure that includes overall importance and interaction strength
   
 }
 
@@ -149,7 +153,7 @@ allcomb
 
 
 ### visualize interactions
-ints.torun <- 1:2
+ints.torun <- 1:3
 int=2
 for(int in 1:length(ints.torun)){
   thisint <- ints.torun[int]
