@@ -309,10 +309,10 @@ Essentially, we are trying to find the point where the derivative of the likelih
 The simplest derivative-based optimization algorithm is the *Newton-Raphson algorithm*. Here is the pseudocode:
 
 - pick a guess for a parameter value     
-- compute the derivative of the likelihood function for that guess       
-- compute the slope of the derivative (curvature) of the likelihood function for that guess      
-- Extrapolate linearly to try to find the root (where the first derivative of the likelihood function should be zero assuming a linear relationship)       
-- repeat until the derivative of the likelihood function is close enough to zero (within a specified tolerance), using the new value from the last step as your initial guess.       
+- compute the first derivative of the likelihood function for that guess       
+- compute the slope of the first derivative (curvature, or second derivative) of the likelihood function for that guess      
+- Extrapolate linearly to try to find the root (where the first derivative of the likelihood function should be zero assuming the first derivative has a constant slope)       
+- repeat until the first derivative of the likelihood function is close enough to zero (within a specified tolerance), using the new value from the previous step as your initial guess.       
 
 Let's first visualize the shape of the first derivative of the likelihood function
 
@@ -453,7 +453,9 @@ Note that this method and other derivative-based methods can work in multiple di
 
 ## Derivative-free optimization methods
 
-Derivative-free methods make no assumption about smoothness. In some ways, they represent a middle ground between the brute force method and the elegant but finnicky derivative-based methods- walking a delicate balance between simplicity and generality.
+Derivative-free methods make no assumption about smoothness. In some ways, they represent a middle ground between the brute force method and the elegant but finicky derivative-based methods- walking a delicate balance between simplicity and generality.
+
+Derivative-free methods only require a likelihood function that returns real numbers but have no additional requirements.  
 
 ## Derivative-free method 1: simplex method
 
@@ -461,17 +463,17 @@ This is the default optimization method for "optim()"! That means that R used th
 
 #### Definition: Simplex
 
-A *simplex* is the multi-dimensional analog of the triangle. In two dimensions, the triangle is the simplest shape possible that encloses an area. It has just one more vertex than there are dimensions! In *n* dimensions, a simplex is defined by *n+1* vertices. 
+A *simplex* is the multi-dimensional analog of the triangle. In a two dimensional space, the triangle is the simplest shape possible that encloses an area. It has just one more vertex than there are dimensions! In *n* dimensions, a simplex is defined by *n+1* vertices. 
 
 #### Pseudocode for Nelder-Mead simplex algorithm
 
-Set up an initial simplex in parameter space (often based on a user's initial guess). NOTE: when you use the Nelder-Mead algorithm in "optim()" you only specify one initial value for each free parameter. "optim()"'s internal algorithm turns that initial guess into a simplex prior to starting the Nelder-Mead algorithm. 
+Set up an initial simplex in parameter space, essentially representing three initial guesses about the parameter values. NOTE: when you use the Nelder-Mead algorithm in "optim()" you only specify one initial value for each free parameter. "optim()"'s internal algorithm turns that initial guess into a simplex prior to starting the Nelder-Mead algorithm. 
 
 Continue the following steps until your answer is good enough:  
 
 * Start by identifying the *worst* vertex (the one with the lowest likelihood)  
 * Take the worst vertex and reflect it across the center of the shape represented by the other vertices. This is your 'proposal vertex'.
-* If the likelihood is higher at the proposal vertex, but is not the highest likelihood of all the vertices, then replace the old vertex with the proposal vertex.
+* If the likelihood is higher at the proposal vertex (better than the original), but is not the highest likelihood of all the vertices, then replace the old vertex with the proposal vertex.
 * If the likelihood is highest for the proposal vertex (out of all the vertices), increase the length of the jump! If this increased jump improves the likelihood even more, replace the old vertex with this new extended-jump vertex.   
 * If the original proposal vertex was bad (lower likelihood than the original) then try a point that's closer to the original vertex along the reflection line. If this point is better than the original vertex, replace the old vertex with this new reduced-jump vertex. 
 * If all reflections were worse than the original, then contract (shrink) the simplex toward the highest-likelihood vertex.   
@@ -511,7 +513,7 @@ Let's plot the simplex...
 ```{r}
     ## first let's make a function to plot the simplex on a 2-D likelihood surface...
 
-addSimplex <- function(simplex,col="green"){
+addSimplex <- function(simplex,col="red"){
   temp <- as.data.frame(simplex)    # easier to work with data frame here
   points(x=temp[1,c(1,2,3,1)], y=temp[2,c(1,2,3,1)],type="b",lwd=2,col=col)
 }
@@ -539,7 +541,7 @@ SimplexLik(simplex)
 
 ```
 
-Now let's develop a function (or functions as the case may be) to implement our first move through parameter space, according to the rules defined above... 
+Now let's develop functions to assist our moves through parameter space, according to the rules defined above... 
 
 ```{r}
 
@@ -549,6 +551,8 @@ Now let's develop a function (or functions as the case may be) to implement our 
 
 ## this function reflects the worst vertex across the remaining vector
 ReflectIt <- function(oldsimplex,WorstVertex){
+  
+  vertnames <- names(oldsimplex)
   
     ## re-arrange simplex- worst must be first
   worstndx <- which(names(oldsimplex)==WorstVertex)
@@ -583,6 +587,9 @@ ReflectIt <- function(oldsimplex,WorstVertex){
   alternates$half <- newsimplex 
   alternates$double[[1]] <- double + oldpoint
   alternates$half[[1]] <- half + oldpoint
+  alternates$reflected <- alternates$reflected[vertnames]
+  alternates$double <- alternates$double[vertnames]
+  alternates$half <- alternates$half[vertnames]
   return(alternates)
 }
 
@@ -652,7 +659,7 @@ newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex)
+addSimplex(newsimplex,col="green")
 
 
 ```
@@ -671,7 +678,7 @@ newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex)
+addSimplex(newsimplex,col="green")
 
 ```
 
@@ -688,7 +695,7 @@ newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex)
+addSimplex(newsimplex,col="green")
 
 ```
 
@@ -705,7 +712,7 @@ newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex)
+addSimplex(newsimplex,col="green")
 
 ```
 
@@ -726,7 +733,7 @@ for(i in 1:4){
   image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
   contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
   addSimplex(oldsimplex,col="red")
-  addSimplex(newsimplex)
+  addSimplex(newsimplex,col="green")
 }
 
 
@@ -770,8 +777,6 @@ SimplexMethod(firstguess = c(shape=39,scale=0.28))
 
 ```
 
-
-Okay, it's close but doesn't seem to be optimizing very well compared with the other methods. I probably didn't implement it perfectly yet! 
 
 I like to call this the "amoeba" method of optimization!
 
@@ -858,7 +863,7 @@ Now let's look at the Metropolis routine:
 ```{r}
 
 ############
-# run and visualize a Metropolis routine
+# run and visualize a Metropolis simulated annealing routine
 
 k <- 100
 oldguess <- startingvals
@@ -889,9 +894,9 @@ lines(guesses,col="red")
 ```
 
 
-Clearly this is the most inefficient, brute-force method we have seen so far (aside from the actual brute force method). And also quite clearly, in the context of this class, the best and most fun (and dangerous!).
+Clearly this is the most inefficient, brute-force method we have seen so far (aside from the actual brute force method). And also quite clearly, in the context of this class, the best and most fun (and dangerous?!).
 
-NOTE: simulated annealing is way more efficient than the brute force method we saw earlier, especially with multiple dimensions!
+NOTE: simulated annealing is still way more efficient than the brute force method we saw earlier, especially with multiple dimensions!
 
 Let's run it for longer, and with a smaller value of k..
 

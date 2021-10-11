@@ -78,7 +78,7 @@ curve(dgamma(x,shape=MLE$par["shape"],scale=MLE$par["scale"]),add=T,col="red")
 # define 2-D parameter space!
 ##############
 
-shapevec <- seq(10,100,by=0.1)   
+shapevec <- seq(10,100,by=0.1)        # divide parameter space into tiny increments
 scalevec <- seq(0.01,0.3,by=0.001)
 
 ##############
@@ -283,7 +283,7 @@ simplex
 
     ## first let's make a function to plot the simplex on a 2-D likelihood surface...
 
-addSimplex <- function(simplex,col="green"){
+addSimplex <- function(simplex,col="red"){
   temp <- as.data.frame(simplex)    # easier to work with data frame here
   points(x=temp[1,c(1,2,3,1)], y=temp[2,c(1,2,3,1)],type="b",lwd=2,col=col)
 }
@@ -311,6 +311,8 @@ SimplexLik(simplex)
 
 ## this function reflects the worst vertex across the remaining vector
 ReflectIt <- function(oldsimplex,WorstVertex){
+  
+  vertnames <- names(oldsimplex)
   
     ## re-arrange simplex- worst must be first
   worstndx <- which(names(oldsimplex)==WorstVertex)
@@ -345,6 +347,9 @@ ReflectIt <- function(oldsimplex,WorstVertex){
   alternates$half <- newsimplex 
   alternates$double[[1]] <- double + oldpoint
   alternates$half[[1]] <- half + oldpoint
+  alternates$reflected <- alternates$reflected[vertnames]
+  alternates$double <- alternates$double[vertnames]
+  alternates$half <- alternates$half[vertnames]
   return(alternates)
 }
 
@@ -414,7 +419,7 @@ newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex)
+addSimplex(newsimplex,col="green")
 
 
 
@@ -427,7 +432,7 @@ newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex)
+addSimplex(newsimplex,col="green")
 
 
 ############
@@ -439,7 +444,7 @@ newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex)
+addSimplex(newsimplex,col="green")
 
 
 ############
@@ -451,7 +456,7 @@ newsimplex <- MoveTheSimplex(oldsimplex)
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex)
+addSimplex(newsimplex,col="green")
 
 
 ############
@@ -466,7 +471,7 @@ for(i in 1:4){
   image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
   contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
   addSimplex(oldsimplex,col="red")
-  addSimplex(newsimplex)
+  addSimplex(newsimplex,col="green")
 }
 
 
@@ -542,7 +547,7 @@ loglikdif
 
 
 ############
-# run and visualize a Metropolis routine
+# run and visualize a Metropolis simulated annealing routine
 
 k <- 100
 oldguess <- startingvals

@@ -389,6 +389,9 @@ div.tocify {
       <a href="FINALPROJ.html">Final project overview</a>
     </li>
     <li>
+      <a href="LAB3demo.html">Lab 3: Likelihood (intro)</a>
+    </li>
+    <li>
       <a href="LAB5.html">Lab 5: Model selection (optional)</a>
     </li>
     <li>
@@ -666,13 +669,13 @@ CurvatureFunc(shape_guess=30)   # try it!</code></pre>
 <ul>
 <li>pick a guess for a parameter value<br />
 </li>
-<li>compute the derivative of the likelihood function for that guess<br />
+<li>compute the first derivative of the likelihood function for that guess<br />
 </li>
-<li>compute the slope of the derivative (curvature) of the likelihood function for that guess<br />
+<li>compute the slope of the first derivative (curvature, or second derivative) of the likelihood function for that guess<br />
 </li>
-<li>Extrapolate linearly to try to find the root (where the first derivative of the likelihood function should be zero assuming a linear relationship)<br />
+<li>Extrapolate linearly to try to find the root (where the first derivative of the likelihood function should be zero assuming the first derivative has a constant slope)<br />
 </li>
-<li>repeat until the derivative of the likelihood function is close enough to zero (within a specified tolerance), using the new value from the last step as your initial guess.</li>
+<li>repeat until the first derivative of the likelihood function is close enough to zero (within a specified tolerance), using the new value from the previous step as your initial guess.</li>
 </ul>
 <p>Let’s first visualize the shape of the first derivative of the likelihood function</p>
 <pre class="r"><code>######
@@ -777,24 +780,25 @@ newMLE</code></pre>
 </div>
 <div id="derivative-free-optimization-methods" class="section level2">
 <h2>Derivative-free optimization methods</h2>
-<p>Derivative-free methods make no assumption about smoothness. In some ways, they represent a middle ground between the brute force method and the elegant but finnicky derivative-based methods- walking a delicate balance between simplicity and generality.</p>
+<p>Derivative-free methods make no assumption about smoothness. In some ways, they represent a middle ground between the brute force method and the elegant but finicky derivative-based methods- walking a delicate balance between simplicity and generality.</p>
+<p>Derivative-free methods only require a likelihood function that returns real numbers but have no additional requirements.</p>
 </div>
 <div id="derivative-free-method-1-simplex-method" class="section level2">
 <h2>Derivative-free method 1: simplex method</h2>
 <p>This is the default optimization method for “optim()”! That means that R used this method for optimizing the fuel economy example from the previous lecture!</p>
 <div id="definition-simplex" class="section level4">
 <h4>Definition: Simplex</h4>
-<p>A <em>simplex</em> is the multi-dimensional analog of the triangle. In two dimensions, the triangle is the simplest shape possible that encloses an area. It has just one more vertex than there are dimensions! In <em>n</em> dimensions, a simplex is defined by <em>n+1</em> vertices.</p>
+<p>A <em>simplex</em> is the multi-dimensional analog of the triangle. In a two dimensional space, the triangle is the simplest shape possible that encloses an area. It has just one more vertex than there are dimensions! In <em>n</em> dimensions, a simplex is defined by <em>n+1</em> vertices.</p>
 </div>
 <div id="pseudocode-for-nelder-mead-simplex-algorithm" class="section level4">
 <h4>Pseudocode for Nelder-Mead simplex algorithm</h4>
-<p>Set up an initial simplex in parameter space (often based on a user’s initial guess). NOTE: when you use the Nelder-Mead algorithm in “optim()” you only specify one initial value for each free parameter. “optim()”’s internal algorithm turns that initial guess into a simplex prior to starting the Nelder-Mead algorithm.</p>
+<p>Set up an initial simplex in parameter space, essentially representing three initial guesses about the parameter values. NOTE: when you use the Nelder-Mead algorithm in “optim()” you only specify one initial value for each free parameter. “optim()”’s internal algorithm turns that initial guess into a simplex prior to starting the Nelder-Mead algorithm.</p>
 <p>Continue the following steps until your answer is good enough:</p>
 <ul>
 <li>Start by identifying the <em>worst</em> vertex (the one with the lowest likelihood)<br />
 </li>
 <li>Take the worst vertex and reflect it across the center of the shape represented by the other vertices. This is your ‘proposal vertex’.</li>
-<li>If the likelihood is higher at the proposal vertex, but is not the highest likelihood of all the vertices, then replace the old vertex with the proposal vertex.</li>
+<li>If the likelihood is higher at the proposal vertex (better than the original), but is not the highest likelihood of all the vertices, then replace the old vertex with the proposal vertex.</li>
 <li>If the likelihood is highest for the proposal vertex (out of all the vertices), increase the length of the jump! If this increased jump improves the likelihood even more, replace the old vertex with this new extended-jump vertex.<br />
 </li>
 <li>If the original proposal vertex was bad (lower likelihood than the original) then try a point that’s closer to the original vertex along the reflection line. If this point is better than the original vertex, replace the old vertex with this new reduced-jump vertex.</li>
@@ -837,7 +841,7 @@ simplex</code></pre>
 <p>Let’s plot the simplex…</p>
 <pre class="r"><code>    ## first let&#39;s make a function to plot the simplex on a 2-D likelihood surface...
 
-addSimplex &lt;- function(simplex,col=&quot;green&quot;){
+addSimplex &lt;- function(simplex,col=&quot;red&quot;){
   temp &lt;- as.data.frame(simplex)    # easier to work with data frame here
   points(x=temp[1,c(1,2,3,1)], y=temp[2,c(1,2,3,1)],type=&quot;b&quot;,lwd=2,col=col)
 }
@@ -858,13 +862,15 @@ SimplexLik &lt;- function(simplex){
 SimplexLik(simplex)</code></pre>
 <pre><code>##   vertex1   vertex2   vertex3 
 ## -774.3825 -271.7534 -369.1696</code></pre>
-<p>Now let’s develop a function (or functions as the case may be) to implement our first move through parameter space, according to the rules defined above…</p>
+<p>Now let’s develop functions to assist our moves through parameter space, according to the rules defined above…</p>
 <pre class="r"><code>#####
 # Helper Functions
 #####
 
 ## this function reflects the worst vertex across the remaining vector
 ReflectIt &lt;- function(oldsimplex,WorstVertex){
+  
+  vertnames &lt;- names(oldsimplex)
   
     ## re-arrange simplex- worst must be first
   worstndx &lt;- which(names(oldsimplex)==WorstVertex)
@@ -899,6 +905,9 @@ ReflectIt &lt;- function(oldsimplex,WorstVertex){
   alternates$half &lt;- newsimplex 
   alternates$double[[1]] &lt;- double + oldpoint
   alternates$half[[1]] &lt;- half + oldpoint
+  alternates$reflected &lt;- alternates$reflected[vertnames]
+  alternates$double &lt;- alternates$double[vertnames]
+  alternates$half &lt;- alternates$half[vertnames]
   return(alternates)
 }
 
@@ -970,7 +979,7 @@ newsimplex &lt;- MoveTheSimplex(oldsimplex)</code></pre>
 <pre class="r"><code>image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col=&quot;red&quot;)
-addSimplex(newsimplex)</code></pre>
+addSimplex(newsimplex,col=&quot;green&quot;)</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
 <p>Let’s try another few moves</p>
 <pre class="r"><code>############
@@ -983,7 +992,7 @@ newsimplex &lt;- MoveTheSimplex(oldsimplex)</code></pre>
 <pre class="r"><code>image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col=&quot;red&quot;)
-addSimplex(newsimplex)</code></pre>
+addSimplex(newsimplex,col=&quot;green&quot;)</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-25-1.png" width="672" /></p>
 <p>And again!</p>
 <pre class="r"><code>############
@@ -996,7 +1005,7 @@ newsimplex &lt;- MoveTheSimplex(oldsimplex)</code></pre>
 <pre class="r"><code>image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col=&quot;red&quot;)
-addSimplex(newsimplex)</code></pre>
+addSimplex(newsimplex,col=&quot;green&quot;)</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-26-1.png" width="672" /></p>
 <p>Again:</p>
 <pre class="r"><code>############
@@ -1009,7 +1018,7 @@ newsimplex &lt;- MoveTheSimplex(oldsimplex)</code></pre>
 <pre class="r"><code>image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 addSimplex(oldsimplex,col=&quot;red&quot;)
-addSimplex(newsimplex)</code></pre>
+addSimplex(newsimplex,col=&quot;green&quot;)</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-27-1.png" width="672" /></p>
 <p>And another few times:</p>
 <pre class="r"><code>############
@@ -1024,7 +1033,7 @@ for(i in 1:4){
   image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
   contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
   addSimplex(oldsimplex,col=&quot;red&quot;)
-  addSimplex(newsimplex)
+  addSimplex(newsimplex,col=&quot;green&quot;)
 }</code></pre>
 <pre><code>## Warning in dgamma(Myx$titer, shape = params[&quot;shape&quot;], scale = params[&quot;scale&quot;], :
 ## NaNs produced</code></pre>
@@ -1065,12 +1074,11 @@ SimplexMethod(firstguess = c(shape=39,scale=0.28))</code></pre>
 ## 49.611453  0.139566 
 ## 
 ## $likelihood
-##   vertex2 
+##   vertex1 
 ## -37.66714 
 ## 
 ## $iterations
 ## [1] 100</code></pre>
-<p>Okay, it’s close but doesn’t seem to be optimizing very well compared with the other methods. I probably didn’t implement it perfectly yet!</p>
 <p>I like to call this the “amoeba” method of optimization!</p>
 <p>In general, the simplex-based methods are less efficient than the derivative-based methods at finding the MLE- especially as you near the MLE.</p>
 </div>
@@ -1125,14 +1133,14 @@ newGuess &lt;- function(oldguess=startingvals){
   # set a new &quot;guess&quot; near to the original guess
 
 newGuess(oldguess=startingvals)     # each time is different- this is the first optimization procedure with randomness built in</code></pre>
-<pre><code>##      shape      scale 
-## 82.9156476  0.1587081</code></pre>
+<pre><code>##     shape     scale 
+## 76.231393  0.171345</code></pre>
 <pre class="r"><code>newGuess(oldguess=startingvals)</code></pre>
 <pre><code>##      shape      scale 
-## 79.9106806  0.1311444</code></pre>
+## 75.7986732  0.1676044</code></pre>
 <pre class="r"><code>newGuess(oldguess=startingvals)</code></pre>
 <pre><code>##      shape      scale 
-## 75.3691298  0.1326455</code></pre>
+## 77.4756621  0.1287046</code></pre>
 <p>Now let’s evaluate the difference in likelihood between the old and the new guess…</p>
 <pre class="r"><code>############
 # evaluate the difference in likelihood between the new proposal and the old point
@@ -1146,10 +1154,10 @@ LikDif &lt;- function(oldguess,newguess){
 newguess &lt;- newGuess(oldguess=startingvals)
 loglikdif &lt;- LikDif(oldguess=startingvals,newguess)
 loglikdif</code></pre>
-<pre><code>## [1] 232.5288</code></pre>
+<pre><code>## [1] -204.2819</code></pre>
 <p>Now let’s look at the Metropolis routine:</p>
 <pre class="r"><code>############
-# run and visualize a Metropolis routine
+# run and visualize a Metropolis simulated annealing routine
 
 k &lt;- 100
 oldguess &lt;- startingvals
@@ -1177,8 +1185,8 @@ image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col=&quot;red&quot;)</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-32-1.png" width="672" /></p>
-<p>Clearly this is the most inefficient, brute-force method we have seen so far (aside from the actual brute force method). And also quite clearly, in the context of this class, the best and most fun (and dangerous!).</p>
-<p>NOTE: simulated annealing is way more efficient than the brute force method we saw earlier, especially with multiple dimensions!</p>
+<p>Clearly this is the most inefficient, brute-force method we have seen so far (aside from the actual brute force method). And also quite clearly, in the context of this class, the best and most fun (and dangerous?!).</p>
+<p>NOTE: simulated annealing is still way more efficient than the brute force method we saw earlier, especially with multiple dimensions!</p>
 <p>Let’s run it for longer, and with a smaller value of k..</p>
 <pre class="r"><code>###########
 # Run it for longer!
@@ -1248,13 +1256,13 @@ points(MLE$vals[1],MLE$vals[2],col=&quot;green&quot;,pch=20,cex=3)</code></pre>
 <pre class="r"><code>MLE</code></pre>
 <pre><code>## $vals
 ##      shape      scale 
-## 49.7959734  0.1389723 
+## 49.4654639  0.1399851 
 ## 
 ## $lik
-## [1] -37.66744
+## [1] -37.6672
 ## 
 ## $step
-## [1] 8111</code></pre>
+## [1] 8802</code></pre>
 <p>As you can see, the simulated annealing method did pretty well. However, we needed thousands of iterations to do what other methods just take a few iterations to do. But, we might feel better that we have explored parameter space more thoroughly and avoided the potential problem of false peaks (although there’s no guarantee that the simulated annealing method will find the true MLE).</p>
 </div>
 </div>
