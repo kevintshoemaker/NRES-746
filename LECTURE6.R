@@ -41,7 +41,7 @@ curve(dbeta(x,1,1),ylim=c(0,2),col="red",ylab = "probability", xlab="parameter \
 ######
 # visualize the data likelihood alongside the prior probability
 
-#   # recall that likelhood surface is not a probability distribution (thus, the 2 y axes)
+#    recall that the likelihood surface is not a probability distribution (thus, the 2 y axes)
 
 data = 3
 param.space <- seq(0,1,by=0.001)
@@ -83,7 +83,7 @@ posterior <- weighted.likelihood/normalization.constant   # this is Bayes' rule!
 
 par(mai=c(1,1,0,1))
 plot(param.space,prior,ylim=c(0,5),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)  # convert posterior to probability density
+points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)  # convert posterior probability to probability density
 points(param.space,likelihood*5,type="l",col="red",lwd=1,lty=2)
 axis(4,at=seq(0,2,by=0.4),labels = seq(0,0.5,by=.1))
 mtext("Likelihood", side=4, col="red",line=3)
@@ -229,7 +229,7 @@ skewed.posterior <- dlnorm(param.space2,4,1)
 mean <- mean(rlnorm(10000,4,1))
 mode <- param.space2[which.max(skewed.posterior)]
 plot(param.space2,skewed.posterior,type="l",ylab="prob density")
-abline(v=c(mean,mode),col=gray(0.5),lwd=3,lty=2)   # add to plot
+abline(v=c(mean,mode),col=gray(c(0.5,0.2)),lwd=3,lty=2)   # add to plot
 
 
 ############
@@ -241,7 +241,7 @@ posterior <- dbeta(param.space,1+data,1+(10-data))
 mean <- mean(rbeta(10000,1+data,1+(10-data)))
 mode <- param.space[which.max(posterior)]
 plot(param.space,posterior,type="l",col="blue",lwd=2)
-abline(v=c(mean,mode),col=gray(0.5),lwd=3,lty=2)   # add to plot
+abline(v=c(mean,mode),col=gray(c(0.5,0.2)),lwd=3,lty=2)   # add to plot
 
 
 #############
