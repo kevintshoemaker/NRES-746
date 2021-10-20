@@ -36,35 +36,37 @@ For those wishing to follow along with the R-based demo in class, [click here](L
 
 ### Markov Chain Monte Carlo
 
-Now in many cases, we simply won't have the computational power to partition our parameter space into discrete pixels and completely evaluate the posterior probability for all *n*-dimensional pixels in that space. In these cases, we tend to harness ingenious procedures known as *Markov-Chain Monte Carlo* algorithms. This approach uses stochastic jumps in parameter space to (eventually) settle on a posterior distribution. The key to MCMC is the following:
+Now in many cases, we simply won't have the computational power to partition our parameter space into discrete pixels and completely evaluate the posterior probability for all *n*-dimensional pixels in that space. In these cases, we tend to harness ingenious procedures known as *Markov-Chain Monte Carlo* algorithms. This approach uses random jumps in parameter space that eventually end up sampling from the posterior distribution! The key to MCMC is the following:
 
-> The ratio of successful jump probabilities is proportional to the ratio of the posterior probabilities. 
+> The probability of a successful jump in parameter space from point A to point B is proportional to the ratio of the posterior probabilities at these two points. 
 
-The jump probability can be characterized as:
+The probability of a successful jump in parameter space can be characterized as:
 
 $Prob(jump) * Prob(accept)$
 
-That is: in order to jump, you need to propose a specific jump (according to some probability distribution) and then accept that jump!
+That is: in order to jump, you need to *propose* a specific jump (according to some probability distribution) and then accept that jump!
 
 The ratio of jump probabilities can be characterized as:
 
 $\frac{Prob(jump_{a\rightarrow b})\cdot Prob(accept b|a)}{Prob(jump_{b\rightarrow a})\cdot Prob(accept a|b)}$
 
-For this procedure to (eventually) sample from the posterior distribution, _this ratio MUST be equal to the ratio of the posterior probabilities_:
+For this procedure to (eventually) extract random samples from the posterior distribution, _this ratio MUST be equal to the ratio of the posterior probabilities at points A and B_:
 
 $\frac{Posterior(B)}{Posterior(A)}$
 
-If this rule is met, then in the long run the chain will spend a lot of time occupying high-probability parts of parameter space, essentially capturing the posterior distribution. With enough jumps, the long-term distribution will match the joint posterior probability distribution.
+If this rule is met, then in the long run the chain will spend a lot of time occupying high-probability parts of parameter space, essentially capturing the entire posterior distribution.
+
+Note: if the proposal distribution is symmetrical, then the probability of proposing a jump from A to B is the same as the probability of proposing a jump from B to A. Therefore, the proposal probabilities drop out of the above equation...
 
 > MCMC is essentially a special type of random number generator that is designed to sample from difficult-to-describe (e.g., multivariate, hierarchical) probability distributions. In many/most cases, the posterior distribution for ecological problems is a very difficult-to-describe probability distribution.
 
-MCMC is kind of magical in that it allows you to sample from probability distributions that are impossible to fully define in practice!
+MCMC is kind of magical in that it allows you to sample from probability distributions that are impossible to fully define mathematically!
 
 Amazingly, MCMC at its core is not that difficult to describe or implement. Let's look at a simple MCMC algorithm.
 
 ## Metropolis-Hastings algorithm
 
-This algorithm is very similar to the simulated annealing algorithm! The main difference: the "temperature" doesn't decrease over time and the parameter *k* is set to 1.
+This algorithm is very similar to the simulated annealing algorithm that never 'cools'! The main difference: the "temperature" doesn't decrease over time and the temperature parameter *k* is always set to 1.
 
 The M-H algorithm can be expressed as:
 
@@ -205,7 +207,7 @@ hist(Myx$titer,freq=FALSE)
 
 ```
 
-We need to estimate the gamma rate and shape parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
+We need to estimate the gamma shape and scale parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
 
 ```{r}
 
@@ -323,7 +325,7 @@ for(i in 1:length(shapevec)){
 }
 
 ############
-# Visualize the likelihood surface
+# Visualize the prior likelihood surface
 ############
 
 image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.0000001,0.001),col=topo.colors(12))
@@ -380,7 +382,7 @@ newGuess <- function(oldguess){
   sdshapejump <- 4
   sdscalejump <- 0.07
   jump <- c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
-  newguess <- abs(oldguess + jump)
+  newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
   return(newguess)
 }
   # set a new "guess" near to the original guess
@@ -674,17 +676,17 @@ par(mfrow=c(1,1))
 
 ```
 
-Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most efficient and flexible. That award tends to go to the **Gibbs sampler**. In lab we will play around with Gibbs samplers, mostly using a remarkable modeling language called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling). 
+Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most efficient. The **Gibbs sampler** tends to be a more efficient sampler. In lab we will play around with Gibbs samplers, mostly using a remarkable modeling language called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling). 
 
 NOTE: BUGS implementations (e.g., JAGS) actually tend to use a combination of M-H and Gibbs sampling! 
-NOTE: M-H and Gibbs samplers aren't the only MCMC routines out there. For example, 'stan' uses a modification of M-H sampling called 'Hamiltonian Monte Carlo". 
+NOTE: M-H and Gibbs samplers aren't the only MCMC routines out there. For example, the popular program 'stan' uses a modification of M-H sampling called 'Hamiltonian Monte Carlo". 
 
 
 ## Gibbs sampler
 
 The Gibbs sampler is amazingly straightforward and efficient. Basically, the algorithm successively samples from the *full conditional* probability distribution -- that is, the posterior distribution for arbitrary parameter *i* conditional on known values for all other parameters in the model.  
 
-In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is especially true if we use *conjugate priors* for our model specification (what BUGS/JAGS tries to do!). Even if not, the full conditional is often analytically tractable. Nonetheless, even if it's not analytically tractable, we can use a univariate M-H procedure as a "brute force" last resort!
+In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is especially true if we use *conjugate priors* for our model specification (what BUGS/JAGS tries to do!). Even if not, the full conditional is often analytically tractable. Nonetheless, even if it's not analytically tractable, we can use a M-H procedure as a "brute force" last resort!
 
 **Q**: Why is a Gibbs sampler usually much more efficient than a pure M-H sampler?  
 
@@ -763,7 +765,7 @@ par(mfrow=c(1,1))
 ```
 
 
-There is quite a bit of apparent autocorrelation in the samples of the markov chain here. Gibbs samplers frequently have this issue! 
+There is quite a bit of apparent autocorrelation in the samples of the Markov chain here. Gibbs samplers frequently have this issue! 
 
 
 ### Back to Myxomatosis!
@@ -772,7 +774,7 @@ There is quite a bit of apparent autocorrelation in the samples of the markov ch
 
 Finally, let's build a Gibbs sampler for our favorite Myxomatosis example! To do this, we will use the BUGS language (as implemented in JAGS), to help us!
 
-The BUGS language looks simlar to R, but there are several key differences:  
+The BUGS language looks similar to R, but there are several key differences:  
 
 * First of all, BUGS is a compiled language, so the order of operations in your code doesn't really matter
 * BUGS is not vectorized- you need to use FOR loops for just about everything!
@@ -798,7 +800,7 @@ model {
   # PRIORS
   ############
   shape ~ dgamma(0.001,0.001)
-  scale ~ dgamma(0.01,0.01)
+  scale ~ dgamma(0.001,0.001)
   rate <- 1/scale   # convert the scale parameter to a "rate" for BUGS
 }
 
@@ -828,7 +830,7 @@ cat("
     # PRIORS
     ############
     shape ~ dgamma(0.001,0.001)
-    scale ~ dgamma(0.01,0.01)
+    scale ~ dgamma(0.001,0.001)
     rate <- 1/scale
   }
 ", file="BUGSmodel.txt")
@@ -880,7 +882,7 @@ Now we can call JAGS!
 # Run JAGS!!!!
 ##########
 
-library(R2jags)
+#library(R2jags)
 library(jagsUI)
 library(modeest)
 
@@ -909,7 +911,7 @@ The first check is just visual- we look for the following to assess convergence:
 
 One way we might be able to do a better job here is to run the chains for longer and discard the initial samples as a *burn in*!
 
-We can also try to reduce serial autocorrelation by thinning our chain- here we retain only 1 out of every 20 samples.
+We can also try to reduce serial autocorrelation by thinning our chain- here we retain only 1 out of every 100 samples.
 
 ```{r}
 
@@ -917,8 +919,8 @@ We can also try to reduce serial autocorrelation by thinning our chain- here we 
 # Run the chains for longer!
 
 jags.fit <- jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,
-                     n.iter = 10000,n.chains = 3,n.adapt = 1000,n.burnin = 1000,
-                     n.thin=20,parallel=T )
+                     n.iter = 100000,n.chains = 3,n.adapt = 1000,n.burnin = 10000,
+                     n.thin=100,parallel=T )
 
 jagsfit.mcmc <- jags.fit$samples   # convert to "MCMC" object (coda package)
 

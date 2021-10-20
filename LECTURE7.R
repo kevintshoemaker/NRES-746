@@ -205,7 +205,7 @@ for(i in 1:length(shapevec)){
 }
 
 ############
-# Visualize the likelihood surface
+# Visualize the prior likelihood surface
 ############
 
 image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.0000001,0.001),col=topo.colors(12))
@@ -248,7 +248,7 @@ newGuess <- function(oldguess){
   sdshapejump <- 4
   sdscalejump <- 0.07
   jump <- c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
-  newguess <- abs(oldguess + jump)
+  newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
   return(newguess)
 }
   # set a new "guess" near to the original guess
@@ -526,7 +526,7 @@ cat("
     # PRIORS
     ############
     shape ~ dgamma(0.001,0.001)
-    scale ~ dgamma(0.01,0.01)
+    scale ~ dgamma(0.001,0.001)
     rate <- 1/scale
   }
 ", file="BUGSmodel.txt")
@@ -563,17 +563,17 @@ init.vals.for.bugs()
 # Run JAGS!!!!
 ##########
 
-library(R2jags)
-library(runjags)
+#library(R2jags)
+library(jagsUI)
 library(modeest)
 
 library(coda)
 
 params.to.store <- c("shape","scale")
 
-jags.fit <- run.jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,monitor=params.to.store,sample=5000,n.chains = 3,adapt = 100,burnin = 0,summarise = FALSE )
+jags.fit <- jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=5000,n.chains = 3,n.adapt = 100,n.burnin = 0)
 
-jagsfit.mcmc <- as.mcmc.list(jags.fit)   # convert to "MCMC" object (coda package)
+jagsfit.mcmc <- jags.fit$samples   # extract "MCMC" object
 
 summary(jagsfit.mcmc)
 
@@ -583,11 +583,11 @@ plot(jagsfit.mcmc)
 ################
 # Run the chains for longer!
 
-jags.fit <- run.jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,monitor=params.to.store,
-                     sample = 10000,n.chains = 3,adapt = 1000,burnin = 1000,
-                     summarise = FALSE,thin=20,method = "parallel" )
+jags.fit <- jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,
+                     n.iter = 100000,n.chains = 3,n.adapt = 1000,n.burnin = 10000,
+                     n.thin=100,parallel=T )
 
-jagsfit.mcmc <- as.mcmc.list(jags.fit)   # convert to "MCMC" object (coda package)
+jagsfit.mcmc <- jags.fit$samples   # convert to "MCMC" object (coda package)
 
 summary(jagsfit.mcmc)
 

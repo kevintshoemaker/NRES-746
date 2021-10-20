@@ -357,6 +357,9 @@ VarExplained_CV
 titanic <- read.csv("titanic.csv",header=T)
 head(titanic)
 
+library(titanic)            # alternative!
+titanic <- titanic_train
+
 
 titanic2 <- na.omit(titanic)
 model1 <- glm(Survived ~ Sex + scale(Age) + scale(SibSp) + scale(Parch) + scale(Fare), data=titanic2, family="binomial")    #logistic regression
