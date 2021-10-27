@@ -165,7 +165,7 @@ Deviance>=Chisq.crit
 1-pchisq(Deviance,df=3)   # p-value
 
 
-###### Visualize the likelihood rato test
+###### Visualize the likelihood ratio test
 curve(dchisq(x,df=3),0,15)
 abline(v=Deviance,col="red",lwd=4)
 
