@@ -10,20 +10,23 @@
 
 
 ############################################################
-####  Publication-quality figures in R                  ####
+####  Publication-quality figures in (base) R           ####
 ############################################################
 
 
+
+library(lubridate)
 
 ##############
 # Read in and tidy up the Seaside Sparrow data
 
 tide = read.csv("tide_ALL_navd_hh.csv", header=TRUE)
-tide$Date = as.Date(tide$Date, format="%m/%d/%Y")     
-tide$Year = substr(tide$Date, 3, 4)
-tide.13 = tide[tide$Year==13,]    # subset by year
-tide.14 = tide[tide$Year==14,]
-tide.15 = tide[tide$Year==15,]
+tide$Date = mdy_hm(tide$Date)
+tide$Date = as.Date(tide$Date)  # remove time component
+tide$Year = year(tide$Date)
+tide.13 = tide[tide$Year==2013,]    # subset by year
+tide.14 = tide[tide$Year==2014,]
+tide.15 = tide[tide$Year==2015,]
 
 #Take a look at data structure
 head(tide)
@@ -38,14 +41,14 @@ bn = bn[bn$Fate!="NA",]
 bn = bn[bn$Fate!=4,]
 bn = na.omit(bn)
 #Put dates/times in correct format
-bn$Date_found = as.Date(bn$Date_found, format="%m/%d/%Y")
-bn$Fate_date = as.Date(bn$Fate_date, format="%m/%d/%Y")
-bn$Start_date = as.Date(bn$Start_date, format="%m/%d/%Y")
-bn$year = substr(bn$Start_date, 3, 4)
+bn$Date_found = mdy(bn$Date_found)
+bn$Fate_date = mdy(bn$Fate_date)
+bn$Start_date = mdy(bn$Start_date)
+bn$year = year(bn$Start_date)
 bn = bn[order(bn$year, -bn$Fate),]
-bn.13 = bn[bn$year==13,]
-bn.14 = bn[bn$year==14,]
-bn.15 = bn[bn$year==15,]
+bn.13 = bn[bn$year==2013,]
+bn.14 = bn[bn$year==2014,]
+bn.15 = bn[bn$year==2015,]
 
 #Take a look at data structure
 head(bn)
@@ -67,7 +70,7 @@ plot(tide.13$Water_Level ~ tide.13$Date, type="l")
 plot(tide.13$Water_Level ~ tide.13$Date, type="l", ylab="Max Tidal Height (m)", lwd=1, main="2013", xlab="")
 
 #Add segment(s) to show when in the tidal cycle sparrow nests were flooded
-segments(x0=as.Date("2013-05-26"), x1=as.Date("2013-05-26"), y0=0.6, y1=1.595, col=gray(0.5))
+segments(x0=ymd("2013-05-26"), x1=ymd("2013-05-26"), y0=0.5, y1=1.595, col=gray(0.5))
 
 
 ##############
@@ -82,13 +85,13 @@ plot(x=bn.13$Fate_date, y=jitter(bn.13$Nest_height), xlim=c(min(tide.13$Date), m
 
 #Color and shapes to distiguish fates
 plot(x=bn.13$Fate_date, y=jitter(bn.13$Nest_height), xlim=c(min(tide.13$Date), max(tide.13$Date)), 
-	ylim=c(min(bn$Nest_height), max(bn$Nest_height)), ylab="Nest Height (m)",
+	ylim=c(min(bn$Nest_height), max(bn$Nest_height)), ylab="Nest Height (m)",xlab="date",
 	col=ifelse(bn.13$Fate==1, "dodgerblue4", ifelse(bn.13$Fate==3, "palegreen3", "gold3")),
 	pch=ifelse(bn.13$Fate==1, 0, ifelse(bn.13$Fate==3, 1, 17)))
 
 #Cex to change size of pch
 plot(x=bn.13$Fate_date, y=jitter(bn.13$Nest_height), xlim=c(min(tide.13$Date), max(tide.13$Date)), 
-	ylim=c(min(bn$Nest_height), max(bn$Nest_height)), ylab="Nest Height (m)",
+	ylim=c(min(bn$Nest_height), max(bn$Nest_height)), ylab="Nest Height (m)",xlab="date",
 	col=ifelse(bn.13$Fate==1, "dodgerblue4", ifelse(bn.13$Fate==3, "palegreen3", "gold3")),
 	pch=ifelse(bn.13$Fate==1, 0, ifelse(bn.13$Fate==3, 1, 17)), cex=1.5)
 
@@ -203,7 +206,7 @@ segments(x0=as.Date("2015-05-16"), x1=as.Date("2015-05-16"), y0=0.3, y1=1.15, co
 #######
 # to add text to any figure...
 
-text(x=as.Date("2015-07-25"), y=1.1, "a")
+text(x=ymd("2015-07-25"), y=1.1, "a")
 
 
 ###
