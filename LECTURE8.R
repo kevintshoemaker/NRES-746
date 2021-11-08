@@ -476,15 +476,15 @@ init.generator1()
 ###########
 # Run the model in JAGS
 
-library(R2jags)    # load packages
+library(jagsUI)    # load packages
 library(coda)
 library(lattice)
 
 params.to.monitor <- c("a","b","r")
 
-jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.adapt=1000, n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5,parallel=TRUE )
 
-jagsfit1.mcmc <- as.mcmc(jags.fit1)   # convert to "MCMC" object (coda package)
+jagsfit1.mcmc <- jags.fit1$samples   # extract "MCMC" object (coda package)
 
 summary(jagsfit1.mcmc)
 
@@ -495,18 +495,19 @@ summary(jagsfit1.mcmc)
 ########
 # Visualize the model fit
 
-densityplot(jagsfit1.mcmc)
+plot(jagsfit1.mcmc)
 
+jagsUI::densityplot(jags.fit1)
 
-hist(jags.fit1$BUGSoutput$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2),xlim=c(0.5,2.5))
-hist(jags.fit1$BUGSoutput$sims.list$r[,2],density=20,col="green",add=T,freq=F)
+hist(jags.fit1$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2),xlim=c(0.5,2.5))
+hist(jags.fit1$sims.list$r[,2],density=20,col="green",add=T,freq=F)
 legend("topright",col=c("green","white"),density=c(20,0),legend=c("wave","nonwave"),bty="n")
 
 
 #######
 # Extract the DIC for the full model!
 
-DIC_full <- jags.fit1$BUGSoutput$DIC
+DIC_full <- jags.fit1$DIC
 DIC_full
 
 
@@ -567,9 +568,9 @@ init.generator2()
 
 params.to.monitor <- c("a","b","r")
 
-jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.adapt=1000, n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
 
-jagsfit2.mcmc <- as.mcmc(jags.fit2)   # convert to "MCMC" object (coda package)
+jagsfit2.mcmc <- jags.fit2$samples   # "MCMC" object (coda package)
 
 summary(jagsfit2.mcmc)
 
@@ -579,13 +580,13 @@ plot(jagsfit2.mcmc[,"r"])
 
 
 
-densityplot(jagsfit2.mcmc)
+densityplot(jags.fit2)
 
 
 ########
 # Compute DIC
 
-DIC_reduced <- jags.fit2$BUGSoutput$DIC
+DIC_reduced <- jags.fit2$DIC
 
 DIC_reduced
 DIC_full
@@ -660,17 +661,17 @@ model  {
 
 params.to.monitor <- c("a","b","r","LogLik")    # now monitor the log likelihood
 
-jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
 
-jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
 
 
 
 ############
 # Compute WAIC!
 
-loglik_full <- jags.fit1$BUGSoutput$sims.list$LogLik
-loglik_red <- jags.fit2$BUGSoutput$sims.list$LogLik
+loglik_full <- jags.fit1$sims.list$LogLik
+loglik_red <- jags.fit2$sims.list$LogLik
 
 waic_full <- waic(loglik_full)
 waic_red <- waic(loglik_red)
@@ -801,11 +802,11 @@ data.package3 <- list(
 
 params.to.monitor <- c("a1","b1","r1","a2","b2","r2","a3","b3","r3","selected","predicted.cones2","predicted.cones","SSE_obs","SSE_pred","SSE2_obs","SSE2_pred")
 
-jags.fit3 <- jags(data=data.package3,parameters.to.save=params.to.monitor,n.iter=5000,model.file="BUGS_fir_modelselection.txt",n.chains = 2,n.burnin = 1000,n.thin=2 )
+jags.fit3 <- jags(data=data.package3,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=5000,model.file="BUGS_fir_modelselection.txt",n.chains = 2,n.burnin = 1000,n.thin=2 )
 
-jagsfit3.mcmc <- as.mcmc(jags.fit3)   # convert to "MCMC" object (coda package)
+jagsfit3.mcmc <- jags.fit3$samples   # convert to "MCMC" object (coda package)
 
-BUGSlist <- as.data.frame(jags.fit3$BUGSoutput$sims.list)
+BUGSlist <- as.data.frame(jags.fit3$sims.list)
 #summary(jagsfit.mcmc)
 
 #plot(jagsfit.mcmc)
@@ -832,8 +833,8 @@ plot(jagsfit3.mcmc[,"r3[1]"])
 ##########
 # Perform explicit model selection
 
-n.iterations <- length(jags.fit3$BUGSoutput$sims.list$selected)
-selected <- table(jags.fit3$BUGSoutput$sims.list$selected)
+n.iterations <- length(jags.fit3$sims.list$selected)
+selected <- table(jags.fit3$sims.list$selected)
 names(selected) <- c("Full model","No wave","Fixed a&b")
 selected
 

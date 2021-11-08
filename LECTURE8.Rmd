@@ -497,15 +497,15 @@ Recall that our I-T metrics, as well as likelihood ratio tests, used the value o
 
 Bayesians compute a posterior distribution that takes into account the entire likelihood surface (and the prior distribution)-- that is, we now are working with an entire posterior distribution rather than just a single point. 
 
-The *marginal likelihood* represents the mean of the data likelihood across parameter space, averaged across (weighted by) the prior distribution. 
+The *marginal likelihood* represents the average data likelihood across parameter space. 
 
 $\overline{\mathcal{L}} = \int \mathcal{L}(x)\cdot Prior(x) dx$
 
-The marginal likelihood represents the average probability of the data across parameter space, or the *average quality of fit of a given model to the data*. 
+The marginal likelihood represents the *average quality of fit of a given model to the data*. 
 
 This should look familiar! It is the denominator of Bayes rule -- also known as the probability of the data, or the **model evidence**. 
 
-The higher the marginal likelihood, the more likely that model is to produce the data, regardless of what the real parameter values may be. 
+The higher the marginal likelihood, the more likely that model is to produce the data. 
 
 The ratio of marginal likelihoods is known as the **Bayes factor** and is an elegant (yet often troublesome in practice) method for comparing models in a Bayesian context. 
 
@@ -513,7 +513,7 @@ $\overline{\mathcal{L}}_1 / \overline{\mathcal{L}}_2$
 
 This is interpreted as *the odds in favor of model 1 versus model 2*
 
-This simple formula elegantly accounts for over-parameterization. Simpler models will generally have higher marginal likelihoods than more complex models. We have already seen why this might be. More complex models will always have a higher likelihood at the MLE, but generally will have much lower likelihoods in other parts of parameter space. A higher marginal likelihood means that a model fits the data better after taking all of parameter space into account.
+This simple formula elegantly penalizes over-parameterization. Simpler models will generally have higher marginal likelihoods than more complex models when all of parameter space is taken into account. We have already seen why this might be. More complex models will always have a higher likelihood at the MLE, but generally will have much lower likelihoods in other parts of parameter space. 
 
 Interestingly, 2*logarithm of the Bayes factor (putting it on the deviance scale) is comparable to AIC (with a fairly strong prior) and is comparable to BIC (with a fairly weak prior). This argument, based on Bayes factors, has been used to justify both AIC and BIC (and is why BIC is called 'Bayesian').
 
@@ -523,7 +523,7 @@ In practice, computing marginal likelihoods can be tricky, involving multi-dimen
 
 A simple binomial distribution example can illustrate Bayes factors quite nicely.
 
-Imagine we conduct a tadpole experiment where we are interested in estimating the mortality rate of some treatment, on the basis of the number of dead tadpoles observed out of 10 in a tank. We are interested in comparing a simple model where *p* is fixed at 0.5 with a more complex model where *p* is a *free parameter*.  
+Imagine we conduct a tadpole experiment where we are interested in estimating the mortality rate of some treatment, on the basis of the number of dead tadpoles observed out of 10 in a tank. We are interested in comparing a simple model where *p* is fixed at 0.5 (a 'point null' model) with a more complex model where *p* is a *free parameter* estimated from data.  
 
 First let's look at the simple model. 
 
@@ -552,7 +552,7 @@ dbinom(2,10,0.5)
 
 **A** It is exactly `r dbinom(2,10,0.5)`. That is, there is no marginalizing to do since there is no free parameter to marginalize over. The likelihood is the likelihood is ... well you get it!
 
-Now let's consider a 'complex' model, where *p* is a free parameter (one additional free parameter relative to the simple model). First, let's assume that the parameter *p* is assigned a uniform $beta(1,1)$ prior across parameter space:
+Now let's consider a more 'complex' model, where *p* is a free parameter (one additional free parameter relative to the simple model). First, let's assume that the parameter *p* is assigned a uniform $beta(1,1)$ prior across parameter space:
 
 ```{r}
 
@@ -561,11 +561,11 @@ curve(dbeta(x,1,1))  # uniform prior on "p"
 
 ```
 
-What is the marginal likelihood of observing any 2 mortalities under this model? 
+What is the marginal likelihood of observing 2 mortalities under this model? 
 
 In other words, what is the average probability of observing 2 mortalities, averaged across all possible values of *p*??? 
 
-Intuitively, because all values of *p* are equally likely, all possible observations should also be equally likely! That is, neither the likelihood function nor the prior distribution favors any particular observation (0 to 10) over any other.   
+Intuitively, because all values of *p* are equally likely, all possible observations (0 mortalities, 2 mortalities, N mortalities) should all be equally likely! That is, neither the likelihood function nor the prior distribution favors any particular observation (0 to 10) over any other.   
 
 We can do this mathematically...
 
@@ -669,7 +669,7 @@ BayesFactor
 
 ```
 
-Here, the bayes factor of around 2 indicates that the data lend support to the more complex model!
+Here, the Bayes factor of around 2 indicates that the data lend support to the more complex model!
 
 What if the data instead were 3 mortalities? Which model is the best model?
 
@@ -698,7 +698,7 @@ BayesFactor
 
 ```
 
-This time, *The simpler model wins*!!! That would never happen if we compared maximum likelihood estimates- the deviance of the (fitted) more highly-parameterized model will always be lower! That's why we have to penalize or *regularize* more highly-parameterized models.
+This time, *The simpler model wins*!!! That would never happen if we compared maximum likelihood estimates- the deviance of the (fitted) more highly-parameterized model will always be lower (i.e., the data likelihood at p=0.3 is higher than the data likelihood at p=0.5)! That's why we have to penalize or *regularize* more highly-parameterized models.
 
 We can visualize this! First of all, what is the maximum likelihood estimate for p under the model with 3 mortality observations?
 
@@ -885,15 +885,15 @@ Then we can run the model!
 ###########
 # Run the model in JAGS
 
-library(R2jags)    # load packages
+library(jagsUI)    # load packages
 library(coda)
 library(lattice)
 
 params.to.monitor <- c("a","b","r")
 
-jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.adapt=1000, n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5,parallel=TRUE )
 
-jagsfit1.mcmc <- as.mcmc(jags.fit1)   # convert to "MCMC" object (coda package)
+jagsfit1.mcmc <- jags.fit1$samples   # extract "MCMC" object (coda package)
 
 summary(jagsfit1.mcmc)
 
@@ -908,8 +908,9 @@ summary(jagsfit1.mcmc)
 ########
 # Visualize the model fit
 
-densityplot(jagsfit1.mcmc)
+plot(jagsfit1.mcmc)
 
+jagsUI::densityplot(jags.fit1)
 ```
 
 
@@ -918,8 +919,8 @@ First of all, is there any evidence that the dispersion of cone data from wave s
 
 ```{r}
 
-hist(jags.fit1$BUGSoutput$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2),xlim=c(0.5,2.5))
-hist(jags.fit1$BUGSoutput$sims.list$r[,2],density=20,col="green",add=T,freq=F)
+hist(jags.fit1$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2),xlim=c(0.5,2.5))
+hist(jags.fit1$sims.list$r[,2],density=20,col="green",add=T,freq=F)
 legend("topright",col=c("green","white"),density=c(20,0),legend=c("wave","nonwave"),bty="n")
 
 ```
@@ -933,7 +934,7 @@ What is the DIC for this model?
 #######
 # Extract the DIC for the full model!
 
-DIC_full <- jags.fit1$BUGSoutput$DIC
+DIC_full <- jags.fit1$DIC
 DIC_full
 
 ```
@@ -1018,9 +1019,9 @@ Then we can run the model!
 
 params.to.monitor <- c("a","b","r")
 
-jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.adapt=1000, n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
 
-jagsfit2.mcmc <- as.mcmc(jags.fit2)   # convert to "MCMC" object (coda package)
+jagsfit2.mcmc <- jags.fit2$samples   # "MCMC" object (coda package)
 
 summary(jagsfit2.mcmc)
 
@@ -1034,7 +1035,7 @@ plot(jagsfit2.mcmc[,"r"])
 
 ```{r}
 
-densityplot(jagsfit2.mcmc)
+jagsUI::densityplot(jags.fit2)
 
 ```
 
@@ -1046,7 +1047,7 @@ What is the DIC for this model?
 ########
 # Compute DIC
 
-DIC_reduced <- jags.fit2$BUGSoutput$DIC
+DIC_reduced <- jags.fit2$DIC
 
 DIC_reduced
 DIC_full
@@ -1064,13 +1065,13 @@ What about AIC? Is the AIC the same every time?
 
 ### Widely Applicable Information Criterion (WAIC)
 
-The WAIC (also known as the Wattanabe-Akaike information criterion) metric is also interpretable just like AIC, BIC and DIC and allows us to compare models fitted in a Bayesian framework via MCMC. 
+The WAIC (also known as the Wattanabe-Akaike information criterion, or the 'widely applicable information criterion') metric is also interpretable just like AIC, BIC and DIC and allows us to compare models fitted in a Bayesian framework via MCMC. 
 
-The WAIC metric, while not computed by default in JAGS, is generally considered a better metric than DIC- it is applicable more widely than DIC and has a more solid theoretical foundation.
+The WAIC metric, while not computed by default in JAGS, is more widely applicable more widely than DIC.
 
 Let's compute the WAIC for the above example, and see how it compares! For this, we will use the "loo" package in R. 
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 
 #############
 # Use WAIC for bayesian model selection!
@@ -1144,9 +1145,9 @@ model  {
 
 params.to.monitor <- c("a","b","r","LogLik")    # now monitor the log likelihood
 
-jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
 
-jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
+jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
 
 
 ```
@@ -1156,8 +1157,8 @@ jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=pa
 ############
 # Compute WAIC!
 
-loglik_full <- jags.fit1$BUGSoutput$sims.list$LogLik
-loglik_red <- jags.fit2$BUGSoutput$sims.list$LogLik
+loglik_full <- jags.fit1$sims.list$LogLik
+loglik_red <- jags.fit2$sims.list$LogLik
 
 waic_full <- waic(loglik_full)
 waic_red <- waic(loglik_red)
@@ -1311,11 +1312,11 @@ Then we can run the model!
 
 params.to.monitor <- c("a1","b1","r1","a2","b2","r2","a3","b3","r3","selected","predicted.cones2","predicted.cones","SSE_obs","SSE_pred","SSE2_obs","SSE2_pred")
 
-jags.fit3 <- jags(data=data.package3,parameters.to.save=params.to.monitor,n.iter=5000,model.file="BUGS_fir_modelselection.txt",n.chains = 2,n.burnin = 1000,n.thin=2 )
+jags.fit3 <- jags(data=data.package3,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=5000,model.file="BUGS_fir_modelselection.txt",n.chains = 2,n.burnin = 1000,n.thin=2 )
 
-jagsfit3.mcmc <- as.mcmc(jags.fit3)   # convert to "MCMC" object (coda package)
+jagsfit3.mcmc <- jags.fit3$samples   # convert to "MCMC" object (coda package)
 
-BUGSlist <- as.data.frame(jags.fit3$BUGSoutput$sims.list)
+BUGSlist <- as.data.frame(jags.fit3$sims.list)
 #summary(jagsfit.mcmc)
 
 #plot(jagsfit.mcmc)
@@ -1352,8 +1353,8 @@ Let's look at the model selection (that's the whole point!!)
 ##########
 # Perform explicit model selection
 
-n.iterations <- length(jags.fit3$BUGSoutput$sims.list$selected)
-selected <- table(jags.fit3$BUGSoutput$sims.list$selected)
+n.iterations <- length(jags.fit3$sims.list$selected)
+selected <- table(jags.fit3$sims.list$selected)
 names(selected) <- c("Full model","No wave","Fixed a&b")
 selected
 
@@ -1388,7 +1389,7 @@ for(d in 1:n.data){
 ```
 
 
-First let's just look at the model predictions vs the observed data. Next, model 2 (reduced)
+Next, model 2 (reduced):
 
 ```{r}
 
@@ -1462,7 +1463,7 @@ Okay that's it for model selection, now let's move on to:
 
 ### Model averaging
 
-The fact that model selection is such a big deal in Ecology indicates that we are rarely certain about which model is the best model. Even after constructing an AIC table we may be very unsure about which model is the "true" model. 
+The fact that model selection is such a big deal in ecology and environmental science indicates that we are rarely certain about which model is the best model. Even after constructing an AIC table we may be very unsure about which model is the "true" model. 
 
 The AIC weights tell us in essence how much we "believe" in each model. This is a very Bayesian interpretation, but model averaging really is best thought of in a Bayesian context. 
 
@@ -1470,7 +1471,7 @@ One way to do model averaging relies on AIC weights. Basically we take the set o
 
 #### When should you use model-averaged parameter estimates
 
-NEVER!
+Really never in my opinion- can be useful for prediction but not useful (even misleading) if you are trying to estimate effect sizes!
 
 #### The Bayesian version!
 
