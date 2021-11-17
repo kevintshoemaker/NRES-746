@@ -1,0 +1,459 @@
+---
+title: "Mixed Effects Modelling"
+authors: Aramee Diethelm, Tara McKinnon, and Gabby Mizell
+date: "Fall 2021"
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+#knitr::opts_knit$set(root.dir="C:/Users/dieat/OneDrive/Documents/UNR/nres746/") 
+```
+
+
+```{r}
+#_____________________________________#
+#     NRES 746, Fall 2021             #
+#     Diethelm, McKinnon, Mizell     #
+#     University of Nevada, Reno      #
+#_____________________________________#
+
+
+#_____________________________________#
+####  Mixed Effects Models  (MEMs) ####
+#_____________________________________#
+
+```
+
+Here is the download link for the R script for this lecture: [Mixed Effects Models script](MEM2.R)
+
+
+
+## Mixed effects models (MEMs): What are they anyway?
+Mixed effects models are a class of models that build on linear models or generalized linear models, with observations measured within discrete groups. These models take into account various factors common in ecological data such as non-independence, heterogeneity, and non-linearity. 
+
+
+While there are no hard and fast rules for how to conduct mixed models, we will be providing some guidelines. We will also attempt to define the required jargon, despite the these definitions being highly contested.
+
+
+There are two types of effects in mixed modeling: 
+
+1) Random effects are the discrete groupings which are variable or the source of random variability within the dataset. These are often factors that represent a random factor sampled of a larger population (such as field sites, genotype, temporal blocks used in a study).
+
+2) Fixed effects are constant and the factors that are directly measured in the experiment, but can have multiple levels.
+
+
+
+## Why use MEMs?
+
+Many models or statistical tests have underlying assumptions of independence. Non-independence within or among your data can lead to errors in modelling and skew your results. Mixed models can allow you to explicitly model the lack of independence in the data. Furthermore, using random effects can deal with issues of pseudoreplication. 
+
+Non-independent data includes: time series, repeated measurements from same specimens, hierarchical data, longitudinal data, as well as blocked experiments
+
+
+Example (from Harrison et al. 2018 PeerJ):
+
+ - If we measured several chicks from the same clutch, and several clutches from different females, or repeated measurements of the same chick’s growth rate over time, then we have a time series of non-independent data. 
+
+ - We may expect that measurements within a statistical unit (a female’s clutch) might be more similar than measurements from different units. We can account for this by using the parent ID or chick ID as a random variable in a mixed model. 
+
+
+![](Chicks.jpg)
+
+Under the same idea of accounting for non-independence, your parameter estimate will be more accurate. Specifically, how the model treats the predictors is different for fixed and random effects (hold on for now we’ll explain this in depth later with actual data).
+
+There are also some cons to using MEMs. For instance, there are issues with convergence, predictions for random effects is tricky, there is some difficulty in interpreting the model output due the complexity of the model, and finally you can not directly test a hypothesis that groups are different if they are treated as random effects (you only get one variance estimate).
+
+
+
+## When to use a random effect?
+
+Random effects are useful when you want to quantify the variability across groups, make predictions for unobserved groups, or combine information across groups.
+
+They can represent a grouping that was randomly sampled from a larger population, a categorical variable that needs to be accounted for but is not a treatment variable (e.g., subject identity, site location, time) > 4 groups (fitting the standard deviation requires at least 3 individuals per level), or unbalanced groups.
+
+Random effects allow for **shrinkage**: 
+
+ - The estimate of the effect for each group computed from a linear mixed model is “pushed” towards the grand mean effect compared to when we fit a separate linear model to each group’s data. 
+ 
+ - Group-level estimates are shrunk towards the mean slope. The less data we have from a given subject, the greater the shrinkage or partial pooling. 
+ 
+ - This means that the group’s effect estimate will be based on the more abundant data, this also helps with unbalanced datasets.
+
+
+
+## What packages are available in R for MEMs?
+
+**lme4**
+An older modeling system and has less tools. Some suggests this is better with temporal data
+
+**nlme** 
+New modeling system and has large toolbox than lme4 and offers ability to make models more complex
+
+**glmmTMB**
+For zero inflated data, when you have many zeros such as in surveys or for specific model comparisons (more on that later)
+
+
+
+## Syntax for MEMs:
+
+Random (non-fixed) intercept only model:
+
+mixed_model_intercept <- lmer(Response ~ Fixed_Predictor + (1|Random_Predictor), data = data, REML = FALSE)
+
+Random (non-fixed) slope and intercept model:
+
+mixed_model_intercept&slope <- lmer(Response ~ Fixed_Predictor + (1+ Fixed_Predictor|Random_Predictor), data = data, REML = FALSE)
+
+mixed_model_intercept&slope <- lmer(Response ~ Fixed_Predictor + (Fixed_Predictor|Random_Predictor), data = data, REML = FALSE)
+
+*We'll show this with actual data and graphs shortly.*
+
+
+
+## General approach and steps to using MEMs:
+
+1) Start with data exploration and looking at patterns in the data
+ - Begin with the most complex model and test (include interactions, random intercept, etc) by creating other models that are less complex 
+
+
+2) Run models and look at their AIC, BIC, and LogLik scores using anova(model 1, model 2….model n)
+ - Lower values are better for AIC and BIC (with less than 2 unit differences models are considered to be equally good)
+ - Similarly, LogLik is negative so less negative values are better
+
+
+3) Check models for convergence
+ - If there are convergence issues then scaling or centering the covariances may help
+ - Or, use the simplified model instead
+
+
+4) Explore models that remain for their basic residual distributions using plot(model) and other functions, testing their validity, and exploring any warnings
+
+*Some argument to always center your data and residuals, bolker mentioned running only adjusted residuals in his models*
+
+
+## Load example dataset:
+
+```{r message=FALSE, warning=FALSE}
+##load packages
+library(lme4) 
+library(nlme)
+library(glmmTMB)
+library(ggplot2)
+```
+
+```{r}
+##RIKZ dataset
+
+#as described in Zuur et al. (2007) and Zuur et al. (2009)
+
+##download data to follow along:
+
+#rikz_data <- "https://uoftcoders.github.io/rcourse/data/rikz_data.txt"
+
+#download.file(rikz_data, "rikz_data.txt")
+
+rikz_data  <- read.table("rikz_data.txt", header = TRUE, sep="\t")
+
+```
+
+
+## Explanation of the data set:
+
+There are 9 intertidal areas (denoted 'Beach')
+
+At each beach the researchers sampled five sites (denoted 'Site') 
+
+Research also noted abiotic variables (exposure and NAP) and calculated the species richness of macro-fauna
+
+
+'Richness' refers to the total number of aquatic invertebrate species found at a given site 
+
+'NAP' refers to the height of the sampling location relative to the mean sea level.
+
+'Exposure' refers to physical components of the site as experienced by the macro-fauna as example wave action and length of surf zone
+
+**Our question is: "What is the influence of NAP on species richness?"**
+
+
+![](Beach example.jpg)
+
+
+## Modeling the data:
+
+```{r warning = FALSE}
+
+rikz_data$Beach <- as.factor(rikz_data$Beach)
+str(rikz_data)
+
+##This code is adapted from: https://uoftcoders.github.io/rcourse/lec08-linear-mixed-effects-models.html#accounting_for_non-independence
+
+# Start with a linear model:
+lm1 <- lm(Richness~ NAP, data = rikz_data)
+summary(lm1)
+
+```
+
+Coming back to our question "How does NAP influence species richness", NAP does appear to be significantly associated with richness based on the model output above. 
+
+
+But, first we have to check that the model is fitting the data.
+
+Let's start with diagnostic plots for the residuals against the fitted values and a QQ-plot.
+
+```{r}
+
+# Check model assumptions.
+par(mfrow=c(2,2))
+plot(lm1)
+
+#The QQ plot looks okay, but first panel suggests that the model assumption for
+#homogeneity is violated.
+
+#Here we see an increasing variance in the residuals with increasing fitted
+#values.
+
+#For now, we will ignore these violations of the model assumptions to explore
+#mixed-effects modelling strategies on untransformed data.
+
+#Furthermore, we also know the observations in these data are not independent.
+```
+
+Now let's look at beach as a fixed predictor to illustrate why it's better as a random effect:
+
+```{r}
+
+lm2 <- lm(Richness ~ NAP + Beach, data = rikz_data)
+summary(lm2)
+
+```
+
+The model is estimating a separate effect for each beach (with 8 total as 1 is used as the reference). This is drastically reducing our degrees of freedom, which gives less ability to detect relationships that exist. 
+
+However, we need to account for non-independence among sites within a beach, so let's try putting beach as a random effect. 
+
+First, we will build the simpler intercept-only model and then a model where the slopes are allowed to vary as the more complicated model.
+
+
+```{r}
+#Q: What is the influence of NAP on species richness, while accounting for
+#variation within beaches?
+
+# Although a Poison might work well here given that richness a count of species,
+# we will use a Gaussian distribution to keep things simple
+
+#The (1|Beach) is the random effect term, where the 1 denotes this is a
+#random-intercept model and the term on the right of the | is a nominal variable
+#(or factor) to be used as the random effect.
+
+#This model is fit using maximum likelihood, rather than restricted maximal
+#likelihood by specifying REML = FALSE
+
+#If your data are balanced (i.e., similar sample sizes in each factor group) and
+#your random effects are not nested, then you can set REML to FALSE to use
+#maximum likelihood.
+
+
+mem.intercept <- lmer(Richness ~ NAP + (1|Beach), data = rikz_data, REML = FALSE)
+
+summary(mem.intercept)
+```
+
+Notice the model out includes an estimated variance for the random effects in the model. 
+
+Here, the variance associated with the effect of beach is ~7.5. 
+
+We can look at the total amount of variance by summing all the variance including the residuals. Then we can see that by including beach as a random effect we are accounting for ~45% of the total unexplained variance (that which is not from our fixed effect of NAP).
+
+In other words, differences between beaches account for (7.507 / 7.507 + 9.111) * 100 = 45% of the residual variance after accounting for the fixed effects in the model. This is a large effect that would have gone unaccounted for if we didn't include beach in model. 
+
+Note: the estimate or beta-coefficient for NAP has changed with our new model. 
+
+
+Let's visual the model now:
+```{r out.width = "90%"}
+# Let's plot the linear model for each beach, with a varying intercept only: 
+rikz_data$fit_mem.intercept <- predict(mem.intercept)
+
+ggplot(rikz_data, aes(x = NAP, y = Richness, colour = Beach)) +
+    # Add fixed effect regression line (i.e. NAP)
+    geom_abline(aes(intercept = `(Intercept)`, slope = NAP),
+                size = 2,
+                as.data.frame(t(fixef(mem.intercept)))) +
+    # Add fitted values (i.e. regression) for each beach
+    geom_line(aes(y = fit_mem.intercept), size = 1) +
+    geom_point(size = 3) +
+    theme_classic() +
+    theme(legend.position = "none") +
+    scale_colour_brewer(palette="Set1")
+```
+
+The black line shows the fitted values associated with the fixed-effect component of the model.
+
+The other lines show the fitted values estimated for each beach. 
+
+Now let's look at the model with a random slope and intercept:
+
+```{r warning = FALSE}
+
+# Random intercept and slope model
+mem_intslope <- lmer(Richness ~ NAP + (1 + NAP|Beach), REML = FALSE,
+                             data = rikz_data)
+
+summary(mem_intslope)
+
+```
+
+Here there is an additional variance component in the random effects, which estimates the variance in slopes across beaches.
+
+Furthermore, now that beach is allowed to vary in response to NAP using a random intercept and slope model, beach is accounting for ~52% of the total variance not explained by the fixed effect of NAP.
+
+We did have some convergence issues with this model, however we are ignoring those for now and would suggest scaling the variables and re-running these models. We think it's best to just move forward with this demo for the sake of time.
+
+```{r out.width = "90%"}
+
+# Let's plot the linear model for each beach, with a varying intercept AND slope: 
+rikz_data$fit_IntSlope <- predict(mem_intslope)
+
+ggplot(rikz_data, aes(x = NAP, y = Richness, colour = Beach)) +
+    geom_abline(aes(intercept = `(Intercept)`, slope = NAP),
+                size = 2,
+                as.data.frame(t(fixef(mem_intslope)))) +
+    geom_line(aes(y = fit_IntSlope), size = 1) +
+    geom_point(size = 3) +
+    theme_classic() +
+    theme(legend.position = "none") +
+    scale_colour_brewer(palette="Set1")
+
+```
+
+Here you can see that the beaches with larger intercepts also have more steeply negative slopes. In addition, the regression line now fits the data points better.
+
+
+
+Now that you understand the workings of the models and how parameter estimates can vary by model, let's talk more about selecting your random effects.
+
+Recall that setting beach as a fixed effect resulted in the model estimating a separate parameter for each beach, which gobbled up degrees of freedom.
+
+While it is important to use the knowledge of your dataset when selecting a random effect, if we wanted to test for model differences the glmmTMB package will allow us to do this. Recall that the glmmTMB package was designed for zero-inflated countdata (i.e., data containing more zeros than would be expected from the standard error distributions in other mixed models). Models that ignore zero-inflation, or treat it like overdispersion, tend to resulted in biased parameter estimates (Harrison, 2014).
+
+Here though, we will use the glmmTMB package because it is the only MEM package that allows us to create a regression both with and without a random effect.
+
+```{r}
+
+mod1 <- glmmTMB(Richness ~ NAP, data = rikz_data)
+mod2 <- glmmTMB(Richness ~ NAP + (1|Beach), data = rikz_data)
+
+#The relative fit of two nested models can be evaluated using a chi-square difference statistic:
+anova(mod1, mod2, test="Chisq")
+```
+
+The Chi-sq test suggests that the model 2 is the better model between the two being investigated. 
+
+Recall that using the principle of parsimony we are looking for the model with the largest degree of explanatory power with as few predictor variables as possible. The Chi-square difference tests essentially tell us whether the extra predictors or interactions really improve the model. This form of model selection can only be used when comparing nested models (i.e., models that share predictors in a nested fashion). It is also worth noting that the ‘anova()’ tests the models against one another in the order specified.
+
+
+Next, let's take a look at including a random slope and intercept in the model and see if that would improve our fit.
+
+We can compare our mixed models using the Akaike Information Criterion, AIC (Akaike, 1998) metric:
+
+```{r}
+#First we want to try scaling our numeric predictor to help with convergence
+NAP.sc <- scale(rikz_data$NAP, center = TRUE, scale = TRUE)
+
+#this function calculates the mean and standard deviation of the entire vector,
+#then scales each element by those values by subtracting the mean and dividing
+#by the sd.
+
+#REML=FALSE is particularly important for linear mixed model selection
+mod5 <- lmer(Richness ~ NAP.sc  + (1|Beach), REML=FALSE, data = rikz_data)
+summary(mod5)
+#AIC = 249.8
+
+mod6 <- lmer(Richness ~ NAP.sc + (1 + NAP|Beach), REML=FALSE, data = rikz_data)
+summary(mod6)
+#AIC = 246.7
+
+anova(mod5, mod6)
+
+```
+
+The Chi-sq test does suggest that random slope and intercept model fit the data better than our other model, but we should check our residuals to see how the model is doing: 
+
+```{r out.width = "70%"}
+# we still need check model fit
+plot(residuals(mod6))
+qqnorm(resid(mod6))# QQ-plot
+qqline(resid(mod6))
+
+```
+
+This could be better and we are still having convergence issues with the more complex model (despite scaling the NAP predictor).
+
+Let's try using a generalized linear mixed model with a poisson family since richness is a count of species present (i.e., count data).
+
+```{r}
+#REML=FALSE does not work in generalized linear mixed model selection
+#glmer() uses Maximum Likelihood (ML) as default rather than Restricted Maximum Likelihood (REML)
+
+mod7 <- glmer(Richness ~ NAP.sc  + (1|Beach), family = poisson, data = rikz_data)
+summary(mod7)
+#AIC = 220.8
+
+mod8 <- glmer(Richness ~ NAP.sc + (1 + NAP|Beach), family = poisson, data = rikz_data)
+summary(mod8)
+#AIC = 218.7
+
+anova(mod7, mod8)
+
+```
+Based on these tests, we can see that the random slope and intercept model fit the data better than our other model, even with the penalties that come with a more complex model. 
+
+```{r out.width = "70%"}
+# we still need check model fit
+plot(residuals(mod8))
+qqnorm(resid(mod8))# QQ-plot
+qqline(resid(mod8))
+
+```
+
+It took us a while to find the optimal model to fit the data, but it was worth it.
+
+While using an intercept-only random effect is easier and much more common, the rationale for this should come from the data themselves and not the level of difficulty.
+
+
+
+## Further Resources
+Lastly we want to leave you with resources to further investigate mixed effects modelling
+
+ - Analysing Ecological Data	2007,  Zuur, Leno and Smith	
+Mixed Model Chapter ("Mixed Effects Modelling for Nested Data"  Pg 101-142)
+
+ - Mixed Effects Models and Extensions in Ecology with R	2009
+Zuur et al.	https://unr.primo.exlibrisgroup.com/permalink/01UNR_INST/146dp7v/alma991013777570306781
+
+ - gethub info on mixed effects	N.D. Shrikanth S	https://ademos.people.uic.edu/Chapter17.html
+
+ - Generalized linear mixed models: a practical guide for ecology and evolution
+ https://www.sciencedirect.com/science/article/pii/S0169534709000196
+
+
+ - An Introduction to Linear Mixed-Effects Modeling in R	2021 Brown VA	
+https://journals.sagepub.com/doi/full/10.1177/2515245920960351
+
+ - A brief introduction to mixed effects modelling and multi-model inference in ecology	2018 Harrison et al.	https://peerj.com/articles/4794/
+
+ - Quantitative Methods in R for Biology	N.D. Santangelo JS	https://uoftcoders.github.io/rcourse/lec08-linear-mixed-effects-models.html
+
+ - Bolker github FAQ	https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html
+
+
+--- the End ---
+
+
