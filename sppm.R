@@ -69,6 +69,9 @@ plot(envelope(cataglyphis,fun=Kest,nsim=n,verbose=F))
 
 #Messor
 plot(envelope(messor,fun=Kest,nsim=n,verbose=F))
+#Array of K function plots for ants dataset
+ants_all_k_plots <- alltypes(ants,"K",envelope=T,verbose=F)
+plot(ants_all_k_plots)
 # paired distances
 pairdist(finpines)[1:3, 1:5]
 
