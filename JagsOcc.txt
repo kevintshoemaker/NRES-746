@@ -1,0 +1,58 @@
+
+  model {
+  
+  #######################
+  # Likelihood
+  # Estimating true state
+  #######################
+  
+  for(i in 1:R){            # Make a for- loop that loops through the number of sites surveyed
+  z[i] ~ dbern(psi[i])                # The latent state z, whether animal was actually there or not is distributed by a bernoulli distribution 
+  psi[i] <- 1/(1 + exp(-lpsi.lim[i]))          # Calculate logit psi, probability of site i occupancy, on the logit scale  
+  lpsi.lim[i] <- min(999, max(-999,lpsi[i]))   # Truncate values on logit scale to prevent numeric overflow and underflow
+  lpsi[i] <- alpha0.psi + alpha1.psi * edge[i]  # linear estimation of psi with different probability dependent on site (in woods, edge of woods)
+  
+  # Modeling the observations
+  for(j in 1:T){              # For loop iterating through number of surveys
+  y[i,j] ~ dbern(mu.p[i,j])         #detected or not detected at site i and survey j
+  mu.p[i,j] <- z[i] * p[i,j]           #Calculate probability of detection which = zi (whether site is occupied or not) * p (probability of detection at site i and survey j)
+  p[i,j] <- 1/(1 + exp(-lp.lim[i,j]))          # Calculation of detection probability at site i and survey j on the logit scale
+  lp.lim[i,j] <- min(999, max(-999, lp[i,j]))     # Truncate values to provent over/underflow
+  lp[i,j] <- beta0.p + beta1.p*DATES[i,j] +           # Calculate detection probability as linear 
+             beta2.p * pow(DATES[i,j],2) + 
+             beta3.p * MINS[i,j] + beta4.p * pow(MINS[i,j],2)
+             
+
+   #Bayes P-Value
+   
+   Presi[i,j] <- (y[i,j] - p[i,j])^2       # Calculate the squared residual error of the observed data 
+   y.new[i,j] ~ dbern(mu.p[i,j])                # Simulate observed data 
+   Presi.new[i,j] <- (y.new[i,j] - p[i,j])^2  # Calculate squared residual error of simulated data 
+   
+  }
+}
+  SSEobs <- sum(Presi[,])     # Calculate the sum of squared residual errors for observed data
+  SSEsim <- sum(Presi.new[,]) # Calculate the sum of squared residual error for the similuated data
+  
+  p.val <- step(SSEsim - SSEobs)
+  
+  ########################
+  ###
+  ### Priors
+  ###
+  ########################
+  
+  alpha0.psi ~ dnorm(0,1/2.25)
+  alpha1.psi ~ dnorm(0,1/2.25)
+  beta0.p ~ dnorm(0,1/2.25)
+  beta1.p ~ dnorm(0,1/2.25)
+  beta2.p ~ dnorm(0,1/2.25)
+  beta3.p ~ dnorm(0,1/2.25)
+  beta4.p ~ dnorm(0,1/2.25)
+  
+  occ.fs <- sum(z[])
+  mean.p <- exp(beta0.p) / (1 + exp(beta0.p))
+  
+  }
+
+  
