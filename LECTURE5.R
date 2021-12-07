@@ -586,6 +586,7 @@ guesses <- matrix(0,nrow=1000,ncol=2)
 colnames(guesses) <- names(startingvals)
 while(counter<1000){
   newguess <- newGuess(oldguess)
+  while(any(newguess<0)) newguess <- newGuess(oldguess)
   loglikdif <- LikDif(oldguess,newguess)
   if(loglikdif>0){ 
     oldguess <- newguess
@@ -618,6 +619,7 @@ colnames(guesses) <- names(startingvals)
 MLE <- list(vals=startingvals,lik=GammaLikelihoodFunction(startingvals),step=0)
 while(counter<10000){
   newguess <- newGuess(oldguess)
+  while(any(newguess<0)) newguess <- newGuess(oldguess)
   loglikdif <- LikDif(oldguess,newguess)
   if(loglikdif>0){ 
     oldguess <- newguess

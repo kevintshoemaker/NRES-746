@@ -497,7 +497,7 @@ summary(jagsfit1.mcmc)
 
 plot(jagsfit1.mcmc)
 
-jagsUI::densityplot(jags.fit1)
+lattice::densityplot(jagsfit1.mcmc)
 
 hist(jags.fit1$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2),xlim=c(0.5,2.5))
 hist(jags.fit1$sims.list$r[,2],density=20,col="green",add=T,freq=F)
@@ -580,7 +580,7 @@ plot(jagsfit2.mcmc[,"r"])
 
 
 
-densityplot(jags.fit2)
+lattice::densityplot(jagsfit2.mcmc)
 
 
 ########

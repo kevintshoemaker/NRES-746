@@ -171,7 +171,7 @@ GammaLogLikelihoodFunction(params)
 
 GammaPriorFunction <- function(params){
   prior <- c(shape=NA,scale=NA)
-  prior['shape'] <- dgamma(params['shape'],shape=0.01,scale=100)
+  prior['shape'] <- dgamma(params['shape'],shape=0.001,scale=1000)
   prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000)
   # prior['shape'] <- dunif(params['shape'],3,100)        # alternative: could use uniform prior!
   # prior['scale'] <- dunif(params['scale'],0.01,0.5)
@@ -180,14 +180,14 @@ GammaPriorFunction <- function(params){
 
 GammaLogPriorFunction <- function(params){
   prior <- c(shape=NA,scale=NA)
-  prior['shape'] <- dgamma(params['shape'],shape=0.01,scale=100,log=T)
+  prior['shape'] <- dgamma(params['shape'],shape=0.001,scale=1000,log=T)
   prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000,log=T)
   # prior['shape'] <- dunif(params['shape'],3,100)        # alternative: could use uniform prior!
   # prior['scale'] <- dunif(params['scale'],0.01,0.5)
   return(sum(prior))
 }
 
-curve(dgamma(x,shape=0.01,scale=1000),3,100)
+curve(dgamma(x,shape=0.001,scale=1000),3,100)
 
 params <- c(shape=40,scale=0.15) 
 params
@@ -208,7 +208,7 @@ for(i in 1:length(shapevec)){
 # Visualize the prior likelihood surface
 ############
 
-image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.0000001,0.001),col=topo.colors(12))
+image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.000000001,0.001),col=topo.colors(12))
 #contour(x=shapevec,y=scalevec,z=prior2D,levels=c(-30,-40,-80,-500),add=T)
 
 
