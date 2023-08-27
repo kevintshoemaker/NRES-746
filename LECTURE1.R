@@ -1,22 +1,10 @@
 
-############################################################
-####                                                    ####  
-####  NRES 746, Lecture 1                               ####
-####                                                    ####
-####  Kevin Shoemaker                                   #### 
-####  University of Nevada, Reno                        ####
-####                                                    #### 
-############################################################
+#  NRES 746, Lecture 1                          
+#   University of Nevada, Reno                        
+#   Computational algorithms vs standard statistics   
 
 
-############################################################
-####  Computational algorithms vs standard statistics   ####
-############################################################
-
-
-
-###################
-# SALMON EXAMPLE (made-up!)
+# SALMON EXAMPLE (made-up!) ------------------
 
 population.mean = 4.5
 population.sd = 0.9
@@ -27,12 +15,12 @@ sample.size <- length(my.sample)     # determine sample size
 
 obs.samplemean = mean(my.sample)     # note the equal sign as assignment operator
 
-## visualize the population of conventional-raised salmon
+## visualize the population of conventional-raised salmon  -------------------
 
 curve(dnorm(x,population.mean,population.sd),0,10,
       xlab="Body mass (kg)",ylab="Probability density")
 
-## now overlay this on the observed data
+### now overlay this on the observed data  --------------------
 
 hist(my.sample,freq=F,
      xlab="Body mass (kg)",ylab="Probability density",main="",
@@ -42,16 +30,13 @@ curve(dnorm(x,population.mean,population.sd),0,10,
 abline(v=obs.samplemean,col="blue",lwd=3)
 
 
-################
-# Perform standard z-test
-################
+# Perform "canned" z-test  ----------------------------
 
 library(BSDA)
 z.test(x=my.sample,mu=population.mean, sigma.x=population.sd,alternative = "less")
 
 
-############
-# alternative z-test
+# alternative "canned" z-test  -----------------------
 
 std.err = population.sd/sqrt(sample.size)
 
@@ -63,22 +48,16 @@ p.val = pnorm(obs.samplemean,population.mean,std.err)
 p.val     # this is the same as the p value from the z-test above...
 
 
-######################
-   # ALTERNATIVE ALGORITHMIC APPROACH!
-######################
+# ALTERNATIVE ALGORITHMIC Z-TEST! ----------------------
 
-#############
-# Simulate the STATISTICAL POPULATION under the null hypothesis
-#############
+## Simulate the STATISTICAL POPULATION under the null hypothesis -----------------
 
 infinity <- 1000000  # large number approximating infinity 
 
 popData_null <- rnorm(n=infinity,mean=population.mean,sd=population.sd)    # the statistical "population" of interest (under null model w no 'treatment' effect)
 
 
-#############
-# Draw a SAMPLE from that null data
-#############
+## Draw a SAMPLE from that null data ----------------
 
 null.sample <- sample(popData_null,size=sample.size)    # use R's native "sample()" function to sample from the null distribution
 
@@ -87,9 +66,7 @@ null.samplemean <- mean(null.sample)
 null.samplemean    # here is one sample mean that we can generate under the null hypothesis
 
 
-#################
-# Repeat this process using a FOR loop
-#################
+## Repeat this process using a FOR loop ----------------------
 
 n.samples <- 1000                 # set the number of replicate samples to generate
 null.samplemeans <- numeric(n.samples)       # initialize a storage vector for sample means under the null hypothesis
@@ -103,9 +80,7 @@ hist(null.samplemeans,xlim=c(0,10))       # plot out the sampling distribution
 abline(v=obs.samplemean,col="green",lwd=3)     # overlay the observed sample statistic. 
 
 
-############
-# Generate a p-value algorithmically!!
-############
+## Generate a p-value algorithmically!!   --------------------------
 
 ordered_means <- sort(null.samplemeans)       # sort the vector of null sample means
 more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "extremeness" of the observed statistic?
@@ -113,23 +88,17 @@ p_value <- more_extreme/n.samples       # compute a p-value!
 p_value    
 
 
-#############
-# Develop a function that wraps up all the above steps into one!
-#############
+# Develop a function that wraps up all the above steps into one! ------------------
 
 z.test.algorithm <- function(sample, pop.mean, pop.sd){
-  
-  #############
+
   # Compute the sample statistic
-  #############
   
   observed_mean <- mean(sample)
   
   sample.size <- length(sample)   # compute sample size
 
-  #################
   # Generate SAMPLING DISTRIBUTION
-  #################
   
   reps <- 1000                 # set the number of replicate samples
   null_dist <- numeric(reps)       # initialize a storage structure for sampling distribution
@@ -160,9 +129,10 @@ hist(ztest$null_dist)       # plot out all the samples under the null hypothesis
 abline(v=ztest$observed_mean,col="green",lwd=3)     # indicate the observed sample statistic. 
 
 
-#############
-# Start with a made-up data frame!
-#############
+# Nonparametric t-test (permutation test) ------------------------
+
+## Start with a made-up data frame! ---------------------
+
 
 df <- data.frame(
   A = c(175, 168, 168, 190, 156, 181, 182, 175, 174, 179),
@@ -173,7 +143,6 @@ summary(df)    # summarize!
 
 sample.size <- length(df$A)     # determine sample size    
 
-#######
 # Get data in proper format
 
 reshape_df <- data.frame(                # "reshape" the data frame so each observation gets its own row (standard 'tidy' format)
@@ -183,8 +152,7 @@ reshape_df <- data.frame(                # "reshape" the data frame so each obse
 )
 
 
-########
-# Alternative (commented out)- using the 'tidyverse'
+## Alternative (commented out)- using the 'tidyverse'
 
 # library(tidyr)
 # reshape_df <- pivot_longer(df,everything(),names_to = "Treatment",values_to="Mass")
@@ -192,16 +160,13 @@ reshape_df <- data.frame(                # "reshape" the data frame so each obse
 
 plot(Mass~Treatment, data=reshape_df)    # explore/visualize the data
 
-#######
-# Compute the observed difference between group means
+## Compute the observed difference between group means  -----------------
 
 observed_dif <- mean(reshape_df$Mass[reshape_df$Treatment=="A"])	- mean(reshape_df$Mass[reshape_df$Treatment=="B"])
 
 
 
-##################
-# NON-PARAMETRIC T-TEST -- PERMUTATION TEST
-##################
+## Run permutation t-test ----------------
 
 reps <- 5000            # Define the number of permutations to run (number of replicates)
 null_difs <- numeric(reps)   # initialize storage variable
@@ -214,24 +179,21 @@ hist(null_difs)    # Plot a histogram of null differences between group A and gr
 abline(v=observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
 
 
-########
-# Compute a p-value based on the permutation test, just like we did before (except now 2-tailed)!
-########
+## Compute a p-value based on the permutation test -------------------
+
+  #just like we did before (except now 2-tailed)!
+
 
 more_extreme <- length(which(abs(null_difs)>=abs(observed_dif)))
 p_value <- more_extreme/reps  
 p_value
 
 
-#############
-# Develop a function that performs a permutation-t-test!
-#############
+## Develop a function that performs a permutation-t-test! -----------------------
 
 t.test.permutation <- function(dat = reshape_df, group = "Treatment", value = "Mass" ){
-  
-  #############
+
   # Compute the sample statistic
-  #############
   
   indexA <- which(dat[,group]=="A")     # rows representing treatment A
   indexB <- which(dat[,group]=="B")     # rows representing treatment B
@@ -267,23 +229,21 @@ abline(v=my.ttest$observed_dif,col="green",lwd=3)   # Add a vertical line to the
 
 
 
-##############
-# Demonstration: bootstrapping a confidence interval!
+# Demonstration: bootstrapping a confidence interval! ---------------------
 
 ## use the "trees" dataset in R:
 
 head(trees)   # use help(trees) for more information
 
 
-#########
-# Basic data exploration
+## Basic data exploration  --------------------
 
 plot(trees$Volume~trees$Height, main = 'Black Cherry Tree Height/Volume Relationship', xlab = 'Height', ylab = 'Volume', pch = 16, col ='blue')
 plot(trees$Volume~trees$Girth, main = 'Black Cherry Tree Girth/Volume Relationship', xlab = 'Girth', ylab = 'Volume', pch = 16, col ='red')
 
 
-#########
-# Function for returning a vector of R-squared statistics from models regressing a response variable on multiple possible predictor variables
+## Function for returning a vector of R-squared statistics  -------------
+     # Function for returning a vector of R-squared statistics from models regressing a response variable on multiple possible predictor variables
    # here we assume that all columns in the input data frame that are NOT the response variable are potential predictor variables.
 
 Rsquared <- function(df,responsevar="Volume"){    # univariate models only- interaction and multiple regression not implemented here
@@ -301,15 +261,13 @@ Rsquared <- function(df,responsevar="Volume"){    # univariate models only- inte
 }
 
 
-#########
-# test the function to see if it works!
+# test the function to see if it works!  ----------------------
 
 stat <- Rsquared(trees,"Volume")
 stat
 
 
-############
-# new function to generate "bootstrap" samples from a data frame
+# new function to generate "bootstrap" samples from a data frame  ----------------
 
 boot_sample <- function(df,statfunc,n_samples,responsevar="Volume"){
   indices <- c(1:nrow(df))
@@ -324,8 +282,7 @@ boot_sample <- function(df,statfunc,n_samples,responsevar="Volume"){
 }
 
 
-##########
-# Generate a few bootstrapped samples!
+# Generate a few bootstrapped samples!  ------------------
 
 boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=10)       # generate test stats from lots of bootstrapped samples
 colnames(boot) <- names(stat)         # name the columns to recall which predictor variables they represent
@@ -334,8 +291,7 @@ boot
 stat
 
 
-#############
-# use bootstrapping to generate confidence intervals for R-squared statistic!
+# use bootstrapping to generate confidence intervals for R-squared statistic!  ----------------
 
 boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=1000)   # generate test statistics (Rsquared vals) for 1000 bootstrap samples
 confint <- apply(boot,2,function(t)  quantile(t,c(0.025,0.5,0.975)))       # summarize the quantiles to generate confidence intervals for each predictor variable

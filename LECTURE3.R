@@ -1,19 +1,8 @@
 
-############################################################
-####                                                    ####  
-####  NRES 746, Lecture 3                               ####
-####                                                    ####
-####  Kevin Shoemaker                                   #### 
-####  University of Nevada, Reno                        ####
-####                                                    #### 
-############################################################
-
-
-############################################################
-####  The virtual ecologist                             ####
-####     Building data simulation models                ####
-############################################################
-
+#  NRES 746, Lecture 3  ------------------------
+##  University of Nevada, Reno       
+##  The virtual ecologist                             
+##     Building data simulation models  
 
 
 ###########

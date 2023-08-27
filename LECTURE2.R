@@ -1,22 +1,10 @@
 
-############################################################
-####                                                    ####  
-####  NRES 746, Lecture 2                               ####
-####                                                    ####
-####  Kevin Shoemaker                                   #### 
-####  University of Nevada, Reno                        ####
-####                                                    #### 
-############################################################
+#  NRES 746, Lecture 2  ---------------------------           
+##  University of Nevada, Reno     
+##  Working with Probabilities                   
 
 
-############################################################
-####  Working with Probabilities                        ####
-############################################################
-
-
-
-#########
-# Classic Urn Example
+# Classic Urn Example ------------------------
 
 n_red <- 104
 n_blue <- 55
@@ -40,7 +28,7 @@ as.numeric( Prob["blue"] + Prob["red"] )     # probability of drawing a blue or 
 as.numeric( Prob["blue"] + Prob["red"] + Prob["green"] )      # P(blue OR green)
 
 
-#### Question: What is the probability of drawing a blue **AND THEN** a red sphere? 
+# Question: What is the probability of drawing a blue **AND THEN** a red sphere? 
 
 #[your command here]    # P(blue AND THEN red)
 
@@ -50,8 +38,7 @@ as.numeric( Prob["blue"] + Prob["red"] + Prob["green"] )      # P(blue OR green)
 #[your command here]    # P(blue AND THEN red)
 
 
-##########
-# Urn example #2
+# Urn example #2: color and shape --------------------------
 
 n_red_sphere <- 39       # contents of new urn
 n_blue_sphere <- 76
@@ -66,17 +53,8 @@ rownames(allTypes) <- c("sphere","cube")               # name rows and columns
 colnames(allTypes) <- c("red","blue")
 allTypes
 
-Prob_Shape <- apply(allTypes,1,sum)/sum(allTypes)  # marginal probabilities of shape
-Prob_Shape
-
-Prob_Color <- apply(allTypes,2,sum)/sum(allTypes)    # marginal probabilities of color
-Prob_Color
-
 allprobs <- (allTypes/sum(allTypes))
 allprobs
-
-
-Prob_Color["red"]      # marginal probability of drawing a red object
 
 
 as.numeric( Prob_Color["blue"] * Prob_Shape["cube"])      # joint probability of drawing a blue object that is a cube
@@ -98,17 +76,23 @@ as.numeric( (allprobs["cube","blue"] / Prob_Shape["cube"]) * Prob_Shape["cube"])
 allprobs["cube","blue"]   # check answer to make sure it's right
 
 
-# unconditional probability of drawing a blue item..  Seems too complicated, but this method of computing unconditional probabilities will prove useful when getting into Bayesian statistics!
+# unconditional probability of drawing a blue item.  Seems too complicated, but this method of computing unconditional probabilities will prove useful as we get into Bayesian statistics!
 uncond_prob_blue <- (allprobs["cube","blue"] /  Prob_Shape["cube"]) * Prob_Shape["cube"] + 
               (allprobs["sphere","blue"] / Prob_Shape["sphere"]) * Prob_Shape["sphere"]       
 
 as.numeric(uncond_prob_blue)
 
-Prob_Color["blue"]   # check to make sure we get the right answer!
+
+Prob_Shape <- apply(allTypes,1,sum)/sum(allTypes)  # marginal probabilities of shape
+Prob_Shape
+
+Prob_Color <- apply(allTypes,2,sum)/sum(allTypes)    # marginal probabilities of color
+Prob_Color
+
+Prob_Color["blue"]      # marginal probability of drawing a blue object (across all possible shapes)
 
 
-##########
-# Bolker medical example
+# Medical example (positive predictive value) --------------------------
 
 Prob_Disease <- c(1,999999)     # disease prevalence 
 Prob_Disease <- Prob_Disease/sum(Prob_Disease)      # probability of disease
@@ -116,17 +100,13 @@ names(Prob_Disease) <- c("yes","no")                # make it a named vector!
 Prob_Disease
 
 
-### compute the unconditional probability of testing positive
+## compute the unconditional probability of testing positive
 
 as.numeric( 1*Prob_Disease["yes"] + 0.01*Prob_Disease["no"] )    # Prob(+test|Disease)*Prob(Disease) + Prob(+test|no Disease)*Prob(no Disease)
 
 
-##### Monty Hall simulation code (code by Corey Chivers 2012)
-#####################################################
-# Simulation of the Monty Hall Problem
-#
-# Corey Chivers, 2012
-#####################################################
+# Monty Hall simulation code --------------
+#   (code by Corey Chivers 2012)
  
 monty<-function(strat='stay',N=1000,print_games=TRUE){
   doors<-1:3 #initialize the doors behind one of which is a good prize
@@ -168,23 +148,23 @@ monty<-function(strat='stay',N=1000,print_games=TRUE){
 }
 
 
-###########
 # run the monty hall code!
 
 monty(strat="stay",print_games=FALSE)
 
 
-###########
 # run the monty hall code!
 
 monty(strat="switch",print_games=FALSE)
 
 
-#################
-# Probability distributions
+# Probability distributions in R  ---------------------
 
 mean <- 5
 rpois(10,mean)    # the random numbers have no decimal component
+
+
+## Discrete -------------------------
 
              # plot a discrete distribution!
 xvals <- seq(0,15,1)
@@ -198,8 +178,7 @@ barplot(cumsum(probs),ylab="Cumulative Probability",main="Poisson distribution (
 sum(probs)   # just to make sure it sums to 1!  Does it??? 
 
 
-#########
-# continuous distributions
+## Continuous  --------------------
 
 shape1 = 0.5
 shape2 = 0.5
@@ -213,8 +192,7 @@ curve(pbeta(x,shape1,shape2))   # cumulative distribution
 integrate(f=dbeta,lower=0,upper=1,shape1=shape1,shape2=shape2)    # just to make sure it integrates to 1!!
 
 
-##########
-# Binomial
+## Binomial -----------------
 
 size <- 10
 prob <- 0.3
@@ -231,8 +209,7 @@ barplot(cumsum(probs),ylab="Cumulative Probability",main="Binomial distribution"
 sum(probs)   # just to make sure it sums to 1!  Does it???
 
 
-#########
-# Gaussian
+## Gaussian (Normal) ---------------
 
 mean = 7.1
 stdev = 1.9
