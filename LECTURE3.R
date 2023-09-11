@@ -5,15 +5,14 @@
 ##     Building data simulation models  
 
 
-###########
-# Random number generators (a key component of data simulation models- but usually not the whole story)
+# Random number generators  -------------------------------
+#   (a key component of data simulation models- but usually not the whole story)
 
 runif(1,0,25)   # draw random numbers from various probability distributions
 rpois(1,3.4)
 rnorm(1,22,5.4)
 
 
-#############
 # Short exercise:
 
 # Generate 50 samples from Normal(mean=10,sd=5) 
@@ -32,14 +31,15 @@ curve(dnorm(x,0,2),-10,10)
 # What happens when you try to use a discrete distribution?
 
 
-############
-# SIMULATE DATA GENERATION: decompose into deterministic and stochastic components 
+# SIMULATE DATA: ------------------
+#  decompose into deterministic and stochastic components (linear regression example)
 
-##########
-# Deterministic component: define function for transforming a predictor variable into an expected response (linear regression)
+## Deterministic component  -----------------------------------------
+
+#   define function for transforming a predictor variable into an expected response (linear regression)
 
     # Arguments:
-      # x: vector of covariate values
+      # x: vector of covariate values (predictor variable)
       # a: the intercept of a linear relationship mapping the covariate to an expected response
       # b: the slope of a linear relationship mapping the covariate to an expected response
 
@@ -58,8 +58,8 @@ plot(xvals,expected_vals)   # plot out the relationship
 # plot(xvals,expected_vals,type="l")    # alternatively, plot as a line
 
 
-##########
-# Stochastic component: define a function for transforming an expected (deterministic) response and adding a layer of "noise" on top!
+## Stochastic component -------------------------------------------- 
+##    define a function for transforming an expected (deterministic) response and adding a layer of "noise" on top!
 
     # Arguments:
       # x: vector of expected responses
@@ -87,26 +87,23 @@ plot(xvals,sim_vals)     # plot it- it should look much more "noisy" now!
 sim_vals <- stochastic_component(deterministic_component(xvals,175,-1.5),500)    # stochastic "shell" surrounds a deterministic "core"    
 
 
-############
-# Goodness-of-fit test!
+# Goodness-of-fit test! -------------------------------------
 
-    # Does the data fall into the range of plausble data produced by this fully specified model?
+    # Do the data fall into the range of plausible values produced by this model?
 
-############
 # Imagine you have the following "real" data (e.g., tree volumes). 
 
 realdata <- data.frame(Volume=c(125,50,90,110,80,75,100,400,350,290,350),Girth=xvals)
 plot(realdata$Girth,realdata$Volume)
 
 
-#############
-# Let's simulate many datasets from our hypothesized data generating model (intercept=10,slope=4,variance=1000):
+# Simulate many datasets from our hypothesized data generating model (intercept=10,slope=4,variance=1000):
 
 reps <- 1000    # specify number of replicate datasets to generate
 samplesize <- nrow(realdata)    # define the number of data points we should generate for each simulation "experiment"
 simresults <- array(0,dim=c(samplesize,reps))   # initialize a storage array for results 
+exp_vals <- deterministic_component(realdata$Girth,a=10,b=4)          # simulate the expected tree volumes for each measured girth value
 for(i in 1:reps){       # for each independent simulation "experiment":
-  exp_vals <- deterministic_component(realdata$Girth,a=10,b=4)          # simulate the expected tree volumes for each measured girth value
   sim_vals <- stochastic_component(exp_vals,1000)  # add stochastic noise
   simresults[,i] <- sim_vals   # store the simulated data for later
 }
@@ -116,7 +113,6 @@ boxplot(t(simresults),xaxt="n")    # (repeat) make a boxplot of the simulation r
 axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add x axis labels 
 
 
-#########
 # Now overlay the "real" data
     # how well does the model fit the data?
 
@@ -125,8 +121,7 @@ axis(1,at=c(1:samplesize),labels=realdata$Girth)                          # add 
 points(c(1:samplesize),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # this time, overlay the "real" data 
 
 
-#############
-# Let's simulate many datasets from our hypothesized data generating model (intercept=100,slope=0,variance=75000):
+# Let's simulate many datasets from a 'null' model (intercept=100,slope=0,variance=75000):
 
 reps <- 1000    # specify number of replicate datasets to generate
 samplesize <- nrow(realdata)    # define the number of data points we should generate for each simulation "experiment"
@@ -144,13 +139,13 @@ points(c(1:samplesize),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # th
 
 
 
-###############
-# Power analysis example: designing a monitoring program for a rare species
+# Power analysis example ---------------------------------
+#    designing a monitoring program for a rare species
 
 
    ### first, let's develop some helper functions:
 
-########
+## helper function 1 ---------------------------
 # function for computing the number of observed/detected animals in a single survey
 
     # Arguments:
@@ -168,8 +163,8 @@ NumObserved <- function(TrueN=1000,surveyors=1,days=3){
 NumObserved(TrueN=500,surveyors=2,days=7)   # test the new function
 
 
-#########
-# function for computing expected abundance dynamics of a declining population (deterministic component!)
+## helper function 2 -----------------------------
+##   function for computing expected abundance dynamics of a declining population (deterministic component!)
 
     # Arguments:
       # LastYearAbund: true population abundance in the previous year
@@ -185,7 +180,8 @@ ThisYearAbund(LastYearAbund=500,trend=-0.03)    # test the new function
 # NOTE: we could introduce stochastic population dynamics (or density dependence, etc!) for a more realistic model, but we are omitting this here. 
 
 
-########
+## function: simulate monitoring data ----------------------------
+
 # develop a function for simulating monitoring data from a declining population
 
     # Arguments:
@@ -212,8 +208,7 @@ SimulateMonitoringData <- function(initabund=1000,trend=-0.03,years=25,observers
 SimulateMonitoringData(initabund=1000,trend=-0.03,years=25,observers=1,days=3,survint=2)    # test the new function
 
 
-#########
-# finally, develop a function for assessing whether or not a decline was detected:
+## function: assessing whether or not a decline was detected ------------------------
 
     # Arguments:
       # monitoringData: simulated results from a long-term monitoring study
@@ -231,8 +226,8 @@ IsDecline <- function(monitoringData,alpha=0.05){
 IsDecline(monitoringData=c(10,20,NA,15,1),alpha=0.05)    # test the function
 
 
-###########
-# Lab exercise: develop a "power" function to return the statistical power to detect a decline under alternative monitoring schemes...
+## Review lab exercise (lab 2) ----------------------------
+##     develop a "power" function to return the statistical power to detect a decline under alternative monitoring schemes...
 
 nreps <- 10000      # set number of replicate monitoring "experiments"
 initabund <- 1000    # set initial population abundance.
