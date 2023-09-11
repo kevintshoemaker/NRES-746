@@ -59,7 +59,7 @@ allprobs
 
 as.numeric( Prob_Color["blue"] * Prob_Shape["cube"])      # joint probability of drawing a blue object that is a cube
 
-## NOTE: if the above answer is not correct, please correct it!  And would I be asking this if it were correct? Hmmm...
+## NOTE: if the above answer is not correct, please correct it!  And would I be asking this if it were correct?
 
 
 as.numeric( Prob_Color["blue"] + Prob_Shape["cube"])        # probability of drawing something blue or something cube-shaped...
