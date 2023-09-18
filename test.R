@@ -33,18 +33,19 @@ hist(rpois(1000,4),freq=F,breaks=seq(-0.5,12.5,1),add=T,border ="red",col=NA)
 lines(0:13,dpois(0:13,4),col="red")
 
 
-simlinreg <- function(n=10,xlims=c(0,10),b0 = 1, b1 = 0.5, sig = 1){
-  xvals <- runif(n,xlims[1],xlims[2])
+xvals=round(sample(runif(n,0,10)),2)
+simlinreg <- function(xvals=xvals,n=10,b0 = 1, b1 = 0.5, sig = 1){
   yexp <- b0+b1*xvals
   yvals <- rnorm(n,yexp,sig)
   data.frame(x=xvals,y=yvals)
 }
 
-simlinreg()
+simlinreg(xvals)
 
-reps <- lapply(1:100,simlinreg)
+reps <- lapply(1:100, function(t) simlinreg(xvals) )
 
-lapply(reps,function(t) lm(y~x,t) )
+mods <- lapply(reps,function(t) lm(y~x,t) )
 
+coefs <- lapply(mods,coef)
 
 
