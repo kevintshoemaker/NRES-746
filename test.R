@@ -42,10 +42,13 @@ simlinreg <- function(xvals=xvals,n=10,b0 = 1, b1 = 0.5, sig = 1){
 
 simlinreg(xvals)
 
-reps <- lapply(1:100, function(t) simlinreg(xvals) )
+reps <- lapply(1:1000, function(t) simlinreg(xvals) )
 
 mods <- lapply(reps,function(t) lm(y~x,t) )
 
 coefs <- lapply(mods,coef)
+
+plot(reps[[1]])
+lapply(coefs,abline,col=rgb(0.4,0.4,0.4,0.4))
 
 
