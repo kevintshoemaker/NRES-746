@@ -15,21 +15,11 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 ```{r echo=FALSE}
 
-############################################################
-####                                                    ####  
-####  NRES 746, Lecture 5                               ####
-####                                                    ####
-####  Kevin Shoemaker                                   #### 
-####  University of Nevada, Reno                        ####
-####                                                    #### 
-############################################################
-
-
-############################################################
-####  Optimization                                      ####
-####     Searching parameter space to identify the MLE  ####
-####     While thwarting the curse of dimensionality    ####
-############################################################
+#  NRES 746, Lecture 5            
+#   University of Nevada, Reno                       
+#   Optimization     --------------------------                                
+#      Searching parameter space to identify the MLE  
+#      While thwarting the curse of dimensionality   
 
 
 ```
@@ -37,25 +27,25 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 For those wishing to follow along with the R-based demo in class, [click here](LECTURE5.R) for the companion R-script for this lecture.
 
-If you haven't already done this, please sign up (on our shared Google Sheets) for a time slot (30 mins) to discuss your group project proposals with me on Tues Oct 1. The rest of lab time is yours to either work on the group projects or get started with lab 3 (if I finish revising it in time!)  
-
 # Optimization
 
 We can't maximize a likelihood function without an optimization algorithm.  
 
 We can't optimize a sampling or monitoring regime, as in the power analysis problem, without an optimization algorithm.
 
-Clearly, we need optimization algorithms!! In addition, they provide an excellent example of how computers (often via brute force algorithms) are so essential for modern data analysis. 
+Clearly, we need optimization algorithms!! In addition, they provide an excellent example of how computer algorithms are so essential for modern data analysis. 
 
 You may not have built your own optimization algorithm before, but you've probably taken advantage of optimization algorithms that are operating behind the scenes. For example, if you have performed a glmm or a non-linear regression in R, you have exploited numerical optimization routines!
 
-We will discuss optimization in the context of maximum likelihood estimation, and a couple lectures from now we'll discuss optimization in a Bayesian context. Let's start with the most simple of all optimization algorithms -- brute force!
+We will discuss optimization in the context of maximum likelihood estimation, and then we will discuss optimization and parameter estimation in a Bayesian context. 
+
+Let's start with the most conceptually simple of all optimization algorithms -- brute force!
 
 NOTE: you won't need to build your own optimization routines for this class- the code in this lecture is for demonstration purposes only!
 
 ## Brute Force!
 
-Just like we did for the two-dimensional likelihood surface, we could evaluate the likelihood at tiny intervals across a broad range of parameter space. Then we can just identify the parameter set associated with the maximum likelihood across all evaluated parameter sets. 
+Just like we did for the two-dimensional likelihood surface, we could evaluate the likelihood at tiny intervals across a broad range of parameter space. Then we can identify the parameter set associated with the maximum likelihood across all evaluated parameter sets (and the range of plausible parameter estimates!). 
 
 ### Positives
 
@@ -65,7 +55,7 @@ Just like we did for the two-dimensional likelihood surface, we could evaluate t
 
 ### Negatives
 
-- Speed: even slower and less efficient than a typical ecologist is willing to accept! Practically impossible for complex multi-dimensional problems (curse of dimensionality)  
+- Speed: even slower and less efficient than a typical ecologist is willing to accept! Practically impossible for complex multi-dimensional problems (*curse of dimensionality*)  
 - Resolution: we can only get the answer to within plus or minus the interval size.
 
 ### Example dataset: Myxomatosis titer in rabbits
@@ -74,18 +64,26 @@ Let's use Bolker's myxomatosis example dataset (an example we'll return to frequ
 
 ```{r}
 
-####################
-# Explore Bolker's myxomatosis example
+# Explore Bolker's myxomatosis example   -------------------------
 
 library(emdbook)    # this is the package provided to support the textbook!
+library(ggplot2)
+library(ggthemes)
 
 MyxDat <- MyxoTiter_sum         # load Bolker's example data
-Myx <- subset(MyxDat,grade==1)    # subset: most virulent
+MyxDat$grade <- as.factor(MyxDat$grade)
+
+ggplot(MyxDat,aes(day,titer)) + 
+  geom_point(aes(col=grade))  +
+  facet_wrap(vars(grade), scales = "free") +
+  theme_clean()
+
+Myx <- subset(MyxDat,grade==1)    # subset: select most virulent
 head(Myx)
 
 ```
 
-For this example, we are modeling the distribution of measured titers (virus loads) for Australian rabbits. Bolker chose to use a Gamma distribution. Here is the empirical distribution:
+For this example, we're modeling the distribution of measured titers (virus loads) for Australian rabbits. Bolker chose to use a Gamma distribution. Here is the empirical distribution:
 
 ```{r}
 
@@ -97,11 +95,10 @@ We need to estimate the gamma 'rate' and 'shape' parameters that best fit this e
 
 ```{r}
 
-###########
-# Overlay a gamma distribution on the histogram 
+# Overlay a gamma distribution on the histogram -------------------
 
 hist(Myx$titer,freq=FALSE)     # note the "freq=FALSE", which displays densities of observations, and therefore makes histograms comparable with probability density functions
-curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
+curve(dgamma(x,shape=40,rate=6),add=T,col="red")
 
 ```
 
@@ -111,16 +108,13 @@ Let's build a likelihood function for this problem!
 
 ```{r}
 
-################
-# Build likelihood function
+# Build gamma likelihood function  ---------------------
 
 GammaLikelihoodFunction <- function(params){           # only one argument (params)- the data are hard-coded here (this is often the case with simple likelihood functions)
-  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))     # use params and data to compute likelihood 
+  -sum(dgamma(Myx$titer,shape=params['shape'],rate=params['rate'],log=T))     # use params and data to compute likelihood 
 }
 
-params <- c(40,0.15) 
-names(params) <- c("shape","scale")
-params
+params <- c(shape=40,rate=6) 
 GammaLikelihoodFunction(params)    # test the function!
 
 ```
@@ -132,17 +126,12 @@ NOTE: "optim()" will throw some warnings here because it will try to find the da
 
 ```{r warning=FALSE}
 
-############
-# USE R's 'OPTIM()' FUNCTION
-############
-
-############
 # Optimize using R's built-in "optim()" function: find the maximum likelihood estimate
 
-ctrl <- list(fnscale=-1)   # maximize rather than minimize!!
-MLE <- optim(fn=GammaLikelihoodFunction,par=params,control=ctrl,method="BFGS")   # stop the warnings!
+MLE <- optim(params,GammaLikelihoodFunction)  
 
 MLE$par
+MLE$value
 
 ```
 
@@ -152,11 +141,10 @@ Let's visualize the fit of the MLE in this case...
 
 ```{r}
 
-##############
-# visualize the fit
+# visualize the maximum likelihood fit
 
 hist(Myx$titer,freq=FALSE)
-curve(dgamma(x,shape=MLE$par["shape"],scale=MLE$par["scale"]),add=T,col="red")
+curve(dgamma(x,shape=MLE$par["shape"],rate=MLE$par["rate"]),add=T,col="red")
 
 ```
 
@@ -168,38 +156,31 @@ We start with the conceptually simple, often computationally impossible, brute f
 
 ```{r}
 
-######################
-# BRUTE FORCE ALTERNATIVE
-######################
+# BRUTE FORCE ALTERNATIVE    ------------------------------
 
-##############
 # define 2-D parameter space!
-##############
 
 shapevec <- seq(10,100,by=0.1)        # divide parameter space into tiny increments
-scalevec <- seq(0.01,0.3,by=0.001)
+ratevec <- seq(0.5,30,by=0.05)
 
-##############
 # define the likelihood surface across this grid within parameter space
-##############
 
-surface2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
+
+surface2D <- matrix(nrow=length(shapevec),ncol=length(ratevec))   # initialize storage variable
 
 newparams <- params
 for(i in 1:length(shapevec)){
   newparams['shape'] <- shapevec[i]
-  for(j in 1:length(scalevec)){
-    newparams['scale'] <- scalevec[j]
-    surface2D[i,j] <- GammaLikelihoodFunction(newparams)   # compute likelihood for every point in 2-d parameter space
+  for(j in 1:length(ratevec)){
+    newparams['rate'] <- ratevec[j]
+    surface2D[i,j] <- -1*GammaLikelihoodFunction(newparams)   # compute likelihood for every point in 2-d parameter space
   }
 }
 
-############
 # Visualize the likelihood surface
-############
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-250,-35),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-150),add=T)
 
 ```
 
@@ -207,13 +188,11 @@ Now what is the maximum likelihood estimate?
 
 ```{r}
 
-############
-# Find the MLE
-############
+# Find the MLE (brute force)  ------------------------
 
 ndx <- which(surface2D==max(surface2D),arr.ind=T)  # index of the max likelihood grid cell
 shapevec[ndx[,1]]     
-scalevec[ndx[,2]]
+ratevec[ndx[,2]]
 
 MLE$par  # compare with the answer from "optim()"
 
@@ -224,18 +203,16 @@ MLE$par  # compare with the answer from "optim()"
 
 ## Derivative based methods!
 
-If we assume that the likelihood surface is smooth (differentiable) and has only one minimum, we can develop very efficient optimization algorithms. In general, derivative-based methods look for the point in parameter space where the first derivative of the likelihood function is zero. That is, at the peak- or the valley bottom.  
+If we assume that the likelihood surface is smooth (differentiable) and has only one minimum, we can use very efficient derivative-based optimization algorithms. 
 
+In general, derivative-based methods look for the point in parameter space where the first derivative (slope) of the likelihood function is zero (the 'root' of the likelihood function). That is, at the peak- or the valley bottom.  
 
 Let's imagine we are interested in determining the shape parameter, given a known scale parameter for a gamma distribution. To use derivative based methods, let's first build a function that estimates the slope of the function at any arbitrary point in parameter space:
 
 ```{r}
 
-###################
-# Derivative-based optimization methods
-###################
+# Derivative-based optimization methods   ------------------
 
-######
 # function for estimating the slope of the likelihood surface at any point in parameter space....
 
 ## NOTE: even here I'm using a coarse, brute force method for estimating the first and second derivative of the likelihood function
@@ -257,14 +234,11 @@ Now let's visualize this!
 
 ```{r}
 
-#########
 # Visualize the slope of the likelihood function at different points in parameter space
 
 shapevec <- seq(10,100,by=0.1)   
 
-##############
 # define the likelihood surface
-##############
 
 surface1D <- numeric(length(shapevec))   # initialize storage variable
 
@@ -275,18 +249,17 @@ for(i in 1:length(shapevec)){
 }
 
 plot(surface1D~shapevec,type="l")
-point <- GammaLikelihoodFunction(c(shape=30,MLE$par['scale']))
+point <- GammaLikelihoodFunction(c(shape=30,MLE$par['rate']))
 slope <- SlopeFunc(shape_guess=30)
 lines(c(20,40),c(point-slope*10,point+slope*10),col="red")
 
 ```
 
 
-We also need a function to compute the second derivative, or the curvature...
+We also need a function to compute the second derivative, or the curvature (rate of change in the slope)...
 
 ```{r}
 
-########
 # function for estimating the curvature of the likelihood function at any point in parameter space
 
 params <- MLE$par
@@ -311,14 +284,13 @@ The simplest derivative-based optimization algorithm is the *Newton-Raphson algo
 - pick a guess for a parameter value     
 - compute the first derivative of the likelihood function for that guess       
 - compute the slope of the first derivative (curvature, or second derivative) of the likelihood function for that guess      
-- Extrapolate linearly to try to find the root (where the first derivative of the likelihood function should be zero assuming the first derivative has a constant slope)       
+- Extrapolate linearly to try to find the root (where the first derivative of the likelihood function should be zero assuming the rate of change in the slope is constant)       
 - repeat until the first derivative of the likelihood function is close enough to zero (within a specified tolerance), using the new value from the previous step as your initial guess.       
 
 Let's first visualize the shape of the first derivative of the likelihood function
 
 ```{r}
 
-######
 # First- visualize the gradient of the likelihood function
 
 firstderiv <- numeric(length(shapevec))   # initialize storage variable
@@ -337,7 +309,6 @@ First compute the derivatives:
 
 ```{r}
 
-#########
 # Now we can perform a simple, derivative-based optimization!
 
 ### Pick "80" as the starting value
@@ -353,7 +324,6 @@ Now let's use this linear function to extrapolate to where the first derivative 
 
 ```{r}
 
-#########
 # Use this info to estimate the root
 
 oldguess <- 80
@@ -366,7 +336,6 @@ Our new guess is that the shape parameter is 41.31. Let's do it again!
 
 ```{r}
 
-##########
 # Repeat this process
 
 oldguess <- 41.31
@@ -380,7 +349,6 @@ Okay, we're already getting close to our MLE of around 49.36. Let's do it again:
 
 ```{r}
 
-#######
 # again...
 
 oldguess<-newguess
@@ -393,7 +361,6 @@ And again!
 
 ```{r}
 
-#######
 # again...
 
 oldguess<-newguess
@@ -406,7 +373,6 @@ And again!!!
 
 ```{r}
 
-#######
 # again...
 
 oldguess<-newguess
@@ -415,12 +381,11 @@ newguess
 
 ```
 
-Wow, in just a few steps we already basically found the true root. Let's find the root for real, using an algorithm...
+Wow, in just a few iterations we already basically found the true root. Let's find the root for real, using an algorithm...
 
 ```{r}
 
-##########
-# Implement the Newton Method as a function!
+# Implement the Newton Method as a function!  ------------------
 
 NewtonMethod <- function(firstguess,tolerance=0.0000001){
   deriv <- SlopeFunc(firstguess)
@@ -434,7 +399,7 @@ NewtonMethod <- function(firstguess,tolerance=0.0000001){
   }
   mle <- list()
   mle$estimate <- newguess
-  mle$likelihood <- GammaLikelihoodFunction(c(shape=newguess,MLE$par['scale']))
+  mle$likelihood <- GammaLikelihoodFunction(c(shape=newguess,MLE$par['rate']))
   mle$iterations <- counter
   return(mle)
 }
@@ -472,11 +437,10 @@ Set up an initial simplex in parameter space, essentially representing three ini
 Continue the following steps until your answer is good enough:  
 
 * Start by identifying the *worst* vertex (the one with the lowest likelihood)  
-* Take the worst vertex and reflect it across the center of the shape represented by the other vertices. This is your 'proposal vertex'.
-* If the likelihood is higher at the proposal vertex (better than the original), but is not the highest likelihood of all the vertices, then replace the old vertex with the proposal vertex.
-* If the likelihood is highest for the proposal vertex (out of all the vertices), increase the length of the jump! If this increased jump improves the likelihood even more, replace the old vertex with this new extended-jump vertex.   
-* If the original proposal vertex was bad (lower likelihood than the original) then try a point that's closer to the original vertex along the reflection line. If this point is better than the original vertex, replace the old vertex with this new reduced-jump vertex. 
-* If all reflections were worse than the original, then contract (shrink) the simplex toward the highest-likelihood vertex.   
+* REFLECT IT: Take the worst vertex and reflect it across the center of the shape represented by the other vertices. This is your 'proposal vertex'. If the new likelihood at the reflected point is now the second best of all the vertices in the new simplex, then replace the old vertex with the proposal vertex.
+* EXPAND IT: If the likelihood is highest for the proposal vertex (out of all the vertices), increase the length of the jump! If this increased jump improves the likelihood even more, replace the old vertex with this new extended-jump vertex. If the expansion is not as good as the reflection, use the reflected vertex instead.   
+* CONTRACT IT: If the original reflected vertex was bad (lower likelihood than the original) then try a point closer to the original vertex along the reflection line. If this point is better than the original vertex, replace the old vertex with this new contracted vertex. 
+* If all reflections, expansions and contractions were worse than the original vertex, then contract (shrink) the simplex toward the highest-likelihood vertex.   
 
 **Q**: What does the simplex look like for a one-dimensional optimization problem?
 
@@ -487,21 +451,18 @@ Continue the following steps until your answer is good enough:
 **Step 1:** Set up an initial simplex in parameter space
 ```{r}
 
-#############
-# SIMPLEX OPTIMIZATION METHOD!
-#############
+# SIMPLEX OPTIMIZATION METHOD!   -----------------------
 
-########
 # set up an "initial" simplex
 
-firstguess <- c(shape=70,scale=0.22)   # "user" first guess 
+firstguess <- c(shape=70,rate=5)   # "user" first guess 
 
 simplex <- list()
  
            # set up the initial simplex based on the first guess...
-simplex[['vertex1']] <- firstguess + c(3,0.04)
-simplex[['vertex2']] <- firstguess + c(-3,-0.04)
-simplex[['vertex3']] <- firstguess + c(3,-0.04)
+simplex[['vertex1']] <- firstguess + c(3,1)
+simplex[['vertex2']] <- firstguess + c(-3,-1)
+simplex[['vertex3']] <- firstguess + c(3,-1)
 
 simplex
 
@@ -518,8 +479,8 @@ addSimplex <- function(simplex,col="red"){
   points(x=temp[1,c(1,2,3,1)], y=temp[2,c(1,2,3,1)],type="b",lwd=2,col=col)
 }
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-300,-30),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-120),add=T)
 addSimplex(simplex)
 
 
@@ -529,11 +490,10 @@ Now let's evaluate the log likelihood at each vertex
 
 ```{r}
 
-########
 # Evaluate log-likelihood at each vertex of the simplex
 
 SimplexLik <- function(simplex){
-  newvec <- unlist(lapply(simplex,GammaLikelihoodFunction))   # note use of apply instead of for loop...
+  newvec <- -1*unlist(lapply(simplex,GammaLikelihoodFunction))   # note use of apply instead of for loop...
   return(newvec)
 }
 
@@ -545,103 +505,76 @@ Now let's develop functions to assist our moves through parameter space, accordi
 
 ```{r}
 
-#####
+
 # Helper Functions
-#####
 
 ## this function reflects the worst vertex across the remaining vector
-ReflectIt <- function(oldsimplex,WorstVertex){
+
+# values <- SimplexLik(simplex)
+# oldsimplex=simplex[order(values,decreasing = T)]   # note: must be sorted with worst vertex last
+ReflectIt <- function(oldsimplex){
   
-  vertnames <- names(oldsimplex)
+  # vertnames <- names(oldsimplex)
+  n=length(oldsimplex[[1]])
+  centroid <- apply(t(as.data.frame(oldsimplex[1:n])),2,mean)
   
-    ## re-arrange simplex- worst must be first
-  worstndx <- which(names(oldsimplex)==WorstVertex)
-  otherndx <- c(1:3)[-worstndx]
-  newndx <- c(worstndx,otherndx) 
-  
-    ## translate so that vertex 1 is the origin (0,0)
-  oldsimplex <- oldsimplex[newndx] 
-  translate <- oldsimplex[[1]]
-  newsimplex <- list(oldsimplex[[1]]-translate,oldsimplex[[2]]-translate,oldsimplex[[3]]-translate)
-  
-  reflected <- c(newsimplex[[2]]["shape"]+newsimplex[[3]]["shape"],newsimplex[[2]]["scale"]+newsimplex[[3]]["scale"])
-  names(reflected) <- c("shape","scale") 
-  
-    ## translate back to the likelihood surface
-  newsimplex[[1]] <- reflected
-  newsimplex <- list(newsimplex[[1]]+translate,newsimplex[[2]]+translate,newsimplex[[3]]+translate)
-    ## return the new simplex
-  names(newsimplex) <- names(oldsimplex)
-  
-    ## generate some alternative jumps (or "oozes"!)...
-  oldpoint <- oldsimplex[[1]]
-  newpoint <- newsimplex[[1]]
-  
-  newpoint2 <- newpoint-oldpoint
-  double <- newpoint2 * 3
-  half <- newpoint2 * 0.24
+  reflected <- centroid + (centroid - oldsimplex[[n+1]])
+  expanded <- centroid + 2*(centroid - oldsimplex[[n+1]])
+  contracted <- centroid + 0.5*(centroid - oldsimplex[[n+1]])
   
   alternates <- list()
-  alternates$reflected <- newsimplex
-  alternates$double <- newsimplex 
-  alternates$half <- newsimplex 
-  alternates$double[[1]] <- double + oldpoint
-  alternates$half[[1]] <- half + oldpoint
-  alternates$reflected <- alternates$reflected[vertnames]
-  alternates$double <- alternates$double[vertnames]
-  alternates$half <- alternates$half[vertnames]
+  alternates$reflected <- oldsimplex
+  alternates$expanded <- oldsimplex 
+  alternates$contracted <- oldsimplex 
+  alternates$reflected[[n+1]] <- reflected
+  alternates$expanded[[n+1]] <- expanded
+  alternates$contracted[[n+1]] <- contracted
   return(alternates)
 }
+# ReflectIt(oldsimplex)
 
 
-ShrinkIt <- function(oldsimplex,BestVertex){
-  newsimplex <- oldsimplex
-  
-      ## indices...
-  bestndx <- which(names(oldsimplex)==BestVertex)
-  otherndx <- c(1:3)[-bestndx]
-  
-  translate <- oldsimplex[[bestndx]]
-  
-  i=2
-  for(i in otherndx){
-    newvector <- oldsimplex[[i]]-translate
-    shrinkvector <- newvector * 0.5
-    newsimplex[[i]] <- shrinkvector + translate
-  }
-  
-  return(newsimplex)
+ShrinkIt <- function(oldsimplex){
+  n <- length(oldsimplex[[1]])
+  X.vert <- t(as.data.frame(oldsimplex[(1:(n+1))]))
+  temp <- sweep(0.5*sweep(X.vert, 2, oldsimplex[[1]], FUN = "-"), 2, X.vert[1, ], FUN="+")
+  temp2 <- as.data.frame(t(temp))
+  lapply(temp2,function(t) c(shape=t[1],rate=t[2])  )
 }
 
 
 MoveTheSimplex <- function(oldsimplex){     # (incomplete) nelder-mead algorithm
   newsimplex <- oldsimplex  # 
-           # Start by identifying the *worst* vertex (the one with the lowest likelihood)
+           # Start by sorting the simplex (worst vertex last)
   VertexLik <- SimplexLik(newsimplex)
-  WorstLik <- min(VertexLik)
-  BestLik <- max(VertexLik)
-  WorstVertex <- names(VertexLik[which.min(VertexLik)])    # identify vertex with lowest likelihood
-  candidates <- ReflectIt(oldsimplex=newsimplex,WorstVertex)      # reflect across the remaining edge
+  newsimplex <- newsimplex[order(VertexLik,decreasing=T)]
+  liks <- VertexLik[order(VertexLik,decreasing=T)]
+  worstLik <- liks[3]
+  secondworstLik <- liks[2]
+  bestLik <- liks[1]
+  
+  candidates <- ReflectIt(oldsimplex=newsimplex)      # reflect across the remaining edge
   CandidateLik <- sapply(candidates,SimplexLik)                          # re-evaluate likelihood at the vertices...
   CandidateLik <- apply(CandidateLik,c(1,2), function(t) ifelse(is.nan(t),-99999,t))
-  bestCandidate <- names(which.max(CandidateLik[WorstVertex,]))
-  bestCandidateLik <- CandidateLik[WorstVertex,bestCandidate]
-  if(CandidateLik[WorstVertex,"reflected"]>=WorstLik){
-    if(CandidateLik[WorstVertex,"reflected"]>BestLik){    
-      if(CandidateLik[WorstVertex,"double"]>CandidateLik[WorstVertex,"reflected"]){
-        newsimplex <- candidates[["double"]]    # expansion
-      }else{
-        newsimplex <- candidates[["reflected"]]
-      }
-    }else if(CandidateLik[WorstVertex,"half"]>CandidateLik[WorstVertex,"reflected"]){   # contraction
-      newsimplex <- candidates[["half"]]
+  bestCandidate <- names(which.max(CandidateLik[3,]))
+  bestCandidateLik <- CandidateLik[3,bestCandidate]
+  
+  if((CandidateLik[3,"reflected"]<=bestLik)&(CandidateLik[3,"reflected"]>secondworstLik)){
+    newsimplex <- candidates[["reflected"]]
+  }else if (CandidateLik[3,"reflected"]>bestLik){
+    if(CandidateLik[3,"expanded"]>CandidateLik[3,"reflected"]){
+      newsimplex <- candidates[["expanded"]]
     }else{
       newsimplex <- candidates[["reflected"]]
     }
   }else{
-    BestVertex <- names(VertexLik[which.max(VertexLik)])
-    newsimplex <- ShrinkIt(oldsimplex,BestVertex)
+    if(CandidateLik[3,"contracted"]>worstLik){
+      newsimplex <- candidates[["contracted"]]
+    }else{
+      newsimplex <- ShrinkIt(newsimplex)
+    }
   }
+
   return(newsimplex)
 }
 
@@ -651,13 +584,12 @@ MoveTheSimplex <- function(oldsimplex){     # (incomplete) nelder-mead algorithm
 # addSimplex(candidates$reflected,col="green")
 # addSimplex(candidates$half,col="green")
 
-###########
-# Visualize the simplex
+# Visualize the simplex  ---------------------
 
 oldsimplex <- simplex
 newsimplex <- MoveTheSimplex(oldsimplex)
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
 addSimplex(oldsimplex,col="red")
 addSimplex(newsimplex,col="green")
 
@@ -669,14 +601,13 @@ Let's try another few moves
 
 ```{r}
 
-############
-# Make another move
+# Make another move  -------------
 
 oldsimplex <- newsimplex
 newsimplex <- MoveTheSimplex(oldsimplex)
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
 addSimplex(oldsimplex,col="red")
 addSimplex(newsimplex,col="green")
 
@@ -686,14 +617,13 @@ And again!
 
 ```{r}
 
-############
-# Make another move
+# Make another move  ----------------------
 
 oldsimplex <- newsimplex
 newsimplex <- MoveTheSimplex(oldsimplex)
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
 addSimplex(oldsimplex,col="red")
 addSimplex(newsimplex,col="green")
 
@@ -703,14 +633,13 @@ Again:
 
 ```{r}
 
-############
-# Make another move
+# Make another move  ----------------
 
 oldsimplex <- newsimplex
 newsimplex <- MoveTheSimplex(oldsimplex)
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
 addSimplex(oldsimplex,col="red")
 addSimplex(newsimplex,col="green")
 
@@ -721,8 +650,7 @@ And another few times:
 
 ```{r}
 
-############
-# Make another few moves
+# Make another few moves  ----------------------
 
 par(mfrow=c(2,2))
 
@@ -730,8 +658,8 @@ for(i in 1:4){
   oldsimplex <- newsimplex
   newsimplex <- MoveTheSimplex(oldsimplex)
   
-  image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-  contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+  image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
+  contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
   addSimplex(oldsimplex,col="red")
   addSimplex(newsimplex,col="green")
 }
@@ -744,25 +672,23 @@ Now we can build a function and use the algorithm for optimizing!
 
 ```{r}
 
-############
-# Build a simplex optimization function!
+# Build a simplex optimization function!  -----------------
 
 SimplexMethod <- function(firstguess,tolerance=0.00001){
   initsimplex <- list()
-  initsimplex[['vertex1']] <- firstguess + c(5,0.05)
-  initsimplex[['vertex2']] <- firstguess + c(-5,-0.05)
-  initsimplex[['vertex3']] <- firstguess + c(5,-0.05)
+  initsimplex[['vertex1']] <- firstguess + c(5,0.5)
+  initsimplex[['vertex2']] <- firstguess + c(-5,-0.5)
+  initsimplex[['vertex3']] <- firstguess + c(5,-0.5)
   VertexLik <- SimplexLik(initsimplex)
   oldbestlik <- VertexLik[which.max(VertexLik)]
   deltalik <- 100
   counter <- 0
-  while(counter<100){
+  oldsimplex <- initsimplex
+  while((counter<250)&(any(abs(diff(VertexLik))>tolerance))){
     newsimplex <- MoveTheSimplex(oldsimplex)
     VertexLik <- SimplexLik(newsimplex)
     bestlik <- VertexLik[which.max(VertexLik)]
-    deltalik <- bestlik-oldbestlik
     oldsimplex <- newsimplex
-    oldbestlik <- bestlik
     counter <- counter+1
   }
   mle <- list()
@@ -772,8 +698,7 @@ SimplexMethod <- function(firstguess,tolerance=0.00001){
   return(mle)
 }
 
-
-SimplexMethod(firstguess = c(shape=39,scale=0.28))
+SimplexMethod(firstguess = c(shape=39,rate=4))
 
 ```
 
@@ -814,11 +739,10 @@ Let's use the same familiar myxomatosis example!
  
 ```{r}
 
-################
-# Simulated annealing!
+# Simulated annealing!  -----------------------
 
-startingvals <- c(shape=80,scale=0.15)
-startinglik <- GammaLikelihoodFunction(startingvals)
+startingvals <- c(shape=80,rate=7)
+startinglik <- -GammaLikelihoodFunction(startingvals)
 startinglik
 
 k = 100   # set the "temperature"
@@ -826,8 +750,8 @@ k = 100   # set the "temperature"
      # function for making new guesses
 newGuess <- function(oldguess=startingvals){
   maxshapejump <- 5
-  maxscalejump <- 0.05
-  jump <- c(runif(1,-maxshapejump,maxshapejump),runif(1,-maxscalejump,maxscalejump))
+  maxratejump <- 0.75
+  jump <- c(runif(1,-maxshapejump,maxshapejump),runif(1,-maxratejump,maxratejump))
   newguess <- oldguess + jump
   return(newguess)
 }
@@ -843,12 +767,11 @@ Now let's evaluate the difference in likelihood between the old and the new gues
 
 ```{r}
 
-############
 # evaluate the difference in likelihood between the new proposal and the old point
 
 LikDif <- function(oldguess,newguess){
-  oldLik <- GammaLikelihoodFunction(oldguess)
-  newLik <- GammaLikelihoodFunction(newguess)
+  oldLik <- -GammaLikelihoodFunction(oldguess)
+  newLik <- -GammaLikelihoodFunction(newguess)
   return(newLik-oldLik)
 }
 
@@ -862,8 +785,7 @@ Now let's look at the Metropolis routine:
 
 ```{r}
 
-############
-# run and visualize a Metropolis simulated annealing routine
+# run and visualize a Metropolis simulated annealing routine -------------
 
 k <- 100
 oldguess <- startingvals
@@ -887,8 +809,8 @@ while(counter<100){
 
 # visualize!
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
 lines(guesses,col="red")
 
 ```
@@ -903,7 +825,6 @@ Let's run it for longer, and with a smaller value of k..
 
 ```{r}
 
-###########
 # Run it for longer!
 
 k <- 10
@@ -929,8 +850,8 @@ while(counter<1000){
 
 # visualize!
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
 lines(guesses,col="red")
 
 
@@ -943,7 +864,6 @@ Now let's "cool" the temperature over time, let the algorithm settle down on a l
 
 ```{r}
 
-#############
 # cool the "temperature" over time and let the algorithm settle down
 
 k <- 100
@@ -951,7 +871,7 @@ oldguess <- startingvals
 counter <- 0
 guesses <- matrix(0,nrow=10000,ncol=2)
 colnames(guesses) <- names(startingvals)
-MLE <- list(vals=startingvals,lik=GammaLikelihoodFunction(startingvals),step=0)
+MLE <- list(vals=startingvals,lik=-GammaLikelihoodFunction(startingvals),step=0)
 while(counter<10000){
   newguess <- newGuess(oldguess)
   while(any(newguess<0)) newguess <- newGuess(oldguess)
@@ -967,18 +887,20 @@ while(counter<10000){
   counter <- counter + 1
   if(counter%%100==0) k <- k*0.8
   guesses[counter,] <- oldguess
-  thislik <- GammaLikelihoodFunction(oldguess)
-  if(thislik>MLE$lik) MLE <- list(vals=oldguess,lik=GammaLikelihoodFunction(oldguess),step=counter)
+  thislik <- -GammaLikelihoodFunction(oldguess)
+  if(thislik>MLE$lik) MLE <- list(vals=oldguess,lik=-GammaLikelihoodFunction(oldguess),step=counter)
 }
 
 # visualize!
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
+contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
 lines(guesses,col="red")
 points(MLE$vals[1],MLE$vals[2],col="green",pch=20,cex=3)
 
 MLE
+
+optim(params,GammaLikelihoodFunction)$par
 
 ```
 
