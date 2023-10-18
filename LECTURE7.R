@@ -1,26 +1,12 @@
 
-############################################################
-####                                                    ####  
-####  NRES 746, Lecture 7                               ####
-####                                                    ####
-####  Kevin Shoemaker                                   #### 
-####  University of Nevada, Reno                        ####
-####                                                    #### 
-############################################################
 
-
-############################################################
-####  Bayesian analysis #2: MCMC                        ####
-############################################################
+#  NRES 746, Lecture 7   
+#   Bayesian analysis #2: MCMC  ---------------------------------                   
 
 
 
-#################
-# Simple example of MCMC sampling
-#################
+# Simple example of MCMC sampling -----------------------
 
-
-#########
 # first, let's build a function that generates random numbers from a bivariate standard normal distribution
 
 rbvn<-function (n, rho)   #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
@@ -30,7 +16,6 @@ rbvn<-function (n, rho)   #function for drawing an arbitrary number of independe
         cbind(x, y)
 }
 
-#########
 # Now, plot the random draws from this distribution, make sure this makes sense!
 
 bvn<-rbvn(10000,0.98)
@@ -45,7 +30,6 @@ par(mfrow=c(1,1))
 
 
 
-###############
 # Metropolis-Hastings implementation of bivariate normal sampler... 
 
 library(mvtnorm)    # load a package that allows us to compute probability densities for mv normal distribution 

@@ -256,7 +256,7 @@ hist(Myx$titer,freq=FALSE)    # visualize the data, again!
 ### Error is modeled as gamma distributed
 
 hist(Myx$titer,freq=FALSE)
-curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
+curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")   # note here we are using scale and not rate...
 
 
 ####
