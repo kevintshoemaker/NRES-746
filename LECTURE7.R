@@ -4,7 +4,6 @@
 #   Bayesian analysis #2: MCMC  ---------------------------------                   
 
 
-
 # Simple example of MCMC sampling -----------------------
 
 # first, let's build a function that generates random numbers from a bivariate standard normal distribution
@@ -62,7 +61,6 @@ metropolisHastings <- function (n, rho=0.98){    # an MCMC sampler implementatio
 }
 
 
-###########
 # Test the new M-H sampler
 
 bvn<-metropolisHastings(10000,0.98)
@@ -76,9 +74,7 @@ hist(bvn[,2],40)
 par(mfrow=c(1,1))
 
 
-############
-# MCMC implementation of the Myxomatosis example from the Bolker book
-############
+# MCMC implementation of the Myxomatosis example from the Bolker book --------------
 
 library(emdbook)
 
@@ -87,29 +83,23 @@ Myx <- subset(MyxDat,grade==1)
 head(Myx)
 
 
-###########
 # Visualize the Myxomatosis data for the 100th time!
 
 hist(Myx$titer,freq=FALSE)
 
 
-#########
 # ... and overlay a proposed data-generating model (gamma distribution)
 
 hist(Myx$titer,freq=FALSE)
 curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
 
 
-##############
 # define 2-D parameter space!
-##############
 
 shapevec <- seq(3,100,by=0.1)   
 scalevec <- seq(0.01,0.5,by=0.001)
 
-##############
-# define the likelihood surface across this grid within parameter space
-##############
+# define the likelihood surface  -------------
 
 GammaLogLikelihoodFunction <- function(params){
   sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))
@@ -125,21 +115,19 @@ for(i in 1:length(shapevec)){
   }
 }
 
-############
 # Visualize the likelihood surface
-############
 
 image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
 contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 
 
-############
-# Write a non-log-transformed likelihood function
+# Write a non-log-transformed likelihood function ------------
 
 GammaLikelihoodFunction <- function(params){
   prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=F))   
 }
 
+  # and here's the log likelihood function
 GammaLogLikelihoodFunction <- function(params){
   sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))   
 }
@@ -150,8 +138,7 @@ GammaLikelihoodFunction(params)
 GammaLogLikelihoodFunction(params)
 
 
-#############
-# Function for returning the prior probability density for any point in parameter space  
+# Function for returning the prior probability density for any point in parameter space 
 
 GammaPriorFunction <- function(params){
   prior <- c(shape=NA,scale=NA)
@@ -188,9 +175,7 @@ for(i in 1:length(shapevec)){
   }
 }
 
-############
 # Visualize the prior likelihood surface
-############
 
 image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.000000001,0.001),col=topo.colors(12))
 #contour(x=shapevec,y=scalevec,z=prior2D,levels=c(-30,-40,-80,-500),add=T)
@@ -198,8 +183,7 @@ image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.000000001,0.001),col=topo.colors(
 
 
 
-############
-# Function for computing the ratio of posterior densities between any two points in parameter space
+# Function for computing the ratio of posterior densities -----------------
 
 PosteriorRatio <- function(oldguess,newguess){
   oldLik <- max(1e-90,GammaLikelihoodFunction(oldguess))   # compute likelihood and prior density at old guess
@@ -224,8 +208,8 @@ PosteriorRatio(oldguess,newguess)
 PosteriorRatio2(oldguess,newguess)
 
 
-############
-# Define proposal distribution for jumps in parameter space (use normal distribution)!
+# Define proposal distribution --------------------------
+    #for jumps in parameter space (use normal distribution)!
 
      # function for making new guesses
 newGuess <- function(oldguess){
@@ -242,14 +226,12 @@ newGuess(oldguess=params)
 newGuess(oldguess=params)
 
 
-##########
-# Set a starting point in parameter spacer
+# Set a starting point in parameter space -------------------
 
 startingvals <- c(shape=75,scale=0.28)    # starting point for the algorithm
 
 
-###########
-# Try our new functions
+# Try our new functions  ------------------
 
 newguess <- newGuess(startingvals)    # take a jump in parameter space
 newguess
@@ -257,8 +239,7 @@ newguess
 PosteriorRatio2(startingvals,newguess)   # difference in posterior ratio
 
 
-###############
-# Visualize the Metropolis-Hastings routine:
+# Visualize the Metropolis-Hastings routine: ---------------
 
 chain.length <- 11
 oldguess <- startingvals
@@ -285,8 +266,7 @@ contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
 
 
-##########
-# Get more MCMC samples
+# Get more MCMC samples --------------
 
 chain.length <- 100
 oldguess <- startingvals
@@ -314,8 +294,7 @@ contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
 
 
-############
-# And more...
+# And more... -------------------
 
 chain.length <- 1000
 oldguess <- startingvals
@@ -343,21 +322,19 @@ contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
 
 
-#############
-# Evaluate "traceplot" for the MCMC samples...
+# Evaluate "traceplot" for the MCMC samples... ---------------------
 
-##### Shape parameter
+## Shape parameter
 
 plot(1:chain.length,guesses[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 
 
-###### Scale parameter
+## Scale parameter
 
 plot(1:chain.length,guesses[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
 
 
-############
-# Remove "burn-in" (allow MCMC routine some time to get to the posterior)
+# Remove "burn-in" (allow MCMC routine some time to get to the posterior) --------------
 
 burn.in <- 100
 MCMCsamples <- guesses[-c(1:burn.in),]
@@ -367,8 +344,7 @@ plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="
 plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
 
 
-##########
-# Try again- run for much longer
+# Try again- run for much longer ---------------------
 
 chain.length <- 20000
 oldguess <- startingvals
@@ -396,8 +372,7 @@ contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
 lines(guesses,col="red")
 
 
-#############
-# Use longer "burn-in"
+# Use longer "burn-in" ------------------
 
 burn.in <- 5000
 MCMCsamples <- guesses[-c(1:burn.in),]
@@ -408,8 +383,7 @@ plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="
 plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
 
 
-##########
-# "thin" the MCMC samples
+# "thin" the MCMC samples  -----------------------
 
 thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=5),]
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
@@ -422,8 +396,7 @@ plot(density(thinnedMCMC[,'scale']),main="scale parameter",xlab="scale")
 plot(density(thinnedMCMC[,'shape']),main="shape parameter",xlab="shape")
 
 
-#########
-# More visual posterior checks...
+# More visual posterior checks... -----------------
 
 par(mfrow=c(3,2))
 plot(thinnedMCMC,col=1:10000)
@@ -435,11 +408,8 @@ hist(thinnedMCMC[,2],40)
 par(mfrow=c(1,1))
 
 
-#############
-# Simple example of a Gibbs sampler
-#############
+# Simple example of a Gibbs sampler ----------------
 
-########
 # first, recall our simple bivariate normal sampler
 
 rbvn<-function (n, rho){  #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
@@ -459,8 +429,7 @@ hist(bvn[,2],40)
 par(mfrow=c(1,1))
 
 
-#############
-# Now construct a Gibbs sampler alternative
+# Now construct a Gibbs sampler alternative ---------------
 
 gibbs<-function (n, rho){    # a gibbs sampler implementation of a bivariate random number generator
     mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
@@ -476,8 +445,7 @@ gibbs<-function (n, rho){    # a gibbs sampler implementation of a bivariate ran
 }
 
 
-##########
-# Test the Gibbs sampler
+# Test the Gibbs sampler ------------------
 
 bvn<-gibbs(10000,0.98)
 par(mfrow=c(3,2))
@@ -490,10 +458,8 @@ hist(bvn[,2],40)
 par(mfrow=c(1,1))
 
 
-###########
-# Myxomatosis example in BUGS modeling language
+# Myxomatosis example in BUGS modeling language ---------------
 
-##########
 # Write the BUGS model to file
 
 cat("
@@ -517,8 +483,7 @@ cat("
 
 
 
-############
-# Encapsulate the data into a single "list" object
+# Encapsulate the data into a single "list" object ------------------
 
 myx.data.for.bugs <- list(
   titer = Myx$titer,
@@ -528,8 +493,7 @@ myx.data.for.bugs <- list(
 myx.data.for.bugs
 
 
-###########
-# Function for generating random initial values for all free parameters
+# Function for generating random initial values --------------
 
 init.vals.for.bugs <- function(){
   list(
@@ -543,13 +507,10 @@ init.vals.for.bugs()
 init.vals.for.bugs()
 
 
-###########
-# Run JAGS!!!!
-##########
+# Run JAGS!!!!  ------------------
 
 #library(R2jags)
 library(jagsUI)
-library(modeest)
 
 library(coda)
 
@@ -564,8 +525,7 @@ summary(jagsfit.mcmc)
 plot(jagsfit.mcmc)
 
 
-################
-# Run the chains for longer!
+# Run the chains for longer! -----------------
 
 jags.fit <- jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,
                      n.iter = 100000,n.chains = 3,n.adapt = 1000,n.burnin = 10000,
@@ -578,8 +538,7 @@ summary(jagsfit.mcmc)
 plot(jagsfit.mcmc)
 
 
-##############
-# Run convergence diagnostics
+# Run convergence diagnostics  ------------------
 
 gelman.diag(jagsfit.mcmc)
 
