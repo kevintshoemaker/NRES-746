@@ -109,14 +109,14 @@ metropolisHastings <- function (n, rho=0.98){    # an MCMC sampler implementatio
     mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
     x <- 0   # initial values for all parameters
     y <- 0
-    prev <- dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
+    prev <- mvtnorm::dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
     mat[1, ] <- c(x, y)        # initialize the markov chain
     counter <- 1
     while(counter<=n) {
       newx <- rnorm(1,x,0.5)     # make a jump. Note the symmetrical proposal distribution
       newy <- rnorm(1,y,0.5)
       
-      newprob <- dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
+      newprob <- mvtnorm::dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
       ratio <- newprob/prev   # compute the ratio of probabilities at the old (jump from) and proposed (jump to) locations. 
       
       prob.accept <- min(1,ratio)     # decide the probability of accepting the new jump!
@@ -124,9 +124,12 @@ metropolisHastings <- function (n, rho=0.98){    # an MCMC sampler implementatio
       if(rand<=prob.accept){
         x=newx;y=newy    # set x and y to the new location
         mat[counter,] <- c(x,y)    # store this in the storage array 
-        counter=counter+1
         prev <- newprob    # get ready for the next iteration
+      }else{
+        mat[counter,] <- c(x,y)
       }
+      
+      counter=counter+1
       
     }
     return(mat)
@@ -343,9 +346,10 @@ Then we need a function for making new guesses, or jumps in parameter space:
 
      # function for making new guesses
 newGuess <- function(oldguess){
-  sdshapejump <- 4
-  sdscalejump <- 0.07
-  jump <- c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
+  sdshapejump <- 1 #4
+  sdscalejump <- 0.01
+  corjump <- -0.7
+  jump <- mvtnorm::rmvnorm(1,oldguess,) # c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
   newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
   return(newguess)
 }
@@ -376,6 +380,7 @@ Let's play with the different functions we have so far...
 
 # Try our new functions  ------------------
 
+startingvals
 newguess <- newGuess(startingvals)    # take a jump in parameter space
 newguess
 
@@ -404,8 +409,10 @@ while(counter <= chain.length){
   if(rand<=prob.accept){
     oldguess <- newguess
     guesses[counter,] <- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] <- oldguess 
   }
+  counter=counter+1
 }
 
 # visualize!
@@ -424,7 +431,7 @@ Let's run it for longer...
 
 # Get more MCMC samples --------------
 
-chain.length <- 100
+chain.length <- 1000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
@@ -439,8 +446,10 @@ while(counter <= chain.length){
   if(rand<=prob.accept){
     oldguess <- newguess
     guesses[counter,] <- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] <- oldguess 
   }
+  counter=counter+1
 }
 
 # visualize!
@@ -458,7 +467,7 @@ How about for even longer??
 
 # And more... -------------------
 
-chain.length <- 1000
+chain.length <- 10000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
@@ -473,8 +482,10 @@ while(counter <= chain.length){
   if(rand<=prob.accept){
     oldguess <- newguess
     guesses[counter,] <- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] <- oldguess 
   }
+  counter=counter+1
 }
 
 # visualize!
