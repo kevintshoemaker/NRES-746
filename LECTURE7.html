@@ -548,14 +548,14 @@ metropolisHastings &lt;- function (n, rho=0.98){    # an MCMC sampler implementa
     mat &lt;- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
     x &lt;- 0   # initial values for all parameters
     y &lt;- 0
-    prev &lt;- dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
+    prev &lt;- mvtnorm::dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
     mat[1, ] &lt;- c(x, y)        # initialize the markov chain
     counter &lt;- 1
     while(counter&lt;=n) {
       newx &lt;- rnorm(1,x,0.5)     # make a jump. Note the symmetrical proposal distribution
       newy &lt;- rnorm(1,y,0.5)
       
-      newprob &lt;- dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
+      newprob &lt;- mvtnorm::dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
       ratio &lt;- newprob/prev   # compute the ratio of probabilities at the old (jump from) and proposed (jump to) locations. 
       
       prob.accept &lt;- min(1,ratio)     # decide the probability of accepting the new jump!
@@ -563,9 +563,12 @@ metropolisHastings &lt;- function (n, rho=0.98){    # an MCMC sampler implementa
       if(rand&lt;=prob.accept){
         x=newx;y=newy    # set x and y to the new location
         mat[counter,] &lt;- c(x,y)    # store this in the storage array 
-        counter=counter+1
         prev &lt;- newprob    # get ready for the next iteration
+      }else{
+        mat[counter,] &lt;- c(x,y)
       }
+      
+      counter=counter+1
       
     }
     return(mat)
@@ -764,23 +767,27 @@ space:</p>
 
      # function for making new guesses
 newGuess &lt;- function(oldguess){
-  sdshapejump &lt;- 4
-  sdscalejump &lt;- 0.07
-  jump &lt;- c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
-  newguess &lt;- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
+  sdshapejump &lt;- 3 #4
+  sdscalejump &lt;- 0.05
+  corjump &lt;- -0.6
+  vcv &lt;- diag(2)*c(sdshapejump^2,sdscalejump^2)
+  vcv[2,1] &lt;- vcv[1,2] &lt;- corjump*sqrt(sdshapejump^2*sdscalejump^2)
+  newguess &lt;- mvtnorm::rmvnorm(1,oldguess,vcv)[1,] # c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
+  # newguess &lt;- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
+  newguess &lt;- ifelse(newguess&lt;0.001,0.001,newguess)
   return(newguess)
 }
   # set a new &quot;guess&quot; near to the original guess
 
 newGuess(oldguess=params)   </code></pre>
-<pre><code>##       shape       scale 
-## 38.32598095  0.04727806</code></pre>
+<pre><code>##      shape      scale 
+## 38.7879892  0.1032595</code></pre>
 <pre class="r"><code>newGuess(oldguess=params)</code></pre>
 <pre><code>##       shape       scale 
-## 41.53852865  0.05725767</code></pre>
+## 41.19306213  0.08522816</code></pre>
 <pre class="r"><code>newGuess(oldguess=params)</code></pre>
 <pre><code>##      shape      scale 
-## 46.8468931  0.1689683</code></pre>
+## 45.1268979  0.1102452</code></pre>
 <p>Now we are ready to implement the Metropolis-Hastings MCMC
 algorithm:</p>
 <p>We need a starting point:</p>
@@ -790,12 +797,15 @@ startingvals &lt;- c(shape=75,scale=0.28)    # starting point for the algorithm<
 <p>Let’s play with the different functions we have so far…</p>
 <pre class="r"><code># Try our new functions  ------------------
 
-newguess &lt;- newGuess(startingvals)    # take a jump in parameter space
+startingvals</code></pre>
+<pre><code>## shape scale 
+## 75.00  0.28</code></pre>
+<pre class="r"><code>newguess &lt;- newGuess(startingvals)    # take a jump in parameter space
 newguess</code></pre>
 <pre><code>##      shape      scale 
-## 71.6866159  0.1617311</code></pre>
+## 72.5651002  0.2364431</code></pre>
 <pre class="r"><code>PosteriorRatio2(startingvals,newguess)   # difference in posterior ratio</code></pre>
-<pre><code>## [1] 8.73916e+291</code></pre>
+<pre><code>## [1] 7.032794e+121</code></pre>
 <p>Now let’s look at the Metropolis-Hastings routine:</p>
 <pre class="r"><code># Visualize the Metropolis-Hastings routine: ---------------
 
@@ -813,8 +823,10 @@ while(counter &lt;= chain.length){
   if(rand&lt;=prob.accept){
     oldguess &lt;- newguess
     guesses[counter,] &lt;- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] &lt;- oldguess 
   }
+  counter=counter+1
 }
 
 # visualize!
@@ -825,34 +837,6 @@ lines(guesses,col=&quot;red&quot;)</code></pre>
 <p><img src="LECTURE7_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
 <p>Let’s run it for longer…</p>
 <pre class="r"><code># Get more MCMC samples --------------
-
-chain.length &lt;- 100
-oldguess &lt;- startingvals
-guesses &lt;- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) &lt;- names(startingvals)
-guesses[1,] &lt;- startingvals
-
-counter &lt;- 2
-while(counter &lt;= chain.length){
-  newguess &lt;- newGuess(oldguess)
-  post.rat &lt;- PosteriorRatio2(oldguess,newguess)
-  prob.accept &lt;- min(1,post.rat)
-  rand &lt;- runif(1)
-  if(rand&lt;=prob.accept){
-    oldguess &lt;- newguess
-    guesses[counter,] &lt;- newguess 
-    counter=counter+1
-  }
-}
-
-# visualize!
-
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
-<p>How about for even longer??</p>
-<pre class="r"><code># And more... -------------------
 
 chain.length &lt;- 1000
 oldguess &lt;- startingvals
@@ -869,8 +853,40 @@ while(counter &lt;= chain.length){
   if(rand&lt;=prob.accept){
     oldguess &lt;- newguess
     guesses[counter,] &lt;- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] &lt;- oldguess 
   }
+  counter=counter+1
+}
+
+# visualize!
+
+image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+lines(guesses,col=&quot;red&quot;)</code></pre>
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<p>How about for even longer??</p>
+<pre class="r"><code># And more... -------------------
+
+chain.length &lt;- 10000
+oldguess &lt;- startingvals
+guesses &lt;- matrix(0,nrow=chain.length,ncol=2)
+colnames(guesses) &lt;- names(startingvals)
+guesses[1,] &lt;- startingvals
+
+counter &lt;- 2
+while(counter &lt;= chain.length){
+  newguess &lt;- newGuess(oldguess)
+  post.rat &lt;- PosteriorRatio2(oldguess,newguess)
+  prob.accept &lt;- min(1,post.rat)
+  rand &lt;- runif(1)
+  if(rand&lt;=prob.accept){
+    oldguess &lt;- newguess
+    guesses[counter,] &lt;- newguess 
+  }else{
+    guesses[counter,] &lt;- oldguess 
+  }
+  counter=counter+1
 }
 
 # visualize!
@@ -900,7 +916,7 @@ value, and is therefore not a stationary distribution. We need to remove
 the first part of the chain, called the <strong>‘burn-in’</strong>.</p>
 <pre class="r"><code># Remove &quot;burn-in&quot; (allow MCMC routine some time to get to the posterior) --------------
 
-burn.in &lt;- 100
+burn.in &lt;- 1000
 MCMCsamples &lt;- guesses[-c(1:burn.in),]
 
 chain.length=chain.length-burn.in
@@ -913,7 +929,7 @@ longer, and see if we get something that looks more like a proper random
 number generator (white noise)…</p>
 <pre class="r"><code># Try again- run for much longer ---------------------
 
-chain.length &lt;- 20000
+chain.length &lt;- 100000
 oldguess &lt;- startingvals
 guesses &lt;- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) &lt;- names(startingvals)
@@ -928,8 +944,10 @@ while(counter &lt;= chain.length){
   if(rand&lt;=prob.accept){
     oldguess &lt;- newguess
     guesses[counter,] &lt;- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] &lt;- oldguess 
   }
+  counter=counter+1
 }
 
 # visualize!
@@ -941,7 +959,7 @@ lines(guesses,col=&quot;red&quot;)</code></pre>
 <p>Let’s first remove the first 5000 samples as a burn-in</p>
 <pre class="r"><code># Use longer &quot;burn-in&quot; ------------------
 
-burn.in &lt;- 5000
+burn.in &lt;- 25000
 MCMCsamples &lt;- guesses[-c(1:burn.in),]
 chain.length=chain.length-burn.in</code></pre>
 <p>Now, let’s look at the chains again</p>
@@ -955,7 +973,7 @@ might have a little autocorrelation. One way to “fix” this is to thin
 the MCMC samples:</p>
 <pre class="r"><code># &quot;thin&quot; the MCMC samples  -----------------------
 
-thinnedMCMC &lt;- MCMCsamples[seq(1,chain.length,by=5),]
+thinnedMCMC &lt;- MCMCsamples[seq(1,chain.length,by=10),]
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,&#39;shape&#39;],type=&quot;l&quot;,main=&quot;shape parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;shape&quot;)</code></pre>
 <p><img src="LECTURE7_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
 <pre class="r"><code>plot(1:nrow(thinnedMCMC),thinnedMCMC[,&#39;scale&#39;],type=&quot;l&quot;,main=&quot;scale parameter&quot;,xlab=&quot;iteration&quot;,ylab=&quot;scale&quot;)</code></pre>
@@ -982,11 +1000,13 @@ hist(thinnedMCMC[,2],40)</code></pre>
 <p>Hopefully it is clear that the Metropolis-Hastings MCMC method could
 be modified to fit arbitrary numbers of free parameters for arbitrary
 models. However, the M-H algorithm by itself is not necessarily the most
-efficient. The <strong>Gibbs sampler</strong> tends to be a more
-efficient sampler. In lab we will play around with Gibbs samplers,
-mostly using a modeling language called <strong>BUGS</strong>
-(<strong>B</strong>ayesian <strong>I</strong>nference
-<strong>U</strong>sing <strong>G</strong>ibbs
+efficient- and it can be very difficult to develop proposal
+distributions for multi-dimensional parameter space. The <strong>Gibbs
+sampler</strong> tends to be a more effective sampler for
+multi-dimensional joint posterior distributions. In lab we will play
+around with Gibbs samplers, mostly using a modeling language called
+<strong>BUGS</strong> (<strong>B</strong>ayesian
+<strong>I</strong>nference <strong>U</strong>sing <strong>G</strong>ibbs
 <strong>S</strong>ampling).</p>
 <p>NOTE: BUGS implementations (e.g., JAGS) actually tend to use a
 combination of M-H and Gibbs sampling!</p>
