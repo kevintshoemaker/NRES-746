@@ -346,11 +346,14 @@ Then we need a function for making new guesses, or jumps in parameter space:
 
      # function for making new guesses
 newGuess <- function(oldguess){
-  sdshapejump <- 1 #4
-  sdscalejump <- 0.01
-  corjump <- -0.7
-  jump <- mvtnorm::rmvnorm(1,oldguess,) # c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
-  newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
+  sdshapejump <- 3 #4
+  sdscalejump <- 0.05
+  corjump <- -0.6
+  vcv <- diag(2)*c(sdshapejump^2,sdscalejump^2)
+  vcv[2,1] <- vcv[1,2] <- corjump*sqrt(sdshapejump^2*sdscalejump^2)
+  newguess <- mvtnorm::rmvnorm(1,oldguess,vcv)[1,] # c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
+  # newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
+  newguess <- ifelse(newguess<0.001,0.001,newguess)
   return(newguess)
 }
   # set a new "guess" near to the original guess
@@ -529,7 +532,7 @@ First of all, the beginning of the chain "remembers" the starting value, and is 
 
 # Remove "burn-in" (allow MCMC routine some time to get to the posterior) --------------
 
-burn.in <- 100
+burn.in <- 1000
 MCMCsamples <- guesses[-c(1:burn.in),]
 
 chain.length=chain.length-burn.in
@@ -546,7 +549,7 @@ But it still doesn't look all that great. Let's run it for even longer, and see 
 
 # Try again- run for much longer ---------------------
 
-chain.length <- 20000
+chain.length <- 100000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
@@ -561,8 +564,10 @@ while(counter <= chain.length){
   if(rand<=prob.accept){
     oldguess <- newguess
     guesses[counter,] <- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] <- oldguess 
   }
+  counter=counter+1
 }
 
 # visualize!
@@ -580,7 +585,7 @@ Let's first remove the first 5000 samples as a burn-in
 
 # Use longer "burn-in" ------------------
 
-burn.in <- 5000
+burn.in <- 25000
 MCMCsamples <- guesses[-c(1:burn.in),]
 chain.length=chain.length-burn.in
 
@@ -603,7 +608,7 @@ When evaluating these trace plots, we are hoping to see a "stationary distributi
 
 # "thin" the MCMC samples  -----------------------
 
-thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=5),]
+thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=10),]
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
 
@@ -640,7 +645,7 @@ par(mfrow=c(1,1))
 
 ```
 
-Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most efficient. The **Gibbs sampler** tends to be a more efficient sampler. In lab we will play around with Gibbs samplers, mostly using a modeling language called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling). 
+Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most efficient- and it can be very difficult to develop proposal distributions for multi-dimensional parameter space. The **Gibbs sampler** tends to be a more effective sampler for multi-dimensional joint posterior distributions. In lab we will play around with Gibbs samplers, mostly using a modeling language called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling). 
 
 NOTE: BUGS implementations (e.g., JAGS) actually tend to use a combination of M-H and Gibbs sampling! 
 
