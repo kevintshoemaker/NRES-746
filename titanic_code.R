@@ -212,6 +212,70 @@ abline(1,1)
 
 # next: try mtcars example with posterior predictive check?
 
+# clear workspace --------------
+
+rm(list=ls())
+
+# load data ----------------
+
+data(mtcars)
+
+
+# write jags code --------------
+
+fn <- "mtcars_jags.txt"
+cat("
+model{
+
+b0~dunif(10,40)
+b1~dunif(-0.05,0)
+mpg.sd~dunif(0,10)
+mpg.prec<-pow(mpg.sd,-2)
+for(i in 1:nobs){
+  mpg.exp[i] <- b0 * exp(b1*disp[i])
+  mpg[i] ~ dnorm(mpg.exp[i],mpg.prec)  # data node
+}
+
+}",file=fn)
+
+
+# package data for jags
+
+dat <- list(
+  nobs=nrow(mtcars),
+  disp=mtcars$disp,
+  mpg=mtcars$mpg
+)
+dat
+
+inits <- function(){
+  list(
+    b0=runif(1,30,35),
+    b1=runif(1,-0.005,-0.001),
+    mpg.sd=runif(1,2,3)
+  )
+}
+inits()
+
+
+pars <- c("b0","b1","mpg.sd")
+
+# run jags ---------------
+
+mod <- jags(dat, inits, pars, model.file=fn,
+            n.chains=3, n.adapt=1000, n.iter=10000, n.burnin=5000, n.thin=2,
+            parallel=T)
+
+plot(mod,"b0")
+plot(mod,"b1")
+plot(mod,"mpg.sd")
+
+
+sims = mod$sims.list
+samps <- mod$samples
+
+
+
 
 
 
