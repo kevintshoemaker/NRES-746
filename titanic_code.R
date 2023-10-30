@@ -1,15 +1,24 @@
 
+# TITANIC example ---------------------
 
+## clear workspace ---------------------
+
+rm(list=ls())
+
+## load packages ----------------------
 
 library(titanic)
+library(ggplot2)
+library(tidyverse)
+library(emdbook)
+library(coda)
 
-## load data
+## load data --------------------
 
 titanic <- titanic::titanic_train
 
+## write jags code ------------------- 
 
-
-## write jags code
 fn <- "titanic_jags.txt"
 cat("
 
@@ -28,12 +37,9 @@ b.fare ~ dnorm(0,0.1)  # slightly regularized prior
 b.age ~ dnorm(0,0.1)
 b.female ~ dnorm(0,0.1)
 
-psurv0[1] ~ dunif(0,1)  # flat prior from 0 to 1 on p scale
-psurv0[2] ~ dunif(0,1)
-psurv0[3] ~ dunif(0,1)
-
-for(i in 1:3){    # convert to logit scale
-   psurv0.l[i] <- log(psurv0[i]/(1-psurv0[i]))
+for(i in 1:3){    
+   psurv0[i] ~ dunif(0,1)                       # flat prior from 0 to 1 on p scale
+   psurv0.l[i] <- log(psurv0[i]/(1-psurv0[i]))  # convert to logit scale
 }
 
 
@@ -52,20 +58,39 @@ for(p in 1:npassengers){
 
 
 
-# package the data for jags
+## package the data for jags --------------------
+
+
+# prep for standardization 
+
+meanfare <- mean(titanic$Fare)
+sdfare <- sd(titanic$Fare)
+meanage <- mean(titanic$Age,na.rm=T)
+sdage <- sd(titanic$Age,na.rm=T)
 
 dat <- list(
   npassengers = nrow(titanic),
   class = titanic$Pclass,
-  fare = (titanic$Fare-mean(titanic$Fare))/sd(titanic$Fare),
-  age = (titanic$Age-mean(titanic$Age,na.rm = T))/sd(titanic$Age,na.rm=T),
+  fare = (titanic$Fare-meanfare)/sdfare,
+  age = (titanic$Age-meanage)/sdage,
   is.fem = ifelse(titanic$Sex=="female",1,0),
   survived = titanic$Survived
 )
 dat
 
+## set inits -----------------  
 
-# set inits
+inits <- function(){
+  list(
+    meanage = runif(1,-0.5,0.5),
+    sdage = runif(1,1,1.5),
+    b.fare = runif(1,-0.5,0.5),
+    b.age = runif(1,-0.5,0.5),
+    b.female = runif(1,-0.5,0.5),
+    psurv0 = runif(3,0.4,0.6)   # note: three random numbers!
+  )
+}
+inits()
 
 # params to store
 
@@ -73,13 +98,16 @@ params <- c("psurv0","b.fare","b.age","b.female","sdage","meanage")
 
 library(jagsUI)
 
+
+## run jags -----------------------
+
 # ?jags
 
 mod <- jags(dat, parameters.to.save=params, model.file=fn,
      n.chains=3, n.adapt=1000, n.iter=10000, n.burnin=5000, n.thin=2,
      parallel=T)
 
-mod
+mod   # check Rhat (same as psrf)
 
 sims <- mod$sims.list
 samps <- mod$samples
@@ -89,13 +117,9 @@ plot(mod,"b.fare")
 plot(mod, "b.female")
 plot(mod, "b.age")
 
-
-library(coda)
 gelman.diag(samps)   # gelman-rubin diagnostic
 
-
-
-# visualize the effect of age and sex
+## visualize the effect of age and sex  ------------------
 
 maleprob <- plogis( qlogis(sims$psurv0[,2]) + sims$b.fare*0  + sims$b.age*0 + sims$b.female*0)
 femprob <- plogis( qlogis(sims$psurv0[,2]) + sims$b.fare*0  + sims$b.age*0 + sims$b.female*1)
@@ -105,11 +129,8 @@ df <- data.frame(
   probsurv <- c(maleprob,femprob)
 )
 
-library(ggplot2)
-
 ggplot(df,aes(sex,probsurv)) +
   geom_violin()
-
 
 # and age...
 
@@ -130,8 +151,6 @@ for(i in 1:length(age.st)){
   df2 <- rbind(df2,temp)
 }
 
-library(tidyverse)
-
 df3 <- df2 %>% 
   group_by(age) %>% 
   summarize(
@@ -146,8 +165,7 @@ ggplot(df3,aes(age,med)) +
   labs(y="prob surv")
 
 
-
-### posterior predictive check (bayes p-val)
+## posterior predictive check (bayes p-val)  ---------------------------
 
 # goal: summarize the observed vs expected number of mortalities per class and sex
 
@@ -157,8 +175,6 @@ titanic$died <- 1-titanic$Survived
 
 obsdat <- with(titanic, tapply(died,list(Sex,Pclass), sum   ) )
 nandx <- which(is.na(dat$age))
-
-thissim <- 1
 
 expdat <- function(thissim){
   dat$age[nandx] <- rnorm(length(nandx),sims$meanage[thissim],sims$sdage[thissim])
@@ -174,10 +190,6 @@ chisq <- function(obs,exp){
   sum((obs-exp)^2/exp ) 
 }
 
-obsdat
-expdat(2)
-
-
 simdat <- function(thissim){
   dat$age[nandx] <- rnorm(length(nandx),sims$meanage[thissim],sims$sdage[thissim])
   theseps <- sapply(1:nrow(titanic), function(t) plogis(qlogis(sims$psurv0[thissim,titanic$Pclass[t]]) + sims$b.fare[thissim] * dat$fare[t]  
@@ -188,13 +200,16 @@ simdat <- function(thissim){
   return(thissim)
 }
 
+obsdat
+expdat(3)
+
 chisq(obs=obsdat,exp=expdat(2))
 chisq(obs=simdat(2),exp=expdat(2))
 
 chisq(obs=obsdat,exp=expdat(3))
 chisq(obs=simdat(3),exp=expdat(3))
 
-nsims=100
+nsims=300
 errors_obs <- numeric(nsims)
 errors_sim <- numeric(nsims)
 
@@ -208,20 +223,17 @@ plot(errors_obs,errors_sim,xlim=c(0,30),ylim=c(0,30))
 abline(1,1)
 
 
+# MTCARS example -----------------------
 
-
-# next: try mtcars example with posterior predictive check?
-
-# clear workspace --------------
+## clear workspace --------------
 
 rm(list=ls())
 
-# load data ----------------
+## load data ----------------
 
 data(mtcars)
 
-
-# write jags code --------------
+## write jags code --------------
 
 fn <- "mtcars_jags.txt"
 cat("
@@ -239,7 +251,7 @@ for(i in 1:nobs){
 }",file=fn)
 
 
-# package data for jags
+## package data for jags  ---------------------
 
 dat <- list(
   nobs=nrow(mtcars),
@@ -260,7 +272,7 @@ inits()
 
 pars <- c("b0","b1","mpg.sd")
 
-# run jags ---------------
+## run jags ---------------
 
 mod <- jags(dat, inits, pars, model.file=fn,
             n.chains=3, n.adapt=1000, n.iter=10000, n.burnin=5000, n.thin=2,
@@ -271,8 +283,43 @@ plot(mod,"b1")
 plot(mod,"mpg.sd")
 
 
-sims = mod$sims.list
-samps <- mod$samples
+sims = mod$sims.list   # joint posterior distribution (easy to use!)
+samps <- mod$samples   # MCMC chains
+nmcmc <- length(sims$b0)
+
+## posterior predictive check -----------------
+
+mcmc_ndx <- 1
+
+expvals <- function(mcmc_ndx){
+  sapply(1:nrow(mtcars), function(t) sims$b0[mcmc_ndx] * exp(sims$b1[mcmc_ndx]*mtcars$disp[t]) )
+}
+
+simdat <- function(mcmc_ndx){
+  exp_mpg <- sapply(1:nrow(mtcars), function(t) sims$b0[mcmc_ndx] * exp(sims$b1[mcmc_ndx]*mtcars$disp[t]) )
+  rnorm(nrow(mtcars), exp_mpg, sims$mpg.sd[mcmc_ndx])
+}
+
+expvals(100)
+simdat(100)
+
+rmse <- function(obs,exp){
+  sqrt(sum((obs-exp)^2))
+}
+
+rmse(mtcars$mpg,expvals(100))
+rmse(simdat(100),expvals(100))
+
+nsims = 1000
+
+
+## write for loop in class!  ------------------
+
+
+
+
+
+
 
 
 
