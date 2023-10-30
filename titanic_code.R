@@ -28,7 +28,7 @@ model{
 
 for(p in 1:npassengers){
   logit(psurv[p]) <- psurv0.l[class[p]] + b.fare * fare[p]  + b.age * age[p] + b.female * is.fem[p]
-  survived[p] ~ dbern(psurv[p])
+  survived[p] ~ dbern(psurv[p])    # DATA NODE
 }
 
 # priors
@@ -41,7 +41,6 @@ for(i in 1:3){
    psurv0[i] ~ dunif(0,1)                       # flat prior from 0 to 1 on p scale
    psurv0.l[i] <- log(psurv0[i]/(1-psurv0[i]))  # convert to logit scale
 }
-
 
 ## interpolate missing data
 
