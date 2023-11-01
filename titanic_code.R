@@ -166,13 +166,13 @@ ggplot(df3,aes(age,med)) +
 
 ## posterior predictive check (bayes p-val)  ---------------------------
 
-# goal: summarize the observed vs expected number of mortalities per class and sex
+# goal: summarize the observed vs expected number of mortalities per class and sex (this can be somewhat arbitrary)
 
 # observed
 
 titanic$died <- 1-titanic$Survived
 
-obsdat <- with(titanic, tapply(died,list(Sex,Pclass), sum   ) )
+obsdat <- with(titanic, tapply(died,list(Sex,Pclass), sum   ) )  # doesn't change by MCMC iteration
 nandx <- which(is.na(dat$age))
 
 expdat <- function(thissim){
@@ -182,11 +182,6 @@ expdat <- function(thissim){
 
   thisexp <- tapply(1-theseps,list(titanic$Sex,titanic$Pclass), sum   )
   return(thisexp)
-}
-
-
-chisq <- function(obs,exp){
-  sum((obs-exp)^2/exp ) 
 }
 
 simdat <- function(thissim){
@@ -199,8 +194,14 @@ simdat <- function(thissim){
   return(thissim)
 }
 
+chisq <- function(obs,exp){
+  sum((obs-exp)^2/exp ) 
+}
+
+
 obsdat
 expdat(3)
+simdat(3)
 
 chisq(obs=obsdat,exp=expdat(2))
 chisq(obs=simdat(2),exp=expdat(2))
@@ -220,6 +221,8 @@ for(i in 1:nsims){
 
 plot(errors_obs,errors_sim,xlim=c(0,30),ylim=c(0,30))
 abline(1,1)
+
+sum(errors_sim>errors_obs)/nsims   # bayesian p-value
 
 
 # MTCARS example -----------------------
