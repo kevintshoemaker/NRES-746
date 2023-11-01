@@ -1,21 +1,10 @@
 
-############################################################
-####                                                    ####  
-####  NRES 746, Lecture 8                               ####
-####                                                    ####
-####  Kevin Shoemaker                                   #### 
-####  University of Nevada, Reno                        ####
-####                                                    #### 
-############################################################
-
-
-############################################################
-####  Model selection and multi-model inference         ####
-############################################################
+#  NRES 746, Lecture 8                     
+#   University of Nevada, Reno                       
+#   Model selection and multi-model inference    -------------------      
 
 
 
-#######
 # Load the balsam fir dataset (finally, no more rabbits and virus titers!)
 
 library(emdbook)
@@ -28,7 +17,6 @@ head(fir)
 plot(fir$TOTCONES ~ fir$DBH)   # fecundity as a function of tree size (diameter at breast height)
 
 
-#########
 # tree fecundity by size, categorized into two site-level categories: "wave" and "non-wave" 
 
 ndx <- fir$WAVE_NON=="w"   # logical vector indicating which observations were from "wave" sites
@@ -37,12 +25,11 @@ points(fir$DBH[!ndx],fir$TOTCONES[!ndx],pch=4,col="red")
 legend("topleft",pch=c(1,4),col=c("black","red"),legend=c("Wave","Non-wave"),bty="n")
 
 
-########
 # build likelihood function for the full model: CONES ~ negBINOM( a(wave)*DBH^b(wave), dispersion(wave))
 
    
 NegBinomLik_full <- function(params){
-  wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos    # note: we are hard-coding the data into our likelhood function here!
+  wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos    # note: we are hard-coding the data into our likelihood function here!
   a <- c(params[1],params[2])[wave.code]     # a parameters (two for wave and one for non-wave)
   b <- c(params[3],params[4])[wave.code]      # b parameter (two for wave and one for non-wave)
   k <- c(params[5],params[6])[wave.code]       # over-dispersion parameters (two for wave and one for non-wave)
@@ -55,7 +42,7 @@ params <- c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1)
 NegBinomLik_full(params)
 
 
-#### Find the MLE
+#### Find the MLE -----------------------
 
 MLE_full <- optim(fn=NegBinomLik_full,par=c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1),method="L-BFGS-B")
 
@@ -64,7 +51,6 @@ MLE_full$par
 MLE_full$value
 
 
-########
 # build likelihood function for a reduced model: CONES ~ negBINOM( a(wave)*DBH^b, dispersion(wave))
 
 
@@ -91,7 +77,6 @@ MLE_constb$par
 MLE_constb$value
 
 
-#######
 # compute -2*loglik for each model at the MLE
 
 ms_full <- 2*MLE_full$value     # this is 2 * min.nll = -2*logLik_at_MLE
@@ -102,8 +87,7 @@ ms_full
 ms_constb
 
 
-#############
-# Likelihood-Ratio test (frequentist)
+# Likelihood-Ratio test (frequentist) -----------------------
 
 Deviance <- ms_constb - ms_full 
 Deviance
@@ -116,13 +100,12 @@ Deviance>=Chisq.crit   # perform the LRT
 1-pchisq(Deviance,1)   # p-value
 
 
-####### Visualize the likelihood ratio test- compare the observed deviance with the distribution of deviances expected under the null hypothesis
+# Visualize the likelihood ratio test- compare the observed deviance with the distribution of deviances expected under the null hypothesis
 
 curve(dchisq(x,df=1),0,5)
 abline(v=Deviance,col="red",lwd=4)
 
 
-#############
 # Try a different reduced model: CONES ~ negBINOM( a*DBH^b, dispersion)
 
 NegBinomLik_nowave <- function(params){
@@ -138,7 +121,7 @@ params <- c(a=1,b=1,k=1)
 NegBinomLik_nowave(params)
 
 
-### Find the MLE
+# Find the MLE
 
 MLE_nowave <- optim(fn=NegBinomLik_nowave,par=params,method="L-BFGS-B")
 
@@ -147,7 +130,6 @@ MLE_nowave$par
 MLE_nowave$value
 
 
-#########
 # Perform LRT -- this time with three fewer free parameters in the reduced model
 
 ms_full <- 2*MLE_full$value
@@ -165,17 +147,13 @@ Deviance>=Chisq.crit
 1-pchisq(Deviance,df=3)   # p-value
 
 
-###### Visualize the likelihood ratio test
+# Visualize the likelihood ratio test (test statistic and sampling distribution under the null)
 curve(dchisq(x,df=3),0,15)
 abline(v=Deviance,col="red",lwd=4)
 
 
-##############
-# Information-theoretic metrics for model-selection
-##############
+# Information-theoretic metrics for model-selection ------------------------------
 
-
-#########
 # Akaike's Information Criterion (AIC)
 
 #### First, let's build another likelihood function: whereby only the "b" parameter differs by "wave" sites
@@ -205,7 +183,6 @@ MLE_constak$value
 ms_constak <- 2*MLE_constak$value
 
 
-###########
 ### Now, let's build and fit one more final model- this time with no wave effect and a Poisson error distribution
 
 PoisLik_nowave <- function(params){
@@ -228,7 +205,6 @@ MLE_pois$value
 ms_pois <- 2*MLE_pois$value
 
 
-###########
 # Compare all five models using AIC!
 
 AIC_constak <- ms_constak + 2*4
@@ -253,11 +229,9 @@ AICtable$AICc <- AICtable$AIC + ((2*AICtable$params)*(AICtable$params+1))/(nrow(
 
 AICtable[order(AICtable$AIC),c(1,7,2,5,6,4,3)]
 
-###########
-# Bayes factor example
-###########
+# Bayes factor example  ---------------------
 
-##### take a basic binomial distribution with parameter p fixed at 0.5:
+# take a basic binomial distribution with parameter p fixed at 0.5:
 
 probs1 <- dbinom(0:10,10,0.5)          
 names(probs1) = 0:10
@@ -275,7 +249,6 @@ dbinom(2,10,0.5)
 curve(dbeta(x,1,1))  # uniform prior on "p"
 
 
-###########
 # Compute the marginal likelihood of observing 2 mortalities
 
 # ?integrate
@@ -284,7 +257,6 @@ marginal_likelihood <- integrate(f=binom2,0,1)$value    # use "integrate" functi
 marginal_likelihood  # equal to 0.0909 = 1/11
 
 
-###########
 # Compute the marginal likelihood of observing 3 mortalities
 
 binom3 <- function(x) dbinom(x=3,size=10,prob=x)
@@ -292,7 +264,6 @@ marginal_likelihood <- integrate(f=binom3,0,1)$value    # use "integrate" functi
 marginal_likelihood   # equal to 0.0909 = 1/11
 
 
-#########
 # simulate data from the model across all possible values of the parameter "p"
 
 lots=1000000
@@ -301,7 +272,6 @@ for_hist <- table(a_priori_data)/lots
 barplot(for_hist,xlab="Potential Observation",ylab="Marginal likelihood")
 
 
-#########
 # Visualize the marginal likelihood of all possible observations
 
 probs2 <- rep(1/11,times=11)          
@@ -309,7 +279,6 @@ names(probs2) = 0:10
 barplot(probs2,ylab="probability",ylim=c(0,1))
 
 
-###########
 # Overlay the marginal likelihood of the simpler model, with p fixed at 0.5
 
 probs2 <- rep(1/11,times=11)          
@@ -321,7 +290,6 @@ names(probs1) = 0:10
 barplot(probs1,ylab="probability",add=T,col="red",density=20)
 
 
-############
 # Finally, compute the bayes factor given that we observed 2 mortalities. Which model is better?
 
 probs2 <- rep(1/11,times=11)          
@@ -339,7 +307,6 @@ BayesFactor = (1/11)/dbinom(2,10,0.5)
 BayesFactor
 
 
-############
 # Compute the bayes factor given that we observed 3 mortalities. Which model is better now?
 
 probs2 <- rep(1/11,times=11)          
@@ -357,7 +324,6 @@ BayesFactor = dbinom(3,10,0.5)/(1/11)
 BayesFactor
 
 
-#############
 # Visualize the likelihood ratio
 
 # probs2 <- rep(1/11,times=11)          
@@ -375,7 +341,6 @@ barplot(probs3,ylab="probability",add=T,col="green",density=10,angle = -25)
 abline(v=4.3,col="green",lwd=4 )
 
 
-#########
 # LRT: simple model (p fixed at 0.5) vs complex model (p is free parameter)
 
 Likelihood_simple <- dbinom(3,10,0.5)
@@ -389,7 +354,6 @@ qchisq(0.95,1)
 pchisq(1.64,1)    # very high p value, simpler model is preferred
 
 
-#########
 # AIC: simple model (p fixed at 0.5) vs complex model (p is free parameter)
 
 AIC_simple <- -2*log(Likelihood_simple) + 2*0
@@ -408,7 +372,6 @@ AICc_simple
 AICc_complex    
 
 
-######
 # Alternatively, try BIC
 
 BIC_simple <- -2*log(Likelihood_simple) + log(10)*0
@@ -419,7 +382,6 @@ BIC_complex
 
 
 
-##############
 # Bayesian model selection: Bolker's fir dataset
 
 cat("
@@ -447,7 +409,6 @@ model  {
 ",file="BUGS_fir.txt")
 
 
-#######
 # Package the data for JAGS
 
 data.package1 <- list(
@@ -459,7 +420,6 @@ data.package1 <- list(
 #data.package
 
 
-##########
 # Make a function for generating initial guesses
 
 init.generator1 <- function(){ list(
@@ -473,7 +433,6 @@ init.generator1()
 
 
 
-###########
 # Run the model in JAGS
 
 library(jagsUI)    # load packages
@@ -492,7 +451,6 @@ summary(jagsfit1.mcmc)
 
 
 
-########
 # Visualize the model fit
 
 plot(jagsfit1.mcmc)
@@ -504,15 +462,13 @@ hist(jags.fit1$sims.list$r[,2],density=20,col="green",add=T,freq=F)
 legend("topright",col=c("green","white"),density=c(20,0),legend=c("wave","nonwave"),bty="n")
 
 
-#######
 # Extract the DIC for the full model!
 
 DIC_full <- jags.fit1$DIC
 DIC_full
 
 
-#################
-# Build JAGS code for the reduced model
+# Build JAGS code for the reduced model --------------
 
 cat("
 
@@ -539,7 +495,6 @@ model  {
 ",file="BUGS_fir_reduced.txt")
 
 
-##########
 # Package data for JAGS
 
 data.package2 <- list(
@@ -550,7 +505,6 @@ data.package2 <- list(
 )
 
 
-############
 # Function for generating initial guesses for all params
 
 init.generator2 <- function(){ list(
@@ -563,7 +517,6 @@ init.generator2 <- function(){ list(
 init.generator2()
 
 
-###########
 # Run the reduced model and visualize the JAGS fit
 
 params.to.monitor <- c("a","b","r")
@@ -583,7 +536,6 @@ plot(jagsfit2.mcmc[,"r"])
 lattice::densityplot(jagsfit2.mcmc)
 
 
-########
 # Compute DIC
 
 DIC_reduced <- jags.fit2$DIC
@@ -592,7 +544,6 @@ DIC_reduced
 DIC_full
 
 
-#############
 # Use WAIC for bayesian model selection!
 
 library(loo)    # load the "loo" package, which allows us to compute WAIC from JAGS output'
@@ -627,8 +578,7 @@ model  {
 ",file="BUGS_fir.txt")
 
 
-#################
-# Build JAGS code for the reduced model
+# Build JAGS code for the reduced model ------------
 
 cat("
 
@@ -656,7 +606,6 @@ model  {
 ",file="BUGS_fir_reduced.txt")
 
 
-############
 # re-fit the models
 
 params.to.monitor <- c("a","b","r","LogLik")    # now monitor the log likelihood
@@ -667,7 +616,6 @@ jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=pa
 
 
 
-############
 # Compute WAIC!
 
 loglik_full <- jags.fit1$sims.list$LogLik
@@ -682,7 +630,6 @@ waic_red$estimates["waic",]
 loo_compare(waic_full, waic_red)
 
 
-#############
 # Explicit Bayesian model selection
 
 cat("
@@ -783,7 +730,6 @@ model  {
 
 
 
-#########
 # Package the data for JAGS
 
 data.package3 <- list(
@@ -797,7 +743,6 @@ data.package3 <- list(
 #data.package
 
 
-#########
 # Run JAGS
 
 params.to.monitor <- c("a1","b1","r1","a2","b2","r2","a3","b3","r3","selected","predicted.cones2","predicted.cones","SSE_obs","SSE_pred","SSE2_obs","SSE2_pred")
@@ -813,7 +758,6 @@ BUGSlist <- as.data.frame(jags.fit3$sims.list)
 
 
 
-##########
 # Visualize the model fit
 
 #plot(jagsfit.mcmc[,"selected"])
@@ -830,7 +774,6 @@ plot(jagsfit3.mcmc[,"r3[1]"])
 
 
 
-##########
 # Perform explicit model selection
 
 n.iterations <- length(jags.fit3$sims.list$selected)
@@ -841,7 +784,6 @@ selected
 barplot(selected/n.iterations,ylab="Degree of belief")
 
 
-##########
 # Goodness of fit
 
 n.data <- length(fir$DBH)
@@ -855,7 +797,6 @@ for(d in 1:n.data){
 }
 
 
-#########
 # Perform posterior predictive check
 
 plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
@@ -876,7 +817,6 @@ for(d in 1:n.data){
 }
 
 
-###############
 # Posterior Predictive Checks!
 
 plot(as.vector(jagsfit3.mcmc[,"SSE_pred[1]"][[1]])~as.vector(jagsfit3.mcmc[,"SSE_obs[1]"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
@@ -906,7 +846,6 @@ for(d in 1:n.data){
 }
 
 
-###########
 # Posterior predictive check with model-averaged model!
 
 plot(as.vector(jagsfit3.mcmc[,"SSE2_pred"][[1]])~as.vector(jagsfit3.mcmc[,"SSE2_obs"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")

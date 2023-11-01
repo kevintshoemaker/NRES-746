@@ -37,14 +37,14 @@ metropolisHastings <- function (n, rho=0.98){    # an MCMC sampler implementatio
     mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
     x <- 0   # initial values for all parameters
     y <- 0
-    prev <- dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
+    prev <- mvtnorm::dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
     mat[1, ] <- c(x, y)        # initialize the markov chain
     counter <- 1
     while(counter<=n) {
       newx <- rnorm(1,x,0.5)     # make a jump. Note the symmetrical proposal distribution
       newy <- rnorm(1,y,0.5)
       
-      newprob <- dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
+      newprob <- mvtnorm::dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
       ratio <- newprob/prev   # compute the ratio of probabilities at the old (jump from) and proposed (jump to) locations. 
       
       prob.accept <- min(1,ratio)     # decide the probability of accepting the new jump!
@@ -52,9 +52,12 @@ metropolisHastings <- function (n, rho=0.98){    # an MCMC sampler implementatio
       if(rand<=prob.accept){
         x=newx;y=newy    # set x and y to the new location
         mat[counter,] <- c(x,y)    # store this in the storage array 
-        counter=counter+1
         prev <- newprob    # get ready for the next iteration
+      }else{
+        mat[counter,] <- c(x,y)
       }
+      
+      counter=counter+1
       
     }
     return(mat)
@@ -213,10 +216,14 @@ PosteriorRatio2(oldguess,newguess)
 
      # function for making new guesses
 newGuess <- function(oldguess){
-  sdshapejump <- 4
-  sdscalejump <- 0.07
-  jump <- c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
-  newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
+  sdshapejump <- 3 #4
+  sdscalejump <- 0.05
+  corjump <- -0.6
+  vcv <- diag(2)*c(sdshapejump^2,sdscalejump^2)
+  vcv[2,1] <- vcv[1,2] <- corjump*sqrt(sdshapejump^2*sdscalejump^2)
+  newguess <- mvtnorm::rmvnorm(1,oldguess,vcv)[1,] # c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
+  # newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
+  newguess <- ifelse(newguess<0.001,0.001,newguess)
   return(newguess)
 }
   # set a new "guess" near to the original guess
@@ -233,6 +240,7 @@ startingvals <- c(shape=75,scale=0.28)    # starting point for the algorithm
 
 # Try our new functions  ------------------
 
+startingvals
 newguess <- newGuess(startingvals)    # take a jump in parameter space
 newguess
 
@@ -255,8 +263,10 @@ while(counter <= chain.length){
   if(rand<=prob.accept){
     oldguess <- newguess
     guesses[counter,] <- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] <- oldguess 
   }
+  counter=counter+1
 }
 
 # visualize!
@@ -267,34 +277,6 @@ lines(guesses,col="red")
 
 
 # Get more MCMC samples --------------
-
-chain.length <- 100
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-    counter=counter+1
-  }
-}
-
-# visualize!
-
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
-
-
-# And more... -------------------
 
 chain.length <- 1000
 oldguess <- startingvals
@@ -311,8 +293,40 @@ while(counter <= chain.length){
   if(rand<=prob.accept){
     oldguess <- newguess
     guesses[counter,] <- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] <- oldguess 
   }
+  counter=counter+1
+}
+
+# visualize!
+
+image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
+contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+lines(guesses,col="red")
+
+
+# And more... -------------------
+
+chain.length <- 10000
+oldguess <- startingvals
+guesses <- matrix(0,nrow=chain.length,ncol=2)
+colnames(guesses) <- names(startingvals)
+guesses[1,] <- startingvals
+
+counter <- 2
+while(counter <= chain.length){
+  newguess <- newGuess(oldguess)
+  post.rat <- PosteriorRatio2(oldguess,newguess)
+  prob.accept <- min(1,post.rat)
+  rand <- runif(1)
+  if(rand<=prob.accept){
+    oldguess <- newguess
+    guesses[counter,] <- newguess 
+  }else{
+    guesses[counter,] <- oldguess 
+  }
+  counter=counter+1
 }
 
 # visualize!
@@ -336,7 +350,7 @@ plot(1:chain.length,guesses[,'scale'],type="l",main="scale parameter",xlab="iter
 
 # Remove "burn-in" (allow MCMC routine some time to get to the posterior) --------------
 
-burn.in <- 100
+burn.in <- 1000
 MCMCsamples <- guesses[-c(1:burn.in),]
 
 chain.length=chain.length-burn.in
@@ -346,7 +360,7 @@ plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="
 
 # Try again- run for much longer ---------------------
 
-chain.length <- 20000
+chain.length <- 100000
 oldguess <- startingvals
 guesses <- matrix(0,nrow=chain.length,ncol=2)
 colnames(guesses) <- names(startingvals)
@@ -361,8 +375,10 @@ while(counter <= chain.length){
   if(rand<=prob.accept){
     oldguess <- newguess
     guesses[counter,] <- newguess 
-    counter=counter+1
+  }else{
+    guesses[counter,] <- oldguess 
   }
+  counter=counter+1
 }
 
 # visualize!
@@ -374,7 +390,7 @@ lines(guesses,col="red")
 
 # Use longer "burn-in" ------------------
 
-burn.in <- 5000
+burn.in <- 25000
 MCMCsamples <- guesses[-c(1:burn.in),]
 chain.length=chain.length-burn.in
 
@@ -385,7 +401,7 @@ plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="
 
 # "thin" the MCMC samples  -----------------------
 
-thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=5),]
+thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=10),]
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 plot(1:nrow(thinnedMCMC),thinnedMCMC[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
 
