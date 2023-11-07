@@ -1,7 +1,7 @@
 ---
-title: "Lab Exercise 5 (optional)"
+title: "Lab Exercise 5 (demo)"
 author: "NRES 746"
-date: "Fall 2019"
+date: "Fall 2023"
 output: 
   html_document: 
     theme: cerulean
@@ -13,30 +13,11 @@ output:
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
+To follow along, click [here](LAB5.R)
 
 ## Model selection!
 
-This exercise was modified from a lab by J. Weiss: see [here](https://www.unc.edu/courses/2006spring/ecol/145/001/docs/lectures/lecture19.htm) 
-
-### New R concepts/commands
-
-**ifelse** tests each element of a vector with respect to a condition (first argument). If the condition tests TRUE the second argument is returned. If the condition tests FALSE, the third argument is returned. The result is a vector of the same length as the input vector.      
-
-**min** returns the minimum value from a vector or matrix     
-
-**NULL** is not a function but is a reserved word used to identify the value of an object of length zero    
-
-**round** rounds its argument to the number of decimals specified.    
-
-**t()** is the transpose function. It switches the rows and columns of a matrix.
-
-**angle=** (argument to barplot) specifies the angle of the hatch marks in the bars of barplots.      
-
-**beside=** (argument to barplot) when TRUE creates side-by-side bar plots rather than stacked bar plots     
-
-**density=** (argument to barplot) controls the spacing of hatch marks in hatched bars      
-
-**legend.txt=** (argument to barplot) when TRUE adds a legend to a bar plot when multiple groups are plotted      
+This exercise was modified from a lab by J. Weiss
 
 
 ### The Crawley slug data set
@@ -47,41 +28,43 @@ Get the data
 
 ```{r}
 
+# load packages ---------------------
+
+library(glmmTMB)
+library(DHARMa)
+
+# load slugs data -------------------------
+
 slugs<-read.table( 'http://www.bio.ic.ac.uk/research/mjcraw/statcomp/data/slugsurvey.txt', header=TRUE)
 head(slugs)
 
+# write.csv(slugs,file = "slugs.csv", row.names = F)
+
 ```
 
+You can also download the data from [here](slugs.csv).
 
 Crawley describes these data as follows (Crawley 2002, p. 542).    
 
-"Count data were obtained on the number of slugs found beneath 40 tiles placed in a stratified random grid over each of two permanent grasslands. This was part of a pilot study in which the question was simply whether the mean slug density differed significantly between the two grasslands." My interpretation of this is that the experiment was extraordinarily simple. Rocks of standard shape and size were laid out in two fields and at some point later in time the fields were revisited and the number of slugs under each rock was recorded. The data we are given are the raw counts, i.e., the individual slug counts for each rock. Thus we have a total of 80 observations, 40 from each field type. A value of 0 means no slugs were found under that rock.
+"Count data were obtained on the number of slugs found beneath 40 tiles placed in a stratified random grid over each of two permanent grasslands. This was part of a pilot study in which the question was simply whether the mean slug density differed significantly between the two grasslands." 
 
-Crawley then spends a chapter of his textbook trying one statistical test after another to test the hypothesis of no mean difference in slugs between the two field types. In the end his conclusion is ambiguous. Some tests say there is a difference, some say there isn't.
-I submit that the problem posed by Crawley is essentially an uninteresting one. Any two populations in nature will typically differ with respect to whatever characteristic we care to measure. Whether that difference can be deemed statistically significant is not a statement about nature, but instead is a statement about the sample size used in the study. With enough data any difference, no matter how small, will achieve "statistical significance". A far more useful approach is to determine some way to characterize the differences in slug distribution that exist and then assess whether that characterization tells us anything interesting about slugs and/or nature in general.
+My interpretation of this is that the experiment was extraordinarily simple. Tiles of standard shape and size were laid out in two fields and at some point later in time the fields were revisited and the number of slugs under each tile was recorded. The data we are given are the raw counts, i.e., the individual slug counts for each rock. Thus we have a total of 80 observations, 40 from each field type. A value of 0 means no slugs were found under that rock.
 
-Our goal in this exercise is find a statistical model that fits the data and provides insight into the distribution of slugs. I use this exercise as an illustration of how AIC can be used to select models.
+Our objective is to characterize the differences in slug distribution that exist between the two fields and then assess whether that characterization tells us anything interesting about slugs and/or nature in general. Here we will attempt to identify a statistical model that fits the data and provides insight into the distribution of slugs. I use this exercise as an illustration of how AIC can be used to select models.
 
 
 First we summarize the distribution of slugs under rocks in the two field types.
 
 ```{r}
 
-table(slugs$slugs,slugs$field)
-
-```
-
-A bar plot of the two distributions would be useful. We have a number of choices. If we apply the *barplot* function to the tabled values we get two stacked bar plots (Fig. 1).
-
-```{r}
+# Summarize data ---------------------
 
 out <- table(slugs$slugs,slugs$field)
-barplot(out)
+out
 
 ```
 
-
-On the other hand if we first transpose the table so that the field categories define the rows of our table, we can obtain an ordinary bar plot in which the bars representing counts in the two fields appear side by side and are inter-nested among each other.
+A bar plot of the two distributions would be useful. If we first transpose the table so that the field categories define the rows of our table, we can obtain an ordinary bar plot in which the bars representing counts in the two fields appear side by side and are inter-nested among each other.
 
 ```{r}
 
@@ -89,17 +72,17 @@ barplot(t(out), beside=TRUE, angle=c(45,135), density=c(20,20), col=c('black','r
 
 ```
 
-
-The transpose function is 't()'.
-
 Setting the *beside* option to TRUE creates the side by side display. (The alternative would be a set of stacked bars.)
+
 I use the angle option to get bars filled with hatch marks rather than solid fill. The angles specified are the angles the hatch marks make with the horizontal. Since the transposed table has two rows I need a different angle for each row (field type).
+
 The *density* option controls how closely spaced the hatch marks are displayed. It also is a vector of length two.
+
 The *legend.text* option adds a legend that identifies the field type.
 
-We can also customize the legend in the usual way as shown in the code below (resulting graph not shown). This is an alternative to using the legend.text=TRUE option.
+We can also customize the legend in the usual way as shown in the code below. This is an alternative to using the legend.text=TRUE option.
 
-```{r}
+```{r, eval=FALSE}
 
 coords<-barplot(t(out), beside=TRUE, angle=c(45,135), density=c(20,20), ylim=c(0,27), col=c('black','red'), xlab='# of slugs', ylab='frequency')
 box()
@@ -137,8 +120,6 @@ c. common λ and separate θ
 d. separate λ and θ
 
 #### ZINB model (9 possible models)
-The ZIP model I use in this exercise is the zero-inflated Poisson model of Lambert (1992). We could also consider fitting the hurdle model but without additional predictors to examine there would not be much point.
-
 
 Fitting this many models is clearly overkill and some of them could be dismissed out of hand. Burnham & Anderson (2002) would clearly disapprove of this approach as they would argue we should only be fitting those models that can be biologically motivated. I fit so many models here largely to illustrate the mechanics of model-building and the use of AIC to compare models, and only secondarily in order to learn something about the ecology of slugs.
 
@@ -150,6 +131,8 @@ Fitting this many models is clearly overkill and some of them could be dismissed
 Construct likelihood function and optimize:
 
 ```{r}
+
+# poisson likelihood -----------------------------
 
 poi.1<-function(data,p) -sum(log(dpois(data$slugs,lambda=p)))
 
@@ -182,20 +165,21 @@ Although field type would appear to be a character variable, it is in fact a fac
 
 ```{r}
 
-as.numeric(slugs$field)
+as.numeric(as.factor(slugs$field))
 
 ```
-
 
 So the nursery slugs are coded 1 and the rookery slugs are coded 2. (The coding is done alphabetically by default.) I make use of this fact to fit a separate λ for each field. I display the function below and then go into the details. 
 
 ```{r}
 
+# poisson, mean varies with field ----------------------------
+
 poi.2<-function(data,p) {
-  field.dummy<-as.numeric(data$field)-1
+  field.dummy<-as.numeric(as.factor(slugs$field))-1
   mylambda<-p[1]+p[2]*field.dummy
-  negloglike<- -sum(log(dpois(data$slugs,lambda=mylambda)))
-  negloglike
+  negloglike<- -sum(dpois(data$slugs,lambda=mylambda,log=T))
+  return(negloglike)
 }
 
 
@@ -203,34 +187,42 @@ poi.2<-function(data,p) {
 
 
 The first line of the body of the function (after the function declaration line) subtracts 1 from the numeric coding of field. This changes its current values of 1 and 2 to the new values 0 and 1. The nursery slugs are now coded 0 and the rookery slugs are coded 1. I name the new coding field.dummy because the coding I'm using for nominal data is generally called dummy coding.
+
 The second line creates a variable called mylambda that is defined in terms of field.dummy. Since field.dummy is a vector, mylambda will also be a vector. As the value of field.dummy changes among the observations, the value of mylambda will also change.
+
 For nursery slugs field.dummy equals 0. Thus for nursery slugs mylambda has the value:
 
-> mylambda = p[1] + p[2]*0 = p[1]
+mylambda = p[1] + p[2]*0 = p[1]
 
 For rookery slugs field.dummy equals 1. Thus for rookery slugs mylambda has the value
 
-> mylambda = p[1] + p[2]*1 = p[1] + p[2]
+mylambda = p[1] + p[2]*1 = p[1] + p[2]
 
-In summary we have the following.
+So we see that p[1] is the value of λ for nursery slugs.
 
-So we see that p[1] is the value of λ for nursery slugs. Since the value of λ for rookery slugs is p[1]+p[2] we see that p[2] represents the difference in the value of λ between nursery and rookery slugs. Since λ is the mean, p[2] is the mean slug count difference between nursery and rookery slugs.
-The third line in the body of the function is the usual definition of the negative loglikelihood for a Poisson model. Notice that it uses mylambda as the value for λ. Hence the value for λ will differ depending upon field type.
-The last line is a print statement. Specifying the name of a variable all by itself causes R to print its contents. This last line is crucial because otherwise R will not return a value.
+Since the value of λ for rookery slugs is p[1]+p[2] we see that p[2] represents the difference in the value of λ between nursery and rookery slugs.
+
+Since λ is the mean, p[2] is the mean slug count difference between nursery and rookery slugs.
+
+The third line in the body of the function is the usual definition of the negative log-likelihood for a Poisson model. Notice that it uses mylambda as the value for λ. Hence the value for λ will differ depending upon field type.
+
+The last line is a return statement. 
+
 In order to use the function I first need initial estimates for the components of p. To get these I calculate the mean number of slugs in the two field types. I use the tapply function for this.
 
 ```{r}
 tapply(slugs$slugs,slugs$field,mean)
 ```
 
-
 The mean difference is 1. Hence I use 1.2 as the estimate for p[1] (the mean for nursery slugs) and 1 for p[2] (the mean difference).
 
 Let's optimize!
 
 ```{r}
+
 out2 <- nlm(function(p) poi.2(slugs,p),c(1.2,1))
 out2
+
 ```
 
 I check the gradient and code to verify the model has converged.
@@ -242,6 +234,14 @@ Both components are approximately zero as they should be and the estimates are n
 out1$minimum
 out2$minimum
 
+# compare with canned R functions ------------------
+
+mod1 <- glm(slugs~1, data=slugs, family=poisson())
+mod2 <- glm(slugs~field, data=slugs, family=poisson())
+
+logLik(mod1)
+logLik(mod2)
+
 ```
 
 
@@ -251,6 +251,8 @@ A more honest comparison of models is to use AIC. I write a function that calcul
 The following function implements this formula for these data.
 
 ```{r}
+
+# AIC function ----------------
 
 my.aic<-function(output) -2*(-output$minimum) + 2*length(output$estimate)
 
@@ -265,31 +267,34 @@ Applying this function to the two models we've fit thus far, I obtain the follow
 my.aic(out1)
 my.aic(out2)
 
+AIC(mod1,mod2)   # compare with models fitted with 'glm()'
+
+
 ```
 
-The second model has the smaller AIC and should be preferred. The difference in AIC is substantial indicating there is very little support for the first model. 
-
+The second model has the smaller AIC and should be preferred. The difference in AIC is substantial indicating there is very little support for the first model given these are the only two candidate models. 
 
 ### Negative binomial models
 
 The negative binomial probability model has two parameters, μ and θ, the mean and dispersion. One, neither, or both of these parameters could be allowed to vary across field types yielding 3-parameter, 2-parameter, and 4-parameter models.
 
-### ZIP models
+### ZIP models (zero-inflated Poisson)
 
 The zero-inflated Poisson model (excess zeros mixture model) is presented in the Bolker book. The probability formula derived there is reproduced below.
 
-
 Recall that this is the heterogeneous zeros model. The model assumes zero counts arise from two sources. The first source contributes a fraction θ to the probability of a zero count. The remaining fraction derives from a Poisson distribution.
+
 As with the negative binomial models there are four models we could consider here.
 We can let θ and λ be the same in the two field types.
 We can let λ differ in the two field types but estimate a common θ.
 We can let θ differ in the two field types but estimate a common λ.
 We can estimate separate values of λ and θ in the two field types.
+
 I consider each of these in turn.
 
 #### Common mean and zero fraction ZIP model
 
-The function for obtaining the negative loglikelihood of the common λ and θ ZIP model is given below.
+The function for obtaining the negative log-likelihood of the common λ and θ ZIP model is given below.
 
 ```{r}
 
@@ -298,8 +303,8 @@ The function for obtaining the negative loglikelihood of the common λ and θ ZI
 zip1<-function(data,p) {
   lambda<-p[1]
   theta<-p[2]
-  zero.term<-sum(log(theta+(1-theta)* dpois(data$slugs[data$slugs==0], lambda)))
-  nonzero.term<-sum(log((1- theta)* dpois(data$slugs[data$slugs>0], lambda)))
+  zero.term<-sum(log(theta+(1-theta)* dpois(data$slugs[data$slugs==0], lambda)))   # stochastic process #1
+  nonzero.term<-sum(log((1- theta)* dpois(data$slugs[data$slugs>0], lambda)))      # stochastic process #2
   negloglike<- -(zero.term+nonzero.term)
   negloglike
 }
@@ -307,14 +312,20 @@ zip1<-function(data,p) {
 ```
 
 
-
 The first two lines of the body of the function serve no purpose here except to identify the parameter order. I include them because they make it easy to generalize this function to the three other ZIP models we will fit.
+
 Because the ZIP model has a different probability formula for the zero and nonzero counts I need separate lines in the function for these calculations, zero.term and nonzero.term.
+
 You should see that these two lines are a direct translation of the formula given above into R code.
+
 To ensure that zero.term is only calculated for observations in which the slug count is zero, I use the Boolean expression data$slugs[data$slugs==0]inside the dpois function. This selects only the slug counts that equal zero.
+
 Likewise to use only the nonzero counts in the nonzero.term formula I use the Boolean expression data$slugs[data$slugs>0]to select those counts that are greater than zero.
+
 Finally I add the two terms and place a negative sign in front of the sum to yield the negative loglikelihood.
+
 A sensible initial estimate for λ is the mean of the nonzero slug counts. This will only approximate the final estimate because some of the zero counts also come from the Poisson part of the model.
+
 A sensible initial estimate for θ is the fraction of zeros. This will only approximate the final estimate of θ because some of the zeros do come from the Poisson part of the model.
 
 ```{r}
@@ -332,12 +343,15 @@ I use λ = 3 and θ = 0.4 as my initial estimates.
 out7 <- nlm(function(p) zip1(slugs,p),c(3,.4))
 out7
 
+## compare with ZIP model using TMB
+
+mod7 <- glmmTMB(slugs~1,slugs,family=poisson(),ziformula = ~1)
+logLik(mod7)
+
+
 ```
 
-
-
 I check the gradient and code to verify the model has converged.
-
 
 Both components are approximately zero as they should be. From the estimate of θ we see that most of the zeros, 0.392/0.425 or 92% are ascribed to come from a separate distribution and only a small percentage are estimated to come from the Poisson distribution.
 
@@ -346,6 +360,8 @@ I calculate the AIC.
 ```{r}
 
 my.aic(out7)
+
+AIC(mod1,mod2,mod7)
 
 ```
 
@@ -359,7 +375,7 @@ The function to fit a ZIP model in which the two fields are allowed to have a se
 
 # different lambda, same theta 
 zip2<-function(data,p) {
-  field.dummy<-as.numeric(slugs$field)-1
+  field.dummy<-as.numeric(as.factor(slugs$field))-1
   mylambda<-p[1]+p[3]*field.dummy
   theta<-p[2]
   zero.term<-sum(ifelse(data$slugs==0,log(theta+(1-theta)* dpois(data$slugs,lambda=mylambda)),0))
@@ -372,11 +388,18 @@ zip2<-function(data,p) {
 
 
 
-The first part of this function resembles the Poisson model. I create a 0-1 variable field.dummy that records the field type. Then I use it to generate a different value of λ for each field type. The parameter p[3] is the difference in the value of λ between rookery and nursery slugs.
-I use a new concept, the ifelse construction, to define the zero.term and nonzero.term. The ifelse function has three arguments and has the basic form: ifelse(condition,x,y)
+The first part of this function resembles the Poisson model. 
+
+I create a 0-1 variable field.dummy that records the field type. Then I use it to generate a different value of λ for each field type. The parameter p[3] is the difference in the value of λ between rookery and nursery slugs.
+
+I use a the ifelse construction to define the zero.term and nonzero.term. The ifelse function has three arguments and has the basic form: ifelse(condition,x,y)
+
 The first argument specifies a condition to test. This is a Boolean expression. In my first use of ifelse the condition I test is data$slugs==0. So I'm testing if the slug count is zero or not.
+
 The second argument is the calculation to carry out and return if the condition is TRUE. Here I specify the corresponding formula for the ZIP model to use when the count is zero.
+
 The third argument is the value to return when the condition is FALSE. I choose to return the value of 0 when the condition is FALSE. Since I end up summing the values returned by the ifelse function, a return value of zero will contribute nothing to the sum.
+
 I then do a similar set of calculations for the nonzero terms.
 
 Note: a more efficient but perhaps less readable way of doing this would have been to combine the zero.term and nonzero.term lines into a single line as follows.
@@ -393,7 +416,7 @@ Thus in this version if the slug count is zero we calculate the loglikelihood te
 ```{r}
 
 zip2.alt<-function(data,p) {
-  field.dummy<-as.numeric(slugs$field)-1
+  field.dummy<-as.numeric(as.factor(slugs$field))-1
   mylambda<-p[1]+p[3]*field.dummy
   theta<-p[2]
   negloglike<- -sum(ifelse(data$slugs==0,log(theta+(1-theta)* dpois(data$slugs,lambda=mylambda)),log((1-theta)*dpois(data$slugs,lambda=mylambda))))
@@ -404,9 +427,13 @@ zip2.alt<-function(data,p) {
 
 
 The *ifelse* function acts on vectors one element at a time and returns a vector of results. The use of the ifelse function is preferable to subsetting the data like was done in the first ZIP function because it makes the code more portable.
+
 The portability arises because when we write the remaining ZIP functions we will only need to change the way mylambda and theta are defined. The rest of the function will remain the same.
+
 To use the subsetting Boolean expressions approach that I used before I would have to not only subset data$slugs but also the mylambda vector. Later on when we let θ vary between fields we would have to add a Boolean expression to subset theta also. Using the ifelse construction it is not necessary to worry about subsetting at all. The ifelse condition takes care of it for us.
+
 The first ZIP function we wrote, zip1, could have been written using the ifelse construction, but there was no compelling reason to do so at the time.
+
 To obtain initial values for the fit, I calculate the mean for nonzero counts separately for nursery and rookery slugs.
 
 ```{r}
@@ -414,7 +441,6 @@ To obtain initial values for the fit, I calculate the mean for nonzero counts se
 tapply(slugs$slugs[slugs$slugs>0],slugs$field[slugs$slugs>0],mean)
 
 ```
-
 
 Based on this output we should estimate p[1] to be 3.4 and p[3] to be about –0.4, the rookery mean minus the nursery mean. I fit the model using these initial values and 0.42 as the initial guess for the zero fraction.
 
@@ -435,7 +461,7 @@ The code for this model is a simple modification of the code for the separate me
 
 #different theta
 zip3<-function(data,p){
-  field.dummy<-as.numeric(data$field)-1
+  field.dummy<-as.numeric(as.factor(data$field))-1
   mylambda<-p[1]
   theta<-p[2]+p[3]*field.dummy
   zero.term<-sum(ifelse(data$slugs==0,log(theta+(1-theta)* dpois(data$slugs,lambda=mylambda)),0))
@@ -466,12 +492,9 @@ out9
 ```
 
 
-
 From the output we can see that the estimates converged and roughly to the values we anticipated.
 
 #### Separate zero fraction and separate means ZIP model
-
-This is a homework exercise.
 
 #### Log-transformed normal models
 
