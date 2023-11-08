@@ -1,18 +1,7 @@
 
-############################################################
-####                                                    ####  
-####  NRES 746, Lecture 9                               ####
-####                                                    ####
-####  Kevin Shoemaker                                   #### 
-####  University of Nevada, Reno                        ####
-####                                                    #### 
-############################################################
-
-
-############################################################
-####  Model performance evaluation                      ####
-############################################################
-
+#  NRES 746, Lecture 9                      
+#  University of Nevada, Reno   
+#  Model performance evaluation  --------------------------
 
 
 library(emdbook)
@@ -22,9 +11,7 @@ Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
 head(Myx)
 
 
-#######
-# Fit the model with ML
-#######
+# Fit the model with ML -----------------------------
 
 Ricker <- function(a,b,predvar) a*predvar*exp(-b*predvar)
   
@@ -41,9 +28,7 @@ MaxLik <- optim(par=init.params, fn=NegLogLik_func, data=Myx)
 MaxLik
   
 
-########
-# Plug-in prediction interval
-########
+# Plug-in prediction interval -------------------------
 
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15))
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
@@ -56,9 +41,7 @@ points(1:10,upper,type="l",col="red",lty=2)
 points(1:10,lower,type="l",col="red",lty=2)
 
 
-#########
-# Parametric bootstrap!
-#########
+# Parametric bootstrap!  -------------------------------------
 
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15),type="n")
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
@@ -81,7 +64,6 @@ boxplot(x=as.list(as.data.frame(simdata)),at=uniquedays,add=T,boxwex=0.25,xaxt="
 points(Myx$day,Myx$titer,cex=1.5,pch=20)
 
 
-########
 # Compare observed error statistic with expected range of error statistic as part of parametric bootstrap analysis
 
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],Myx$day)
@@ -97,10 +79,7 @@ hist(rmse_simulated,freq=F)
 abline(v=rmse_observed,col="green",lwd=3)
 
 
-
-#########
-# Bayesian goodness-of-fit
-#########
+# Bayesian goodness-of-fit  -------------------------
 
 library(R2jags)
 library(lattice)
@@ -186,8 +165,7 @@ p.value=length(which(as.vector(jags.fit.mcmc[,"RMSE_sim"][[1]])>as.vector(jags.f
 p.value
 
 
-##########
-# Summary statistics of a models "usefulness" (e.g., R-squared)
+# Summary statistics of a models "usefulness" (e.g., R-squared)  -------------------
 
 SS_res <- sum((Myx$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],Myx$day))^2)
 SS_tot <- sum((Myx$titer-mean(Myx$titer))^2)
@@ -195,7 +173,6 @@ Rsquared <- 1-SS_res/SS_tot
 
 cat("R-squared = ", Rsquared, "\n")
 
-#########
 # Fit the null likelihood model!
 
 NegLogLik_null <- function(params){
@@ -214,7 +191,7 @@ RMSE = sqrt(mean((Myx$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],Myx$day))^2))
 cat("RMSE = ", RMSE, "\n")
 
 
-####
+
 # Collect new data that were not used in model fitting
 
 newdata <- data.frame(
@@ -225,8 +202,7 @@ newdata <- data.frame(
 newdata
 
 
-###########
-# Validation #1
+# Validation #1  -------------------------
 
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15),type="n",xlab="days",ylab="titer")
 expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
@@ -264,8 +240,7 @@ RMSE = sqrt(mean((newdata$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$d
 cat("RMSE = ", RMSE, "\n")
 
 
-#########
-# Validation #2
+# Validation #2 ---------------------------
 
 newdata <- data.frame(        # imagine these are new observations...
   grade = 1,
@@ -311,14 +286,10 @@ RMSE = sqrt(mean((newdata$titer-Ricker(MaxLik$par["a"],MaxLik$par["b"],newdata$d
 cat("RMSE = ", RMSE, "\n")
 
 
-#####################
-# CROSS-VALIDATION
-#####################
+# CROSS-VALIDATION ------------------
 
 
-##### 
 # PARTITION THE DATA
-####
 
 n.folds <- nrow(Myx)   # jackknife
 
@@ -351,8 +322,7 @@ VarExplained_full
 VarExplained_CV
 
 
-##########
-# Cross-validation: titanic disaster example!
+# Cross-validation: titanic disaster example!  --------------------
 
 titanic <- read.csv("titanic.csv",header=T)
 head(titanic)
@@ -436,7 +406,6 @@ probSurv
 
 
 
-### 
 
 plot(titanic$Survived~titanic$Age,pch=16,xlab="AGE",ylab="Survived!")
 
@@ -477,8 +446,7 @@ library(rms)
 model1 <- glm(Survived ~ Sex + SibSp + Parch + Fare, data=titanic, family="binomial")
 
 
-###################################
-#################### CROSS VALIDATION CODE FOR BINARY RESPONSE
+# CROSS VALIDATION CODE FOR BINARY RESPONSE  ----------------------------
 
 n.folds = 10       # set the number of "folds"
 foldVector = rep(c(1:n.folds),times=floor(length(titanic$Survived)/9))[1:length(titanic$Survived)]
