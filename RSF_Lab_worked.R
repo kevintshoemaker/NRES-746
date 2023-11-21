@@ -1,5 +1,33 @@
+
+# load packages --------------------
+
+library(ResourceSelection)
+library(lubridate)
+library(tidyr)
+library(terra)
+library(spdep)
+library(sf)
+library(dplyr)
+library(sp)
+library(adehabitatHR)
+library(scales)
+library(raster)
+#library(rgdal) # Removed from CRAN in October! Replaced by terra.
+library(ggplot2)
+library(amt, quietly = T)
+library(raster, quietly = T)
+library(glmmTMB)
+
+
+# read in data ----------------
+
 sheeps <- read.csv("rsf_intro.csv")
+
 head(sheeps) # What does the first few rows look like?
+
+
+# Visualize data -------------
+
 ggplot(sheeps, aes(x = JulianDay)) +
   geom_histogram(binwidth = 1, fill = "gray", color = "black") +
   scale_y_continuous(labels = scales::comma, breaks = seq(0, max(table(sheeps$JulianDay)), by = 100000)) +
@@ -10,6 +38,7 @@ ggplot(sheeps, aes(x = JulianDay)) +
     panel.grid.major = element_blank(), 
     panel.grid.minor = element_blank()
   )
+
 colnames(sheeps)[1] <- 'ID' # Bug fix, don't mind
 n_indivs <- sheeps %>% 
   distinct(ID) %>% 
@@ -22,6 +51,7 @@ ggplot(sheeps, aes(x=Sex, fill=Sex))+
        y="Number of Records") +
   theme_minimal()
 
+
 mf_counts <- table(sheeps$Sex)
 mf_counts
 count_table <- table(sheeps$ID)
@@ -29,6 +59,11 @@ barplot(count_table, main = "Number of Records for Each Individual",
         xlab = "Individual", ylab = "Number of Records",
         col = "skyblue", border = "black")
 plot(Northing~Easting, sheeps, col=ifelse(Sex=="M","blue","red"), pch=16)
+
+
+
+# create study region polygon and make random points ----------------
+
 # (In this example, we will create an MCP using a helper package called SpatialPoints)
 # SpatialPoints data frame objects don't like missing values
 # Let's remove the first two rows that contain NA values and...
@@ -46,10 +81,15 @@ plot(sheep.mcp, col = alpha(1:5, 0.5), add = TRUE)
 
 sheep.mcp <- st_as_sf(sheep.mcp) # Let's use our MCP that we created and convert it to a spatial data frame
 class(sheep.mcp) # You can use the "class" function to verify that your "sheep.mcp" object is indeed a data frame!
-rand <- st_sample(sheep.mcp, size = nrow(sheeps)) # Let's generate a number of random data points equal to the length of our data set (1:1 ratio).
+
+     # generate random points
+rand <- st_sample(sheep.mcp, size = nrow(sheeps)*5) # Let's generate a number of random data points equal to the length of our data set (1:1 ratio).
 
 rand_final <- st_coordinates(rand) # Let us also make sure that we save their coordinates 
 rand_final <- as.data.frame(rand_final) # and convert this to a data frame
+
+
+
 
 plot(Northing~Easting, sheeps, col=ifelse(Sex=="M","blue","red"), pch=16)
 plot(sheep.mcp, col = alpha(1:5, 0.5), add = TRUE)
@@ -59,7 +99,7 @@ colnames(rand_final)[2] <- "Northing"
 rand_final$Used <- 0 # Random Points
 sheeps$Used <- 1 # Used Points
 sheeps$Num <- 1:1115
-rand_final$Num <- 1115:2229
+rand_final$Num <- rep(1115:2229,each=5)
 rand_merge <- merge(sheeps,rand_final, by = "Num", all=TRUE)
 rand_merge[is.na(rand_merge)] <- ""
 rand_merge$Easting <- paste(rand_merge$Easting.x, rand_merge$Easting.y)
@@ -67,6 +107,8 @@ rand_merge$Northing <- paste(rand_merge$Northing.x, rand_merge$Northing.y)
 rand_merge$Used <- paste(rand_merge$Used.x, rand_merge$Used.y)
 rand_merge <- subset(rand_merge, select = -c(Easting.x, Easting.y, Northing.x, Northing.y, Used.x, Used.y))
 copydata <- c("ID", "Sex", "JulianDay")
+
+## STOP HERE AND JUST START WITH EXERCISE
 rand_merge[1116:2229, copydata] <- rand_merge[1:1115, copydata]
 all_sheep <- rand_merge
 all_sheep$Easting <- as.numeric(all_sheep$Easting)
@@ -107,6 +149,14 @@ head(all_sheep)
 
 all_sheep$Used <- as.numeric(all_sheep$Used)
 all_sheep$JulianDay <- as.numeric(all_sheep$JulianDay)
+
+# START EXERCISE ------------------
+
+rm(list=ls())
+
+df <- read.csv("rsf_lab.csv")
+
+
 
 mean.pfg <- mean(all_sheep$pfg)
 sd.pfg <-  sd(all_sheep$pfg)
