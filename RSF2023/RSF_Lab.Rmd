@@ -79,7 +79,7 @@ ggplot(sheeps, aes(x = JulianDay)) +
     panel.grid.minor = element_blank()
   )
 ```
-Hm, the plot indicates that something something strange is going on. The GPS collar data should be somewhat evenly distributed throughout the spring, though there seems to be a lower number of records from the Julian date ~110-150. Because of this, we need to introduce a random effect on ID to account for uneven sampling.
+Hm, the plot indicates that something something strange is going on. The GPS collar data should be somewhat evenly distributed throughout the spring, though there seems to be a lower number of records from the Julian date ~110-150. We need to keep this uneven sampling in mind when we create our models...
 
 
 
@@ -261,16 +261,34 @@ colnames(all_sheep)[8] <- "pfg"
 head(all_sheep)
 ```
 
-That's it! This demonstrates the general process of extracting values from a spatial covariate, given a raster image file with the same coordinate reference system as our population data set. In the exercises below, you will be given a larger data frame, containing more covariates for you to implement into your resource selection model (depending on how you choose to build it!). 
-
+That's it! This demonstrates the general process of extracting values for a covariate, given a raster image file with the same coordinate reference system as our population data set. The nature of our spatial data is generally messy, and building models with this can be challenging. In the exercises below, you will be given a larger data frame, containing even more covariates for you to implement into your resource selection model (depending on how you choose to build it). Fun! 
 
 ---
 
 ## Exercises 
+The two methods we will be using today are GLMMs and JAGS models. We use GLMMs because they allow us to model fixed and random effects.
 
-In the lab introduction above, we extracted data for the cover of perennial grasses and forbs (PFG) and added it as a column into our data frame. Now, to make things more interesting, we have added a couple of more covariates for you to include in your models. *Go ahead and download the "RSF_Lab.csv" file.* 
 
-```{r echo=FALSE, eval=FALSE}
+Fixed Effect: Parameters are _fixed_ and non-random
+
+* Vegetation parameters (continuous fixed effects)
+* Topography (continuous fixed effects)
+* Temperature, Precipitation (continuous fixed effects)
+
+
+Random Effect: Represent a random sample
+
+* **Individual (categorical random effect)**
+* Year (categorical random effect)
+* Site (categorical random effect) 
+
+We use random effects in this framework because our data points are not independent; we have numerous recorded locations from the same sheep individuals that are spatially autocorrelated. When modeling random effects, we also assume that our data are normally distributed. 
+
+---
+
+In the lab introduction above, we extracted data for the cover of perennial grasses and forbs (PFG) and added it as a column into our data frame. Now, to make things more interesting, we have added a couple of more covariates for you to include in your models. *Please begin the lab by downloading the "RSF_Lab.csv" file.* 
+
+```{r echo=FALSE}
 all_sheep <- read.csv("rsf_lab.csv")
 colnames(all_sheep)[1] <- 'ID' # Bug fix, don't mind
 head(all_sheep)
@@ -283,6 +301,8 @@ As you can see, in addition to PFG, the new covariates are (extracted using a si
 * Trees, percentage cover per cell, 0-100%
 * Elevation, in meters above sea level.
 
+There's also a new column for ID (ID2), which may be of help when creating your models. 
+
 You can now get started with the exercises! For both of these, we provide you with some general questions below for you to consider. All of them can essentially be explained with resource selection models! 
 
 * Which covariates do sheep appear to be selecting for or against? For example, do they prefer areas that are covered with trees more than shrubs?
@@ -290,11 +310,10 @@ You can now get started with the exercises! For both of these, we provide you wi
 * Based on your model, do you think you have a decent understanding of what sheep are selecting for in this region? Why or why not? 
 
 #### Exercise 1
-Our first exercise takes a frequentist approach to building a resource selection model. We suggest using a GLMM - below is a simple example - though it's up to you to choose your covariates and random effects. Consider what link-function would be appropriate to use. To avoid convergence issues, you might also have to transform the covariate columns. Good luck!
+Our first exercise takes a frequentist approach to building a resource selection model. We suggest using a GLMM - below is a simple example - though it's up to you to choose your covariates and random effects. Note that this simple model uses (1|ID) to represent a random intercept. Consider what link-function would be appropriate to use. To avoid convergence issues, you might also have to transform the covariate columns. Good luck!
 
 
-```{r hidden_GLMM}
-#Suggested solution?
+```{r hidden_GLMM, eval=FALSE}
 
 all_sheep$Used <- as.numeric(all_sheep$Used)
 all_sheep$JulianDay <- as.numeric(all_sheep$JulianDay)
@@ -311,18 +330,24 @@ all_sheep$ID2 <- as.numeric(as.factor(all_sheep$ID))
 
 ## Build your GLMM:: 
 
-spring_mod0 <- glmmTMB(Used ~ Sex + JulianDay + pfg + 
-                         (1|ID), data = all_sheep, family=binomial(link="logit"),
-                       na.action = "na.fail",REML=FALSE )
+spring_mod0 <- glmmTMB(Used ~ Sex + JulianDay + pfg + (1|ID), 
+                      data = all_sheep, family=binomial(link="logit"),
+                      na.action = "na.fail", REML=FALSE)
 # summary(spring_mod0)
 
 ```
 
+Hint: For the larger models, we encourage you to use random slopes and random intercepts, which you can code like this: 
+	Used ~ pfg + afg + (1+pfg|ID) + (1+afg|ID)
 
 #### Exercise 2
 This second exercise allows you to build a similar resource selection model in JAGS/BUGS. To make your lives a little easier (and given the time constraint), we've provided the JAGS code for you below. Try modifying the likelihood function by including different covariates other than PFG, and attempt to interpret the posterior distributions. Have fun!
 
-```{r hidden_JAGS}
+```{r hidden_JAGS, eval=FALSE}
+
+# In this example, we introduce a random effect between individual and perennial forbs and grasses. 
+# Additionally, this model will allow us to determine the difference between females and males (isfem[o]). 
+
 library(jagsUI)
 cat("
     model{
