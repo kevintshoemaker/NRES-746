@@ -1,6 +1,3 @@
-
-
-
 sheeps <- read.csv("rsf_intro.csv")
 head(sheeps) # What does the first few rows look like?
 ggplot(sheeps, aes(x = JulianDay)) +
@@ -107,7 +104,6 @@ colnames(all_sheep)[8] <- "pfg"
 
 # View final data frame #
 head(all_sheep)
-#Suggested solution?
 
 all_sheep$Used <- as.numeric(all_sheep$Used)
 all_sheep$JulianDay <- as.numeric(all_sheep$JulianDay)
@@ -124,10 +120,14 @@ all_sheep$ID2 <- as.numeric(as.factor(all_sheep$ID))
 
 ## Build your GLMM:: 
 
-spring_mod0 <- glmmTMB(Used ~ Sex + JulianDay + pfg + 
-                         (1|ID), data = all_sheep, family=binomial(link="logit"),
-                       na.action = "na.fail",REML=FALSE )
+spring_mod0 <- glmmTMB(Used ~ Sex + JulianDay + pfg + (1|ID), 
+                      data = all_sheep, family=binomial(link="logit"),
+                      na.action = "na.fail", REML=FALSE)
 # summary(spring_mod0)
+
+
+# In this example, we introduce a random effect between individual and perennial forbs and grasses. 
+# Additionally, this model will allow us to determine the difference between females and males (isfem[o]). 
 
 library(jagsUI)
 cat("
