@@ -156,25 +156,84 @@ rm(list=ls())
 
 df <- read.csv("rsf_lab.csv")
 
+df <- na.omit(df)
+
+mean.pfg <- mean(df$pfg)
+sd.pfg <-  sd(df$pfg)
+df$pfg.s <- (df$pfg-mean.pfg)/sd.pfg
+
+mean.afg <- mean(df$afg)
+sd.afg <-  sd(df$afg)
+df$afg.s <- (df$afg-mean.afg)/sd.afg
+
+mean.shrub <- mean(df$shrub)
+sd.shrub <-  sd(df$shrub)
+df$shrub.s <- (df$shrub-mean.shrub)/sd.shrub
+
+mean.elev <- mean(df$elevation)
+sd.elev <-  sd(df$elevation)
+df$elev.s <- (df$elevation-mean.elev)/sd.elev
+
+mean.jul <- mean(df$JulianDay)
+sd.jul <-  sd(df$JulianDay)
+df$jul.s <- (df$JulianDay-mean.jul)/sd.jul
+
+mean.tree <- mean(df$tree)
+sd.tree <-  sd(df$tree)
+df$tree.s <- (df$tree-mean.tree)/sd.tree
+
+df$ID2 <- as.numeric(as.factor(df$ID))
 
 
-mean.pfg <- mean(all_sheep$pfg)
-sd.pfg <-  sd(all_sheep$pfg)
-all_sheep$pfg.s <- (all_sheep$pfg-mean.pfg)/sd.pfg
+df$Sex <- as.factor(df$Sex)
 
-mean.jul <- mean(all_sheep$JulianDay)
-sd.jul <-  sd(all_sheep$JulianDay)
-all_sheep$Julian.s <- (all_sheep$JulianDay-mean.jul)/sd.jul
+hist(df$jul.s)
+hist(df$elev.s)
+hist(df$shrub.s)
+hist(df$pfg.s)
+hist(df$afg.s)
 
-all_sheep$ID2 <- as.numeric(as.factor(all_sheep$ID))
+df$ID <- as.factor(df$ID)
 
-## Build your GLMM:: 
+## Build your GLMM::   --------------------
 
-spring_mod0 <- glmmTMB(Used ~ Sex + JulianDay + pfg + (1|ID), 
-                      data = all_sheep, family=binomial(link="logit"),
+fullmod <- glmmTMB(Used ~ poly(pfg.s,2) + afg.s + poly(elev.s,2) +
+                         (1|ID) + (0+poly(elev.s,2)|ID) + (0+poly(pfg.s,2)|ID) + (0+afg.s|ID)
+                       , 
+                      data = df, family=binomial(link="logit"),
                       na.action = "na.fail", REML=FALSE)
-# summary(spring_mod0)
+summary(fullmod)
 
+library(effects)
+
+plot(effects::effect("elev.s",fullmod))
+plot(effects::effect("afg.s",fullmod))
+# plot(effects::effect("jul.s",fullmod))
+plot(effects::effect("pfg.s",fullmod))
+
+
+library(DHARMa)
+sims <- simulateResiduals(fullmod)
+testResiduals(sims)
+
+
+ranef(fullmod)
+
+
+elevs <- seq(min(df$elev.s),max(df$elev.s),length=100)
+elevs
+
+newdf <- data.frame(
+  elev.s = elevs,
+  afg.s = mean(df$afg.s),
+  pfg.s = mean(df$pfg.s),
+  ID = factor(levels(df$ID)[4],levels=levels(df$ID))
+)
+
+preds <- predict(fullmod,newdf,type="response")
+
+# plot(elevs,preds,type="l")
+lines(elevs,preds)
 
 # In this example, we introduce a random effect between individual and perennial forbs and grasses. 
 # Additionally, this model will allow us to determine the difference between females and males (isfem[o]). 
