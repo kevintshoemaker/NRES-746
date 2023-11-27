@@ -1,0 +1,345 @@
+---
+title: "Geostatistical Modeling Using R-INLA: Malaria Prevalence in The Gambia"
+author: "Melissa Schwan"
+date: "2023-11-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F)
+```
+
+In this demo we will do a spatial regression model using R-INLA. You can download it by copying the commented code below into your console and running it, or by visiting the R-INLA download site: https://www.r-inla.org/download-install  
+
+```{r INLAinstall, echo=TRUE}
+#install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
+```
+  
+
+We are going to use a geostatistical model to predict malaria prevalence in The Gambia. We will use Integrated Nested Laplace Approximation (INLA), which is a method for approximating model parameters in a Bayesian framework. The method here uses a stochastic partial differential equation (SPDE) approach to estimate continuous spatial effects using discrete points created by a mesh, and basis functions, resulting in a random effects *surface*. The data we will use are malaria prevalence from children in 65 towns in The Gambia, and a raster from 'terra' for elevation. Following the SPDE approach, we build a triangulated mesh to cover The Gambia. Then we build a projection matrix and stack the data for the model. Then we use the results to obtain predictions, and show 95% Credible Intervals for uncertainty.
+
+This tutorial is modified from chapter 9 of Paula Moraga's book "Geospatial Health Data: Modeling and Visualization with R-INLA and Shiny", available here: https://www.paulamoraga.com/book-geospatial/sec-geostatisticaldataexamplespatial.html
+
+You will need several packages for this tutorial:  
+
+```{r packages, echo=TRUE}
+library(geoR) # this may be obsolete soon
+library(dplyr)
+library(sf)
+library(leaflet)
+library(viridis)
+library(terra)
+library(geodata)
+library(INLA)
+```
+## Gambia Data  
+
+Load the gambia dataset, from the 'geoR' package, and look at it. 
+
+```{r}
+data(gambia)
+head(gambia)
+```
+   
+The variables in the gambia dataset:  
+**x**: x coordinate of village in UTM (zone 28)  
+**y**: y coordinate of village in UTM (zone 28)  
+**pos**: presence (1) or absence (0) of malaria in blood sample  
+**age**: age of the child, in days  
+**netuse**: indicator whether child sleeps under a net (1) or not (0)  
+**treated**: indicator of whether net is treated  
+**green**: satellite data, measure of greenness in the vicinity of the village  
+**phc**: indicator of whether a health center is present in village  
+
+
+
+
+## Data Preparation  
+
+In this dataset, each observation is for an individual blood test.  
+We want to do our analysis on malaria prevalence at the village level.   
+To do this we will make a new dataframe with data at the village level.  
+First take a look at the number of unique locations.  
+```{r, echo=TRUE}
+dim(unique(gambia[, c("x", "y")]))
+```
+  
+There are 65 unique locations, or villages.  So our dataframe needs to have 65 rows, and 5 columns including:   
+coordinates (2 columns: x and y)  
+total number of tests (total)  
+positive tests (positive)  
+and prevalence of malaria (prev)
+
+
+```{r DataFrame, echo = TRUE}
+# dplyr and summary statistics to create the new columns
+d <- group_by(gambia, x, y) %>%
+  summarize(
+    total = n(),
+    positive = sum(pos),
+    prev = positive / total
+    #,greenness = mean(green) # another variable you might use if running glmm/gam
+  )
+head(d)
+```
+We will be using elevation from a raster to model a continuous spatial covariate as a fixed effect, but are there other environmental covariates that we could use? Like the variable "green"? 
+
+  
+### Geometry, Coordinates, and Transforming the Coord. System
+
+
+We will need to first create geometric points from our x,y data, then specify the coordinate reference system (UTM Zone 28 North), then transform the points into a long,lat coordinate system (we'll use WGS84).  
+Then we'll add the long and lat columns to our data frame.  
+
+```{r SpatialDataPrep, echo=TRUE}
+# create geometric points from XY
+pts <- 
+  st_multipoint(x = as.matrix(d[,1:2]), dim="XY")
+# create spatially referenced points: these are in UTM Zone 28 N
+sp <- 
+  st_sfc(pts, crs = "+proj=utm +zone=28")
+# transform to long lat crs: WGS84
+sp_tr <- 
+  st_transform(sp, crs = "+proj=longlat +datum=WGS84")
+# add long, lat columns to data frame
+d[, c("long", "lat")] <- st_coordinates(sp_tr)[,1:2]
+head(d)
+```
+  
+### Map of Malaria Prevalence
+
+```{r PrevalenceMap, fig.cap="Figure 1: Map of Malaria Prevalence in The Gambia", echo=TRUE}
+pal <- colorBin("viridis", bins = c(0, 0.25, 0.5, 0.75, 1))
+leaflet(d) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircles(lng = ~long, lat = ~lat, color = ~ pal(prev)) %>%
+  addLegend("bottomright",
+            pal = pal, values = ~prev,
+            title = "Malaria Prevalence"
+  ) %>%
+  addScaleBar(position = c("bottomleft"))
+```
+
+
+### Fixed Effects: Elevation
+  
+In this demo, we'll model malaria prevalence with elevation as our fixed effect, and to do this we need to get a raster of elevation data, and mask it to only include data for The Gambia region.  
+
+
+```{r RasterData, echo=TRUE}
+r <- elevation_30s(country = "GMB", 
+                   path = tempdir(), mask = TRUE)
+
+pal <- colorNumeric("viridis", values(r),
+                    na.color = "transparent"
+)
+# map elevation raster
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addRasterImage(r, colors = pal, opacity = 0.5) %>%
+  addLegend("bottomright",
+            pal = pal, values = values(r),
+            title = "Altitude (m)"
+  ) %>%
+  addScaleBar(position = c("bottomleft"))
+# extract elevation for all observations and add "alt" to dataframe
+d["alt"] <- 
+  terra::extract(r, d[, c("long", "lat")], 
+                 list=T, ID=F, method="bilinear")
+head(d)
+```
+
+## Modeling Prevalence
+
+
+
+### Specify Model
+
+The number of positive malaria tests (pos_i) out of the total number sampled (N_i), conditional on the true prevalence at a certain location prev(x_i), follows a binomial distribution, with a logit link.  
+
+pos_i|prev(x_i) ~ Binomial(N_i, prev(x_i))
+logit(prev(x_i) = beta0 + beta1*altitude + s(x_i)   
+beta0 = intercept  
+beta1 = coefficient for altitude  
+s = spatial random effect  
+
+
+### Mesh
+We build a **triangulated mesh** whose vertices will create the discrete points to which the basis functions will be fitted. This might sound familiar: nodes and splines?  
+
+```{r TriangulatedMesh, fig.cap="Triangulated Mesh, used for the SPDE model", echo=T}
+coo <- cbind(d$long, d$lat) 
+mesh <- inla.mesh.2d(
+  loc = coo, max.edge = c(0.1, 5),
+  cutoff = 0.01
+)
+mesh$n
+
+plot(mesh)
+points(coo, col = "red")
+```
+  
+### Build the SPDE model on the mesh  
+
+We use a SPDE to model the spatial random effect.  
+The spatial effect function is a "zero-mean, Gaussian process with Matern covariance".  
+The alpha parameter is related to the smoothness parameter.
+
+```{r SPDE, echo=T}
+# SPDE model: here is the spatial effect!!
+spde <- 
+  inla.spde2.matern(mesh = mesh, alpha = 2, constr = TRUE)
+# Index the SPDE 
+indexs <- 
+  inla.spde.make.index("s", spde$n.spde)
+lengths(indexs)
+```
+  
+### Projection Matrix A   
+  
+```{r ProjectionMatrixA, echo=TRUE}
+# Create the projection matrix A
+A <- inla.spde.make.A(mesh = mesh, loc = coo)
+dp <- terra::as.points(r)
+dim(dp)
+```
+
+### Prediction Matrix Ap  
+
+```{r PredictionData, echo=TRUE}
+dp <- terra::as.points(r)
+dim(dp)
+
+ra <- terra::aggregate(r, fact = 4, fun = mean)
+dp <- terra::as.points(ra)
+dp <- as.matrix(cbind(crds(dp)[,1], crds(dp)[,2], values(dp)))
+colnames(dp) <- c("x", "y", "alt")
+dim(dp)
+
+coop <- dp[, c("x", "y")]
+
+Ap <- inla.spde.make.A(mesh = mesh, loc = coop)  
+```
+
+### Stack for estimation  
+
+```{r StackforEstimation, echo = TRUE}
+stk.e <- inla.stack(
+  tag = "est",
+  data = list(y = d$positive, numtrials = d$total),
+  A = list(1, A),
+  effects = list(data.frame(b0 = 1, altitude = d$alt), s = indexs)
+)
+```
+
+### Stack for prediction  
+
+```{r StackforPrediction, echo = TRUE}
+stk.p <- inla.stack(
+  tag = "pred",
+  data = list(y = NA, numtrials = NA),
+  A = list(1, Ap),
+  effects = list(data.frame(b0 = 1, altitude = dp[, 3]),
+                 s = indexs
+  )
+)
+```
+
+### Full stack, containing estimation and prediction  
+
+```{r StackforFull, echo=TRUE}
+stk.full <- inla.stack(stk.e, stk.p)        
+```
+
+## Model
+
+```{r ModelDefinition, echo=TRUE}
+formula <- y ~ 0 + b0 + altitude + f(s, model = spde)
+```
+
+Fit the model
+
+```{r INLAmodel, echo=TRUE}
+res <- inla(formula,
+            family = "binomial", Ntrials = numtrials,
+            control.family = list(link = "logit"),
+            data = inla.stack.data(stk.full),
+            control.predictor = list(
+              compute = TRUE, link = 1,
+              A = inla.stack.A(stk.full)
+            )
+)
+```
+
+## Mapping Malaria Prevalence  
+
+
+```{r MapPrevalence, echo=TRUE}
+index <- inla.stack.index(stack = stk.full, tag = "pred")$data
+
+prev_mean <- res$summary.fitted.values[index, "mean"]
+prev_ll <- res$summary.fitted.values[index, "0.025quant"]
+prev_ul <- res$summary.fitted.values[index, "0.975quant"]
+
+pal <- colorNumeric("viridis", c(0, 1), na.color = "transparent")
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircles(
+    lng = coop[, 1], lat = coop[, 2],
+    color = pal(prev_mean)
+  ) %>%
+  addLegend("bottomright",
+            pal = pal, values = prev_mean,
+            title = "Prev."
+  ) %>%
+  addScaleBar(position = c("bottomleft"))
+```
+
+```{r RaterizePrediction, echo=TRUE}
+r_prev_mean <- terra::rasterize(
+  x = coop, y = ra, values = prev_mean,
+  fun = mean
+)
+
+pal <- colorNumeric("viridis", c(0, 1), na.color = "transparent")
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addRasterImage(r_prev_mean, colors = pal, opacity = 0.5) %>%
+  addLegend("bottomright",
+            pal = pal,
+            values = values(r_prev_mean), title = "Prev."
+  ) %>%
+  addScaleBar(position = c("bottomleft"))
+```
+
+
+```{r LowerUpperLimits, echo=TRUE}
+r_prev_ll <- terra::rasterize(
+  x = coop, y = ra, values = prev_ll,
+  fun = mean
+)
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addRasterImage(r_prev_ll, colors = pal, opacity = 0.5) %>%
+  addLegend("bottomright",
+            pal = pal,
+            values = values(r_prev_ll), title = "LL"
+  ) %>%
+  addScaleBar(position = c("bottomleft"))
+
+r_prev_ul <- terra::rasterize(
+  x = coop, y = ra, values = prev_ul,
+  fun = mean
+)
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addRasterImage(r_prev_ul, colors = pal, opacity = 0.5) %>%
+  addLegend("bottomright",
+            pal = pal,
+            values = values(r_prev_ul), title = "UL"
+  ) %>%
+  addScaleBar(position = c("bottomleft"))

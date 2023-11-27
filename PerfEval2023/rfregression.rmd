@@ -1,0 +1,240 @@
+---
+title: "Random Forest Regression"
+output:
+  html_notebook: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+  
+---
+Elena cox, Katarena Matos Meira, Mahipal Reddy Ramireddy
+
+
+Random Forest regression is done as follows
+
+1.  split the data set into train and test.
+2.  create Random Forest object
+3.  plot oob error rate
+4.  tune Random Forests finding optimal mtry.
+5.  do cross validation on complete dataset.
+6.  plot variable importance.
+
+``` {r}
+library(randomForest)
+library(rfUtilities)
+```
+
+``` {r}
+my_data = read.csv("C:/Users/mahip/Downloads/ET_data.csv")
+my_data = na.omit(my_data)
+# Initialize empty training and test sets
+train_set <- data.frame()
+test_set <- data.frame()
+
+# Specify the number of rows to include in each set alternately
+rows_per_set <- 3
+
+# Create alternating sets
+for (i in seq(1, nrow(my_data), by = rows_per_set * 2)) {
+  test_indices <- i:(i + rows_per_set - 1)
+  train_indices <- (i + rows_per_set):(i + rows_per_set * 2 - 1)
+
+  test_set <- rbind(test_set, my_data[test_indices, , drop = FALSE])
+  train_set <- rbind(train_set, my_data[train_indices, , drop = FALSE])
+}
+```
+
+``` {r}
+train_set <- na.omit(train_set)
+set.seed(123)
+rf <- randomForest(data = train_set ,x = train_set[,c(1,3:8)],y = train_set$ET,ntree = 600,mtry = 2,importance = TRUE,proximity = TRUE)
+print(rf)
+```
+
+# Plotting OOB error rate
+``` {r}
+plot(rf)
+```
+
+# Tuning RF
+``` {r}
+set.seed(123)
+tuneRF(y = train_set$ET,x = train_set[,c(1,3:8)],,mtryStart = 2,stepFactor = 3,trace = TRUE,plot = TRUE, ntreeTry = 600 )
+```
+
+# Cross validation
+
+-   We trained the model with only train dataset.
+-   we are using the complete data set to do cross validation.
+
+``` {r}
+cv <- rf.crossValidation(x= rf, xdata = my_data[,c(1,3:8)],ydata = my_data$ET,p = 0.2, n = 99, seed = 123)
+```
+
+1.  **`fit.var.exp`**: Percent variance explained from the specified fit
+    model. This metric typically represents the proportion of variance
+    in the dependent variable that is explained by the model.
+
+\$ \\text{Percent Variance Explained} = 100 \\times \\left(1 -
+\\frac{\\text{Residual Sum of Squares}}{\\text{Total Sum of
+Squares}}\\right) \$
+
+``` {r}
+mean(cv$fit.var.exp)
+```
+
+2.  **`fit.mse`**: Mean Squared Error from the specified fit model. MSE
+    is a measure of the average squared differences between observed and
+    predicted values. It is commonly used as a measure of the model\'s
+    accuracy.
+
+\$\\text{Mean Squared Error (MSE)} = \\frac{1}{n} \\sum\_{i=1}\^{n}
+(y_i - \\hat{y}\_i)\^2 \$
+``` {r}
+mean(cv$fit.mse)
+```
+
+3.  **`y.rmse`**: Root Mean Squared Error (observed vs. predicted) from
+    each Bootstrap iteration (cross-validation). RMSE is similar to MSE
+    but provides a measure in the original units of the response
+    variable.
+
+$\text{Root Mean Squared Error (RMSE)} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}$
+
+``` {r}
+mean(cv$y.rmse)
+```
+
+4.  **`y.mbe`**: Mean Bias Error from each Bootstrapped model. Bias is
+    the difference between the average prediction and the true value.
+
+$\text{Mean Bias Error (MBE)} = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)$
+
+``` {r}
+mean(cv$y.mbe)
+```
+
+5.  **`y.mae`**: Mean Absolute Error from each Bootstrapped model. MAE
+    is the average of the absolute differences between observed and
+    predicted values. It is less sensitive to outliers than MSE.
+
+$\text{Mean Absolute Error (MAE)} = \frac{1}{n} \sum_{i=1}^{n} |y_i - \hat{y}_i|$
+
+``` {r}
+mean(cv$y.mae)
+```
+
+6.  The Kolmogorov-Smirnov (KS) test statistic ($D$) is a measure of the
+    maximum absolute difference between the cumulative distribution
+    functions (CDFs) of two datasets. The KS test is often used to
+    assess whether a sample comes from a particular distribution or to
+    compare two samples. Here\'s how to interpret the (D) statistic:
+
+  1.  **Larger ($D$):** A larger ($D$) value indicates a greater
+    discrepancy between the two empirical cumulative distribution
+    functions. This suggests that the two samples are less likely to
+    come from the same underlying distribution.
+
+  2.  **Smaller ($D$):** A smaller ($D$) value indicates a smaller
+    discrepancy between the two CDFs, suggesting that the samples are
+    more similar in terms of their distribution.
+
+``` {r}
+mean(cv$D)
+```
+
+7.  **`p.val`**: The p-value represents the probability of observing a
+    ($D$) value as extreme as the one computed, assuming that the two
+    samples are drawn from the same distribution.
+
+    -   Small p-value: Indicates evidence to reject the null hypothesis
+        that the two samples come from the same distribution.
+
+    -   Large p-value: Suggests that there is insufficient evidence to
+        reject the null hypothesis.
+
+-   **Null Hypothesis:** The null hypothesis of the KS test is that the
+    two samples come from the same distribution.
+
+``` {r}
+mean(cv$p.val)
+```
+
+# Variable Importance Plot
+
+``` {r}
+varImpPlot(rf)
+```
+
+# Exercise
+
+``` {r}
+
+library(randomForest)
+library(rfUtilities)
+
+my_data = read.csv('path_to_csv')
+my_data = na.omit(my_data)
+# Initialize empty training and test sets
+train_set <- data.frame()
+test_set <- data.frame()
+
+# Specify the number of rows to include in each set alternately
+rows_per_set <- 3
+
+# Create alternating sets
+for (i in seq(1, nrow(my_data), by = rows_per_set * 2)) {
+  test_indices <- i:(i + rows_per_set - 1)
+  train_indices <- (i + rows_per_set):(i + rows_per_set * 2 - 1)
+
+  test_set <- rbind(test_set, my_data[test_indices, , drop = FALSE])
+  train_set <- rbind(train_set, my_data[train_indices, , drop = FALSE])
+}
+
+train_set <- na.omit(train_set)
+set.seed(123)
+rf <- randomForest(data = train_set ,x = train_set[,c(1,3:8)],y = train_set$ET,ntree = 600,mtry = 2,importance = TRUE,proximity = TRUE)
+print(rf)
+
+# Plotting OOB error rate
+
+plot(rf)
+
+# Tuning RF
+
+set.seed(123)
+tuneRF(y = train_set$ET,x = train_set[,c(1,3:8)],,mtryStart = 2,stepFactor = 3,trace = TRUE,plot = TRUE, ntreeTry = 600 )
+
+# Cross validation
+
+#- We trained the model with only train dataset.
+#- we are using the complete data set to do cross validation.
+
+
+cv <- rf.crossValidation(x= rf, xdata = train_set[,c(1,3:8)],ydata = train_set$ET,p = 0.2, n = 99, seed = 123)
+
+#fit.var.exp
+mean(cv$fit.var.exp)
+
+#fit.mse
+mean(cv$fit.mse)
+
+#y.rmse
+mean(cv$y.rmse)
+
+#y.mbe
+mean(cv$y.mbe)
+
+#y.mae
+mean(cv$y.mae)
+
+# D (Kolmogorov-Smirnov distribution test)
+mean(cv$D)
+
+#p.val(p-value for the Kolmogorov-Smirnov distribution test)
+mean(cv$p.val)
+
+#Variable Importance Plot
+varImpPlot(rf)
+
+```
