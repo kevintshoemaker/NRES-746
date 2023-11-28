@@ -1,7 +1,7 @@
 ---
 title: "Geostatistical Modeling Using R-INLA: Malaria Prevalence in The Gambia"
 author: "Melissa Schwan"
-date: "2023-11-22"
+date: "`r Sys.Date()`"
 output: html_document
 ---
 
@@ -9,20 +9,20 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE, message = F)
 ```
 
-In this demo we will do a spatial regression model using R-INLA. You can download it by copying the commented code below into your console and running it, or by visiting the R-INLA download site: https://www.r-inla.org/download-install  
+In this demo we will do a spatial regression model using R-INLA. You can download R-INLA by copying the commented code below into your console and running it, or by visiting the R-INLA download site: https://www.r-inla.org/download-install  
 
 ```{r INLAinstall, echo=TRUE}
 #install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
 ```
   
 
-We are going to use a geostatistical model to predict malaria prevalence in The Gambia. We will use Integrated Nested Laplace Approximation (INLA), which is a method for approximating model parameters in a Bayesian framework. The method here uses a stochastic partial differential equation (SPDE) approach to estimate continuous spatial effects using discrete points created by a mesh, and basis functions, resulting in a random effects *surface*. The data we will use are malaria prevalence from children in 65 towns in The Gambia, and a raster from 'terra' for elevation. Following the SPDE approach, we build a triangulated mesh to cover The Gambia. Then we build a projection matrix and stack the data for the model. Then we use the results to obtain predictions, and show 95% Credible Intervals for uncertainty.
+We are going to use a geostatistical model to predict malaria prevalence in The Gambia. We will use Integrated Nested Laplace Approximation (INLA), which is a method for approximating model parameters in a Bayesian framework. The method here uses a stochastic partial differential equation (SPDE) approach to estimate continuous spatial effects using discrete points created by a mesh, and basis functions, resulting in a random effects *surface* which goes into our INLA model. We are using the gambia dataset from the package 'geoR' which consists of blood test results from children screened for malaria in 65 towns in The Gambia. In addition, we are using an elevation raster downloaded with the 'geodata' package. Following the SPDE approach, we build a triangulated mesh to cover The Gambia. Then we make a projection matrix and stack the data for the model. Then we use the results to obtain predictions, and show 95% Credible Intervals for uncertainty.
 
 This tutorial is modified from chapter 9 of Paula Moraga's book "Geospatial Health Data: Modeling and Visualization with R-INLA and Shiny", available here: https://www.paulamoraga.com/book-geospatial/sec-geostatisticaldataexamplespatial.html
 
 You will need several packages for this tutorial:  
 
-```{r packages, echo=TRUE}
+```{r packages, echo=TRUE, eval=T}
 library(geoR) # this may be obsolete soon
 library(dplyr)
 library(sf)
@@ -31,6 +31,7 @@ library(viridis)
 library(terra)
 library(geodata)
 library(INLA)
+library(geostats)
 ```
 ## Gambia Data  
 
@@ -44,7 +45,7 @@ head(gambia)
 The variables in the gambia dataset:  
 **x**: x coordinate of village in UTM (zone 28)  
 **y**: y coordinate of village in UTM (zone 28)  
-**pos**: presence (1) or absence (0) of malaria in blood sample  
+**pos**: presence (1) or absence (0) of malaria in blood sample. We calculate prevalence from this variable.  
 **age**: age of the child, in days  
 **netuse**: indicator whether child sleeps under a net (1) or not (0)  
 **treated**: indicator of whether net is treated  
@@ -53,42 +54,45 @@ The variables in the gambia dataset:
 
 
 
-
 ## Data Preparation  
 
 In this dataset, each observation is for an individual blood test.  
-We want to do our analysis on malaria prevalence at the village level.   
+We want to do our analysis on malaria prevalence at the village level. Prevalence is the number of positive tests out of total tests, for each village.  
 To do this we will make a new dataframe with data at the village level.  
 First take a look at the number of unique locations.  
 ```{r, echo=TRUE}
 dim(unique(gambia[, c("x", "y")]))
 ```
   
-There are 65 unique locations, or villages.  So our dataframe needs to have 65 rows, and 5 columns including:   
-coordinates (2 columns: x and y)  
-total number of tests (total)  
-positive tests (positive)  
-and prevalence of malaria (prev)
+There are 65 unique locations.  So our dataframe needs to have 65 rows, and 5 columns including:   
+**x** and **y**: 2 columns for x and y coordinates, in this order  
+**total**: total number of tests  
+**positive**: number of positive tests   
+**prev**: prevalence of malaria, calculated positive/total
 
+## For the lab-part 1 
+Are there any other variables you would want to include? How can you include them on a per-village scale? I included code to add netuse and greenness to the data frame, what others would you add? You may even want to add that code here so you have it in your data frame.
 
 ```{r DataFrame, echo = TRUE}
+# For the lab-part 1, different variables, consider other models----
 # dplyr and summary statistics to create the new columns
 d <- group_by(gambia, x, y) %>%
   summarize(
     total = n(),
     positive = sum(pos),
     prev = positive / total
-    #,greenness = mean(green) # another variable you might use if running glmm/gam
+    #,netuse = mean(netuse) # for the lab, you could include these 
+    #,greenness = mean(green)
   )
 head(d)
 ```
-We will be using elevation from a raster to model a continuous spatial covariate as a fixed effect, but are there other environmental covariates that we could use? Like the variable "green"? 
+
 
   
 ### Geometry, Coordinates, and Transforming the Coord. System
 
 
-We will need to first create geometric points from our x,y data, then specify the coordinate reference system (UTM Zone 28 North), then transform the points into a long,lat coordinate system (we'll use WGS84).  
+With package 'sf'. We will need to first create geometric points from our x,y data, then specify the coordinate reference system (UTM Zone 28 North), then transform the points into a long,lat coordinate system (we'll use WGS84).  
 Then we'll add the long and lat columns to our data frame.  
 
 ```{r SpatialDataPrep, echo=TRUE}
@@ -106,7 +110,8 @@ d[, c("long", "lat")] <- st_coordinates(sp_tr)[,1:2]
 head(d)
 ```
   
-### Map of Malaria Prevalence
+### Map of Malaria Prevalence with package 'leaflet' 
+In this tutorial we're using the package 'leaflet' to map data. It looks tidy and is very nice for including interactive maps into your reports. Also check out 'leafsync' for viewing multiple synchronized panes of interactive maps to show multiple aspects of your spatial data.  
 
 ```{r PrevalenceMap, fig.cap="Figure 1: Map of Malaria Prevalence in The Gambia", echo=TRUE}
 pal <- colorBin("viridis", bins = c(0, 0.25, 0.5, 0.75, 1))
@@ -121,12 +126,13 @@ leaflet(d) %>%
 ```
 
 
-### Fixed Effects: Elevation
+
+### Fixed Effects: Elevation from package 'geodata'
   
-In this demo, we'll model malaria prevalence with elevation as our fixed effect, and to do this we need to get a raster of elevation data, and mask it to only include data for The Gambia region.  
+In this demo, we model elevation as a fixed effect, so here we get an elevation raster with function geodata::elevation_30s(), and mask it to only include data for The Gambia region using the country code "GMB". The 'geodata' package has functions for downloading different types of geographic data. The 'terra' package has functions to aid working with rasters.  
 
 
-```{r RasterData, echo=TRUE}
+```{r RasterData, fig.cap="Figure 2: Elevation in The Gambia. Data source SRTM.", echo=TRUE}
 r <- elevation_30s(country = "GMB", 
                    path = tempdir(), mask = TRUE)
 
@@ -149,9 +155,51 @@ d["alt"] <-
 head(d)
 ```
 
-## Modeling Prevalence
+## For the lab-part 2 "MyRaster"
 
 
+One option for the lab: Try a different covariate to model as a fixed effect and see how this differs from the first model where we use elevation, or include them both. For geo data, the package 'geodata' has more raster datasets available, and you can explore them here: https://rdrr.io/github/rspatial/geodata/man/
+
+I've included code here to help. You can use it as is if you want to look at wind, or change it to look at a different variable.  
+
+```{r MyRaster, fig.cap="Figure for lab: Map of my_raster, you can choose a different variable for your fixed effect and map it.", echo=TRUE}
+# For the lab-part 2, "MyRaster" ----
+
+# help(package="geodata") # click on a dataset help page to learn about the dataset and choose a variable
+# 
+# ## here's an example:
+# gdata <- worldclim_country(country = "GMB",
+#                                var="wind", # choose anything!
+#                                path = tempdir(),
+#                                version=2.1,
+#                                mask = TRUE)
+# ## wind is average monthly data, so it has 12 layers. You can use terra::subset() to choose one or more months (layers) and average across them for seasonal data
+# 
+# my_raster <- mean(subset(x=gdata, subset=c(7,8,9,10))) #subsetting July-October and taking the mean, so we will have July-October wind speeds
+# 
+# pal <- colorNumeric("viridis", values(my_raster),
+#                     na.color = "transparent"
+# )
+# # map my_raster
+# leaflet() %>%
+#   addProviderTiles(providers$CartoDB.Positron) %>%
+#   addRasterImage(my_raster, colors = pal, opacity = 0.5) %>%
+#   addLegend("bottomright",
+#             pal = pal, values = values(my_raster),
+#             title = "JASO wind (m/s)" # change to the units for your variable
+#   ) %>%
+#   addScaleBar(position = c("bottomleft"))
+# # extract measurement for all observations and add this variable to dataframe
+# d["wind"] <- # change this to reflect the variable you chose
+#   terra::extract(my_raster, d[, c("long", "lat")],
+#                  list=T, ID=F, method="bilinear")
+# head(d)
+```
+
+
+## Modeling Malaria Prevalence
+
+Now we can get to the modeling!
 
 ### Specify Model
 
@@ -159,87 +207,131 @@ The number of positive malaria tests (pos_i) out of the total number sampled (N_
 
 pos_i|prev(x_i) ~ Binomial(N_i, prev(x_i))
 logit(prev(x_i) = beta0 + beta1*altitude + s(x_i)   
+
 beta0 = intercept  
 beta1 = coefficient for altitude  
 s = spatial random effect  
 
 
 ### Mesh
-We build a **triangulated mesh** whose vertices will create the discrete points to which the basis functions will be fitted. This might sound familiar: nodes and splines?  
+We build a **triangulated mesh** whose vertices will create the discrete points to which the basis functions will be fitted. This will become a continuous Gaussian random field which represents the spatial random effect. This approach might sound familiar: nodes and splines.  
+We have set max.edge = c(0.1,5) to make smaller triangles inside the region and larger ones in the extension. This cuts down on computation in the outer region where there are no observations. **You can play around with the max.edge values and see how it affects your mesh.**  
+cutoff = 0.01 avoids making many small triangles in areas where there are lots of observations close together.
 
-```{r TriangulatedMesh, fig.cap="Triangulated Mesh, used for the SPDE model", echo=T}
-coo <- cbind(d$long, d$lat) 
-mesh <- inla.mesh.2d(
-  loc = coo, max.edge = c(0.1, 5),
-  cutoff = 0.01
+```{r TriangulatedMesh, fig.cap="Figure 2: Triangulated Mesh used for the SPDE model.", echo=T}
+### Build the mesh ----
+coo <- cbind(d$long, d$lat) # coordinates of observations
+mesh <- inla.mesh.2d(loc = coo,
+                     # loc is coordinates to start the mesh
+                     max.edge = c(0.1, 5),
+                     # max.edge-play around with these values and see
+                     cutoff = 0.01
 )
 mesh$n
-
 plot(mesh)
 points(coo, col = "red")
 ```
   
 ### Build the SPDE model on the mesh  
 
-We use a SPDE to model the spatial random effect.  
-The spatial effect function is a "zero-mean, Gaussian process with Matern covariance".  
-The alpha parameter is related to the smoothness parameter.
+INLA uses a **stochastic partial differential equation (SPDE)**, some complex math, to model the spatial random effect, the Gaussian random field.  
+The spatial effect function is a "zero-mean, Gaussian process with Matern covariance".    
+The alpha parameter is related to the smoothness parameter v for the random process. And d is the dimension of the random effect.  
+$$\alpha = v + \frac{d}{2}$$
+In our example, v=1, d=2, so alpha = 1+2/2 = 2.
+
+within the inla.spde2.matern() you can set priors for the spatial effect with the following arguments.  
+prior.variance.nominal=   
+prior.range.nominal=   
+Setting these priors has a large effect on the fitted model. You can try setting them, and see what effect it has on your model output.   
 
 ```{r SPDE, echo=T}
+### Build the SPDE model on the mesh ----
 # SPDE model: here is the spatial effect!!
 spde <- 
-  inla.spde2.matern(mesh = mesh, alpha = 2, constr = TRUE)
-# Index the SPDE 
+  inla.spde2.matern(mesh = mesh, 
+                    alpha = 2, # 0 > alpha ≥ 2
+                    #prior.variance.nominal = 1, # nominal prior mean for the field variance, sigma
+                    #prior.range.nominal = NULL, # nominal prior mean for the spatial range 
+                    constr = TRUE) # constr imposes an integrate-to-zero constraint for our model
+### Index the SPDE ---- 
 indexs <- 
   inla.spde.make.index("s", spde$n.spde)
 lengths(indexs)
 ```
   
 ### Projection Matrix A   
-  
+
+The projection matrix projects the spatially continuous Gaussian random field from the observations to the mesh nodes. It contains the basis functions that will be fitted to the nodes of the mesh.   
 ```{r ProjectionMatrixA, echo=TRUE}
-# Create the projection matrix A
-A <- inla.spde.make.A(mesh = mesh, loc = coo)
-dp <- terra::as.points(r)
-dim(dp)
+### Create the projection matrix A ----
+A <- inla.spde.make.A(mesh = mesh, loc = coo) # coo is coordinates of our observations
 ```
 
 ### Prediction Matrix Ap  
+The prediction matrix has the coordinates of the positions where we will predict the malaria prevalence values.
 
 ```{r PredictionData, echo=TRUE}
-dp <- terra::as.points(r)
+### Prediction data ----
+
+dp <- terra::as.points(r) # this makes the r raster into a vector of points
 dim(dp)
 
-ra <- terra::aggregate(r, fact = 4, fun = mean)
-dp <- terra::as.points(ra)
+ra <- terra::aggregate(r, fact = 4, fun = mean) # reduce the number of raster cells, factor 4 combines 4x4 cells of raster into one cell
+dp <- terra::as.points(ra) # take aggregated raster and turn into vector of points so it is easier to get coordinates from them
+# then use the crds() function to get coordinates and put everything into a matrix
 dp <- as.matrix(cbind(crds(dp)[,1], crds(dp)[,2], values(dp)))
 colnames(dp) <- c("x", "y", "alt")
+
+## For the lab-part 3 ----
+# run the next 2 lines to include another environmental covariate raster
+#dp <- as.matrix(cbind(dp, terra::extract(my_raster, dp[, c("x", "y")], method="bilinear")))
+
+# for the lab-part 3: # change "wind" to whatever you used
+#colnames(dp) <- c("x", "y", "alt", "wind") 
+
 dim(dp)
 
-coop <- dp[, c("x", "y")]
+coop <- dp[, c("x", "y")] # prediction coordinates from the raster
 
-Ap <- inla.spde.make.A(mesh = mesh, loc = coop)  
+# make the prediction matrix
+Ap <- inla.spde.make.A(mesh = mesh, loc = coop)
 ```
 
 ### Stack for estimation  
+Stacking is getting all the elements of our model together into a format that INLA can read easily, similar to how we 'package' data for models for JAGS.
 
 ```{r StackforEstimation, echo = TRUE}
+## For the lab-part 3 ----
+# you can add other fixed effect covariates inside the inla.stack() function. For my example with the wind raster, I would add: 
+# , wind = d$wind 
+# inside the data.frame() function alongside other fixed effects, b0, altitude.
+
 stk.e <- inla.stack(
-  tag = "est",
-  data = list(y = d$positive, numtrials = d$total),
-  A = list(1, A),
-  effects = list(data.frame(b0 = 1, altitude = d$alt), s = indexs)
+  tag = "est", # lets INLA know this is our estimation stack
+  data = list(y = d$positive, numtrials = d$total), 
+  A = list(1, A), # A, projection matrix
+  effects = list(data.frame(b0 = 1, 
+                            altitude = d$alt), s = indexs)
 )
 ```
 
 ### Stack for prediction  
+Notice that all the same elements are in this stack, because INLA wants to compare similar things. Some are NA
 
 ```{r StackforPrediction, echo = TRUE}
+## For the lab-part 3 ----
+# to add your raster values for prediction, they need to go in effects here too.
+# For my wind example I would add:
+# , wind = dp[, 4] 
+# right after the altitude
+
 stk.p <- inla.stack(
-  tag = "pred",
+  tag = "pred", # tag it for prediction, so INLA knows
   data = list(y = NA, numtrials = NA),
-  A = list(1, Ap),
-  effects = list(data.frame(b0 = 1, altitude = dp[, 3]),
+  A = list(1, Ap), # Ap, prediction matrix
+  effects = list(data.frame(b0 = 1, 
+                            altitude = dp[, 3]),
                  s = indexs
   )
 )
@@ -248,33 +340,45 @@ stk.p <- inla.stack(
 ### Full stack, containing estimation and prediction  
 
 ```{r StackforFull, echo=TRUE}
-stk.full <- inla.stack(stk.e, stk.p)        
+stk.full <- inla.stack(stk.e, stk.p)  # assembles the data for INLA, similar to how we "package" the data for JAGS      
 ```
 
-## Model
+## Model Formula
 
-```{r ModelDefinition, echo=TRUE}
-formula <- y ~ 0 + b0 + altitude + f(s, model = spde)
+The formula for prevalence that we will use for the INLA call.  
+By setting that first intercept to 0, we are removing it and instead adding it as a covariate term b0. This is so that all the covariate terms are captured in the projection matrix. Altitude is our fixed effect, and f(s,model=spde) is our random Gaussian field, which is our random effects.
+
+## For the lab-part 3
+If you want to add or remove covariates from the model you can do that in the formula.  
+
+```{r ModelFormula, echo=TRUE}
+formula <- y ~ 0 + b0 + altitude + f(s, model = spde) # for my example, I would add 'wind'
 ```
 
-Fit the model
+## INLA Call
 
-```{r INLAmodel, echo=TRUE}
+
+```{r INLAcall, echo=TRUE}
 res <- inla(formula,
-            family = "binomial", Ntrials = numtrials,
+            family = "binomial",
+            Ntrials = numtrials,
             control.family = list(link = "logit"),
+            control.compute=list(return.marginals.predictor=TRUE),
             data = inla.stack.data(stk.full),
             control.predictor = list(
-              compute = TRUE, link = 1,
+              compute = TRUE, # this computes the posteriors of the predictions
+              link = 1,
               A = inla.stack.A(stk.full)
             )
 )
+summary(res)
 ```
 
-## Mapping Malaria Prevalence  
+## Mapping Malaria Prevalence Predictions 
 
 
-```{r MapPrevalence, echo=TRUE}
+```{r MapPredictedPrevalence, fig.cap="Figure 3: Predicted prevalence of malaria in The Gambia, shown as points.", echo=TRUE}
+## Mapping Malaria Prevalence ----
 index <- inla.stack.index(stack = stk.full, tag = "pred")$data
 
 prev_mean <- res$summary.fitted.values[index, "mean"]
@@ -296,7 +400,8 @@ leaflet() %>%
   addScaleBar(position = c("bottomleft"))
 ```
 
-```{r RaterizePrediction, echo=TRUE}
+```{r RasterizePrediction, fig.cap="Figure 4: Raster of predicted prevalence of malaria.",echo=TRUE}
+### Rasterize the Prediction ----
 r_prev_mean <- terra::rasterize(
   x = coop, y = ra, values = prev_mean,
   fun = mean
@@ -315,7 +420,10 @@ leaflet() %>%
 ```
 
 
-```{r LowerUpperLimits, echo=TRUE}
+## 
+
+```{r LowerLimits, fig.cap="Figure 5: Lower prediction limits.",echo=TRUE}
+### Lower limits of prediction
 r_prev_ll <- terra::rasterize(
   x = coop, y = ra, values = prev_ll,
   fun = mean
@@ -329,7 +437,9 @@ leaflet() %>%
             values = values(r_prev_ll), title = "LL"
   ) %>%
   addScaleBar(position = c("bottomleft"))
-
+```
+```{r UpperLimits, fig.cap="Figure 6: Upper prediction limits.",echo=TRUE}
+### Lower limits of prediction
 r_prev_ul <- terra::rasterize(
   x = coop, y = ra, values = prev_ul,
   fun = mean
@@ -343,3 +453,65 @@ leaflet() %>%
             values = values(r_prev_ul), title = "UL"
   ) %>%
   addScaleBar(position = c("bottomleft"))
+```
+
+## For the lab-part 4: Use this analysis to inform decisions with exceedance probabilities
+
+As a wizard geostatistical epidemiologist working for the government, you know that when prevalence of malaria exceeds 20% on a local scale, it tends to spread to nearby villages at much higher rates? You want to know what is the probability that prevalence is at or above 20% anywhere in the region, so that you can inform your team where the highest risk areas are to send public health response teams and focus actions for prevention. You can do this.   
+
+```{r ExceedanceProbabilities, fig.cap="Figure 7: Malaria Exceedance Probabilities for The Gambia, level=20%",echo=TRUE}
+## For the lab-part 4 ----
+### Mapping exceedance probabilities ----
+threshold <- 0.2 # threshold of 20%
+
+index <- inla.stack.index(stack = stk.full, tag = "pred")$data
+marg <- res$marginals.fitted.values[index][[1]]
+1 - inla.pmarginal(q = threshold, marginal = marg)
+excprob <- sapply(res$marginals.fitted.values[index],
+                  FUN = function(marg){1-inla.pmarginal(q = threshold, marginal = marg)})
+
+head(excprob)
+r_excprob <- terra::rasterize(
+  x = coop, y = ra, values = excprob,
+  fun = mean
+)
+
+pal <- colorNumeric("viridis", c(0, 1), na.color = "transparent")
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addRasterImage(r_excprob, colors = pal, opacity = 0.5) %>%
+  addLegend("bottomright",
+            pal = pal,
+            values = values(r_excprob), title = "P(p>0.2)"
+  ) %>%
+  addScaleBar(position = c("bottomleft"))
+```
+
+# Lab Questions
+
+
+Just pick one or two of the questions, whatever appeals to you, and write your comments in a word document to turn in. Alternatively, if something during the demo sparked your interest that you want to follow up on, go for that instead, and just write some sentences about what you did and what you found out.
+
+1. If you were going to model malaria prevalence in a GLMM or a GAM, without adding rasters and things, what factors from the dataset would you include? How would you turn them into village-level data instead of individual data?
+
+2. Try another environmental covariate, in the form of a raster. See the code in the "MyRaster" section for help. What raster and what variable(s) did you use, and why? How do you think it might relate to or affect malaria prevalence?
+
+3. (Follow through with part 2) With your choice of environmental raster data, go through the steps of adding it to the INLA model alongside elevation as a fixed effect, or only using yours. Are there any that do better than others? For this, look for my "part 3" hints throughout the code or just get me to look at your code to make sure it's running.
+
+4. Using exceedence probabilities to inform decisions. What are 
+
+* If you're a JAGS wizard, try using it to run this model and tell me how it goes! I did not do this so I'm curious.
+
+
+## Some great resources 
+
+
+Moraga, Paula. (2019). Geospatial Health Data: Modeling and Visualization with R-INLA and Shiny. Chapman & Hall/CRC Biostatistics Series
+https://www.paulamoraga.com/book-geospatial/index.html
+
+Moraga, Paula. (2023). Spatial Statistics for Data Science: Theory and Practice with R. Chapman & Hall/CRC Data Science Series.
+https://www.paulamoraga.com/book-spatial/index.html
+
+
+
