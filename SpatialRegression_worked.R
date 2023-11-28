@@ -1,7 +1,14 @@
 
+# Spatial regression topic... 
 
+
+# Install packages --------------------
 
 #install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
+
+
+# Load packages --------------------
+
 library(geoR) # geoR may be obsolete soon
 library(dplyr)
 library(sf)
@@ -11,34 +18,68 @@ library(terra)
 library(geodata)
 library(INLA)
 library(geostats)
+
+
+# Load data -------------------------
+
 data(gambia)
 head(gambia)
-dim(unique(gambia[, c("x", "y")]))
+
+dim(gambia)   # 2035 observations at individual level
+dim(unique(gambia[, c("x", "y")]))   # 65 unique locations
+
+rm(gambia.borders)
+
+# Process data -------------------
+
 # For the lab-part 1, different variables, consider other models----
 # dplyr and summary statistics to create the new columns
-d <- group_by(gambia, x, y) %>%
+df <- group_by(gambia, x, y) %>%
   summarize(
     total = n(),
     positive = sum(pos),
-    prev = positive / total
-    #,netuse = mean(netuse) # for the lab, you could include these 
-    #,greenness = mean(green)
+    prev = positive / total,
+    netuse = mean(netuse),   # for the lab, you could include these 
+    greenness = mean(green)
   )
-head(d)
+head(df)
+
+
 # create geometric points from XY
 pts <- 
-  st_multipoint(x = as.matrix(d[,1:2]), dim="XY")
+  st_multipoint(x = as.matrix(df[,1:2]), dim="XY")
 # create spatially referenced points: these are in UTM Zone 28 N
 sp <- 
   st_sfc(pts, crs = "+proj=utm +zone=28")
 # transform to long lat crs: WGS84
 sp_tr <- 
   st_transform(sp, crs = "+proj=longlat +datum=WGS84")
+
+
 # add long, lat columns to data frame
-d[, c("long", "lat")] <- st_coordinates(sp_tr)[,1:2]
-head(d)
+df[, c("long", "lat")] <- st_coordinates(sp_tr)[,1:2]
+head(df)
+
+
+# get raster data -----------------
+
+elev <- elevation_30s(country = "GMB", 
+                   path = tempdir(), mask = TRUE)
+
+precip <- worldclim_country(country = "GMB",
+                               var="prec", # choose anything!
+                               path = tempdir(),
+                               version=2.1,
+                               mask = TRUE)
+
+precip <- precip$GMB_wc2.1_30s_prec_10
+# plot(precip)
+
+
+# visualize spatial data -------------
+
 pal <- colorBin("viridis", bins = c(0, 0.25, 0.5, 0.75, 1))
-leaflet(d) %>%
+leaflet(df) %>%
   addProviderTiles(providers$CartoDB.Positron) %>%
   addCircles(lng = ~long, lat = ~lat, color = ~ pal(prev)) %>%
   addLegend("bottomright",
@@ -46,59 +87,56 @@ leaflet(d) %>%
             title = "Malaria Prevalence"
   ) %>%
   addScaleBar(position = c("bottomleft"))
-r <- elevation_30s(country = "GMB", 
-                   path = tempdir(), mask = TRUE)
 
-pal <- colorNumeric("viridis", values(r),
+pal <- colorNumeric("viridis", values(elev),
                     na.color = "transparent"
 )
+
 # map elevation raster
 leaflet() %>%
   addProviderTiles(providers$CartoDB.Positron) %>%
-  addRasterImage(r, colors = pal, opacity = 0.5) %>%
+  addRasterImage(elev, colors = pal, opacity = 0.5) %>%
   addLegend("bottomright",
-            pal = pal, values = values(r),
+            pal = pal, values = values(elev),
             title = "Altitude (m)"
   ) %>%
   addScaleBar(position = c("bottomleft"))
-# extract elevation for all observations and add "alt" to dataframe
-d["alt"] <- 
-  terra::extract(r, d[, c("long", "lat")], 
-                 list=T, ID=F, method="bilinear")
-head(d)
-# For the lab-part 2, "MyRaster" ----
 
-# help(package="geodata") # click on a dataset help page to learn about the dataset and choose a variable
-# 
-# ## here's an example:
-# gdata <- worldclim_country(country = "GMB",
-#                                var="wind", # choose anything!
-#                                path = tempdir(),
-#                                version=2.1,
-#                                mask = TRUE)
-# ## wind is average monthly data, so it has 12 layers. You can use terra::subset() to choose one or more months (layers) and average across them for seasonal data
-# 
-# my_raster <- mean(subset(x=gdata, subset=c(7,8,9,10))) #subsetting July-October and taking the mean, so we will have July-October wind speeds
-# 
-# pal <- colorNumeric("viridis", values(my_raster),
-#                     na.color = "transparent"
-# )
-# # map my_raster
-# leaflet() %>%
-#   addProviderTiles(providers$CartoDB.Positron) %>%
-#   addRasterImage(my_raster, colors = pal, opacity = 0.5) %>%
-#   addLegend("bottomright",
-#             pal = pal, values = values(my_raster),
-#             title = "JASO wind (m/s)" # change to the units for your variable
-#   ) %>%
-#   addScaleBar(position = c("bottomleft"))
-# # extract measurement for all observations and add this variable to dataframe
-# d["wind"] <- # change this to reflect the variable you chose
-#   terra::extract(my_raster, d[, c("long", "lat")],
-#                  list=T, ID=F, method="bilinear")
-# head(d)
-### Create the projection matrix A ----
+pal <- colorNumeric("viridis", values(precip),
+                    na.color = "transparent"
+)
+# map precip raster
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addRasterImage(precip, colors = pal, opacity = 0.5) %>%
+  addLegend("bottomright",
+            pal = pal, values = values(precip),
+            title = "Precip"
+  ) %>%
+  addScaleBar(position = c("bottomleft"))
+
+# extract elevation for all observations and add "alt" to dataframe
+
+df["elev"] <- 
+  terra::extract(elev, df[, c("long", "lat")], 
+                 list=T, ID=F, method="bilinear")
+head(df)
+
+# extract precip for all observations and add "alt" to dataframe
+
+df["precip"] <- 
+  terra::extract(precip, df[, c("long", "lat")], 
+                 list=T, ID=F, method="bilinear")
+head(df)
+
+
+# start the INLA spatial regression process -------------------
+
+## Create the mesh network (nodes) --------
+
 A <- inla.spde.make.A(mesh = mesh, loc = coo) # coo is coordinates of our observations
+
+
 ### Prediction data ----
 
 dp <- terra::as.points(r) # this makes the r raster into a vector of points

@@ -1,6 +1,3 @@
-
-
-
 #install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
 library(geoR) # geoR may be obsolete soon
 library(dplyr)
@@ -97,6 +94,29 @@ head(d)
 #   terra::extract(my_raster, d[, c("long", "lat")],
 #                  list=T, ID=F, method="bilinear")
 # head(d)
+### Build the mesh ----
+coo <- cbind(d$long, d$lat) # coordinates of observations
+mesh <- inla.mesh.2d(loc = coo,
+                     # loc is coordinates to start the mesh
+                     max.edge = c(0.1, 5),
+                     # max.edge-play around with these values and see
+                     cutoff = 0.01
+)
+mesh$n
+plot(mesh)
+points(coo, col = "red")
+### Build the SPDE model on the mesh ----
+# SPDE model: here is the spatial effect!!
+spde <- 
+  inla.spde2.matern(mesh = mesh, 
+                    alpha = 2, # 0 > alpha ≥ 2
+                    #prior.variance.nominal = 1, # nominal prior mean for the field variance, sigma
+                    #prior.range.nominal = NULL, # nominal prior mean for the spatial range 
+                    constr = TRUE) # constr imposes an integrate-to-zero constraint for our model
+### Index the SPDE ---- 
+indexs <- 
+  inla.spde.make.index("s", spde$n.spde)
+lengths(indexs)
 ### Create the projection matrix A ----
 A <- inla.spde.make.A(mesh = mesh, loc = coo) # coo is coordinates of our observations
 ### Prediction data ----
