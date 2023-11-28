@@ -1,107 +1,72 @@
+# Random Forest PET demo, worked ------------------------
 
-
-library(randomForest)
-library(rfUtilities)
-my_data = read.csv("ET_data.csv")
-my_data = na.omit(my_data)
-# Initialize empty training and test sets
-train_set <- data.frame()
-test_set <- data.frame()
-
-# Specify the number of rows to include in each set alternately
-rows_per_set <- 3
-
-# Create alternating sets
-for (i in seq(1, nrow(my_data), by = rows_per_set * 2)) {
-  test_indices <- i:(i + rows_per_set - 1)
-  train_indices <- (i + rows_per_set):(i + rows_per_set * 2 - 1)
-
-  test_set <- rbind(test_set, my_data[test_indices, , drop = FALSE])
-  train_set <- rbind(train_set, my_data[train_indices, , drop = FALSE])
-}
-train_set <- na.omit(train_set)
-set.seed(123)
-rf <- randomForest(data = train_set ,x = train_set[,c(1,3:8)],y = train_set$ET,ntree = 600,mtry = 2,importance = TRUE,proximity = TRUE)
-print(rf)
-plot(rf)
-set.seed(123)
-tuneRF(y = train_set$ET,x = train_set[,c(1,3:8)],,mtryStart = 2,stepFactor = 3,trace = TRUE,plot = TRUE, ntreeTry = 600 )
-cv <- rf.crossValidation(x= rf, xdata = my_data[,c(1,3:8)],ydata = my_data$ET,p = 0.2, n = 99, seed = 123)
-mean(cv$fit.var.exp)
-mean(cv$fit.mse)
-mean(cv$y.rmse)
-mean(cv$y.mbe)
-mean(cv$y.mae)
-mean(cv$D)
-mean(cv$p.val)
-varImpPlot(rf)
-
-# Start of exercise ------------------------
+# load packages ---------------------
 
 library(randomForest)
 library(rfUtilities)
+library(faux)
 
-my_data = read.csv("ET_data.csv")   # replace with your specific filepath if needed
-my_data = na.omit(my_data)
-# Initialize empty training and test sets
-train_set <- data.frame()
-test_set <- data.frame()
+# read in data ---------------------
 
-# Specify the number of rows to include in each set alternately
-rows_per_set <- 3
+df = read.csv("ET_data.csv")
 
-# Create alternating sets
-for (i in seq(1, nrow(my_data), by = rows_per_set * 2)) {
-  test_indices <- i:(i + rows_per_set - 1)
-  train_indices <- (i + rows_per_set):(i + rows_per_set * 2 - 1)
+df = df[order(df$DOY),]   # make sure data is sorted by day of year
 
-  test_set <- rbind(test_set, my_data[test_indices, , drop = FALSE])
-  train_set <- rbind(train_set, my_data[train_indices, , drop = FALSE])
-}
+# define response and predictors ----------------------------
 
-train_set <- na.omit(train_set)
-set.seed(123)
-rf <- randomForest(data = train_set ,x = train_set[,c(1,3:8)],y = train_set$ET,ntree = 600,mtry = 2,importance = TRUE,proximity = TRUE)
-print(rf)
+names(df)
 
-# Plotting OOB error rate
-
-plot(rf)
-
-# Tuning RF
-
-set.seed(123)
-tuneRF(y = train_set$ET,x = train_set[,c(1,3:8)],,mtryStart = 2,stepFactor = 3,trace = TRUE,plot = TRUE, ntreeTry = 600 )
-
-# Cross validation
-
-#- We trained the model with only train dataset.
-#- we are using the complete data set to do cross validation.
+predictors <- c("DOY","wind_speed","Rs","Rs_reflected","Rn","RH","air_temp","random0","random10","random25","random50")
+response <- "ET"
 
 
-cv <- rf.crossValidation(x= rf, xdata = train_set[,c(1,3:8)],ydata = train_set$ET,p = 0.2, n = 99, seed = 123)
+# generate random variables ------------------
 
-#fit.var.exp
-mean(cv$fit.var.exp)
+df$random0 <- rnorm(nrow(df))
+df$random10 <- faux::rnorm_pre(df[,response],r=0.1)
+df$random25 <- faux::rnorm_pre(df[,response],r=0.25)
+df$random50 <- faux::rnorm_pre(df[,response],r=0.5)
 
-#fit.mse
-mean(cv$fit.mse)
 
-#y.rmse
-mean(cv$y.rmse)
+# separate test and training data ----------------
 
-#y.mbe
-mean(cv$y.mbe)
+testndx <- seq(1,nrow(df),5)   # rows to withhold
+trainndx <- setdiff(1:nrow(df),testndx)
 
-#y.mae
-mean(cv$y.mae)
+testdat <- df[testndx,]
+traindat <- df[trainndx,]
 
-# D (Kolmogorov-Smirnov distribution test)
-mean(cv$D)
 
-#p.val(p-value for the Kolmogorov-Smirnov distribution test)
-mean(cv$p.val)
+# tune random forest analysis ---------------
 
-#Variable Importance Plot
+rf.tune <- tuneRF(y = traindat[,response],x = traindat[,predictors],ntreeTry=500,
+       mtryStart = 11,stepFactor = 2,trace = TRUE,plot = TRUE )    # find optimal mtry parameter
+
+# run random forest analysis -----------------
+
+rf <- randomForest(x = traindat[,predictors],y = traindat[,response],
+                   ntree = 500,mtry = 4,importance = TRUE,proximity = TRUE)
+
+rf
+
+plot(rf)  # Plotting OOB error rate
+
+
+# Cross validation for fitted model -------------------------
+
+cv <- rf.crossValidation(x= rf, xdata = traindat[,predictors], ydata = traindat[,response], p = 0.1, n = 50)
+summary(cv)
+
+plot(cv, stat = "mse")
+
+cv.v <- rf.crossValidation(x= rf, xdata = testdat[,predictors], ydata = testdat[,response], p = 0.5, n = 25)
+plot(cv.v, stat = "mse")
+
+summary(cv.v)   # note higher MSE for validation set...
+
+
+#Variable Importance Plot -----------------------
 varImpPlot(rf)
+
+
 
