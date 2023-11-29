@@ -151,40 +151,104 @@ points(coo, col = "red")
 A <- inla.spde.make.A(mesh = mesh, loc = coo) # coo is coordinates of our observations
 # str(A)    # 673 mesh notes, mapped to 65 observations
 
-stk.nopred <- inla.stack(stk.e, stk.p)  # assembles the data for INLA, similar to how we "package" the data for JAGS      
-formula <- y ~ 0 + b0 + altitude + f(s, model = spde) # for my example, I would add 'wind'
+
+## Build the SPDE model on the mesh ----
+
+# SPDE model: here is the spatial effect!!
+
+spde <- 
+  inla.spde2.matern(mesh = mesh, 
+                    alpha = 2, # 0 > alpha ≥ 2
+                    #prior.variance.nominal = 1, # nominal prior mean for the field variance, sigma
+                    #prior.range.nominal = NULL, # nominal prior mean for the spatial range 
+                    constr = TRUE) # constr imposes an integrate-to-zero constraint for our model
+
+# Index the SPDE
+
+indexs <- 
+  inla.spde.make.index("s", spde$n.spde)
+lengths(indexs)
+
+# Make data stacks... ----------------------
+
+stk.e <- inla.stack(
+  tag = "est", # lets INLA know this is our estimation stack
+  data = list(y = df$positive, numtrials = df$total), 
+  A = list(1, A), # A, projection matrix
+  effects = list(data.frame(b0 = 1, 
+                            elevation = df$elev, netuse = df$netuse, 
+                            precip = df$precip), s = indexs)
+)
+
+# Run INLA ------------------------
+
+stk.nopred <- inla.stack(stk.e)  # assembles the data for INLA, similar to how we "package" the data for JAGS      
+formula <- y ~ 0 + b0 + elevation + netuse + precip + f(s, model = spde) 
+
 res <- inla(formula,
             family = "binomial",
             Ntrials = numtrials,
             control.family = list(link = "logit"),
             control.compute=list(return.marginals.predictor=TRUE),
-            data = inla.stack.data(stk.full),
+            data = inla.stack.data(stk.nopred),
             control.predictor = list(
               compute = TRUE, # this computes the posteriors of the predictions
               link = 1,
-              A = inla.stack.A(stk.full)
+              A = inla.stack.A(stk.nopred)
             )
 )
 summary(res)
 
 
-### Prediction data ----
+# Make predictions --------------------
 
-dp <- terra::as.points(elev) # this makes the elev raster into a vector (spatvector) of points
-dim(dp)
+dfp <- terra::as.points(elev) # this makes the elev raster into a vector (spatvector) of points
+dim(dfp)  # 12847 points
 
-ra <- terra::aggregate(r, fact = 4, fun = mean) # reduce the number of raster cells, factor 4 combines 4x4 cells of raster into one cell
-dp <- terra::as.points(ra) # take aggregated raster and turn into vector of points so it is easier to get coordinates from them
+eleva <- terra::aggregate(elev, fact = 4, fun = mean) # reduce the number of raster cells, factor 4 combines 4x4 cells of raster into one cell
+precipa <- terra::aggregate(precip, fact = 4, fun = mean)
+
+
+dfp <- terra::as.points(eleva) # take aggregated raster and turn into vector of points so it is easier to get coordinates from them
+
 # then use the crds() function to get coordinates and put everything into a matrix
-dp <- as.matrix(cbind(crds(dp)[,1], crds(dp)[,2], values(dp)))
-colnames(dp) <- c("x", "y", "alt")
 
+dfp <- as.matrix(cbind(crds(dfp)[,1], crds(dfp)[,2], values(dfp)))
+
+colnames(dfp) <- c("long", "lat", "elev")
+
+dfp <- as.data.frame(dfp)
+
+dfp$precip <-  terra::extract(precip, dfp[, c("long", "lat")], 
+                 list=T, ID=F, method="bilinear")
+
+dfp$netuse <- 0.5
 
 # make the prediction matrix
-Ap <- inla.spde.make.A(mesh = mesh, loc = coop)
+
+coop <- dfp[, c("long", "lat")]
+
+Ap <- inla.spde.make.A(mesh = mesh, loc = as.matrix(coop))
+
+# make the prediction stack -------------- 
+
+stk.p <- inla.stack(
+  tag = "pred", # tag it for prediction, so INLA knows
+  data = list(y = NA, numtrials = NA),
+  A = list(1, Ap), # Ap, prediction matrix
+  effects = list(data.frame(b0 = 1, 
+                            elevation = dfp$elev,
+                            precip = dfp$precip,
+                            netuse = dfp$netuse),
+                 s = indexs
+  )
+)
+
+
 stk.full <- inla.stack(stk.e, stk.p)  # assembles the data for INLA, similar to how we "package" the data for JAGS      
-formula <- y ~ 0 + b0 + altitude + f(s, model = spde) # for my example, I would add 'wind'
-res <- inla(formula,
+formula <- y ~ 0 + b0 + elevation + netuse + precip + f(s, model = spde) 
+
+res2 <- inla(formula,
             family = "binomial",
             Ntrials = numtrials,
             control.family = list(link = "logit"),
@@ -196,30 +260,17 @@ res <- inla(formula,
               A = inla.stack.A(stk.full)
             )
 )
-summary(res)
+
+summary(res2)
 
 
+# Mapping Malaria Prevalence ----------
 
-## For the lab-part 3 ----
-# run the next 2 lines to include another environmental covariate raster
-#dp <- as.matrix(cbind(dp, terra::extract(my_raster, dp[, c("x", "y")], method="bilinear")))
-
-# for the lab-part 3: # change "wind" to whatever you used
-#colnames(dp) <- c("x", "y", "alt", "wind") 
-
-dim(dp)
-
-coop <- dp[, c("x", "y")] # prediction coordinates from the raster
-
-
-
-
-## Mapping Malaria Prevalence ----
 index <- inla.stack.index(stack = stk.full, tag = "pred")$data
 
-prev_mean <- res$summary.fitted.values[index, "mean"]
-prev_ll <- res$summary.fitted.values[index, "0.025quant"]
-prev_ul <- res$summary.fitted.values[index, "0.975quant"]
+prev_mean <- res2$summary.fitted.values[index, "mean"]
+prev_ll <- res2$summary.fitted.values[index, "0.025quant"]
+prev_ul <- res2$summary.fitted.values[index, "0.975quant"]
 
 pal <- colorNumeric("viridis", c(0, 1), na.color = "transparent")
 
@@ -234,9 +285,11 @@ leaflet() %>%
             title = "Prev."
   ) %>%
   addScaleBar(position = c("bottomleft"))
+
+
 ### Rasterize the Prediction ----
 r_prev_mean <- terra::rasterize(
-  x = coop, y = ra, values = prev_mean,
+  x = as.matrix(coop), y = eleva, values = prev_mean,
   fun = mean
 )
 
@@ -250,9 +303,11 @@ leaflet() %>%
             values = values(r_prev_mean), title = "Prev."
   ) %>%
   addScaleBar(position = c("bottomleft"))
+
+
 ### Lower limits of prediction
 r_prev_ll <- terra::rasterize(
-  x = coop, y = ra, values = prev_ll,
+  x = as.matrix(coop), y = eleva, values = prev_ll,
   fun = mean
 )
 
@@ -264,9 +319,10 @@ leaflet() %>%
             values = values(r_prev_ll), title = "LL"
   ) %>%
   addScaleBar(position = c("bottomleft"))
+
 ### Lower limits of prediction
 r_prev_ul <- terra::rasterize(
-  x = coop, y = ra, values = prev_ul,
+  x = as.matrix(coop), y = eleva, values = prev_ul,
   fun = mean
 )
 
@@ -278,6 +334,8 @@ leaflet() %>%
             values = values(r_prev_ul), title = "UL"
   ) %>%
   addScaleBar(position = c("bottomleft"))
+
+
 ## For the lab-part 4 ----
 ### Mapping exceedance probabilities ----
 threshold <- 0.2 # exceedance threshold 20%
@@ -285,14 +343,15 @@ threshold <- 0.2 # exceedance threshold 20%
 index <- inla.stack.index(stack = stk.full, tag = "pred")$data
 marg <- res$marginals.fitted.values[index][[1]]
 1 - inla.pmarginal(q = threshold, marginal = marg) # probability
-excprob <- sapply(res$marginals.fitted.values[index],
+excprob <- sapply(res2$marginals.fitted.values[index],
                   FUN = function(marg){1-inla.pmarginal(q = threshold, marginal = marg)})
 
 head(excprob)
 r_excprob <- terra::rasterize(
-  x = coop, y = ra, values = excprob,
+  x = as.matrix(coop), y = eleva, values = excprob,
   fun = mean
 )
+
 # map
 pal <- colorNumeric("viridis", c(0, 1), na.color = "transparent")
 leaflet() %>%
@@ -303,3 +362,8 @@ leaflet() %>%
             values = values(r_excprob), title = "P(p>0.2)"
   ) %>%
   addScaleBar(position = c("bottomleft"))
+
+
+
+
+
