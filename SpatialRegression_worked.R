@@ -132,14 +132,45 @@ head(df)
 
 # start the INLA spatial regression process -------------------
 
-## Create the mesh network (nodes) --------
+## Build the mesh ----
+coo <- cbind(df$long, df$lat) # coordinates of observations
+mesh <- inla.mesh.2d(loc = coo,
+                     # loc is coordinates to start the mesh
+                     max.edge = c(0.1, 5),
+                     # max.edge-play around with these values and see
+                     cutoff = 0.01
+)
+mesh$n
 
+plot(mesh)
+points(coo, col = "red")
+
+## Create the projection matrix A ----
+
+     # sparse matrix
 A <- inla.spde.make.A(mesh = mesh, loc = coo) # coo is coordinates of our observations
+# str(A)    # 673 mesh notes, mapped to 65 observations
+
+stk.nopred <- inla.stack(stk.e, stk.p)  # assembles the data for INLA, similar to how we "package" the data for JAGS      
+formula <- y ~ 0 + b0 + altitude + f(s, model = spde) # for my example, I would add 'wind'
+res <- inla(formula,
+            family = "binomial",
+            Ntrials = numtrials,
+            control.family = list(link = "logit"),
+            control.compute=list(return.marginals.predictor=TRUE),
+            data = inla.stack.data(stk.full),
+            control.predictor = list(
+              compute = TRUE, # this computes the posteriors of the predictions
+              link = 1,
+              A = inla.stack.A(stk.full)
+            )
+)
+summary(res)
 
 
 ### Prediction data ----
 
-dp <- terra::as.points(r) # this makes the r raster into a vector of points
+dp <- terra::as.points(elev) # this makes the elev raster into a vector (spatvector) of points
 dim(dp)
 
 ra <- terra::aggregate(r, fact = 4, fun = mean) # reduce the number of raster cells, factor 4 combines 4x4 cells of raster into one cell
@@ -148,16 +179,6 @@ dp <- terra::as.points(ra) # take aggregated raster and turn into vector of poin
 dp <- as.matrix(cbind(crds(dp)[,1], crds(dp)[,2], values(dp)))
 colnames(dp) <- c("x", "y", "alt")
 
-## For the lab-part 3 ----
-# run the next 2 lines to include another environmental covariate raster
-#dp <- as.matrix(cbind(dp, terra::extract(my_raster, dp[, c("x", "y")], method="bilinear")))
-
-# for the lab-part 3: # change "wind" to whatever you used
-#colnames(dp) <- c("x", "y", "alt", "wind") 
-
-dim(dp)
-
-coop <- dp[, c("x", "y")] # prediction coordinates from the raster
 
 # make the prediction matrix
 Ap <- inla.spde.make.A(mesh = mesh, loc = coop)
@@ -176,6 +197,23 @@ res <- inla(formula,
             )
 )
 summary(res)
+
+
+
+## For the lab-part 3 ----
+# run the next 2 lines to include another environmental covariate raster
+#dp <- as.matrix(cbind(dp, terra::extract(my_raster, dp[, c("x", "y")], method="bilinear")))
+
+# for the lab-part 3: # change "wind" to whatever you used
+#colnames(dp) <- c("x", "y", "alt", "wind") 
+
+dim(dp)
+
+coop <- dp[, c("x", "y")] # prediction coordinates from the raster
+
+
+
+
 ## Mapping Malaria Prevalence ----
 index <- inla.stack.index(stack = stk.full, tag = "pred")$data
 

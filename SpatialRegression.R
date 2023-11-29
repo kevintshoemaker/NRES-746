@@ -143,6 +143,33 @@ coop <- dp[, c("x", "y")] # prediction coordinates from the raster
 
 # make the prediction matrix
 Ap <- inla.spde.make.A(mesh = mesh, loc = coop)
+## For the lab-part 3 ----
+# you can add other fixed effect covariates inside the inla.stack() function. For my example with the wind raster, I would add: 
+# , wind = d$wind 
+# inside the data.frame() function alongside other fixed effects, b0, altitude.
+
+stk.e <- inla.stack(
+  tag = "est", # lets INLA know this is our estimation stack
+  data = list(y = d$positive, numtrials = d$total), 
+  A = list(1, A), # A, projection matrix
+  effects = list(data.frame(b0 = 1, 
+                            altitude = d$alt), s = indexs)
+)
+## For the lab-part 3 ----
+# to add your raster values for prediction, they need to go in effects here too.
+# For my wind example I would add:
+# , wind = dp[, 4] 
+# right after the altitude
+
+stk.p <- inla.stack(
+  tag = "pred", # tag it for prediction, so INLA knows
+  data = list(y = NA, numtrials = NA),
+  A = list(1, Ap), # Ap, prediction matrix
+  effects = list(data.frame(b0 = 1, 
+                            altitude = dp[, 3]),
+                 s = indexs
+  )
+)
 stk.full <- inla.stack(stk.e, stk.p)  # assembles the data for INLA, similar to how we "package" the data for JAGS      
 formula <- y ~ 0 + b0 + altitude + f(s, model = spde) # for my example, I would add 'wind'
 res <- inla(formula,
