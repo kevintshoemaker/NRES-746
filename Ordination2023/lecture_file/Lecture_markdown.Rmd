@@ -1,0 +1,785 @@
+---
+title: "Ordination Lecture"
+author: "Kierstin Acuna & Martin Genova"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction to Ordination
+
+## Outline
+
+1.  Introduction
+2.  Definition of Ordination
+3.  Review of Matrices and Matrix Algebra
+4.  Dissimilarity Measures/Distance Coefficients
+5.  Unconstrained Ordination
+6.  Constrained Ordination
+
+R Script for this lab can be found [here](Lecture_script.R).
+
+------------------------------------------------------------------------
+
+# Introduction
+
+So far in this course we have learned several powerful techniques for analyzing data (LM's, GLM's, GLMM's, GAM's, etc.). All of these methods focus on modeling one response variable as a function of one or more predictor variables. For example, say we want to know how a fish species of interest (*Cottus gobio*) is impacted by a handful of environmental variables (pH, average stream flow, and dissolved oxygen concentration).
+
+![](images/Lecture_1.png){Width="75%"}
+
+We can do this easily with a gamma-distributed GLM.
+
+```{r results = 'hide', message = F, warning = F}
+# Load libraries ----
+library(codep)
+library(vegan)
+
+# Load Doubs fish Data ----
+data(Doubs)
+species <- as.data.frame(Doubs.fish[-8,])
+vars <- as.data.frame(cbind(Doubs.env[-8,],Doubs.geo[-8,]))
+
+```
+
+```{r}
+# GLM example ----
+# Cottus gobio gamma distributed model
+
+CHA.alt <- species$CHA + 1 #get rid of zeros to prep for log link
+COGO_mod <- glm(CHA.alt ~ pH + flo + oxy, data = vars, family = Gamma(link = "log"))
+summary(COGO_mod) #oxygen is significantly positive!
+```
+
+It looks like this fish does better when dissolved oxygen concentrations are higher. Cool!
+
+But, what if we were interested in not just one fish, but an entire community of fishies?
+
+![](images/Lecture_2.png){Width="75%"}
+
+This is where multivariate analysis shines! Multivariate analysis is any analysis that allows us to address the simultaneous observation or analysis of more than one response variable. In multivariate analysis, we can ask questions like:
+
+-   How does the bacterial composition on maple leaves change along an elevational gradient?
+-   What is the compositional dissimilarity of bat communities?
+-   How closely-related are local spider communities in relation to their composition?
+-   What environmental variables influence the abundance of fishes in the Shark Tale community?
+
+------------------------------------------------------------------------
+
+## Definition of Ordination
+
+So now that we know what kind of questions multivariate analysis can answer, what is Ordination? In very general terms:
+
+**Ordination is a collective term for multivariate techniques which summarize a multidimensional dataset in such a way that when it is projected onto a low dimensional space, any intrinsic pattern the data may possess becomes apparent upon visual inspection** (Pielou, 1984).
+
+Ordination can also be thought of as the ordering of objects characterized by multiple attributes, hence why it is a type of multivariate analysis. In ecological terms, ordination is often used to summarize complicated community data into a low-dimensional ordination space which places similar species and samples close together while less-similar species and samples are further apart. The dimensions of this low-dimension ordination space often represent environmental or variable gradients, the relative importance of which can be quantified to understand how they structure complicated community data.
+
+Additionally, the results from most ordination techniques can readily be graphed into intuitive interpretations of species-environment relationships.
+
+We can make informative and great looking figures like this:
+
+![](images/Lecture_3.png){width="50%"}![](images/Lecture_4.png){width="50%"}
+
+In other cases, ordination is used as a step in a series of analyses. You can often use ordination to reduce the number of variables to avoid multicollinearity, or reduce the dimensionality of a data set to a limited number of axes, which are then used in regression, classification, or clustering. Some ordination techniques can even be used directly for hypothesis testing.
+
+In order to understand the techniques behind ordination, we first need to have a basic understanding of matrices and matrix algebra
+
+------------------------------------------------------------------------
+
+## Review of Matrices and Matrix Algebra
+
+Most ecological data can take the form of a matrix, where *x* is the sampling unit (e.g., site, plot), and *y* is the ecological descriptor (e.g., species presence-absence, topographical variables, chemical variables).
+
+![](images/Lecture_5.png)
+
+The same ecological data table can be represented in matrix notation like this:
+
+![In this example, *y~1,1~* represents species 1 in site 1. *y~m,n~* represents species *n* in site *m*.](images/Lecture_6.png)
+
+### Association Matrices
+
+Using the data from our matrix *Y*:
+
+![](images/Lecture_7.png)
+
+One can examine the relationship between the first two objects, *x~1~* and *x~2~*:
+
+![](images/Lecture_8.png)
+
+We refer to the relationship between *x~1~* and *x~2~* as *a~1,2~*.
+
+We can populate the association matrix *A~n,n~*, with the relationships between all objects from *Y*.
+
+![](images/Lecture_9.png)
+
+This is the basis of most ordination methods (Q-mode, where the associations between objects, or sites/plots, are analyzed).
+
+We can also analyze the associations between ecological descriptors (columns, R-mode).
+
+![](images/Lecture_10.png)
+
+We can populate the association matrix *A~m,m~* with the relationships between all descriptors from *Y*:
+
+![](images/Lecture_11.png)
+
+------------------------------------------------------------------------
+
+# Dissimmilarity Measures
+
+Now that we understand what an association matrix is, we need to know how to calculate the associations between sites (rows) or species (columns). How do we fill in our association matrix, *A*?
+
+We can obtain the association matrix (*A~n,n~* or *A~m,m~*) in the form of pairwise distances or dissimilarities *D~m,m~* (or similarities *S~m,m~*) and then analyze those distances.
+
+The most common way to calculate distance or dissimilarity matrices is by using the function stats::dist().
+
+## Types of Distance Coefficients
+
+### Euclidean Distance
+
+The most common distance measure is the **Euclidean distance**, which falls under the category of **Metric** distance coefficients. It's used as the default metric for principal component analysis (PCA). Euclidean distance is a measure of the distance between two points in Euclidean space, which is typically planar and orthogonal. In two dimensions, the Euclidean distance between two points p and q can be calculated using the Pythagorean theorem:
+
+<center>
+![](images/Lecture_12.png)
+</center>
+
+We can visualize Euclidean Distance below:
+
+<center>
+![](images/Lecture_13.png)
+</center>
+
+Euclidean distance is a commonly used measure in multivariate analyses because it provides a straightforward and intuitive way to measure the distance or similarity between observations in a multidimensional space. However, the problem with Euclidean distance is that while straightforward and intuitive, this distance metric isn't appropriate for species abundance data because of the **double-zero problem**.
+
+The double-zero problem appears in species abundance data because while there is only one way to observe a species, there are many ways to not observe a species. A species absence could mean that the environmental conditions in a particular site are not suitable for that species, or it could be that we simply failed to observe the species. Therefore, we want to put more emphasis on presences than absences when comparing sites based on species abundances. The Euclidean distance is not able to put special emphasis on any one type of data.
+
+To show this, we can simulate a species abundance data set where there are three samples in three different moisture sites. Six species that prefer different moisture conditions are sampled for their abundance.
+
+```{r}
+(Y.hmm <- data.frame(hydrophillic_1 = c(1, 0, 0), hydrophillic_2 = c(1, 1, 0),
+                    mesic_1 = c(0, 1, 0), mesic_2 = c(0,4,0),
+                    xeric_1 = c(0, 1, 3),xeric_2 = c(0, 0, 2), 
+                    row.names = c("sample_1_wet", "sample_2_intermediate",
+                                                        "sample_3_dry")))
+```
+
+We can easily calculate the Euclidean distance using the dist() function, specifying Euclidean distance using method = "Euclidean".
+
+```{r}
+# Calculate Euclidean distance using the dist() function
+(Y.hmm.DistEu <- as.matrix(stats::dist(x = Y.hmm, method = "euclidean")))
+```
+
+You can also calculate Euclidean distance by hand using the function below:
+
+```{r}
+# Calculate Euclidean Distance by Hand
+calc_eu_dist <- function(spe_abun_df) {
+  # Create output matrix
+  output <- as.data.frame(matrix(NA, nrow = nrow(spe_abun_df), ncol = nrow(spe_abun_df)))
+  # Index through the rows of the data frame
+  for (i in 1:nrow(spe_abun_df)) {
+    x1 <- spe_abun_df[i, ]
+    for (t in 1:nrow(spe_abun_df)) {
+      x2 <- spe_abun_df[t,]
+      # Calculate euclidean distance and place distance into output data frame
+      output[i,t] <- sqrt(sum((x1 - x2)^2))
+    }
+  }
+  # Return output
+  return(output)
+}
+
+# Run Euclidean distance by Hand function
+(Y.hmm_eu_dist <- calc_eu_dist(Y.hmm))
+```
+
+Looking at the Euclidean distance output, lower numbers indicate similarity between sites. The double-zero problem presents itself in that the Euclidean distance between site 1 and site 3 is the lowest, suggesting that they are the most similar sites. However, this is obviously not correct; sites 1 and 3 have no species in common! Because there are multiple reasons why a species might be absent (e.g. sampling error, unsuitable habitat), we want to give more weight to presences in our analyses, and the Euclidean distance is not able to do this.
+
+Therefore, Euclidean distance should not be used to compare sites based on species abundances. This distance is better used when a zero value has a clear and singular meaning, such as a data set that consists of ecological descriptors (i.e., soil nutrients, climate variables, topographical variables). There are other distance metrics that better deal with the double-zero problem.
+
+### Bray-Curtis Coefficient
+
+Another distance coefficient that is better suited to analyze species abundances is the Bray-Curtis coefficient. This coefficient falls under the **Semimetric** category of distance coefficients. The coefficient can be calculated:
+
+![](images/Lecture_14.png)
+
+Where:
+
+-   W is the sum of the lowest abundances in each species found between sites x~1~ and x~2~
+-   A is the sum of all abundances in x~1~
+-   B is the sum of all abundances in x~2~
+
+Using the same data set above, we can calculate the Bray-Curtis coefficient using the vegdist() function in the vegan package:
+
+```{r}
+(Y.hmm.BCdist <- vegan::vegdist(Y.hmm, method = "bray", binary = FALSE))
+
+(Y.hmm.BCdist.matrix <- as.matrix(Y.hmm.BCdist))
+
+```
+
+Again, lower numbers indicate higher similarities. In contrast to the Euclidean coefficient, the Bray-Curtis coefficient between site 1 and site 3 indicates that these sites are less similar compared to their relationship with site 2. Therefore, the Bray-Curtis coefficient is better at using species abundances to capture site differences, which helps deal with the **double-zero problem**.
+
+Below is a function to calculate the Bray-Curtis distance by hand:
+
+```{r}
+# Calculate Bray-Curtis coefficient by hand
+calc_bc_dist <- function(spe_abun_df) {
+  # Create output matrix
+  output <- as.data.frame(matrix(NA, nrow = nrow(spe_abun_df), ncol =
+                                   nrow(spe_abun_df)), 
+                          row.names = rownames(spe_abun_df))
+  colnames(output) <- rownames(spe_abun_df)
+  # Index through the rows of the data frame
+  for (i in 1:nrow(spe_abun_df)) {
+    x1 <- spe_abun_df[i, ]
+    for (t in 1:nrow(spe_abun_df)) {
+      x2 <- spe_abun_df[t,]
+      # Create empty data frame to find the minimum values of each species between two sites
+      comp_df <- as.data.frame(matrix(nrow = 2, ncol = ncol(spe_abun_df)))
+      # Place the site values into the data frame
+      comp_df[1,] = x1
+      comp_df[2,] = x2
+      # Find the minimum abundance values of each species and sum them.
+      min_abundances <- apply(comp_df, 2, min)
+      W <- sum(min_abundances)
+      # Sum the abundances of site 1
+      A = sum(x1)
+      # Sum the abundances of site 2
+      B = sum(x2)
+      # Calculate the Bray-Curtis coefficient
+      bc_dist <- (1 - ((2 * W) / (A + B)))
+      # Place the BC coefficient into the output data frame
+      output[i,t] <- bc_dist
+    }
+  }
+  # Return output
+  return(output)
+}
+
+# Run Bray-Curtis coefficient by hand function
+calc_bc_dist(Y.hmm)
+
+```
+
+### Other Distance Coefficients
+
+Besides Euclidean distance, common **Metric** coefficients include **Chord distances** and **Jaccard's coefficient**. Another common **Semimetric coefficient** is **Sørensen's coefficient**. A final group of distance coefficients are **Nonmetric**, one of which is **Mahalanobis distance**. You can find out more about these distance coefficients [here](https://r.qcbs.ca/workshop09/book-en/types-of-distance-coefficients.html). More information about distance coefficients can be found [here](https://www.davidzeleny.net/anadat-r/doku.php/en:similarity)
+
+***
+
+# Unconstrained Ordination
+
+Unconstrained ordination methods are multivariate techniques used to visualize and explore relationships among variables or observations in a data set without imposing any specific constraints on the relationships. In contrast, constrained ordination methods combine concepts from ordination and regression to test hypotheses. We’ll focus on unconstrained ordination first.
+
+These methods are called "unconstrained" because they do not require prior knowledge or assumptions about the structure of the data or the relationships among variables.
+
+Unconstrained ordination methods work by representing the variables or observations in a lower-dimensional space, such as a two-dimensional or three-dimensional plot, while preserving the overall structure of the data.
+
+Some common unconstrained ordination methods include **principal component analysis (PCA)**, **correspondence analysis (CA)**, **principal coordinates analysis (PCoA)**, and **multidimensional scaling (MDS)**. These methods can be applied to a wide range of ecological data, including species abundance data, environmental data, and community similarity matrices.
+
+Overall, unconstrained ordination methods are widely used in ecology to explore patterns and relationships among biological communities and environmental variables. These methods are valuable tools for identifying key factors that influence community composition and structure, and for developing hypotheses about the underlying ecological processes that drive these patterns.
+
+## Principal Component Analysis
+
+Principal Component Analysis (PCA) is a statistical technique used to reduce the dimensionality of a data set while retaining most of its variability. It's more common uses are analyzing environmental gradients.
+
+It is a linear transformation method that converts the original set of variables into a new set of linearly uncorrelated variables, called principal components (PCs), which are sorted in decreasing order of variance.
+
+PCA has become one of the most commonly used techniques in data analysis due to its ability to identify hidden patterns and reduce the complexity of high-dimensional data.
+
+In essence, PCA aims to find the linear combinations of the original variables that account for the largest possible amount of variation in the data set. The resulting principal components are orthogonal to each other, meaning that they are not correlated, and their order reflects their importance in explaining the variability of the data.
+
+Note: PCA uses Euclidean distances to calculate similarities in data sets.
+
+To become comfortable with PCA, we will follow with detailed examples on how to perform it step-by-step, and then we will use functions from R packages to do it.
+
+### Breaking Down a PCA
+
+1.  Load the data set
+
+```{r}
+data(Doubs)
+species <- Doubs.fish[-8,]
+```
+
+2.  Apply a Hellinger transformation on the Species abundance data to standardize the data
+
+```{r}
+spe.hel <- as.data.frame(vegan::decostand(species, method = "hellinger"))
+head(spe.hel)
+```
+
+3.  Compute the Covariance Matrix
+
+```{r}
+  # Compute covarience matrix by hand
+comp_cov <- function(data) {
+  output_df <- as.data.frame(matrix(NA, nrow = ncol(data), ncol = ncol(data)), row.names = colnames(data))
+  colnames(output_df) <- colnames(data)
+  for (i in 1:ncol(data)) {
+    mean.dif.x1 <- data[,i] - mean(data[,i])
+    for (p in 1:ncol(data)) {
+      mean.dif.x2 <- data[,p] - mean(data[,p])
+      output <- mean.dif.x1 * mean.dif.x2
+      output_df[i, p] <- sum(output)/(nrow(data)-1)
+    }
+  }
+  return(output_df)
+}
+
+cov_matrix <- comp_cov(spe.hel)
+head(cov_matrix)
+
+  # Compare with built-in function
+cov_base_func <- cov(spe.hel)
+head(cov_base_func)
+
+```
+
+4.  Perform the Eigen-decomposition of the covariance matrix
+
+Eigendecomposition is a fancy way of saying calculating the eigenvectors and eigenvalues of a matrix. The eigenvectors represent the directions in covariance space that capture the maximum amount of variance in the data, and the eigenvalues indicate the amount of variance captured by each eigenvector.
+
+Visually, you think of an eigenvector below:
+
+![](images/Lecture_15.png)
+
+Where the black line running through the data represents an eigenvector which captures the most amount of variance of the data. For a PCA, this eigenvector represents the **first principal component**. The **second principal component** would be orthogonal to this eigenvector, as seen below:
+
+![](images/Lecture_16.png)
+
+Calculating eigenvectors and eigenvalues involves several involved linear algebra and matrix multiplication steps, which we won't go into detail here. For this lecture, it's important to understand what eigenvectors and eigenvalues are and how they relate to our data. If you want to understand those steps, a brief introduction can be found [here](https://lpsa.swarthmore.edu/MtrxVibe/EigMat/MatrixEigen.html) and a good youtube tutorial can be found [here](https://www.youtube.com/watch?v=IdsV0RaC9jM).
+
+You can easily compute the eigenvalues and eigenvectors using the eigen() function:
+
+```{r}
+eigen_decomp <- eigen(cov_matrix)
+
+# Extract Eigenvalues
+(eig_values <- eigen_decomp$values)
+
+```
+
+Again, eigenvalues tell us the relative amount of variance explained by each eigenvector. The higher the eigenvalue, the more variance explained by that eigenvector.
+
+```{r}
+# Extract Eigenvectors
+eig_vectors <- -eigen_decomp$vectors
+rownames(eig_vectors) = colnames(spe.hel)
+
+# Extract the first two eigenvectors
+eig_vec_1 <- eig_vectors[,1]
+eig_vec_2 <- eig_vectors[,2]
+```
+
+5.  Show amount of variance contributed by each Principal Component by making a Scree Plot.
+
+```{r}
+  # Calculate the estimated variance for each eigenvalue
+(e_var <- eig_values / (nrow(spe.hel) - 1))
+
+  # Data frame with variance percentages
+var_per <- data.frame(
+  PC  = c("PC01", "PC02", "PC03", "PC04", "PC05", "PC06","PC07", "PC08", "PC09",
+          "PC10", "PC11", "PC12", "PC13", "PC14", "PC15", "PC16", "PC17", "PC18",
+          "PC19", "PC20", "PC21", "PC22", "PC23", "PC24", "PC25", "PC26", "PC27"),
+  PER = c(e_var) * 100 / sum(e_var) # Calculate the percentage
+)
+  # Scree plot to show amount of variance accounted by each principal component
+barplot(PER ~ PC, data = var_per,
+        xlab = "Principal Components",
+        ylab = "Percent of Variation %")
+```
+
+6.  Selecting Principal Components
+
+It is generally a good idea to select the principal components that explain most of the variance in the data. The most common method is the **Kaiser-Guttman Criterion**, which states that any eigenvector with an eigenvalue greater than the mean eigenvalue should be retained.
+
+```{r}
+eig_val_PC <- data.frame(
+  PC = c("PC01", "PC02", "PC03", "PC04", "PC05", "PC06","PC07", "PC08", "PC09",
+          "PC10", "PC11", "PC12", "PC13", "PC14", "PC15", "PC16", "PC17", "PC18",
+          "PC19", "PC20", "PC21", "PC22", "PC23", "PC24", "PC25", "PC26", "PC27"), EV = eig_values)
+
+barplot(EV ~ PC, data = eig_val_PC,
+        xlab = "Principal Components",
+        ylab = "Eigenvalues")
+abline(h = mean(eig_values), col = "red")
+```
+
+Another common method for choosing principal components is the **Broken Stick Model**. It provides "a good combination of simplicity of calculation and accurate evaluation of dimensionality relative to the other statistical approaches" (Jackson 1993). The methods works by keeping "[principal] components that explain more variance than would be expected by randomly dividing the variance into p parts". The "expected proportions" would correspond to a null model that contains uncorrelated (noise) variables. If you plot the eigenvalues of the correlation matrix against the broken-stick proportions, the observed proportions that are higher than the expected proportions indicate which principal components to keep. This methods falls on conservative side of Principal Component selections.
+
+```{r}
+broken_stick <- function(eig_values) {
+  # Calculate Broken Stick Model
+  n = length(eig_values)
+  bsm = data.frame(j=seq(1:n), prop_var=0)
+  bsm$prop_var[1] = 1/n
+  for (i in 2:n) {
+    bsm$prop_var[i] = bsm$prop_var[i-1] + (1/(n + 1 - i))
+    }
+  bsm$prop_var = 100*bsm$prop_var/n
+  
+  # Plot Broken Stick Modol Over 
+  barplot(t(cbind(100*eig_values/sum(eig_values), bsm$p[n:1])),
+        beside=TRUE, 
+        main="Broken Stick Model",
+        col=c("red","blue"),
+        las=2,
+        xlab = "Principal Components", ylab = "Percent of Variation (%)")
+  legend("topright", c("Eigenvalues", "Broken stick model"), 
+         pch=15,
+         col=c("red","blue"), 
+         bty="n")
+
+}
+
+broken_stick(eig_values)
+```
+
+The Kaiser-Guttman Criterion in this example suggests that we should use the first 5 principal components. We can calculate how much variation is captured by these first 5:
+
+``` {r}
+eig_vec_kgc <- eig_values[eig_values > mean(eig_values)]
+
+sum(var_per$PER[1:length(eig_vec_kgc)])
+
+```
+
+7.  Plot the Principal Components over the data
+
+Now, to better understand how principal components relate to our data, we'll plot the first two principal components over the relationship between two species of our fish data set, and then show how they relate to each data point.
+
+```{r, fig.height=8, fig.width=8}
+# Plot only the first principal component
+plot(BAR ~ BLA, col = as.factor(rownames(spe.hel)), pch = 19,
+     xlim = c(-0.25,0.5), ylim = c(-0.5,0.5),
+     data = (spe.hel), xlab = "BLA (Standardized)", ylab = "BAR (Standardized)")
+abline(v=0 , h=0, col = "dark gray")
+
+  # Overlap first eigenvector/principal component
+abline(0, eig_vec_1[11]/eig_vec_1[6], col='purple')
+
+  # Plot lines from the first eigenvector to points
+line1 <- c(0, eig_vec_1[11]/eig_vec_1[6])
+perp.segment.coord <- function(x0, y0, line1){
+  a <- line1[1]  #intercept 
+  b <- line1[2]  #slope
+  x1 <- (x0 + b * y0 - a * b)/(1 + b^2)
+  y1 <- a + b * x1
+  list(x0 = x0, y0 = y0, 
+       x1 = x1, y1 = y1)
+}
+ss <- perp.segment.coord(spe.hel[,6], spe.hel[,11], line1)
+segments(x0 = ss$x0, x1 = ss$x1, y0 = ss$y0, y1 = ss$y1, col = 'purple')
+with(spe.hel, text(BAR ~ BLA, labels = as.factor(rownames(spe.hel)), pos = 1, cex=1))
+title(main = "First Principal Component over the Standardized Data",
+      sub = "Purple Lines Horizontal to the First Principal Components is the Variance", cex.sub = 0.75)
+
+```
+
+Now we'll plot the second principal component and associated variance lines.
+
+``` {r, fig.height = 8, fig.width = 8}
+# Plot both the first and second principal component
+plot(BAR ~ BLA, col = as.factor(rownames(spe.hel)), pch = 19,
+     xlim = c(-0.25,0.5), ylim = c(-0.5,0.5),
+     data = (spe.hel), xlab = "BLA (Standardized)", ylab = "BAR (Standardized)")
+abline(v=0 , h=0, col = "dark gray")
+
+#Overlap pertinent eigenvectors
+abline(0, eig_vec_1[11]/eig_vec_1[6], col='purple')
+abline(0, eig_vec_2[11]/eig_vec_2[6], col='orange')
+
+# Plot the lines from second eigenvector to points
+line2 <- c(0, eig_vec_2[11]/eig_vec_2[6])
+ss <- perp.segment.coord(spe.hel[,6], spe.hel[,11], line2)
+segments(x0 = ss$x0, x1 = ss$x1, y0 = ss$y0, y1 = ss$y1,col = 'orange')
+with(spe.hel, text(BAR ~ BLA, labels = as.factor(rownames(spe.hel)),pos = 1, cex=1))
+title(main = "First (Purple) and Second (Orange) Principal Component over the Standardized Data", cex.main = 0.8, sub = "Lines Horizontal to the Principal Components are the Variance", cex.sub = 0.75)
+
+```
+
+8.  Loading Scores
+
+Elements of each eigenvector are called loadings and can be interpreted as the contribution of each variable in the data set to the corresponding principal component.
+
+You can make a table with these values and see the contributions of each variable to each principal component:
+
+```{r}
+  # Get variable loading scores
+variable.loads <- data.frame(
+  PC01 = eig_vec_1, # First eigenvector
+  PC02 = eig_vec_2  # Second eigenvector
+)
+head(variable.loads)
+
+# You can also calculate the loading scores for each site, which shows how they are placed in relation to the principal components.
+
+  # Get site loading scores
+loading.scores <- as.data.frame(as.matrix(spe.hel) %*% eig_vectors)
+colnames(loading.scores) = c("PC01", "PC02", "PC03", "PC04", "PC05", "PC06","PC07", "PC08", "PC09", "PC10", "PC11", "PC12", "PC13", "PC14", "PC15", "PC16", "PC17", "PC18", "PC19", "PC20", "PC21", "PC22", "PC23", "PC24", "PC25", "PC26", "PC27")
+head(loading.scores)
+```
+
+9.  Make a biplot of the Principal Components and Loading Scores
+
+```{r, fig.width = 8, fig.height = 8}
+  # Set plot parameters
+par(mar = c(5, 5, 10, 5),
+     mgp = c(2, 1, 0))
+
+  # Plot site loading scores
+plot(loading.scores[,2] ~ loading.scores[,1], 
+     xlab = 'PC1', ylab = "PC2",
+     xlim = c(-1,1), ylim  = c(-1,1),col = as.factor(rownames(loading.scores)), pch = 19)
+abline(v = 0, col = "orange")
+abline(h = 0, col = "purple")
+with(loading.scores, text(PC02 ~ PC01, labels = as.factor(rownames(loading.scores)),pos = 1, cex=1))
+
+par(new=TRUE)
+
+  # Overlay the variable loading scores
+plot(PC02 ~ PC01, 
+     xlim = c(-1, 1), ylim = c(-1,1),
+     col = "red", pch = 8, axes = F, xlab = "", ylab = "",
+     data = variable.loads)
+axis(4, ylim = c(-1,1), col = "red")
+axis(3, xlim = c(-0.9,1), col = "red")
+mtext("Loading Scores",side=3,col="red",line=2.5)  
+mtext("Loading Scores",side=4,col="red",line=2.5)  
+for (i in 1:nrow(variable.loads)) {
+  arrows(x0 = 0, y0 = 0, x1 = variable.loads[i,1],y1 = variable.loads[i,2],
+         col = "red", lwd = 1, length = 0.1)
+}
+with(variable.loads, text(PC02 ~ PC01, labels = as.factor(rownames(variable.loads)),pos = 1, cex=1,
+                 col = "red"))
+title(main = "Biplot of Site and Variable Loading Scores against the First and Second Principal Components",
+      cex.main = 0.9)
+```
+
+PCA analysis using the princomp() function
+
+```{r}
+   # Using stats: prcomp()
+PCA_prcomp <- stats::prcomp(spe.hel)
+biplot(PCA_prcomp, xlim = c(-0.5,0.5), ylim = c(-0.5,0.5))
+abline(v= 0, h = 0)
+
+  # Using stats: princomp()
+PCA_princomp <- stats::princomp(spe.hel)
+biplot(PCA_princomp, xlim = c(-0.5,0.5), ylim = c(-0.5,0.5))
+abline(v= 0, h = 0)
+```
+
+``` {r, fig.height = 6, fig.width = 6}
+  # Using vegan::rda()
+PCA_rda <- vegan::rda(spe.hel)
+biplot(PCA_rda)
+```
+
+We can analyze these plots by remembering that our Principal components are linear combinations through our variables. The first principal component (PC1) is most correlated with the species variables that are vertical, as they are all along the same axis. As we move negatively along PC1, we increase in species which have arrows that face downwards, while simultaneously decreasing in abundance with species which have arrows that face upwards. Therefore, PC1 is summarizing these variables, and can further be used as explanatory variables in other analyses. An important thing to remember is that principal components are latent variables and that when interpreting them, you have to know how they are related to the original variables.
+
+The second principal component is orthogonal of principal component 2(PC2) and can be interpreted independently of PC1. You can therefore make other species inferences by moving along PC2.
+
+### Scaling
+
+One last note is that the biplot function has a scaling argument that allows
+us to change our visualization of the data to allow for different inferences.
+
+Type 2 scaling, which is the default, does not preserve approximation of Euclidean distance among sites. This scaling preserves the correlation between variables by their angles relative to each other.
+
+``` {r, fig.height = 6, fig.width = 6}
+biplot(PCA_rda, scaling = 2)
+```
+
+Type 1 scaling attempts to preserve Euclidean distance among sites, while the angles between variables are not meaningful.
+
+``` {r, fig.height = 6, fig.width = 6}
+biplot(PCA_rda, scaling = 1)
+
+```
+
+***
+
+## Correspondence Analysis
+
+Like PCA, Correspondence Analysis (CA) is another technique to reduce the dimensionality of a data set. However, the difference is the use of Chi^2^ distances instead of the Euclidean distances as used in PCA. This feature is better for species abundance data sets where the species distribution is unimodal or where there are lots of zeros. Using a PCA with a unimodal species distribution can lead to a phenomenon called a "horseshoe" effect", which can occur with long ecological gradients.
+
+More information about the "horseshoe effect" can be found [here](https://ordination.okstate.edu/PCA.htm)
+
+When conducting a CA, the only difference to a PCA is that the raw data are first transformed into a matrix of cell-by-call contributions to the Pearson Chi^2^ statistic. Then an eigendecomposition is placed on the resulting matrix, just as in PCA. 
+
+We'll run a quick CA using the same fish data set.
+
+```{r}
+# Run the CA using the cca() function in the vegan package
+
+  # Load data
+data(Doubs)
+species <- Doubs.fish[-8,]
+
+  # Run CA using the vegan package
+spe.ca <- vegan::cca(species)
+
+# Identify the eigenvectors using the Kaiser-Guttman Criterion
+  eig_vec_ca <- spe.ca$CA$eig
+  (ev_kgc <- eig_vec_ca[eig_vec_ca > mean(eig_vec_ca)])
+  
+  # Scree Plot
+  barplot(eig_vec_ca)
+  abline(h = mean(eig_vec_ca), col = "red")
+```
+
+```{r, fig.height = 6, fig.width = 6}
+# Plot CA
+plot(spe.ca, scaling = 2, type = "none", main = "CA",
+     xlab = c("CA1"), ylab = c("CA2"))
+
+points(vegan::scores(spe.ca, display = "sites", choices = c(1, 2), scaling = 2), pch = 21, col = "black", bg = "steelblue", cex = 1.2)
+
+text(vegan::scores(spe.ca, display = "species", choices = c(1), scaling = 2),
+     vegan::scores(spe.ca, display = "species", choices = c(2), scaling = 2),
+     labels = rownames(scores(spe.ca, display = "species", scaling = 2)),
+     col = "red", cex = 0.8)
+  
+```
+
+
+## Principal Coordinate Analysis
+
+Principal Coordinate Analysis (PCoA) builds upon PCA and CA by allowing the use of other distance metrics beyond Euclidean and Chi^2^. PCoA is best used when trying to visualize distance between objects or when data sets have more columns than rows. 
+
+We'll run a PCoA on the Doubs fish data set below:
+``` {r}
+# Use the pcoa() function in the ape package to run a PCoA
+spe.h.pcoa <- ape::pcoa(dist(spe.hel))
+  # Plot PCoA biplot
+ape::biplot.pcoa(spe.h.pcoa, spe.hel)
+
+# Run a PcoA with Bray-Curtis distance
+  # Calculate Bray-Curtis coefficients
+spe.bc <- vegan::vegdist(species, method = "bray")
+  # Run PCoA
+spe.bc.pcoa <- ape::pcoa(spe.bc)
+  # Plot PCoA biplot
+ape::biplot.pcoa(spe.bc.pcoa, spe.hel, dir.axis2 = -1)
+
+```
+
+## Nonmetric MultiDimensional Scaling
+In PCA, CA and PCoA, a goal is to organize (ordinate) objects using using descriptors in full dimensional space. These descriptors are represented by axes which show the variation in descriptors among sites and preserves the distance among those sites. However, when creating a biplot to describe the space, a good portion of the variation can be lost by only showing two axes, while a portion of the variation is described by all the other axes.
+
+With NMDS, the relationship among objects is the priority over showing the distances between objects. Additionally, almost all of the variation among sites can be visualized with less than three axes. Therefore, the biplot produced by an NMDS is a better two dimensional representation of similarity between objects than PCA, CA, and PCoA.
+
+Lets run an NMDS on the fish data:
+``` {r}
+# Load Data
+data(Doubs)
+species <- Doubs.fish[-8,]
+
+# Apply Helligner transformation
+spe.h <- decostand(species, method = "hellinger")
+
+# Run the NMDS
+spe.nmds <- vegan::metaMDS(spe.h,
+                           distance = "bray", # specify the distance coefficient to be calculated in the function
+                           k = 2, # specify the number of dimensions
+                           autotransform = F # indicates that transformation has already been applied to the data
+                           )
+```
+
+When we run an NMDS, objects are first positioned in a random starting condition in the requested number of dimensions (default is 2). It then iteratively moves those objects and then calculates the Euclidean distances between all the objects in that configuration. It then does a pairwise comparison of those distances with the Euclidean distances in complete multidimensional space. That pairwise comparison is calculated as the Stress score, which can be interpreted as a goodness-of-fit of the distance adjustment in the reduced-space configuration. The lower the stress, the better the representation of objects in ordination space. NMDS continues to move objects in the requested number of dimensions until the stress score doesn't improve. That final configuration is the product of an NMDS.
+
+Stress scores lower than <0.2 are generally interpreted as there being a good visual representation of complete multidimensional space in the specified number of NMDS dimensions. <0.1 is great, and <0.05 is excellent, except that is rare.
+
+``` {r}
+# Stress score
+spe.nmds$stress # A stress score <0.1. Great!
+```
+
+We can do a visual check of goodness-of-fit using a Shepard's plot.
+
+``` {r}
+# Shepard Plot
+vegan::stressplot(spe.nmds, main = "Shepard plot")
+```
+
+Each of the points represent pairwise comparisons of the objects. The high correlation we see here indicates that the pairwise comparisons between multidimensional space (Observed Dissimilarity) and the configuration of objects in two dimensions (Ordination Distance) are correlated (higher ordination distance = higher observed distance). Therefore, the NMDS in two dimensions is a good fit. 
+
+Now lets make a biplot.
+
+``` {r, fig.height = 7, fig.width = 7}
+# NMDS Biplot
+vegan::ordiplot(spe.nmds, type = "t", xlim = c(-2,2),
+                ylim = c(-1.5, 1.5), main = "NMDS with Doubs Fish Species Community Abundance Data", sub = "Hellinger Transformed data with Bray-Curtis Coefficients")
+abline(v = 0, h = 0)
+```
+
+With an NMDS plot, we can say that sites close together have small Bray-Curtis distances, and therefore share species presences and also abundances. We can also see which fish species are contributing to those similarities. Unlike a PCA, the axes cannot be used as a latent variable in further analysis, the position of the data points along the axes are actually ordering of points relative to each other.
+
+***
+
+# Constrained Ordination
+
+In contrast to Unconstrained ordination, Constrained Ordination requires prior knowledge or assumptions about the structure of the data or the relationships among variables. Generally, the goal is to identify relationships between a multivariate response table (species composition) and a multivariate explanatory table (environmental gradients) by combining ordination and regression. Like Unconstrained Ordination, axes that describe the variance in a data set are produced, but these axes are constrained by environmental variables. The constrained ordination axes correspond to the directions of the variability in species composition which is explained by these environmental variables.
+
+Unlike Unconstrained Ordination, Constrained Ordination can be used to test hypotheses about the relationship between the environmental variables and species composition. It can partition the variance of species composition into the fraction explained by environmental variables (associated with constrained ordination axes), and not explained by environmental variables (unconstrained ordiation axes).   
+
+There are three ways you can work with environmental variables in the context of Constrained Ordination. The first is [Forward Selection](https://www.davidzeleny.net/anadat-r/doku.php/en:forward_sel), which is the selection of environmental variables relevant to species composition. The second is [Monte Carlo permutation test](https://www.davidzeleny.net/anadat-r/doku.php/en:monte_carlo), which aims to test the significance of the variance explained by chosen environmental factors. And finally [variance partitioning](https://www.davidzeleny.net/anadat-r/doku.php/en:varpart), which is partitioning the variance.
+
+The two most common Constrained Ordination techniques are Redundancy Analysis (RDA) and Constrained Correspondence Analysis (CCA). RDA can be thought of as the constrained form of PCA, while CCA is the constrained form of Correspondence Analysis. 
+
+## Redundancy Analysis
+
+The Redundancy Analysis models the effect of an explanatory matrix on a **response matrix**. This is an important distinction from the models we've made so far, which have only had one response variable.
+
+Like PCA, explanatory variables can be quantitative, qualitative, and/or binary. 
+
+### How RDA Works
+
+1. The first step involves multiple regression, where each object in the response matrix, **Y**, is regressed on the explanatory variables in **X**, which produces a matrix of fitted values, **Y**~***fit***~.
+
+![](images/Lab_1.png){Width="60%"}
+
+2. Then, we run a PCA on the matrix of fitted values **Y**~***fit***~. Just like before, PCA produces eigenvalues and eigenvectors, but in RDA we call these canonical axes. These axes are stored in a matrix ***Z***, which correspond to the linear combinations of the explanatory variables in ***X***. In analyzing community composition, these canonical axes are interpreted as complex environmental gradients. 
+
+We won't go into Canonical Correspondence Analysis in this lecture but more information can be found [here](https://ordination.okstate.edu/overview.htm#Canonical_Correspondence_Analysis). 
+
+For the lab, we'll go through a Redundancy Analysis on the Doubs fish data set.
+
+***
+
+# Sources
+
+What This Lecture is Adapted From
+
+- [Workshop 9: Multivariate Analyses in R](https://r.qcbs.ca/workshop09/book-en/index.html)
+- [Workshop 10: Advanced Multivariate Analyses in R](https://r.qcbs.ca/workshop10/book-en/index.html)
+
+More Information About Ordination 
+
+- [INTRODUCTION TO ORDINATION](https://ourcodingclub.github.io/tutorials/ordination/)
+- [Ordination Methods - an overview](https://ordination.okstate.edu/overview.htm)
+
+Principal Component Selection
+
+- [Principal Component Selection: The Broken-Stick Model](https://www.mohanwugupta.com/post/broken_stick/)
+- [STOPPING RULES IN PRINCIPAL COMPONENTS ANALYSIS: A COMPARISON OF HEURISTICAL AND STATISTICAL APPROACHES](https://esajournals.onlinelibrary.wiley.com/doi/epdf/10.2307/1939574?src=getftr)
+
+- [Ecological Applications in R: Introduction to Ordination](https://youtu.be/VU1yjK68yKQ?si=QWRZBB1iQ2t8L-3w)
+
+
+NMDS
+
+- [Ecological Applications in R, NMDS in R](https://youtu.be/OMrtxobDhrM?si=LoMLX6qveRi0G_FR)
+- [NMDS TUTORIAL IN R](https://jonlefcheck.net/2012/10/24/nmds-tutorial-in-r/)
+- [Stress scores](https://uw.pressbooks.pub/appliedmultivariatestatistics/chapter/nmds/#Stress)
