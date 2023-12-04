@@ -44,18 +44,26 @@ summary(vars)    # lots of variability in the scales of the predictor variables.
 
 # Build a function to prepare the data for RDA
 
-# what is x and what is y?
+# NOTES ----
+# x is env vars, y is species
+# hellinger transform is useful when you only care about relative abundances. 
+
+
 RDA_prep <- function(x, y){
   # Step 1: hellinger-transform the y data
-  as.data.frame(vegan::decostand(species, method = "hellinger"))
+  y=as.data.frame(vegan::decostand(y, method = "hellinger"))
   # Step 2: center and scale the x data
-  
+  x=scale(x)
+  return(list(x=x,y=y))
 }
 
 # Use the function to prepare our data for RDA
-data <- RDA_prep(x = ,
-                 y =
-                   )
+data <- RDA_prep(x = vars,
+                 y = species
+        )
+
+data$x
+data$y   # now the species 
 
 # Exercise 2 ----
 
