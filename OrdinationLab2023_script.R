@@ -42,16 +42,11 @@ data <- RDA_prep(x = ,
 #   using none of the predictor variables.
 rda_global <- vegan::rda(          )
 
-### MG Note: I would have an example of the syntax used for an RDA function so they don't have to struggle looking for an example ###
-
 rda_null <- vegan::rda(          )  
 
 # Step 2: Use the ordiR2step function for variable selection. Define the object as the 
 #   null rda, and the scope as the global rda.
 selection <- vegan::ordiR2step(         )
-
-### MG Note: I would also have an example of the syntax used for an ordir2step function so they don't have to struggle looking for an example ###
-
 
 # Step 3: View the results. The formula in the "Call" contains the variables that 
 #   ordiR2step selected.
@@ -63,9 +58,6 @@ rda_final <- vegan::rda(     )
 
 # Step 2: Visualize the rda using the ordiplot function
 vegan::ordiplot(     )
-
-### MG Note: maybe have a comment above hinting at where you can find the ordiplot() syntax? Such as:
-# Hint: look in the lecture script for ordiplot function syntax
 
 # Step 3: Calculate the adjusted R-squared and p-values for the rda
 r2 <- vegan::RsquareAdj(     )
