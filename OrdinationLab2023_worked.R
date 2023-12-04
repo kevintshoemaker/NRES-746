@@ -53,7 +53,7 @@ RDA_prep <- function(x, y){
   # Step 1: hellinger-transform the y data
   y=as.data.frame(vegan::decostand(y, method = "hellinger"))
   # Step 2: center and scale the x data
-  x=scale(x)
+  x=as.data.frame(scale(x))
   return(list(x=x,y=y))
 }
 
@@ -65,34 +65,60 @@ data <- RDA_prep(x = vars,
 data$x
 data$y   # now the species 
 
+
+
 # Exercise 2 ----
 
 # Step 1: Create a global RDA using all the predictor variables, and a null RDA 
 #   using none of the predictor variables.
-rda_global <- vegan::rda(          )
 
-rda_null <- vegan::rda(          )  
+# note: I am trying to fit a distance based RDA using vegan
+
+?dbrda
+
+
+# Q: does correlation mattter in this analysis?
+
+colnames(data$x)
+varstokeep <- c("slo","flo","pH","nit","Lat","bdo")
+cor(data$x[,varstokeep])
+
+full_form <- as.formula(paste0("species~",paste(varstokeep,collapse="+")))
+null_form <- as.formula("species~1")
+
+dbrda_global <- dbrda(full_form,
+                    data = data$x,
+                    distance = "bray")
+
+
+dbrda_null <- vegan::dbrda(null_form, data=data$x,distance = "bray")  
 
 # Step 2: Use the ordiR2step function for variable selection. Define the object as the 
 #   null rda, and the scope as the global rda.
-selection <- vegan::ordiR2step(         )
+selection <- vegan::ordiR2step(dbrda_null,scope=dbrda_global)
+
+selection$call
 
 # Step 3: View the results. The formula in the "Call" contains the variables that 
 #   ordiR2step selected.
-selection
+
+finalvars <- c("flo","bdo","slo")
+final_form <- as.formula(paste0("species~",paste(finalvars,collapse="+")))
 
 # Exercise 3 ----
 # Step 1: Use the rda function to run an rda on the variables selected in exercise 2
-rda_final <- vegan::rda(     )
+rda_final <- vegan::dbrda(final_form, data = data$x,
+                          distance = "bray"   )
 
 # Step 2: Visualize the rda using the ordiplot function
-vegan::ordiplot(     )
+vegan::ordiplot( rda_final    )
 
 # Step 3: Calculate the adjusted R-squared and p-values for the rda
-r2 <- vegan::RsquareAdj(     )
+r2 <- vegan::RsquareAdj( rda_final    )
+r2
 
-p <- vegan::anova.cca(     )
-
+p <- vegan::anova.cca( rda_final    )
+p
 
 
 
@@ -160,7 +186,7 @@ p <- vegan::anova.cca(rda_final, by="term")
 
 
 
-
+summary(rda_final)
 
 
 
