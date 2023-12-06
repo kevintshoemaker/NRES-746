@@ -36,6 +36,9 @@ Nile.ts <- ts(data = Nile$Y, start = 1871, end = 1970, frequency = 1) #our data 
 
 ts.plot(Nile.ts) #ts.plot() plots time series objects
 
+plot(Nile.ts)
+
+
 #Plot our original dataframe that wasn't a timeseries object
 ts.plot(Nile$Y) #remember we plot our response variable, Y
 
@@ -43,6 +46,7 @@ ts.plot(Nile$Y) #remember we plot our response variable, Y
 
 #Load the beavers dataset from R
 data(beavers) #We'll work with beaver1 :)
+
 
 #Look at the data
 head(beaver1)
