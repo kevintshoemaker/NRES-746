@@ -1,4 +1,38 @@
 
+################ Integrated Population Model ##########################
+
+
+
+
+### Load Data ----------------- 
+
+
+library(IPMbook)
+library(jagsUI)
+
+data(woodchat5)
+str(woodchat5)
+
+
+
+### Bundle data and produce data overview -------------------
+
+
+marr <- marrayAge(woodchat5$ch, woodchat5$age)
+
+jags.data <- list(marr.j=marr[,,1], marr.a=marr[,,2], n.occasions=dim(marr)[2],
+                  rel.j=rowSums(marr[,,1]), rel.a=rowSums(marr[,,2]), J=woodchat5$repro[,1],
+                  year=woodchat5$repro[,2], age=woodchat5$repro[,3], C=woodchat5$count, pNinit=dUnif(1, 300))
+str(jags.data)
+
+jags.data
+
+
+### Write JAGS model file -----------------------
+
+
+
+cat(file="model4.txt", "
 model {
 # Priors and linear models
 for (t in 1:(n.occasions-1)){
@@ -100,3 +134,51 @@ for (t in 1:n.occasions){
 
 }  # 
 
+")
+
+
+
+# Run the Model -----------------
+
+
+# Initial values
+inits <- function(){list(mean.sj=runif(1, 0, 0.5))}
+# Parameters monitored
+parameters <- c("mean.sj", "mean.sa", "mean.f", "mean.p", "sigma.sj", "sigma.sa", "sigma.f",
+                "sigma", "sj", "sa", "f", "N", "ann.growth.rate", "Ntot")
+# MCMC settings
+ni <- 12000; nb <- 2000; nc <- 3; nt <- 2; na <- 1000
+# Call JAGS (ART 1 min), check convergence and summarize posteriors
+out4 <- jags(jags.data, inits, parameters, "model4.txt", n.iter=ni, n.burnin=nb, n.chains=nc,
+             n.thin=nt, n.adapt=na, parallel=TRUE)
+
+
+
+# Results ---------------------
+
+
+#traceplot(out4) # Warning: there are a lot of estimated parameters
+print(out4, 3)
+
+
+
+mag <- 1.25
+cex.tif <- mag * 1.25
+lwd.tif <- 3 * mag
+op <- par(mar=c(4, 4, 3, 0), las=1, cex=cex.tif, lwd=lwd.tif)
+u <- col2rgb("grey82")
+T <- length(woodchat5$count)
+col.pol <- rgb(u[1], u[2], u[3], alpha=100, maxColorValue=255)
+plot(out4$mean$Ntot, type="n",
+     ylim=range(c(out4$q2.5$Ntot, out4$q97.5$Ntot, woodchat5$count)),
+     ylab="Population size", xlab="Year", las=1, cex=1.5, axes=FALSE)
+axis(2, las=1, lwd=lwd.tif)
+axis(2, at=c(90, 110, 130, 150), labels=NA, tcl=-0.25, lwd=lwd.tif)
+axis(1, at=1:T, labels=NA, tcl=-0.25, lwd=lwd.tif)
+axis(1, at=c(5, 10, 15, 20), labels=c(5, 10, 15, 20), tcl=-0.5, lwd=lwd.tif)
+polygon(c(1:T, T:1), c(out4$q2.5$Ntot, out4$q97.5$Ntot[T:1]), border=NA, col=col.pol)
+points(out4$mean$Ntot, type="b", col="black", pch=16, lty=1, lwd=lwd.tif)
+points(woodchat5$count, type="b", col="blue", pch=1, lty=2, lwd=lwd.tif)
+legend("topleft", legend=c("Observed population counts", "Estimated population size"),
+       pch=c(1, 16), lwd=c(lwd.tif, lwd.tif), col=c("blue", "black"), lty=c(2, 1), bty="n")
+par(op)
