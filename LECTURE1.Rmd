@@ -97,44 +97,46 @@ z.test(x=mysample,mu=pop_mean, sigma.x=pop_sd,alternative = "less")
 
 ```
 
-...and we quickly conclude that our sample mean is smaller than we could ever reasonably expect to observe under the null hypothesis. This leads us to conclude that the sample was NOT drawn from the null distribution, and that fish raised on the new diet generally have lower body mass than fish raised on a conventional diet. 
+...and we conclude that our sample mean is smaller than we could ever reasonably expect to observe under the null hypothesis. This leads us to conclude that the sample was NOT drawn from the null distribution, and that fish raised on the new diet generally have lower body mass than fish raised on a conventional diet. 
 
 Here's an alternative z-test performed using base R:
 
 ```{r}
 
-# alternative z-test  -----------------------
+# alternative z-test in base R (no packages)  -----------------------
 
-stderr = pop_sd/sqrt(myN)   # standard deviation for sample means drawn from the null population
+pop_se = pop_sd/sqrt(myN)   # standard deviation for sample means drawn from the null population
 
-curve(dnorm(x,pop_mean,stderr),0,10,     # visualize the sampling distribution under null hypothesis
+curve(dnorm(x,pop_mean,pop_se),0,10,     # visualize the sampling distribution under null hypothesis
       xlab="Body mass (kg)",ylab="Probability density")     # versus the observed sample mean
 abline(v=mysamplemean,col="blue",lwd=3)
 
-p.val = pnorm(mysamplemean,pop_mean,stderr)
+p.val = pnorm(mysamplemean,pop_mean,pop_se)    # note that neither pop_mean or pop_se are random variables- they are known with certainty. Therefore we can use a normal distribution (the known data distribution under the null hypothesis, as specified above) to define the sampling error. 
 p.val     # this is the same as the p value from the z-test above...
 
 ```
 
-### Brute-force algorithmic z-test
+### Brute-force z-test
 
-But imagine that we didn't know about the z-test, or standard errors of the mean. Let's build a solution to the same problem from the ground up, using our statistical intuition and R programming! Of course this is *totally unnecessary* in this case, but you may quickly run into problems with no simple, "canned" solution. 
+But imagine that we didn't know about the z-test, or standard errors of the mean, but we had a basic intuition about the problem we need to solve. 
 
-First, let's state the problem:
+Let's build a solution to the same problem from the ground up, using our statistical intuition and some base R! 
 
-We want to know if the mean mass of 10 salmon raised on the new diet is less than the mean mass we would expect to observe if we sampled 10 random salmon raised on the conventional diet. 
+Of course this is *totally unnecessary* in this case, but you may run into problems with no simple, "canned" solution. 
 
-Let's build a simulation-based algorithm to generate a p-value! 
+First, restate the problem: we want to know if the mass of 10 salmon raised on the new diet is lower on average than the mass of 10 random salmon raised on the conventional diet. Fish raised on the conventional diet have a mass of 4.5 kg on average, with among-individual standard deviation of 0.9 kg.   
+
+Then simulate some data under the assumed null hypothesis. 
 
 Recall the difference between a "population" and a "sample" in statistics:
 
 ![](statistics1.png){width=50%}
 
-Ultimately, we want to make inference about a **population**, but all we have to go on is the **sample**. So we compute one or more **statistics** from our sample and use probabilistic reasoning to infer the extent to which our sample says something meaningful about the population-level **parameters** we are interested in. Because we didn't observe the whole population (the sample typically represents only a small fraction of the total population), there's often substantial uncertainty about how well the sample statistic actually represents the population of interest- this is called **sampling uncertainty**. 
+Ultimately, we want to make inference about a **population**, but all we have to go on is the **sample**. So we compute **statistics** from our sample and use probabilistic reasoning to infer the extent to which our sample says something meaningful about the population-level **parameters**. Because we didn't observe the whole population (the sample typically represents only a small fraction of the total population), there's often substantial uncertainty about how well the sample statistic actually represents the population of interest- this is called **sampling uncertainty**. 
 
-Here, the *population* we are referring to is all farm-raised Atlantic salmon that are raised on the new vegetarian diet. The population *parameter* we are interested in is the mean body mass of these salmon after one year. The *sample* refers to all salmon actually measured as part of this study. Finally, the sample *statistic* is the observed mean body mass of all individuals in our sample.     
+Here, the *population* we are referring to is farm-raised Atlantic salmon raised on the new vegetarian diet. The population *parameter* we are interested in is the mean body mass of these salmon after one year (or alternatively, the difference in mass relative to fish raised on the standard diet). The *sample* refers to all salmon measured as part of this study. Finally, the *statistic* is the observed mean body mass of all individuals in our sample.     
 
-Let's start by simulating a *statistical population* under the null hypothesis (no treatment effect):  
+Let's start by simulating a *population* under the null hypothesis (no treatment effect):  
 
 ```{r}
 
@@ -142,9 +144,9 @@ Let's start by simulating a *statistical population* under the null hypothesis (
 
 ## Simulate the STATISTICAL POPULATION under the null hypothesis -----------------
 
-lots <- 1000000  # large number approximating infinity 
+lots <- 1000000  # large number filling in for infinity 
 
-popData_null <- rnorm(n=lots,mean=population.mean,sd=population.sd)    # the statistical "population" of interest (under null model w no 'treatment' effect)
+null_population <- rnorm(n=lots,mean=pop_mean,sd=pop_sd)    # the statistical "population" of interest (under null model w no 'treatment' effect)
 
 ```
 
@@ -152,86 +154,86 @@ Then we can draw a **sample** from the null distribution:
 
 ```{r}
 
-## Draw a SAMPLE from that null data ----------------
+## Draw a SAMPLE from the null population ----------------
 
-null.sample <- sample(popData_null,size=sample.size)    # use R's native "sample()" function to sample randomly from the null distribution
+null_sample <- sample(null_population,size=myN)    # use R's native "sample()" function to sample randomly from the null distribution
 
-round(null.sample,2)
-null.samplemean <- mean(null.sample)  
-null.samplemean    # here is one sample mean that we can generate under the null hypothesis
+round(null_sample,2)
+null_statistic <- mean(null_sample)  
+null_statistic    # here is one sample mean that we can generate under the null hypothesis
 
 ```
 
-Try it! What did you get? It may differ quite a bit from what I got!
+Try it! What did you get? It may differ quite a bit from what I got! That is because the statistic (sample mean) is a random variable- because it is computed from the null data distribution, which is itself a (Gaussian) random variable. 
 
-This null sample mean represents the mean of 10 fish sampled under a *null hypothesis* where there is no underlying difference in body mass between the conventional diet and the new diet. Of course, under the null hypothesis, the fish we measured were basically drawn from the null distribution- just like the random sample we just drew. The fact that this sample mean is not equal to 4.5 (the known population mean) represents **sampling error**.     
+This null sample mean represents the mean of 10 fish sampled under a *null hypothesis* where there is no underlying difference in body mass between the conventional diet and the new diet. Of course, under the null hypothesis, the fish we measured were also drawn from the null distribution- just like the random sample we just drew. 
 
-Our ultimate goal is to determine how likely it is that the observed difference between the sample mean (the mean body mass of the fish we actually measured) and the known population mean is just a meaningless artifact of sampling error! This is exactly what the **p-value** tells us!
+The fact that this sample mean is not equal to 4.5 (the known mean of the population the sample was plucked out of) represents **sampling error**.     
 
-To begin to **falsify** our null hypothesis about the population of interest, we need to determine the probability that random sampling error could produce a result at least as extreme as our observed sample statistic. This is our goal! 
+Our goal is to determine the extent to which the observed sample mean (the mean body mass of the fish we actually measured) is *inconsistent* with the known population mean. This is what the **p-value** tells us.
 
 Now that we understand the study and research questions, we can write an algorithm to accomplish our goal!
 
-Let's generate a **sampling distribution** (distribution of sample statistics generated under the null hypothesis). 
-
-Here, we repeat this sampling process many times (using a "FOR" loop), each time drawing a different random sample of body masses from our null data population.   
+Here, we repeat the (random) sampling process many times (using a "FOR" loop), where each iteration of the loop draws and stores a different random sample of body masses under the null hypothesis:   
 
 ```{r}
 
 ## Repeat this process using a FOR loop ----------------------
 
-n.samples <- 1000                 # set the number of replicate samples to generate
-null.samplemeans <- numeric(n.samples)       # initialize a storage vector for sample means under the null hypothesis
+null_replicates <- 1000                 # set the number of replicate samples to generate  (yet another number intended to approximate infinity!)
+null_statistics <- numeric(null_replicates)       # initialize a storage vector for sample means under the null hypothesis
 
-for(i in 1:n.samples){            # for each replicate... 
-  this.nullsample <- sample(popData_null,size=sample.size)      # draw a sample of body masses assuming no treatment effect       
-  null.samplemeans[i] <- mean(this.nullsample)           # compute and store the sampling distribution produced under the null hypothesis
+for(i in 1:null_replicates){            # for each replicate... 
+  null_sample <- sample(null_population,size=myN)      # draw a sample of body masses assuming no treatment effect       
+  null_statistics[i] <- mean(null_sample)           # compute and store the sampling distribution produced under the null hypothesis
 }
 
-hist(null.samplemeans,xlim=c(0,10))       # plot out the sampling distribution
-abline(v=obs.samplemean,col="green",lwd=3)     # overlay the observed sample statistic. 
+hist(null_statistics,xlim=c(0,10))       # plot out the sampling distribution
+abline(v=mysamplemean,col="green",lwd=3)     # overlay the observed sample statistic. 
 
 ```
 
-Now, all we need to do to compute a p-value is to compare this vector of sampling errors with the observed statistic (between-group difference):
+Now, all we need to do to compute a p-value is to compare our simulated sampling distribution with the observed statistic:
 
 ```{r}
 
-## Generate a p-value algorithmically!!   --------------------------
+## Generate a p-value  --------------------------
 
-ordered_means <- sort(null.samplemeans)       # sort the vector of null sample means
-more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "extremeness" of the observed statistic?
-p_value <- more_extreme/n.samples       # compute a p-value! 
+more_extreme <- length(which(null_statistics<=mysamplemean))       # how many of these sampling errors equal or exceed the "extremeness" of the observed statistic?
+p_value <- more_extreme/null_replicates       # compute a p-value! 
 p_value    
 
 ```
 
-Now, for convenience, let's collapse this all into a *function* for conducting our algorithmic t-test.
+NOTE: technically this p-value is not the true p-value, but a random variable that will approach the true p-value as the number of replicate samples goes to infinity. In this case, we CAN compute the true p-value mathematically without much trouble. But this won't always be the case! We need to embrace approximate answers when closed-form mathematical solutions are not available. 
+
+Now, for convenience, let's collapse this all into a *function* for conducting our brute-force t-test.
 
 Here is the pseudocode:
 
 Function inputs:   
 
-* sample: the sampled data      
-* pop.mean: the known population mean under the null hypothesis     
-* pop.sd: the known population std deviation under the null hypothesis      
+* d: the observed data (or a stand-in for the observed data), which is assumed to be a random sample from an unknown population      
+* mu: the known population mean under the null hypothesis     
+* sigma: the known population std deviation under the null hypothesis      
     
-Function algorithm:     
+Suggested algorithm:     
 
-* compute the sample mean    
-* determine the sample size    
-* do the following 1000 times:    
-    - obtain a sample from the null data distribution of the same size as the observed data     
+* compute the sample mean (statistic of interest- can call it Xbar)    
+* compute the observed sample size (N; the number of data observations)    
+* do the following thousands of times (the number of reps should 'stand in' for infinity):    
+    - simulate N random samples from the null distribution  
+    - compute the sample mean (statistic of interest, assuming null hypothesis is true)
     - store the result     
-* determine how many of the null samples were more extreme than the observed sample statistic     
-* compute the p-value    
+* determine how many of the simulated sample means were more extreme than the observed sample mean     
+* compute the p-value (fraction of simulated sample means that provide at least as much support for the alternative hypothesis than the observed sample mean)   
 
 Function returns:      
 
-* a list object with:     
-    - null_dist: the sampling distribution under the null hypothesis     
-    - p_value: the p-value!     
-    - observed_mean: the sample mean    
+* a named list with 3 list elements:     
+    - nulldist = the simulated distribution of sample means under the null hypothesis (a vector with thousands of elements)     
+    - p = the p-value (a single number)     
+    - Xbar = the sample mean (a single number)    
 
 Now let's write the function in R!    
         
@@ -240,50 +242,36 @@ Now let's write the function in R!
 
 # Develop a function that wraps up all the above steps into one! ------------------
 
-z.test.algorithm <- function(sample, pop.mean, pop.sd){
-
-  # Compute the sample statistic
-  
-  observed_mean <- mean(sample)
-  
-  sample.size <- length(sample)   # compute sample size
-
-  # Generate SAMPLING DISTRIBUTION
-  
-  reps <- 1000                 # set the number of replicate samples
-  null_dist <- numeric(reps)       # initialize a storage structure for sampling distribution
-  
+ztest_bruteforce <- function(d, mu, sigma){
+  return_list <- list() # bundle results to return using a list object
+  return_list$Xbar <- mean(d)  # Compute the sample statistic
+  N <- length(d)   # compute sample size
+  reps <- 1000       # stand-in for infinity 
+  return_list$nulldist <- numeric(reps)       # initialize a storage structure for sampling distribution
   for(i in 1:reps){            # for each replicate... 
-    nullsamp <- rnorm(sample.size,pop.mean,pop.sd)      # draw a sample assuming no treatment effect       
-    null_dist[i] <- mean(nullsamp)           # compute and store the sample produced under the null hypothesis
+    nullsamp <- rnorm(N,mu,sigma)      # Simulate random sample     
+    return_list$nulldist[i] <- mean(nullsamp)           # generate sampling distribution
   }
-  
-  more.extreme <- length(which(null_dist<=observed_mean))       # how many of these are more extreme than the sample statistic?
-  p_value <- more.extreme/reps
-  
-  to_return <- list()   # initialize object to return
-  
-  to_return$null_dist <- null_dist
-  to_return$p_value <- p_value
-  to_return$observed_mean <- observed_mean
-  
-  return(to_return)
-
+  more.extreme <- length(which(return_list$nulldist<=return_list$Xbar))       # how many of these are more extreme than the sample statistic?
+  return_list$p_value <- more.extreme/reps
+  return(return_list)
 }
 
-ztest <- z.test.algorithm(sample = my.sample, pop.mean=population.mean, pop.sd=population.sd )   # try to run the new function
+ztest <- ztest_bruteforce(d = mysample, mu=4.5, sigma=0.9 )   # try to run the new function
 
 ztest$p_value     # get the p_value
 
-hist(ztest$null_dist,xlim=range(c(ztest$observed_mean,ztest$null_dist)))       # plot out all the samples under the null hypothesis as a histogram
-abline(v=ztest$observed_mean,col="green",lwd=3)     # indicate the observed sample statistic. 
+hist(ztest$nulldist,xlim=range(c(ztest$Xbar,ztest$nulldist)))       # plot out all the samples under the null hypothesis as a histogram
+abline(v=ztest$Xbar,col="green",lwd=3)     # indicate the observed sample statistic. 
 
 ```
 
-
 #### Take-home message
-The value of the algorithmic, brute-force approach to statistics is the flexibility! We have to be aware of assumptions in all of our analyses, but when we build our own algorithms, we can easily "relax" these assumptions! We only make the assumptions we are comfortable making. And we have to be totally explicit about our assumptions, because we are forced to code those assumptions explicitly!
+The value of the brute-force approach to statistics is the flexibility. If we full understand the problem we want to solve, we can build an algorithm to help solve it. 
 
+We always need to be aware of assumptions in all of our analyses, but when we build our own algorithms, we can easily "relax" these assumptions as needed. We only make the assumptions we are comfortable making. And when we write our own simulation routines, we are forced to code those assumptions explicitly!
+
+For example:   // start here*************
 
 ### A nonparametric t-test: permutation t-test
 
