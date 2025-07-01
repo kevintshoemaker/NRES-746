@@ -184,12 +184,12 @@ null_replicates <- 1000                 # set the number of replicate samples to
 null_statistics <- numeric(null_replicates)       # initialize a storage vector for sample means under the null hypothesis
 
 for(i in 1:null_replicates){            # for each replicate... 
-  null_sample <- sample(null_population,size=myN)      # draw a sample of body masses assuming no treatment effect       
+  null_sample <- sample(null_population,size=myN)      # draw a random sample of body masses assuming no treatment effect       
   null_statistics[i] <- mean(null_sample)           # compute and store the sampling distribution produced under the null hypothesis
 }
 
-hist(null_statistics,xlim=c(0,10))       # plot out the sampling distribution
-abline(v=mysamplemean,col="green",lwd=3)     # overlay the observed sample statistic. 
+hist(null_statistics,xlim=c(0,10))       # plot out the sampling distribution using base R plotting
+abline(v=mysamplemean,col="green",lwd=3)     # overlay the observed sample statistic  
 
 ```
 
@@ -205,9 +205,9 @@ p_value
 
 ```
 
-NOTE: technically this p-value is not the true p-value, but a random variable that will approach the true p-value as the number of replicate samples goes to infinity. In this case, we CAN compute the true p-value mathematically without much trouble. But this won't always be the case! We need to embrace approximate answers when closed-form mathematical solutions are not available. 
+NOTE: technically this p-value is not the true p-value, but instead is a random variable that will approach the true p-value as the number of replicate samples goes to infinity. In this case, we CAN compute the true p-value more exactly using mathematics. While this won't always be the case, it's generally a good idea to use mathematical solutions where available, and to embrace approximate answers when closed-form mathematical solutions are not available. 
 
-Now, for convenience, let's collapse this all into a *function* for conducting our brute-force t-test.
+Now, for convenience, let's collapse this all into a *function* for conducting our brute-force z-test.
 
 Here is the pseudocode:
 
@@ -219,7 +219,7 @@ Function inputs:
     
 Suggested algorithm:     
 
-* compute the sample mean (statistic of interest- can call it Xbar)    
+* compute the sample mean (statistic of interest- call it Xbar)    
 * compute the observed sample size (N; the number of data observations)    
 * do the following thousands of times (the number of reps should 'stand in' for infinity):    
     - simulate N random samples from the null distribution  
@@ -236,7 +236,6 @@ Function returns:
     - Xbar = the sample mean (a single number)    
 
 Now let's write the function in R!    
-        
 
 ```{r eval=FALSE}
 
@@ -246,14 +245,12 @@ ztest_bruteforce <- function(d, mu, sigma){
   return_list <- list() # bundle results to return using a list object
   return_list$Xbar <- mean(d)  # Compute the sample statistic
   N <- length(d)   # compute sample size
-  reps <- 1000       # stand-in for infinity 
+  reps <- 1000       # stand-in for infinity [compute lots of replicate samples under the null hypothesis] 
   return_list$nulldist <- numeric(reps)       # initialize a storage structure for sampling distribution
   for(i in 1:reps){            # for each replicate... 
-    nullsamp <- rnorm(N,mu,sigma)      # Simulate random sample     
-    return_list$nulldist[i] <- mean(nullsamp)           # generate sampling distribution
+    return_list$nulldist[i] <- mean(rnorm(N,mu,sigma))           # Simulate random sample and generate sampling distribution
   }
-  more.extreme <- length(which(return_list$nulldist<=return_list$Xbar))       # how many of these are more extreme than the sample statistic?
-  return_list$p_value <- more.extreme/reps
+  return_list$p_value <- sum(return_list$nulldist<=return_list$Xbar)/reps   # how many of these are more extreme than the sample statistic?
   return(return_list)
 }
 
@@ -267,81 +264,71 @@ abline(v=ztest$Xbar,col="green",lwd=3)     # indicate the observed sample statis
 ```
 
 #### Take-home message
-The value of the brute-force approach to statistics is the flexibility. If we full understand the problem we want to solve, we can build an algorithm to help solve it. 
+The value of the brute-force approach to statistics is the flexibility. If we fully understand the problem we want to solve, we can build an algorithm to help solve it. 
 
-We always need to be aware of assumptions in all of our analyses, but when we build our own algorithms, we can easily "relax" these assumptions as needed. We only make the assumptions we are comfortable making. And when we write our own simulation routines, we are forced to code those assumptions explicitly!
+We always need to be aware of the assumptions we are making, but when we build custom algorithms, we can easily "relax" these assumptions as needed. Only make the assumptions you are comfortable making. And when you write our own simulation routines, you are forced to code those assumptions explicitly!
 
-For example:   // start here*************
+For example:
 
-### A nonparametric t-test: permutation t-test
+### permutation t-test
 
-What if we don't want to make any assumptions about the process that generated the data? The normal distribution can arise in many different ways (according to the central limit theorem), but many data-generating processes **don't** result in a normal distribution!
+What if we don't want to make any assumptions about the process that generated the data? By the central limit theorem, the distribution of the sum of many i.i.d. random variables will be normally distributed- that's why we find bell shaped distributions so commonly in the real world!. However, many data-generating processes **don't** result in a normal distribution and we shouldn't blindly assume our data behave "nicely" and follow any normality assumptions. 
 
-We might be able to imagine which of the many alternative distributions makes the most sense for our data. But many times we can't do this with any level of certainty. What can we do in this case? A *permutation test* provides one answer.
-
-This is a *nonparametric* test, meaning it does not make any assumptions about how the population parameter of interest is distributed.
+A *permutation test* allows us to test hypotheses without making distributional assumptions like normality. This is a *nonparametric* (or distribution-free) test.
 
 #### example: pygmy short-horned lizard
 
 ![](shorthornedlizard.jpg){width=30%}
 
-Let’s imagine we’re interested in testing whether the expected mass of a study organism (let’s say an adult pygmy short-horned lizard, *Phrynosoma douglasii*) in Treatment A (e.g., habitat restoration treatment) differs from Treatment B (e.g., no habitat restoration). In other words: does knowledge of an individuals treatment status contribute anything to understanding and/or predicting an individual’s mass?
+Imagine we’re interested in testing if the expected mass of a study organism (let’s say a pygmy short-horned lizard, *Phrynosoma douglasii*) in Treatment A (e.g., cheatgrass removal treatment) differs from a control (e.g., no restoration treatment). In other words: does knowledge of treatment status contribute anything to predicting an individual’s body mass?
 
-In this case, our alternative hypothesis is two-tailed: the treatment means are different, but treatment A mean could be larger or smaller than treatment B mean. 
+In this case, our alternative hypothesis is two-tailed.  
 
 ```{r}
 
 # Nonparametric t-test (permutation test) ------------------------
 
-## Start with a made-up data frame! ---------------------
-
+## Start with a made-up data frame ---------------------
 
 df <- data.frame(
-  A = c(175, 168, 168, 190, 156, 181, 182, 175, 174, 179),
-  B = c(185, 169, 173, 173, 188, 186, 175, 174, 179, 180) 
+  trtA = c(175, 168, 168, 190, 156, 181, 182, 175, 174, 179),
+  Control = c(185, 169, 173, 173, 188, 186, 175, 174, 179, 180) 
 )
 
 summary(df)    # summarize! 
 
-sample.size <- length(df$A)     # determine sample size    
+N <- nrow(df)     # determine sample size N   
 
 # Get data in proper format
 
 reshape_df <- data.frame(                # "reshape" the data frame so each observation gets its own row (standard 'tidy' format)
-  Treatment = rep(c("A","B"),each=sample.size),
-  Mass = c(df$A,df$B),
+  Treatment = rep(factor(c("trtA","Control"),levels=c("Control","trtA")),each=N),
+  Mass = c(df$trtA,df$Control),
   stringsAsFactors = T
 )
-
-
-## Alternative (commented out)- using the 'tidyverse'
-
-# library(tidyr)
-# reshape_df <- pivot_longer(df,everything(),names_to = "Treatment",values_to="Mass")
-
 
 plot(Mass~Treatment, data=reshape_df)    # explore/visualize the data
 
 ## Compute the observed difference between group means  -----------------
 
-observed_dif <- mean(reshape_df$Mass[reshape_df$Treatment=="A"])	- mean(reshape_df$Mass[reshape_df$Treatment=="B"])
+observed_dif <-  diff(with(reshape_df,tapply(Mass,Treatment,mean)))
 
 
 ```
 
-Here, our goal will be to determine if the observed difference between the two group means could plausibly result from random sampling under the null hypothesis. This time, we want to generate a p-value that represents the probability that random sampling (under the null hypothesis) could result in a difference as or more extreme than the observed difference. 
+Here, our goal will be to determine if the observed difference between the two group means is inconsistent with random sampling under the null hypothesis, where the p-value represents the probability that random sampling (under the null hypothesis) could result in an absolute difference as or more extreme than the observed difference. 
 
 Let's build this permutation-test algorithm together. 
 
 Here is some **pseudocode**:
 
-1. Define the number of permutations to run (number of replicate samples to generate)     
+1. Define the number of permutations to run (number of replicate samples)     
 2. Define a storage vector with the same number of elements as the number of samples to generate.
 3. For each replicate sample:
-    a. Assign each observation to a random treatment group (A or B)
-    b. Compute the difference between the group means after assigning each observation to a random treatment group
+    a. Assign each observation to a random treatment group (trtA or Control)
+    b. Compute the difference between the group means after assigning each observation to a random treatment group (treatment - control, with control serving as the benchmark for comparison)
     c. Store this value in the storage vector
-4. Plot a histogram of the differences between group means under the null hypothesis (null sampling distribution)
+4. Plot a histogram of the differences between group means under the null hypothesis (null sampling distribution under random permutations)
 5. Add a vertical line to the plot to indicate the observed difference between group means
 6. Compute a p-value
 
@@ -350,12 +337,11 @@ Here is some **pseudocode**:
 
 ## Run permutation t-test ----------------
 
-reps <- 5000            # Define the number of permutations to run (number of replicates)
+reps <- 5000            # Number of replicates - another number representing infinity!
 null_difs <- numeric(reps)   # initialize storage variable
 for (i in 1:reps){			# For each replicate:		
-  newGroup <- reshape_df$Treatment[sample(c(1:nrow(reshape_df)))]			   # randomly shuffle the observed data with respect to treatment group
-	dif <- mean(reshape_df$Mass[newGroup=="A"])	- mean(reshape_df$Mass[newGroup=="B"])	   #  compute the difference between the group means after reshuffling the data
-	null_difs[i] <- dif	    # store this value in a vector
+  newGroup <- reshape_df$Treatment[sample(c(1:nrow(reshape_df)))]			   # assign each observation a random treatment group
+	null_difs[i] <- mean(reshape_df$Mass[newGroup=="trtA"])	- mean(reshape_df$Mass[newGroup=="Control"])	   #  compute the difference between the group means after reshuffling the data
 }
 hist(null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
 abline(v=observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
@@ -370,13 +356,10 @@ Now we can compute a p-value, just as we did before:
 
   #just like we did before (except now 2-tailed)!
 
-
-more_extreme <- length(which(abs(null_difs)>=abs(observed_dif)))
-p_value <- more_extreme/reps  
+p_value <- sum(abs(null_difs)>=abs(observed_dif))/reps 
 p_value
 
 ```
-
 
 Again, for convenience, let's package this new permutation-based t test into an R function:    
 
@@ -384,53 +367,35 @@ Again, for convenience, let's package this new permutation-based t test into an 
 
 ## Develop a function that performs a permutation-t-test! -----------------------
 
-t.test.permutation <- function(dat = reshape_df, group = "Treatment", value = "Mass" ){
-
-  # Compute the sample statistic
-  
-  indexA <- which(dat[,group]=="A")     # rows representing treatment A
-  indexB <- which(dat[,group]=="B")     # rows representing treatment B
-  observed_dif <- mean(dat[indexA,value]) - mean(dat[indexB,value])
-  
-  reps <- 5000            # Define the number of permutations to run (number of replicates)
-  null_difs <- numeric(reps)   # initialize storage variable
+ttest_permutation <- function(dat = reshape_df, group = "Treatment", value = "Mass" ){
+  to_return <- list()   # initialize object to return
+  to_return$observed_dif = diff(tapply(dat[[value]],dat[[group]],mean)  )            # Compute the sample statistic
+  to_return$null_difs <- numeric(reps)   # initialize storage variable
   for (i in 1:reps){			# For each replicate:		
-    newGroup <- reshape_df$Treatment[sample(c(1:nrow(reshape_df)))]			   # randomly shuffle the observed data with respect to treatment group
-  	dif <- mean(reshape_df$Mass[newGroup=="A"])	- mean(reshape_df$Mass[newGroup=="B"])	   #  compute the difference between the group means after reshuffling the data
-  	null_difs[i] <- dif	    # store this value in a vector
+  	to_return$null_difs[i] <- diff(tapply(dat[[value]],sample(dat[[group]]),mean)  ) 	    # compute and store sample stat after permuting the treatments
   }
   
-  more_extreme <- length(which(abs(null_difs)>=abs(observed_dif)))
-  p_value <- more_extreme/reps  
-  
-  to_return <- list()   # initialize object to return
-  
-  to_return$null_difs <- null_difs
-  to_return$p_value <- p_value
-  to_return$observed_dif <- observed_dif
-  
+  to_return$p_value <- sum(abs(null_difs)>=abs(observed_dif))/reps  
   return(to_return)
-  
 }
 
-my.ttest <- t.test.permutation()   # use default values for all function arguments
+mytest <- ttest_permutation(reshape_df)   # use default values for all function arguments
 
-my.ttest$p_value
+mytest$p_value
 
-hist(my.ttest$null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
-abline(v=my.ttest$observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
+hist(mytest$null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
+abline(v=mytest$observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
 
 
 ```
 
-
 ## Bootstrapping a confidence interval
 
-Let's imagine we want to compare different predictor variables in terms of how strong the relationship is with a response variable. In this case, we will use the coefficient of determination ($R^2$) as a measure of how good a predictor is. However, we want to be able to say that one predictor is definitively *better* than another one -- for that, we would like a confidence interval around the $R^2$ value.
+What if we want to compare different predictor variables in terms of how strong the relationship is with a response variable. In this case, we might choose to use the coefficient of determination ($R^2$) as a measure of how "good" a predictor is. However, we want to be able to put a confidence interval around the $R^2$ value.
 
-But... none of the standard R packages provides a confidence interval for the $R^2$ value... What to do???
+But... no standard R package provides a confidence interval for the $R^2$ value... What to do??
 
-With an algorithmic approach to statistics, getting stuck is not an option. We can just write some code!
+Getting stuck is not an option if we know how to code...
 
 Let's use the "trees" dataset provided in base R:
 
@@ -439,25 +404,24 @@ Let's use the "trees" dataset provided in base R:
 # Demonstration: bootstrapping a confidence interval! ---------------------
 
 ## use the "trees" dataset in R:
-
 head(trees)   # use help(trees) for more information
 
 ```
 
 Tree volume is our response variable. We want to test whether girth or height are better predictors of tree volume. 
 
-Let's first do some basic data exploration:
+Let's first do some exploration:
 
 ```{r}
 
-## Basic data exploration  --------------------
+## Data exploration  --------------------
 
 plot(trees$Volume~trees$Height, main = 'Black Cherry Tree Height/Volume Relationship', xlab = 'Height', ylab = 'Volume', pch = 16, col ='blue')
 plot(trees$Volume~trees$Girth, main = 'Black Cherry Tree Girth/Volume Relationship', xlab = 'Girth', ylab = 'Volume', pch = 16, col ='red')
 
 ```
 
-Let's write a simple function that generates coefficients of determination given a response and some predictor variables:
+Here's a simple function that generates coefficients of determination given a response and some predictor variables:
 
 ```{r}
 
@@ -467,14 +431,12 @@ Let's write a simple function that generates coefficients of determination given
 
 Rsquared <- function(df,responsevar="Volume"){    # univariate models only- interaction and multiple regression not implemented here
   response <- df[,responsevar]       # extract the response variable
-  names <- names(df)                  
-  rsq <- numeric(length(names))        # named storage vector
-  names(rsq) <- names(df)               
-  rsq <- rsq[names(rsq)!=responsevar]           # assume that all columns that are not the response variable are possible predictor variables
+  varnames <- setdiff(names(df),responsevar)      # extract all column names that are not the response    
+  rsq <- numeric(length(varnames))        # named storage vector
+  names(rsq) <- varnames               
   for(i in names(rsq)){         # loop through predictors
-      predictor <- df[,i]                  # extract this predictor
-      model <- lm(response~predictor)       # regress response on predictor
-      rsq[i] <- summary(model)$r.square       # extract R-squared statistic
+      model <- lm(as.formula(paste0(responsevar,"~",i)),df)       # regress response on predictor
+      rsq[i] <- summary(model)$r.square       # extract R-squared statistic   1-RSS/TSS
   }
   return(rsq)     
 }
@@ -482,7 +444,7 @@ Rsquared <- function(df,responsevar="Volume"){    # univariate models only- inte
 ```
 
 
-Let's first compute the $R^2$ values for all predictor variables:
+Let's first compute the $R^2$ values for all predictor variables in the trees dataset:
 
 ```{r}
 
@@ -493,24 +455,25 @@ stat
 
 ```
 
-Now we can use a "bootstrapping" procedure to generate a confidence interval around these values, to see how certain we can be about the strength of the linear relationship between the response and the predictor variable in general (the population-level *parameter*) on the basis of the computed R-squared value (a sample *statistic*)  
+As a test to see if this function can be used for any dataset, try with the 'mtcars' dataset:
+
+```{r}
+
+Rsquared(mtcars,"mpg")
+
+```
+
+Now we can use a "bootstrapping" procedure to generate a confidence interval around these values.  
 
 Let's first write a function to generate bootstrap samples from a data set:
 
 ```{r}
 
-# new function to generate "bootstrap" samples from a data frame  ----------------
+# new function to generate multiple "bootstrap" estimates of a test statistic  ----------------
 
-boot_sample <- function(df,statfunc,n_samples,responsevar="Volume"){
-  indices <- c(1:nrow(df))
-  output <- matrix(NA,nrow=n_samples,ncol=ncol(df)-1)        # storage object- to store a single bootstrapped sample from the original data
-  
-  for(i in 1:n_samples){              # for each bootstrap replicate:
-    boot_rows <- sample(indices,size=nrow(df),replace=T)         # randomly sample observations with replacement
-    newdf <- df[boot_rows,]                       # dataframe of bootstrapped observations
-    output[i,] <- statfunc(newdf,responsevar)                 # generate statistics from the bootstrapped sample  (e.g., compute Rsquared after regressing y on all possible x variables)
-  }
-  return(output)
+boot_sample <- function(df,fun,nboot,y){
+
+  t(replicate(nboot,fun(df[sample(1:nrow(df),replace=T),],responsevar=y) ))  #  randomly sample observations with replacement and generate statistics from the bootstrapped sample
 }
 
 ```
@@ -521,39 +484,37 @@ Now we can generate a bunch of "bootstrapped" statistics to compare with the one
 
 # Generate a few bootstrapped samples!  ------------------
 
-boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=10)       # generate test stats from lots of bootstrapped samples
-colnames(boot) <- names(stat)         # name the columns to recall which predictor variables they represent
+boot <- boot_sample(trees,Rsquared,500, "Volume")       # generate test stats from lots of bootstrapped samples
 
-boot
+summary(boot)
 stat
 
 ```
 
-Finally, we can use the quantiles of the bootstrap samples to generate bootstrap confidence intervals.
+Finally, we can use the quantiles of the bootstrap samples to generate formal bootstrap confidence intervals.
 
 ```{r}
 
 # use bootstrapping to generate confidence intervals for R-squared statistic!  ----------------
 
-boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=1000)   # generate test statistics (Rsquared vals) for 1000 bootstrap samples
+boot <- boot_sample(trees,Rsquared,1000, "Volume")    # generate test statistics (Rsquared vals) for 1000 bootstrap samples
 confint <- apply(boot,2,function(t)  quantile(t,c(0.025,0.5,0.975)))       # summarize the quantiles to generate confidence intervals for each predictor variable
-colnames(confint) <- names(stat)
-t(confint)
+confint
 
 
 ```
 
-Again, don't feel bad if you don't understand all the code yet. At this point, I just want you to understand the value of being able to program your own data analysis algorithms. 
+Again, don't feel bad if you don't understand all the code yet. But I hope you appreciate the value of being able to program your own data analysis algorithms. 
 
-* It allows you to run custom analyses that you can't run any other way.      
+* It allows you to run analyses that you can't run any other way.      
 * It allows you to 'relax' assumptions that standard analyses may make    
-* It allows you to formalize your understanding of how your data were generated, and use this understanding to make the most of your data  
+* It allows you to formalize your understanding of how your data were generated  
 * Can you come up with any other reasons?
 
 Plus...
 * It's fun!
 
-But also remember- with great power comes great responsibility. 
+But with great power comes great responsibility! 
 
 
 [--go to next lecture--](LECTURE2.html) 
