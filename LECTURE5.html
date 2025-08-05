@@ -14,7 +14,7 @@
 
 <title>Optimization!</title>
 
-<script src="site_libs/header-attrs-2.24/header-attrs.js"></script>
+<script src="site_libs/header-attrs-2.29/header-attrs.js"></script>
 <script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link href="site_libs/bootstrap-3.3.5/css/cerulean.min.css" rel="stylesheet" />
@@ -384,19 +384,16 @@ div.tocify {
   </a>
   <ul class="dropdown-menu" role="menu">
     <li>
-      <a href="LAB_Instructions.html">Instructions for Labs</a>
+      <a href="FINALPROJ.html">Final project overview</a>
     </li>
     <li>
-      <a href="LAB3demo.html">Lab 3: Likelihood (intro)</a>
-    </li>
-    <li>
-      <a href="LAB5.html">Lab 5: Model selection (optional)</a>
+      <a href="LAB1.html">Lab 1: Algorithms in R</a>
     </li>
     <li>
       <a href="FigureDemo.html">Demo: Figures in R</a>
     </li>
     <li>
-      <a href="GIT-tutorial.html">Demo: version control in Git</a>
+      <a href="GIT_tutorial.html">Demo: version control in Git</a>
     </li>
   </ul>
 </li>
@@ -435,7 +432,7 @@ div.tocify {
 
 <h1 class="title toc-ignore">Optimization!</h1>
 <h4 class="author">NRES 746</h4>
-<h4 class="date">Fall 2023</h4>
+<h4 class="date">Fall 2025</h4>
 
 </div>
 
@@ -443,25 +440,19 @@ div.tocify {
 <p>For those wishing to follow along with the R-based demo in class, <a
 href="LECTURE5.R">click here</a> for the companion R-script for this
 lecture.</p>
-<div id="optimization" class="section level1">
-<h1>Optimization</h1>
-<p>We can’t maximize a likelihood function without an optimization
-algorithm.</p>
-<p>We can’t optimize a sampling or monitoring regime, as in the power
-analysis problem, without an optimization algorithm.</p>
-<p>Clearly, we need optimization algorithms!! In addition, they provide
-an excellent example of how computer algorithms are so essential for
-modern data analysis.</p>
+<div id="finding-optimal-values-for-a-parameter-vector"
+class="section level1">
+<h1>Finding optimal values for a parameter vector</h1>
 <p>You may not have built your own optimization algorithm before, but
 you’ve probably taken advantage of optimization algorithms that are
 operating behind the scenes. For example, if you have performed a glmm
-or a non-linear regression in R, you have exploited numerical
-optimization routines!</p>
+or a non-linear regression in R, you have used numerical optimization
+routines!</p>
 <p>We will discuss optimization in the context of maximum likelihood
 estimation, and then we will discuss optimization and parameter
 estimation in a Bayesian context.</p>
 <p>Let’s start with the most conceptually simple of all optimization
-algorithms – brute force!</p>
+routines – brute force!</p>
 <p>NOTE: you won’t need to build your own optimization routines for this
 class- the code in this lecture is for demonstration purposes only!</p>
 <div id="brute-force" class="section level2">
@@ -486,8 +477,8 @@ range of plausible parameter estimates!).</p>
 <ul>
 <li>Speed: even slower and less efficient than a typical ecologist is
 willing to accept! Practically impossible for complex multi-dimensional
-problems (<em>curse of dimensionality</em>)<br />
-</li>
+problems (<em>curse of dimensionality</em>). Meaning, you can’t use this
+method unless you have 1 or 2 parameters in your model..</li>
 <li>Resolution: we can only get the answer to within plus or minus the
 interval size.</li>
 </ul>
@@ -495,23 +486,22 @@ interval size.</li>
 <div id="example-dataset-myxomatosis-titer-in-rabbits"
 class="section level3">
 <h3>Example dataset: Myxomatosis titer in rabbits</h3>
-<p>Let’s use Bolker’s myxomatosis example dataset (an example we’ll
-return to frequently!) to illustrate:</p>
+<p>Let’s use Bolker’s myxomatosis example dataset to illustrate:</p>
 <pre class="r"><code># Explore Bolker&#39;s myxomatosis example   -------------------------
 
 library(emdbook)    # this is the package provided to support the textbook!
 library(ggplot2)
 library(ggthemes)
 
-MyxDat &lt;- MyxoTiter_sum         # load Bolker&#39;s example data
-MyxDat$grade &lt;- as.factor(MyxDat$grade)
+Myx &lt;- MyxoTiter_sum        
 
-ggplot(MyxDat,aes(day,titer)) + 
+ggplot(Myx,aes(day,titer)) + 
   geom_point(aes(col=grade))  +
   facet_wrap(vars(grade), scales = &quot;free&quot;) +
-  theme_clean()</code></pre>
+  theme_classic() +
+  theme(legend.position = &quot;none&quot;) </code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
-<pre class="r"><code>Myx &lt;- subset(MyxDat,grade==1)    # subset: select most virulent
+<pre class="r"><code>Myx &lt;- subset(Myx,grade==1)    # subset: select most virulent
 head(Myx)</code></pre>
 <pre><code>##   grade day titer
 ## 1     1   2 5.207
@@ -533,19 +523,22 @@ this distribution:</p>
 hist(Myx$titer,freq=FALSE)     # note the &quot;freq=FALSE&quot;, which displays densities of observations, and therefore makes histograms comparable with probability density functions
 curve(dgamma(x,shape=40,rate=6),add=T,col=&quot;red&quot;)</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
-<p>This is clearly not a great fit, but perhaps this would be an okay
-starting point (optimization algorithms don’t really require perfect
-starting points, just need to be in the ballpark)…</p>
+<p>This seems like an okay starting point (optimization algorithms don’t
+really require perfect starting points, just need to be in the
+ballpark)…</p>
 <p>Let’s build a likelihood function for this problem!</p>
-<pre class="r"><code># Build gamma likelihood function  ---------------------
+<pre class="r"><code># Build gamma LL and NLL function  ---------------------
 
-GammaLikelihoodFunction &lt;- function(params){           # only one argument (params)- the data are hard-coded here (this is often the case with simple likelihood functions)
+GammaNLL &lt;- function(params){  
   -sum(dgamma(Myx$titer,shape=params[&#39;shape&#39;],rate=params[&#39;rate&#39;],log=T))     # use params and data to compute likelihood 
 }
 
 params &lt;- c(shape=40,rate=6) 
-GammaLikelihoodFunction(params)    # test the function!</code></pre>
+GammaNLL(params)    # test the function!</code></pre>
 <pre><code>## [1] 38.74585</code></pre>
+<pre class="r"><code>GammaLL &lt;- function(params){     # same thing- but not using negative LL
+  sum(dgamma(Myx$titer,shape=params[&#39;shape&#39;],rate=params[&#39;rate&#39;],log=T))     # use params and data to compute likelihood 
+}</code></pre>
 <p>Now let’s optimize using ‘optim()’ like we did before, to find the
 MLE!</p>
 <p>NOTE: “optim()” will throw some warnings here because it will try to
@@ -553,257 +546,228 @@ find the data likelihood for certain impossible parameter
 combinations!</p>
 <pre class="r"><code># Optimize using R&#39;s built-in &quot;optim()&quot; function: find the maximum likelihood estimate
 
-MLE &lt;- optim(params,GammaLikelihoodFunction)  
-
-MLE$par</code></pre>
-<pre><code>##     shape      rate 
-## 49.608753  7.164569</code></pre>
-<pre class="r"><code>MLE$value</code></pre>
-<pre><code>## [1] 37.66714</code></pre>
-<p>We can ignore the warnings!</p>
+opt1 &lt;- optim(params,GammaNLL,hessian = T)  
+MLE = opt1$par   # store maximum likelihood estimates for params
+maxLL = -opt1$value    # store maximum log likelihood (note minus sign)  </code></pre>
 <p>Let’s visualize the fit of the MLE in this case…</p>
 <pre class="r"><code># visualize the maximum likelihood fit
 
-hist(Myx$titer,freq=FALSE)
-curve(dgamma(x,shape=MLE$par[&quot;shape&quot;],rate=MLE$par[&quot;rate&quot;]),add=T,col=&quot;red&quot;)</code></pre>
+hist(Myx$titer,freq=FALSE,xlab=&quot;titer&quot;)
+curve(dgamma(x,shape=MLE[&quot;shape&quot;],rate=MLE[&quot;rate&quot;]),add=T,col=&quot;darkgreen&quot;,lwd=2)</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
 <p>Looks pretty good…</p>
-<p>But as dangerous ecological statisticians we aren’t satisfied with
-using a “black box” like the “optim()” function, we need to understand
-what is going on behind the scenes. Let’s write our own optimizer!</p>
+<p>But in this class we can pull back the curtain to glimpse what is
+happening behind the scenes.</p>
+<p>Let’s write our own “toy” optimizers!</p>
 <p>We start with the conceptually simple, often computationally
 impossible, brute force method…</p>
-<pre class="r"><code># BRUTE FORCE ALTERNATIVE    ------------------------------
+<pre class="r"><code># BRUTE FORCE OPTIMIZATION    ------------------------------
 
 # define 2-D parameter space!
 
-shapevec &lt;- seq(10,100,by=0.1)        # divide parameter space into tiny increments
-ratevec &lt;- seq(0.5,30,by=0.05)
+shapevec &lt;- seq(0,150,length=100)        # divide parameter space into tiny increments
+ratevec &lt;- seq(0.5,30,length=100)
 
 # define the likelihood surface across this grid within parameter space
 
+LLsurface &lt;- expand.grid(shapevec,ratevec)
+colnames(LLsurface) &lt;- c(&quot;shape&quot;,&quot;rate&quot;)
+paramslist &lt;- lapply(1:nrow(LLsurface), function(t){MLE[&#39;shape&#39;]=LLsurface$shape[t];MLE[&#39;rate&#39;]=LLsurface$rate[t];MLE } )
+LLsurface$LL &lt;- sapply(paramslist, function(t) -GammaNLL(t))   # note minus sign to turn NLL to LL 
 
-surface2D &lt;- matrix(nrow=length(shapevec),ncol=length(ratevec))   # initialize storage variable
-
-newparams &lt;- params
-for(i in 1:length(shapevec)){
-  newparams[&#39;shape&#39;] &lt;- shapevec[i]
-  for(j in 1:length(ratevec)){
-    newparams[&#39;rate&#39;] &lt;- ratevec[j]
-    surface2D[i,j] &lt;- -1*GammaLikelihoodFunction(newparams)   # compute likelihood for every point in 2-d parameter space
-  }
-}
-
-# Visualize the likelihood surface
-
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-250,-35),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-150),add=T)</code></pre>
+summary(LLsurface)</code></pre>
+<pre><code>##      shape            rate              LL         
+##  Min.   :  0.0   Min.   : 0.500   Min.   :   -Inf  
+##  1st Qu.: 37.5   1st Qu.: 7.875   1st Qu.:-1587.3  
+##  Median : 75.0   Median :15.250   Median : -595.4  
+##  Mean   : 75.0   Mean   :15.250   Mean   :   -Inf  
+##  3rd Qu.:112.5   3rd Qu.:22.625   3rd Qu.: -177.4  
+##  Max.   :150.0   Max.   :30.000   Max.   :  -37.7</code></pre>
+<pre class="r"><code>LL_plot_2D &lt;- ggplot(LLsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the likelihood surface
+  geom_raster(aes(fill=LL)) +
+  geom_contour(aes(z=LL),breaks=seq(maxLL-25,maxLL,10) ,lwd=1.2) +
+  scale_fill_gradient(limits=c(maxLL-100,maxLL)) 
+LL_plot_2D</code></pre>
+<pre><code>## Warning: Removed 100 rows containing non-finite outside the scale range
+## (`stat_contour()`).</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
 <p>Now what is the maximum likelihood estimate?</p>
 <pre class="r"><code># Find the MLE (brute force)  ------------------------
 
-ndx &lt;- which(surface2D==max(surface2D),arr.ind=T)  # index of the max likelihood grid cell
-shapevec[ndx[,1]]     </code></pre>
-<pre><code>## [1] 49.5</code></pre>
-<pre class="r"><code>ratevec[ndx[,2]]</code></pre>
-<pre><code>## [1] 7.15</code></pre>
-<pre class="r"><code>MLE$par  # compare with the answer from &quot;optim()&quot;</code></pre>
+with(LLsurface,c(shape=shape[which.max(LL)],rate=rate[which.max(LL)]) )</code></pre>
+<pre><code>##     shape      rate 
+## 46.969697  6.757576</code></pre>
+<pre class="r"><code>MLE  # compare with the answer from &quot;optim()&quot;</code></pre>
 <pre><code>##     shape      rate 
 ## 49.608753  7.164569</code></pre>
 <p><strong>Q</strong> how would we compute the profile likelihood
 confidence intervals for the shape and scale parameters?</p>
 </div>
 </div>
-<div id="derivative-based-methods" class="section level2">
-<h2>Derivative based methods!</h2>
+<div id="gradient-derivative-based-methods" class="section level2">
+<h2>Gradient (derivative) based methods!</h2>
 <p>If we assume that the likelihood surface is smooth (differentiable)
 and has only one minimum, we can use very efficient derivative-based
 optimization algorithms.</p>
-<p>In general, derivative-based methods look for the point in parameter
-space where the first derivative (slope) of the likelihood function is
-zero (the ‘root’ of the likelihood function). That is, at the peak- or
-the valley bottom.</p>
-<p>Let’s imagine we are interested in determining the shape parameter,
-given a known scale parameter for a gamma distribution. To use
-derivative based methods, let’s first build a function that estimates
-the slope of the function at any arbitrary point in parameter space:</p>
+<p>In general, gradient-based methods identify the point in parameter
+space where the first derivative (gradient) of the negative
+log-likelihood function is zero (the critical minimum of the negative
+log-likelihood function).</p>
+<p>To do this we will use the ‘pracma’ package, which has functionality
+for evaluating the gradient of likelihood functions and other scalar
+valued functions evaluated at any input vector.</p>
 <pre class="r"><code># Derivative-based optimization methods   ------------------
 
-# function for estimating the slope of the likelihood surface at any point in parameter space....
+library(pracma)   # load package capable of computing gradient numerically at any point in parameter space
 
-## NOTE: even here I&#39;m using a coarse, brute force method for estimating the first and second derivative of the likelihood function
-
-params &lt;- MLE$par
-SlopeFunc &lt;- function(shape_guess,tiny=0.001){      
-  params[&#39;shape&#39;] &lt;- shape_guess
-  high &lt;- GammaLikelihoodFunction(params+c(tiny,0))
-  low &lt;- GammaLikelihoodFunction(params-c(tiny,0))
-  slope &lt;- (high-low)/(tiny*2)
-  return(slope)
-}
-
-SlopeFunc(shape_guess=30)    #try it!</code></pre>
-<pre><code>## [1] -13.75925</code></pre>
+grad(GammaLL,MLE)   # confirm that the gradient at the MLE is around zero</code></pre>
+<pre><code>## [1] -0.0003895178  0.0028002881</code></pre>
+<pre class="r"><code>grad(GammaLL,unlist(LLsurface[50,1:2]))   # and it&#39;s mu</code></pre>
+<pre><code>## [1]  -82.85871 3822.14091</code></pre>
+<p>The gradient is a vector that points in the direction of steepest
+ascent</p>
 <p>Now let’s visualize this!</p>
-<pre class="r"><code># Visualize the slope of the likelihood function at different points in parameter space
+<pre class="r"><code>library(dplyr)</code></pre>
+<pre><code>## 
+## Attaching package: &#39;dplyr&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:stats&#39;:
+## 
+##     filter, lag</code></pre>
+<pre><code>## The following objects are masked from &#39;package:base&#39;:
+## 
+##     intersect, setdiff, setequal, union</code></pre>
+<pre class="r"><code>param = slice_sample(LLsurface,n=25)
+thisgrad = sapply(1:nrow(param),function(t) grad(GammaLL,unlist(param[t,1:2])) ) 
+thisgrad = t(apply(thisgrad, 2, function(t) t / Norm(t,2) ) )*2  # normalize by dividing by the magnitude
+colnames(thisgrad) &lt;- c(&quot;grad_shape&quot;,&quot;grad_rate&quot;)
+param &lt;- cbind(param,thisgrad)
 
-shapevec &lt;- seq(10,100,by=0.1)   
-
-# define the likelihood surface
-
-surface1D &lt;- numeric(length(shapevec))   # initialize storage variable
-
-newparams &lt;- params
-for(i in 1:length(shapevec)){
-  newparams[&#39;shape&#39;] &lt;- shapevec[i]
-  surface1D[i] &lt;- GammaLikelihoodFunction(newparams) 
-}
-
-plot(surface1D~shapevec,type=&quot;l&quot;)
-point &lt;- GammaLikelihoodFunction(c(shape=30,MLE$par[&#39;rate&#39;]))
-slope &lt;- SlopeFunc(shape_guess=30)
-lines(c(20,40),c(point-slope*10,point+slope*10),col=&quot;red&quot;)</code></pre>
+# Visualize the gradient of the likelihood function at different points in parameter space
+LL_plot_2D +
+  geom_segment(data=param, aes(x=shape,y=rate,
+                    xend=shape+grad_shape,yend=rate+grad_rate),
+               arrow = arrow(length = unit(0.3, &quot;cm&quot;)),col=&quot;yellow&quot;,lwd=2)</code></pre>
+<pre><code>## Warning: Removed 100 rows containing non-finite outside the scale range
+## (`stat_contour()`).</code></pre>
 <p><img src="LECTURE5_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
-<p>We also need a function to compute the second derivative, or the
-curvature (rate of change in the slope)…</p>
+<p>We also need a function to compute the Hessian, or the curvature.
+This is the gradient of the gradient- or the second derivative. The
+‘hessian’ function in the pracma package does just this!</p>
 <pre class="r"><code># function for estimating the curvature of the likelihood function at any point in parameter space
 
-params &lt;- MLE$par
-CurvatureFunc &lt;- function(shape_guess,tiny=0.001){
-  params[&#39;shape&#39;] &lt;- shape_guess
-  high &lt;- SlopeFunc(shape_guess+tiny)
-  low &lt;- SlopeFunc(shape_guess-tiny)
-  curvature &lt;- (high-low)/(tiny*2)   # how much the slope is changing in this region of the function
-  return(curvature)
-}
-
-CurvatureFunc(shape_guess=30)   # try it!</code></pre>
-<pre><code>## [1] 0.9151666</code></pre>
-<p>Okay, now we can implement a derivative-based optimization
+hessian(GammaLL,MLE)   # confirm the curvature at the maximum likelihood estimate </code></pre>
+<pre><code>##            [,1]       [,2]
+## [1,] -0.5497813   3.768545
+## [2,]  3.7685447 -26.094072</code></pre>
+<pre class="r"><code>-opt1$hessian</code></pre>
+<pre><code>##            shape       rate
+## shape -0.5497812   3.768545
+## rate   3.7685447 -26.094074</code></pre>
+<pre class="r"><code>hessian(GammaLL,unlist(LLsurface[50,1:2]))   # and here&#39;s the curvature at a different point in space... </code></pre>
+<pre><code>##            [,1]        [,2]
+## [1,] -0.3662109    54.00002
+## [2,] 54.0000153 -8018.18213</code></pre>
+<p>Okay, now we can implement a gradient-based optimization
 algorithm!</p>
 <p>Essentially, we are trying to find the point where the derivative of
-the likelihood function is zero (the root of the function!).</p>
+the log-likelihood function is zero (the root of the function!).</p>
 <p>The simplest derivative-based optimization algorithm is the
 <em>Newton-Raphson algorithm</em>. Here is the pseudocode:</p>
 <ul>
-<li>pick a guess for a parameter value<br />
+<li>pick a guess for a parameter value (or vector of values)<br />
 </li>
-<li>compute the first derivative of the likelihood function for that
+<li>compute the gradient of the likelihood function for that guess<br />
+</li>
+<li>compute the hessian (curvature) of the likelihood function for that
 guess<br />
 </li>
-<li>compute the slope of the first derivative (curvature, or second
-derivative) of the likelihood function for that guess<br />
+<li>Extrapolate linearly to approximate the root (where the first
+derivative of the likelihood function should be zero assuming linear
+rate of change in the slope)<br />
 </li>
-<li>Extrapolate linearly to try to find the root (where the first
-derivative of the likelihood function should be zero assuming the rate
-of change in the slope is constant)<br />
-</li>
-<li>repeat until the first derivative of the likelihood function is
-close enough to zero (within a specified tolerance), using the new value
-from the previous step as your initial guess.</li>
+<li>repeat until the gradient of the likelihood function is close enough
+to zero (within a specified tolerance), using the new value from the
+previous step as your initial guess.</li>
 </ul>
-<p>Let’s first visualize the shape of the first derivative of the
-likelihood function</p>
-<pre class="r"><code># First- visualize the gradient of the likelihood function
-
-firstderiv &lt;- numeric(length(shapevec))   # initialize storage variable
-for(i in 1:length(shapevec)){
-  firstderiv[i] &lt;- SlopeFunc(shapevec[i]) 
-}
-
-plot(firstderiv~shapevec,type=&quot;l&quot;)
-abline(h=0,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
 <p>Let’s use the Newton method to find the <em>root</em> of the
-likelihood function. First we pick a starting value. Say we pick 80.</p>
-<p>First compute the derivatives:</p>
+likelihood function. First we pick a starting value. Say we pick the
+vector [shape=50,rate=6].</p>
+<p>First compute the gradient:</p>
 <pre class="r"><code># Now we can perform a simple, derivative-based optimization!
 
-### Pick &quot;80&quot; as the starting value
+start = c(shape=50,rate=7)
 
-firstderiv &lt;- SlopeFunc(80)           # evaluate the first and second derivatives
-secondderiv &lt;- CurvatureFunc(80)
-firstderiv</code></pre>
-<pre><code>## [1] 13.00653</code></pre>
-<pre class="r"><code>secondderiv</code></pre>
-<pre><code>## [1] 0.3396182</code></pre>
-<p>Now let’s use this linear function to extrapolate to where the first
-derivative is equal to zero:</p>
+thisgrad &lt;- grad(GammaLL,start)
+thiscurv &lt;- hessian(GammaLL,start)
+thisgrad</code></pre>
+<pre><code>## [1] -0.8420588  5.9071429</code></pre>
+<pre class="r"><code>thiscurv</code></pre>
+<pre><code>##           [,1]       [,2]
+## [1,] -0.545435   3.857143
+## [2,]  3.857143 -27.551019</code></pre>
+<p>Now let’s use this linear function to extrapolate to where the
+gradient is equal to zero:</p>
 <pre class="r"><code># Use this info to estimate the root
-
-oldguess &lt;- 80
-newguess &lt;- oldguess - firstderiv/secondderiv   # estimate the root (where first deriv is zero)
+newguess &lt;- start - (solve(thiscurv)%*%thisgrad)[,1]
+# grad(GammaNLL,newguess)
+# hessian(GammaNLL,newguess)
 newguess</code></pre>
-<pre><code>## [1] 41.70248</code></pre>
-<p>Our new guess is that the shape parameter is 41.31. Let’s do it
-again!</p>
+<pre><code>##     shape      rate 
+## 47.229279  6.826506</code></pre>
+<p>Our new guess is that the shape parameter is 47.3 and rate is 6.83.
+Let’s do it again!</p>
 <pre class="r"><code># Repeat this process
 
-oldguess &lt;- 41.31
-newguess &lt;- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess) 
+do_newton &lt;- function(oldguess){
+  thisgrad &lt;- grad(GammaLL,oldguess); thiscurv &lt;- hessian(GammaLL,oldguess)
+  oldguess - (solve(thiscurv)%*%thisgrad)[,1]
+}
+
+newguess = do_newton(newguess)
 newguess</code></pre>
-<pre><code>## [1] 48.86382</code></pre>
+<pre><code>##    shape     rate 
+## 49.49530  7.14855</code></pre>
 <p>Okay, we’re already getting close to our MLE of around 49.36. Let’s
 do it again:</p>
 <pre class="r"><code># again...
 
-oldguess&lt;-newguess
-newguess &lt;- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
+newguess = do_newton(newguess)
 newguess</code></pre>
-<pre><code>## [1] 49.60238</code></pre>
-<p>And again!</p>
-<pre class="r"><code># again...
-
-oldguess&lt;-newguess
-newguess &lt;- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
-newguess</code></pre>
-<pre><code>## [1] 49.60804</code></pre>
-<p>And again!!!</p>
-<pre class="r"><code># again...
-
-oldguess&lt;-newguess
-newguess &lt;- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
-newguess</code></pre>
-<pre><code>## [1] 49.60804</code></pre>
-<p>Wow, in just a few iterations we already basically found the true
-root. Let’s find the root for real, using an algorithm…</p>
+<pre><code>##     shape      rate 
+## 49.611159  7.165025</code></pre>
+<p>Let’s write an algorithm to do this entire process:</p>
 <pre class="r"><code># Implement the Newton Method as a function!  ------------------
 
-NewtonMethod &lt;- function(firstguess,tolerance=0.0000001){
-  deriv &lt;- SlopeFunc(firstguess)
-  oldguess &lt;- firstguess
-  counter &lt;- 0
-  while(abs(deriv)&gt;tolerance){
-    deriv &lt;- SlopeFunc(oldguess)
-    newguess &lt;- oldguess - deriv/CurvatureFunc(oldguess)
-    oldguess&lt;-newguess
+NewtonMethod &lt;- function(guess,tolerance=0.0000001){
+  counter=0
+  while(Norm(grad(GammaLL,guess),2)&gt;tolerance){
+    guess = do_newton(guess)
     counter=counter+1
   }
-  mle &lt;- list()
-  mle$estimate &lt;- newguess
-  mle$likelihood &lt;- GammaLikelihoodFunction(c(shape=newguess,MLE$par[&#39;rate&#39;]))
-  mle$iterations &lt;- counter
-  return(mle)
+  list(
+    estimate = guess,
+    likelihood = GammaLL(guess),
+    iterations = counter
+  )
 }
 
 
-newMLE &lt;- NewtonMethod(firstguess=80)
+newMLE &lt;- NewtonMethod(start)
 newMLE</code></pre>
 <pre><code>## $estimate
-## [1] 49.60804
+##     shape      rate 
+## 49.611454  7.165067 
 ## 
 ## $likelihood
-## [1] 37.66714
+## [1] -37.66714
 ## 
 ## $iterations
-## [1] 6</code></pre>
-<p>In just 6 steps we successfully identified the maximum likelihood
-estimate to within 0.0000001 of the true value! How many computations
-did we have to perform to use the brute force method?</p>
-<p>Hopefully this illustrates the power of optimization algorithms!!</p>
-<p>Note that this method and other derivative-based methods can work in
-multiple dimensions! The only constraint here is that the likelihood
-function is differentiable (smooth)</p>
+## [1] 4</code></pre>
+<p>In just 4 steps we successfully approximated the maximum likelihood
+estimate! How many computations did we have to perform to use the brute
+force method?</p>
+<p>Hopefully this illustrates the power of gradient-based optimization
+algorithms!</p>
 </div>
 <div id="derivative-free-optimization-methods" class="section level2">
 <h2>Derivative-free optimization methods</h2>
@@ -817,11 +781,13 @@ returns real numbers but have no additional requirements.</p>
 <div id="derivative-free-method-1-simplex-method"
 class="section level2">
 <h2>Derivative-free method 1: simplex method</h2>
+<p>For even more flexibility and robustness, we can use algorithms that
+don’t depend on computing derivatives.</p>
+<div id="definition-simplex" class="section level4">
+<h4>Definition: Simplex</h4>
 <p>This is the default optimization method for “optim()”! That means
 that R used this method for optimizing the fuel economy example from the
 previous lecture!</p>
-<div id="definition-simplex" class="section level4">
-<h4>Definition: Simplex</h4>
 <p>A <em>simplex</em> is the multi-dimensional analog of the triangle.
 In a two dimensional space, the triangle is the simplest shape possible
 that encloses an area. It has just one more vertex than there are
@@ -875,50 +841,51 @@ space</p>
 
 # set up an &quot;initial&quot; simplex
 
-firstguess &lt;- c(shape=70,rate=5)   # &quot;user&quot; first guess 
+guess &lt;- c(shape=60,rate=8)   # &quot;user&quot; first guess 
 
-simplex &lt;- list()
- 
-           # set up the initial simplex based on the first guess...
-simplex[[&#39;vertex1&#39;]] &lt;- firstguess + c(3,1)
-simplex[[&#39;vertex2&#39;]] &lt;- firstguess + c(-3,-1)
-simplex[[&#39;vertex3&#39;]] &lt;- firstguess + c(3,-1)
+make_simplex &lt;- function(guess){
+  list(
+    vertex1 = guess,
+    vertex2 = guess + c(10,0),
+    vertex3 = guess + c(-5,-1) 
+  )
+}
 
-simplex</code></pre>
+thissimplex = make_simplex(guess)
+
+thissimplex</code></pre>
 <pre><code>## $vertex1
 ## shape  rate 
-##    73     6 
+##    60     8 
 ## 
 ## $vertex2
 ## shape  rate 
-##    67     4 
+##    70     8 
 ## 
 ## $vertex3
 ## shape  rate 
-##    73     4</code></pre>
+##    55     7</code></pre>
 <p>Let’s plot the simplex…</p>
-<pre class="r"><code>    ## first let&#39;s make a function to plot the simplex on a 2-D likelihood surface...
+<pre class="r"><code>    ## first let&#39;s visualize the simplex on a 2-D likelihood surface...
 
-addSimplex &lt;- function(simplex,col=&quot;red&quot;){
-  temp &lt;- as.data.frame(simplex)    # easier to work with data frame here
-  points(x=temp[1,c(1,2,3,1)], y=temp[2,c(1,2,3,1)],type=&quot;b&quot;,lwd=2,col=col)
-}
+simplex_dat = as.data.frame(do.call(rbind,thissimplex))
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-300,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-120),add=T)
-addSimplex(simplex)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-22-1.png" width="672" /></p>
+LL_plot_2D  + 
+  geom_polygon(data=simplex_dat, aes(x=shape,y=rate),lwd=1.5,fill=&quot;pink&quot;,alpha=0.5)</code></pre>
+<pre><code>## Warning: Removed 100 rows containing non-finite outside the scale range
+## (`stat_contour()`).</code></pre>
+<p><img src="LECTURE5_files/figure-html/unnamed-chunk-19-1.png" width="672" /></p>
 <p>Now let’s evaluate the log likelihood at each vertex</p>
 <pre class="r"><code># Evaluate log-likelihood at each vertex of the simplex
 
 SimplexLik &lt;- function(simplex){
-  newvec &lt;- -1*unlist(lapply(simplex,GammaLikelihoodFunction))   # note use of apply instead of for loop...
+  newvec &lt;- sapply(simplex,GammaLL)   # note use of apply instead of for loop...
   return(newvec)
 }
 
-SimplexLik(simplex)</code></pre>
+SimplexLik(thissimplex)</code></pre>
 <pre><code>##   vertex1   vertex2   vertex3 
-## -300.5682 -575.2062 -725.8400</code></pre>
+## -42.96487 -86.52619 -49.12369</code></pre>
 <p>Now let’s develop functions to assist our moves through parameter
 space, according to the rules defined above…</p>
 <pre class="r"><code># Helper Functions
@@ -993,129 +960,87 @@ MoveTheSimplex &lt;- function(oldsimplex){     # (incomplete) nelder-mead algori
   return(newsimplex)
 }
 
-# image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-# contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-# addSimplex(oldsimplex,col=&quot;red&quot;)
-# addSimplex(candidates$reflected,col=&quot;green&quot;)
-# addSimplex(candidates$half,col=&quot;green&quot;)
-
 # Visualize the simplex  ---------------------
 
-oldsimplex &lt;- simplex
+trys = list()
+trys[[1]] &lt;- simplex_dat
+oldsimplex &lt;- thissimplex
 newsimplex &lt;- MoveTheSimplex(oldsimplex)
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-addSimplex(oldsimplex,col=&quot;red&quot;)
-addSimplex(newsimplex,col=&quot;green&quot;)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
+trys[[2]] &lt;-  as.data.frame(do.call(rbind,newsimplex))
+trysdat &lt;- do.call(rbind,trys); trysdat$iter = rep(c(1,2),each=3)
+
+LL_plot_2D  + 
+  geom_polygon(data=trysdat, aes(x=shape,y=rate,group=iter),lwd=0.5,fill=&quot;pink&quot;,linetype=1,alpha=0.7,color=&quot;black&quot;) </code></pre>
+<p><img src="LECTURE5_files/figure-html/unnamed-chunk-21-1.png" width="672" /></p>
 <p>Let’s try another few moves</p>
-<pre class="r"><code># Make another move  -------------
+<pre class="r"><code># Make another few moves  -------------
 
-oldsimplex &lt;- newsimplex
-newsimplex &lt;- MoveTheSimplex(oldsimplex)
+for(i in 3:6){
+  newsimplex &lt;- MoveTheSimplex(newsimplex)
+  trys[[i]] &lt;-  as.data.frame(do.call(rbind,newsimplex))
+}
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-addSimplex(oldsimplex,col=&quot;red&quot;)
-addSimplex(newsimplex,col=&quot;green&quot;)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-25-1.png" width="672" /></p>
-<p>And again!</p>
-<pre class="r"><code># Make another move  ----------------------
+trysdat &lt;- do.call(rbind,trys); trysdat$iter = rep(c(1:6),each=3)
 
-oldsimplex &lt;- newsimplex
-newsimplex &lt;- MoveTheSimplex(oldsimplex)
-
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-addSimplex(oldsimplex,col=&quot;red&quot;)
-addSimplex(newsimplex,col=&quot;green&quot;)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-26-1.png" width="672" /></p>
-<p>Again:</p>
-<pre class="r"><code># Make another move  ----------------
-
-oldsimplex &lt;- newsimplex
-newsimplex &lt;- MoveTheSimplex(oldsimplex)
-
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-addSimplex(oldsimplex,col=&quot;red&quot;)
-addSimplex(newsimplex,col=&quot;green&quot;)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-27-1.png" width="672" /></p>
-<p>And another few times:</p>
-<pre class="r"><code># Make another few moves  ----------------------
-
-par(mfrow=c(2,2))
-
-for(i in 1:4){
-  oldsimplex &lt;- newsimplex
-  newsimplex &lt;- MoveTheSimplex(oldsimplex)
-  
-  image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-  contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-  addSimplex(oldsimplex,col=&quot;red&quot;)
-  addSimplex(newsimplex,col=&quot;green&quot;)
-}</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-28-1.png" width="672" /></p>
+LL_plot_2D  + 
+  geom_polygon(data=trysdat, aes(x=shape,y=rate,group=iter),lwd=0.5,fill=&quot;pink&quot;,linetype=1,alpha=0.7,color=&quot;black&quot;)</code></pre>
+<p><img src="LECTURE5_files/figure-html/unnamed-chunk-22-1.png" width="672" /></p>
 <p>Now we can build a function and use the algorithm for optimizing!</p>
 <pre class="r"><code># Build a simplex optimization function!  -----------------
 
 SimplexMethod &lt;- function(firstguess,tolerance=0.00001){
-  initsimplex &lt;- list()
-  initsimplex[[&#39;vertex1&#39;]] &lt;- firstguess + c(5,0.5)
-  initsimplex[[&#39;vertex2&#39;]] &lt;- firstguess + c(-5,-0.5)
-  initsimplex[[&#39;vertex3&#39;]] &lt;- firstguess + c(5,-0.5)
-  VertexLik &lt;- SimplexLik(initsimplex)
-  oldbestlik &lt;- VertexLik[which.max(VertexLik)]
-  deltalik &lt;- 100
+  simplex &lt;- make_simplex(firstguess)
+  VertexLik &lt;- SimplexLik(simplex)
   counter &lt;- 0
-  oldsimplex &lt;- initsimplex
-  while((counter&lt;250)&amp;(any(abs(diff(VertexLik))&gt;tolerance))){
-    newsimplex &lt;- MoveTheSimplex(oldsimplex)
-    VertexLik &lt;- SimplexLik(newsimplex)
+  while(any(abs(diff(VertexLik))&gt;tolerance)){
+    simplex &lt;- MoveTheSimplex(simplex)
+    VertexLik &lt;- SimplexLik(simplex)
     bestlik &lt;- VertexLik[which.max(VertexLik)]
-    oldsimplex &lt;- newsimplex
     counter &lt;- counter+1
   }
-  mle &lt;- list()
-  mle$estimate &lt;- newsimplex[[1]]
-  mle$likelihood &lt;- bestlik
-  mle$iterations &lt;- counter
-  return(mle)
+  list(estimate = simplex[[1]],
+    likelihood = bestlik,
+    iterations = counter)
 }
 
-SimplexMethod(firstguess = c(shape=39,rate=4))</code></pre>
+SimplexMethod(c(shape=60,rate=8))</code></pre>
 <pre><code>## $estimate
 ##     shape      rate 
-## 49.656948  7.172449 
+## 49.609781  7.164599 
 ## 
 ## $likelihood
-##   vertex3 
+##   vertex1 
 ## -37.66714 
 ## 
 ## $iterations
-## [1] 41</code></pre>
+## [1] 36</code></pre>
+<pre class="r"><code>MLE</code></pre>
+<pre><code>##     shape      rate 
+## 49.608753  7.164569</code></pre>
 <p>I like to call this the “amoeba” method of optimization!</p>
 <p>In general, the simplex-based methods are less efficient than the
 derivative-based methods at finding the MLE- especially as you near the
-MLE.</p>
+MLE. In thsis case, the simplex took 36 iterations while the gradient
+based method took only 4.</p>
 </div>
 </div>
 <div id="derivative-free-method-2-simulated-annealing-se."
 class="section level2">
 <h2>Derivative-free method 2: simulated annealing (SE).</h2>
-<p>Simulated annealing is one of my favorite optimization techniques. I
-think it serves as a good metaphor for problem-solving in general. When
-solving a problem, the first step is to think big, try to imagine
-whether we might be missing possible solutions. Then we settle (focus)
-on a general solution, learn more about how that solution applies to our
-problem, and ultimately get it done!</p>
+<p>Simulated annealing is MUCH slower than the simplex or gradient-based
+algorithms. But it’s more flexible, and I think it serves as a good
+metaphor for problem-solving in general. When solving a problem, the
+first step is to think big, try to imagine whether we might be missing
+possible solutions. Then we settle (focus) on a general solution, learn
+more about how that solution applies to our problem, and ultimately get
+it done!</p>
 <p>The temperature analogy is fun too! We start out “hot”- unfocused,
 frenzied, bouncing around - and we end up “cold” - crystal clear and
 focused on a solution!</p>
 <div id="se-a-global-optimization-solution" class="section level3">
 <h3>SE: A “global” optimization solution</h3>
 <p>Simulated annealing is called a “global” optimization solution
-because it can deal with false peaks and other strangenesses that can
+because it can pass over false peaks and other strangenesses that can
 arise in optimization problems (e.g., maximizing likelihood). The price
 is in reduced efficiency!</p>
 <div id="pseudocode-for-the-metropolis-simulated-annealing-routine"
@@ -1152,7 +1077,7 @@ R (method = “SANN”)</p>
 <pre class="r"><code># Simulated annealing!  -----------------------
 
 startingvals &lt;- c(shape=80,rate=7)
-startinglik &lt;- -GammaLikelihoodFunction(startingvals)
+startinglik &lt;- GammaLL(startingvals)
 startinglik</code></pre>
 <pre><code>## [1] -270.5487</code></pre>
 <pre class="r"><code>k = 100   # set the &quot;temperature&quot;
@@ -1169,27 +1094,27 @@ newGuess &lt;- function(oldguess=startingvals){
 
 newGuess(oldguess=startingvals)     # each time is different- this is the first optimization procedure with randomness built in</code></pre>
 <pre><code>##     shape      rate 
-## 76.416983  7.329611</code></pre>
+## 75.291154  7.264968</code></pre>
 <pre class="r"><code>newGuess(oldguess=startingvals)</code></pre>
 <pre><code>##     shape      rate 
-## 80.837027  7.247608</code></pre>
+## 80.802677  6.314948</code></pre>
 <pre class="r"><code>newGuess(oldguess=startingvals)</code></pre>
 <pre><code>##     shape      rate 
-## 76.552051  7.611385</code></pre>
+## 76.827551  6.779054</code></pre>
 <p>Now let’s evaluate the difference in likelihood between the old and
 the new guess…</p>
 <pre class="r"><code># evaluate the difference in likelihood between the new proposal and the old point
 
 LikDif &lt;- function(oldguess,newguess){
-  oldLik &lt;- -GammaLikelihoodFunction(oldguess)
-  newLik &lt;- -GammaLikelihoodFunction(newguess)
+  oldLik &lt;- GammaLL(oldguess)
+  newLik &lt;- GammaLL(newguess)
   return(newLik-oldLik)
 }
 
 newguess &lt;- newGuess(oldguess=startingvals)
 loglikdif &lt;- LikDif(oldguess=startingvals,newguess)
 loglikdif</code></pre>
-<pre><code>## [1] -103.0489</code></pre>
+<pre><code>## [1] -10.747</code></pre>
 <p>Now let’s look at the Metropolis routine:</p>
 <pre class="r"><code># run and visualize a Metropolis simulated annealing routine -------------
 
@@ -1215,14 +1140,13 @@ while(counter&lt;100){
 
 # visualize!
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
-lines(guesses,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-32-1.png" width="672" /></p>
+LL_plot_2D +
+  geom_path(data=guesses,aes(x=shape,y=rate),lwd=.4,col=&quot;black&quot;)</code></pre>
+<pre><code>## Warning: Removed 100 rows containing non-finite outside the scale range
+## (`stat_contour()`).</code></pre>
+<p><img src="LECTURE5_files/figure-html/unnamed-chunk-26-1.png" width="672" /></p>
 <p>Clearly this is the most inefficient, brute-force method we have seen
-so far (aside from the actual brute force method). And also quite
-clearly, in the context of this class, the best and most fun (and
-dangerous?!).</p>
+so far (aside from the actual brute force method).</p>
 <p>NOTE: simulated annealing is still way more efficient than the brute
 force method we saw earlier, especially with multiple dimensions!</p>
 <p>Let’s run it for longer, and with a smaller value of k..</p>
@@ -1251,10 +1175,11 @@ while(counter&lt;1000){
 
 # visualize!
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
-lines(guesses,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-33-1.png" width="672" /></p>
+LL_plot_2D +
+  geom_path(data=guesses,aes(x=shape,y=rate),lwd=.4,col=&quot;black&quot;)</code></pre>
+<pre><code>## Warning: Removed 100 rows containing non-finite outside the scale range
+## (`stat_contour()`).</code></pre>
+<p><img src="LECTURE5_files/figure-html/unnamed-chunk-27-1.png" width="672" /></p>
 <p>This looks better! The search algorithm is finding the
 high-likelihood parts of parameter space pretty well!</p>
 <p>Now let’s “cool” the temperature over time, let the algorithm settle
@@ -1266,7 +1191,7 @@ oldguess &lt;- startingvals
 counter &lt;- 0
 guesses &lt;- matrix(0,nrow=10000,ncol=2)
 colnames(guesses) &lt;- names(startingvals)
-MLE &lt;- list(vals=startingvals,lik=-GammaLikelihoodFunction(startingvals),step=0)
+MLE_sa &lt;- list(vals=startingvals,lik=GammaLL(startingvals),step=0)
 while(counter&lt;10000){
   newguess &lt;- newGuess(oldguess)
   while(any(newguess&lt;0)) newguess &lt;- newGuess(oldguess)
@@ -1282,30 +1207,28 @@ while(counter&lt;10000){
   counter &lt;- counter + 1
   if(counter%%100==0) k &lt;- k*0.8
   guesses[counter,] &lt;- oldguess
-  thislik &lt;- -GammaLikelihoodFunction(oldguess)
-  if(thislik&gt;MLE$lik) MLE &lt;- list(vals=oldguess,lik=-GammaLikelihoodFunction(oldguess),step=counter)
+  thislik &lt;- GammaLL(oldguess)
+  if(thislik&gt;MLE_sa$lik) MLE_sa &lt;- list(vals=oldguess,lik=GammaLL(oldguess),step=counter)
 }
 
 # visualize!
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
-lines(guesses,col=&quot;red&quot;)
-points(MLE$vals[1],MLE$vals[2],col=&quot;green&quot;,pch=20,cex=3)</code></pre>
-<p><img src="LECTURE5_files/figure-html/unnamed-chunk-34-1.png" width="672" /></p>
-<pre class="r"><code>MLE</code></pre>
+LL_plot_2D +
+  geom_path(data=guesses,aes(x=shape,y=rate),lwd=.4,col=&quot;black&quot;) + 
+  annotate(&quot;point&quot;,x=MLE_sa$vals[1],y=MLE_sa$vals[2],col=&quot;green&quot;,pch=20,cex=3)</code></pre>
+<pre><code>## Warning: Removed 100 rows containing non-finite outside the scale range
+## (`stat_contour()`).</code></pre>
+<p><img src="LECTURE5_files/figure-html/unnamed-chunk-28-1.png" width="672" /></p>
+<pre class="r"><code>MLE_sa</code></pre>
 <pre><code>## $vals
-##     shape      rate 
-## 49.914729  7.206274 
+##    shape     rate 
+## 49.56514  7.16180 
 ## 
 ## $lik
-## [1] -37.66748
+## [1] -37.6673
 ## 
 ## $step
-## [1] 5777</code></pre>
-<pre class="r"><code>optim(params,GammaLikelihoodFunction)$par</code></pre>
-<pre><code>##     shape      rate 
-## 49.608753  7.164569</code></pre>
+## [1] 6074</code></pre>
 <p>As you can see, the simulated annealing method did pretty well.
 However, we needed thousands of iterations to do what other methods just
 take a few iterations to do. But, we might feel better that we have
@@ -1325,22 +1248,18 @@ art!!</p>
 </div>
 <div id="what-about-the-confidence-interval" class="section level2">
 <h2>What about the confidence interval??</h2>
-<p>As you can see in the previous examples, most of the optimization
-techniques we have looked at do not explore parameter space enough to
-discern the shape of the likelihood surface around the maximum
-likelihood estimate. Therefore, we do not have the information we need
-to compute the confidence intervals around our parameter estimates. And
-what good is a point estimate without a corresponding estimate of
-uncertainty??</p>
-<p>There are several techniques that are widely used to estimate and
-describe parameter uncertainty:</p>
+<p>What good is a point estimate without a corresponding estimate of
+uncertainty? As you can see in the previous examples, most of the
+optimization techniques we have looked at do not explore parameter space
+enough to discern the shape of the likelihood surface around the maximum
+likelihood estimate. But all is not lost- there are several techniques
+that are widely used to estimate parameter uncertainty:</p>
 <ol style="list-style-type: decimal">
-<li>Brute force (expose the entire likelihood surface!) [okay, this one
-isn’t actually used very often]</li>
 <li>Profile likelihood (the most accurate way!)</li>
-<li>Evaluate curvature at the MLE and use that to estimate sampling
-error (somewhat inexact but efficient- but generally performs pretty
-well, and is the default for many MLE routines!)</li>
+<li>Evaluate curvature (hessian) at the MLE and use that to estimate
+sampling error (very efficient, and generally performs pretty well, and
+is the default for most MLE routines!)</li>
+<li>Bayesian inference with MCMC (coming up!)</li>
 </ol>
 <p><a href="LECTURE6.html">–go to next lecture–</a></p>
 </div>
