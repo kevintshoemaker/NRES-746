@@ -284,7 +284,7 @@ On WebCampus please respond briefly to the following questions:
 1. What is the approximate maximum likelihood estimate for the *p* (detection probability) parameter? How did you use your likelihood function to get your answer (briefly)?     
 2. Using the "rule of 2", what is the approximate 95% confidence interval for the *p* (probability of detection) parameter.
 
-```{r answerq3_1b, echo=FALSE, eval=FALSE}
+```{r q3_1b-solution, echo=FALSE, eval=FALSE}
 
 # 3.1b -----------------
 
@@ -391,6 +391,7 @@ You can test your function using something like the following:
 ```{r testq3_2a}
 binomNLL2(c(a=0.4,h=1/200),c(5,10,15),c(3,5,6))
 ```
+
 Now we can find the parameter values that best describe these data using 'optim()'. We’ll use the same initial values for a and h that we used to plot the curve.  N is the initial number of tadpoles, and k is the number of tadpoles killed.
 
 ```{r warning=FALSE}
@@ -591,34 +592,47 @@ NLL_myxRicker(params=c(a=4,b=0.2,rate=2))   # test the function
 
 ```
 
-### **Exercise 3.3b**. 
 
-Write a function called "MyxRicker()" for computing the maximum likelihood estimates and plotting the goodness-of-fit for this model.
-
-+ **input**:         
-    + params = named vector of initial values for the model params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution)
-
-+ **suggested algorithm**:   
-    + Compute the MLE for the *a*, *b*, and *shape* parameters for the Ricker/Gamma model (use "optim()" with the likelhood function you just wrote and the initial values in "params").   
-    + Plot the observed virus titer (y axis) vs the days since infection (x axis).      
-    + Overlay a line to visualize your predictions from the Ricker model (expected values) based on the MLE parameters (just the Ricker parameters).
-    + Finally, visualize "plug-in prediction intervals" around your MLE line to make a plot like Figure 6.5a in the Bolker book. Hint: use "qgamma()" to define the 95% quantiles of the Gamma distribution for every point along your curve (see below). 
-
-+ **return**: a named list with two elements
-    + MLE: a named vector of length 3 containing the MLE for the a, b, and shape parameters, in that order (with names "a","b", and "shape" )
-    + df: a data frame with 4 columns: 
-        + x, representing a vector ranging across the time span of the experiment (in units of days)
-        + mean, representing the expected virus titer under the MLE parameters
-        + lwr, representing the lower bound of the plug-in prediction interval
-        + upr, representing the upper bound of the plug-in prediciton interval
-    
-To complete this exercise will involve going through the final steps (5-7) in the process outlined above: 
+We can then optimize our likelihood function using 'optim()'. This takes us through the next couple steps in the maximum likelihood process outlined above. 
 
 **Step 5**.  *Make a guess for the initial parameters*.
 We need initial parameters to put into "optim()".  Remember that the Ricker curve parameters can be estimated based on the initial slope and maximum (see pg. 95). Try plotting the curve over the points to get an approximate fit. There really isn’t any easier way to get there than trial and error for the deterministic function.     
 
 **Step 6**.  *Estimate the best fit parameters using maximum likelihood*.	
 Now use 'optim()' to get your maximum likelihood parameter estimates.
+
+```{r q3_3a-data2, context="data"}
+temp <- optim(NLL_myxRicker,par = c(a=2,b=0.2,rate=2))
+MLE = temp$par
+MinNLL = temp$value 
+
+```
+
+### **Exercise 3.3b**. 
+
+Write a function called "predict_myxRicker1()" for computing the maximum likelihood estimates and plotting the goodness-of-fit for this model.
+
++ **input**:         
+    + mle = named vector of MLE values for the model params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution) (named "a", "b", and "rate", in that order)
+
++ **suggested algorithm**: 
+     + make a data frame with a column "x" spanning the range of the time-since-infection (predictor variable, in days). [I suggest making this vector at least 100 elements]
+    + add a column with the predictions from the Ricker model based on the MLE parameters (just the Ricker parameters) across the range of times since exposure.
+    + add columns to denote the lower and upper bounds of the plug-in prediction interval around your MLE predictions. Hint: use "qgamma()" to define the 95% quantiles of the Gamma distribution for every point along your curve (see below).  
+    + Use ggplot to plot the observed virus titer (y axis) vs the days since infection (x axis).
+    + Overlay a line to visualize your predictions from the Ricker model
+    + Finally, visualize "plug-in prediction intervals" around your MLE line to make a plot similar to Figure 6.5a in the Bolker book.  
+
++ **return**:
+    + df: a data frame with 4 columns: 
+        + x, representing a vector ranging across the time span of the experiment (in units of days) 
+        + mean, representing the expected virus titer under the MLE parameters
+        + lwr, representing the lower bound of the plug-in prediction interval
+        + upr, representing the upper bound of the plug-in prediciton interval
+    
+NOTE: you can assume (1) that a function "NLL_myxRicker()" is available in the global environment and that the "myxdat" data object is also available for use. 
+
+To complete this exercise will involve going through the final step (7) in the process outlined above: 
 
 **Step 7**.  *Add confidence/prediction intervals around your estimates*.  
 After your run of 'optim()' (did you achieve convergence?), plot your fitted Ricker curve to your data. Revisit the earlier prediction interval code to add *plug-in* prediction intervals around your predicted curve based on gamma distributed errors (should resemble Figure 6.5b on page 184 of text).  
@@ -634,31 +648,27 @@ lower<-qgamma(0.025,shape=?, rate=?)
 
 ```
 
-
 Include your function in your submitted r script!
     
 ```{r q3_3b-solution, echo=FALSE, context="data"}
 
 # 3.3b --------------
 
-MyxRicker <- function(params=c(a=2,b=0.2,rate=2)){
-  temp <- optim(NLL_myxRicker,par = params)
-  ret <- list()
-  ret$MLE <- temp$par
-  ret$df <- data.frame(
+predict_myxRicker1 <- function(mle){
+  df <- data.frame(
     x=seq(min(myxdat$day)-1,max(myxdat$day)+1,length=100)
   )
-  ret$df$mean <- Ricker(ret$df$x,ret$MLE["a"],ret$MLE["b"])
-  ret$df$lwr <- qgamma(0.025,ret$df$mean*ret$MLE["rate"],ret$MLE["rate"] )
-  ret$df$upr <- qgamma(0.975,ret$df$mean*ret$MLE["rate"],ret$MLE["rate"] )
-  g = ggplot(ret$df,aes(x,mean)) +
+  df$mean <- Ricker(df$x,mle["a"],mle["b"])
+  df$lwr <- qgamma(0.025,df$mean*mle["rate"],mle["rate"] )
+  df$upr <- qgamma(0.975,df$mean*mle["rate"],mle["rate"] )
+  g = ggplot(df,aes(x,mean)) +
     geom_ribbon(aes(ymin=lwr,ymax=upr),fill="gray") +
     geom_path(col="darkgreen",lwd=2) +
     geom_point(data=myxdat,aes(x=day,y=titer),size=2) +
-    labs(x="Days since infection",y="Virus titer")
+    labs(x="Days since infection",y="Virus titer") +
     theme_classic()
   print(g)
-  return(ret)
+  return(df)
 }
 
 ```
@@ -668,45 +678,174 @@ And as always, make sure to test your function code using something like this:
 
 ```{r testq3_3b}
 
-MyxRicker(params=c(a=2,b=0.2,rate=2))   # test the function
+predict_myxRicker1(mle=MLE)   # test the function
 
 ```
 
-## Exercise 4: Confidence Intervals
+## Exercise 4: Confidence Intervals on parameters
 
-#### TODO: ADD MORE DETAILED INSTRUCTIONS HERE
+In this exercise you will construct confidence intervals that reflect our uncertainty about the parameter estimates in the Ricker/virus titer example. We will then construct prediction intervals that include our uncertainty about the parameter values. 
 
-Making "plug-in" confidence intervals looks nice on the plot (and is a useful, quick-and-dirty way to assess goodness-of-fit), but we also want to quantify parameter uncertainty (and not just uncertainty arising from the randomness of the stochastic or residual error component). 
+Again, you can assume that there is a data frame in your environment named 'myxdat' with columns named 'days' and 'titer' that contain the data.
 
-In this exercise you will construct "real" confidence intervals for the parameter estimates in the Ricker/virus titer example. 
-
-You will need to modify your likelihood functions and "optim()" commands to estimate only the parameters *other than* the one you are trying to get a CI for (because you’ll be fixing that parameter at many values on either side of the MLE).
-
-Again, you can assume that there is a dataframe in your environment named 'myxdat' with columns named 'days' and 'titer' that contain the data.
-
-### **Exercise 4.1a: Gaussian approximation
+### **Exercise 4.1a**: Gaussian approximation
 
 The first step is to optimize your likelihood function, this time using the "hessian=T" argument to the 'optim' function:
 
-```{r q3_4a-data, echo=FALSE, context="data"}
+```{r q4_1a-data, context="data"}
 temp <- optim(NLL_myxRicker,par = c(a=2,b=0.2,rate=2),hessian = T)
 MLE = temp$par
 MinNLL = temp$value 
 H = temp$hessian
 H
 ```
+
 To compute confidence intervals, we first need to compute the standard error of the parameters. This is pretty easy if we remember that the MLE is asymptotically multivariate normally distributed with a variance-covariance matrix of $H^{-1}$, where H is the hessian matrix (matrix of second partial derivatives of the negative log-likelihood function with respect to each parameter) evaluated at the MLE. In other words, the variance-covariance matrix of the parameter vector at the MLE is approximately (asymptotically) equal to the inverse of the hessian matrix of the negative log-likelihood function, evaluated at the MLE. This sounds complicated but is pretty simple to do in R. 
 
 Once you have computed the variance covariance matrix for the MLE parameters, you can compute the standard error as the square root of the diagonals of the variance covariance matrix (the diagonal elements represent variances). Finally, to compute a margin of error for a confidence interval, you can multiply the standard error by the appropriate quantile from a standard normal distribution- for example, for a 95% confidence interval you would multiply the sterr by 1.96, which is the 0.025 quantile of the standard normal distribution (if you exclude 0.025 from the top and the bottom of the distribution, the middle portion contains 95% of the probability mass. Finally, you can add and subtract this margin of error to compute a 95% confidence interval around each parameter. 
 
+Write a function called "CI_myxRicker1()" for computing a confidence interval for all free parameters in this model.
+
++ **input**:         
+    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution)(names should be "a","b", and "rate") 
+    + H = the hessian matrix obtained from optimizing the negative-log-likelihood function (i.e., from 'optim()' with 'hessian=T')
+
++ **suggested algorithm**:   
+    + compute variance-covariance matrix (VCM) from the hessian matrix as described above.
+    + extract the diagonal elements of the VCM and take the square root- this is the standard error of your parameters. 
+    + compute the margin of error by multiplying the standard error of each parameter by the appropriate quantile of the z distribution (standard normal). In this case you want the 97.5% quantile. 
+
++ **return**:    
+    + a matrix: each row is a parameter (in order: a, b, and rate) and there are four columns: first, the mle values, second, the standard error, third, the lower bound of the confidence interval, and fourth, the upper bound of the confidence interval. 
+
 HINT: to take the inverse of a matrix in R, you can use the "solve()" function. 
 
-```{r q3_4a-solution, echo=FALSE, context="data"}
+```{r q4_1a-solution, echo=FALSE, context="data"}
 
 CI_myxRicker1 <- function(mle, H){
   stderr = sqrt(diag(solve(H)))
   moe = stderr*qnorm(0.025,lower=F)
-  cbind(mle=mle,lwr=mle-moe,upr=mle+moe)
+  cbind(mle=mle,se=stderr,lwr=mle-moe,upr=mle+moe)
+}
+
+```
+
+You can test your function code using something like this:
+
+```{r testq4_1a}
+
+CI_myxRicker1(MLE,H)   # test the function
+
+```
+
+### **Exercise 4.1b**: confidence intervals on predictions 
+
+Write a function called "predict_myxRicker2()" that computes a 95% confidence interval for predicted titer values across a range of days-since-exposure. 
+
+To do this, we will use a nice trick called the **delta method** for computing the standard error of the expected titer computed from the MLE. The delta method is applicable any time we want to compute the standard error for a transformation of an asymptotically normally (or multivariate-normally) distributed quantity/vector. Mathematically, it is based on a Taylor expansion, so it is important that the transformation function is differentiable. 
+
+In this class, we will use the delta method to find the variance or standard error of arbitrary transformations of the MLE. To do this, we need the MLE estimates, and we need the variance-covariance matrix of the MLE estimates, which we can compute as the inverse of the hessian matrix of the negative-log-likelihood function. 
+
+$$VCV_{\theta, MLE} = {H_{\theta, MLE}}^{-1}$$
+Now consider some function of the MLE parameters, $f(\vec{\theta})$. Recalling that the MLE is asymptotically normally distributed such that $\hat{\theta} \sim MVN(\hat{\theta}_{MLE},VCV_{\theta, MLE})$, then we can compute the approximate variance of our new estimated quantity:
+
+$$f(\theta) \sim Normal(f(\hat{\theta}_{MLE}),\nabla f(\hat{\theta}_{MLE})^T \times VCV_{\theta, MLE} \times \nabla f(\hat{\theta}_{MLE}) )$$
+That is, the variance of the transformed random variable is:
+
+$$\nabla f(\hat{\theta}_{MLE})^T \times VCV_{\theta, MLE} \times \nabla f(\hat{\theta}_{MLE})$$
+
+The standard error is just the square root of the variance. Finally, you can compute a confidence interval by multiplying the standard error by the desired quantile of the standard normal distribution. For a 95% CI, just multiply the standard error by the upper 0.025 quantile of the z distribution, and add and subtract this quantity from the mean value of the quantity. Here is an example so you can start getting the hang of it!
+
+```{r}
+
+# assume X is a random variable with mean of c(2.2, 4.1)
+
+exp_X = c(2.2,4.1)   # expected value of random MVN variable
+vcv_X = matrix(c(1,.2,.2,1.5),nrow=2)  # vcv matrix of X
+
+# imagine we want to evaluate a transformation of X: 1/(x1^2 + log(x2))
+
+myfun = function(x) 1/(x[1]^2+log(x[2]))   # write a function for your transformation
+
+# compute the gradient of the transformation with respect to the components of X,
+      # evaluated at the mean values of X
+f_prime_X = numDeriv::grad(myfun,exp_X)
+
+# apply the delta method to obtain an approximate standard error:
+var_fX = (t(f_prime_X) %*% vcv_X %*% f_prime_X)[1,1] 
+
+# compute the standard error:
+se_fX = sqrt(var_fX)
+
+# compute the critical value for 95% CI
+z_crit = qnorm(0.025,lower=F)
+
+# compute confidence interval
+ci_fX = myfun(exp_X) + z_crit*se_fX * c(mean=0,lower=-1,upper=1)
+ci_fX
+
+```
+Note that Bolker's 'emdbook' package has a 'deltavar()' function for computing variances using the delta method. You are welcome to use Bolker's function, but I encourage you to apply the delta method 'from scratch' using the 'numDeriv' package to compute gradients. 
+
+As extra credit, see if you can compute and visualize a 95% prediction interval. You can do this by applying the delta method to compute the 'shape' parameter of the gamma distribution, which is a derived parameter involving all three parameters you estimated in this problem (a, b, and rate). 
+
+NOTE: you will need to apply the delta method for every prediction you make- that is, as you vary the number of days since exposure, the variance of the predictions will change. 
+
++ **input**:         
+    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution)(names should be "a","b", and "rate") 
+    + H = the hessian matrix obtained from optimizing the negative-log-likelihood function (i.e., from 'optim()' with 'hessian=T')
+    + prediction = a logical T/F indicating whether to generate a prediction interval (if TRUE) or a confidence interval (if FALSE). Set this to FALSE as a default. Since this is an optional problem, you don't need to incorporate this argument in your algorithm, but please include it anyway! 
+
++ **suggested algorithm**:   
+    + compute variance-covariance matrix (VCM) from the hessian matrix as described above.
+    + make a data frame with a column "x" spanning the range of the time-since-infection (predictor variable, in days).
+    + add a column with the predictions from the Ricker model based on the MLE parameters (just the Ricker parameters) across the range of times since exposure.
+    + use the delta method to compute the standard error for all of your predictions, evaluated at the MLE
+    + Finally, visualize prediction intervals around your MLE line.
+        + if prediction=FALSE, then sample many times from a multivariate normal distribution with mean at the MLE and VCM equal to the VCM computed above. For each sampled parameter vector, add the appropriate noise (here, gamma distributed). 
+    + summarize the upper and lower bound for each 
+    + compute the margin of error by multiplying the standard error of each parameter by the appropriate quantile of the z distribution (standard normal). In this case you want the 97.5% quantile (make sure you know why!). 
+
++ **return**:    
+    + a matrix: each row is a parameter (in order: a, b, and rate) and there are three columns: first, the mle values, second, the lower bound of the confidence/prediction interval, and third, the upper bound of the confidence/prediction interval. 
+
+```{r q3_4a-solution, echo=FALSE, context="data"}
+
+ci_fun = function(par, d) par[1]*d * exp(-par[2]*d)
+  
+pi_fun = function(par, d){
+  (par[1]*d * exp(-par[2]*d)) * par[3]
+}
+
+predict_myxRicker2 <- function(mle, H, prediction=F){
+  VCV = solve(H)
+  df <- data.frame(
+    x=seq(min(myxdat$day)-1,max(myxdat$day)+1,length=100)
+  )
+  df$mean <- Ricker(df$x,mle["a"],mle["b"])
+  if(prediction){
+    df$upr = df$lwr = NA 
+    for(i in 1:nrow(df)){
+      g <- numDeriv::grad(pi_fun, mle, d=df$x[i])
+      se_shap <- sqrt(t(g) %*% VCV %*% g)
+      df[i,c("lwr","upr")] <- qgamma(c(0.025,0.975),df$mean[i]*mle["rate"],mle["rate"] )
+    }
+  }else{
+    se <- sapply(df$x,function(t){
+      g <- numDeriv::grad(ci_fun, mle[1:2], d=t)
+      sqrt(t(g) %*% VCV[1:2,1:2] %*% g)[1,1]  
+    })    # fine to use a for loop here!
+    df$lwr <- df$mean - se * qnorm(0.025,lower=F)
+    df$upr <- df$mean + se * qnorm(0.025,lower=F)
+  }
+  g = ggplot(df,aes(x,mean)) +
+    geom_ribbon(aes(ymin=lwr,ymax=upr),fill="gray") +
+    geom_path(col="darkgreen",lwd=2) +
+    geom_point(data=myxdat,aes(x=day,y=titer),size=2) +
+    labs(x="Days since infection",y="Virus titer") +
+    theme_classic()
+  print(g)
+  return(df)
 }
 
 ```
@@ -715,17 +854,35 @@ You can test your function code using something like this:
 
 ```{r testq3_4a}
 
-CI_myxRicker1(MLE,H)   # test the function
+predict_myxRicker2(MLE,H,prediction = T)   # test the function
+predict_myxRicker2(MLE,H,prediction = F)
 
 ```
 
-### **Exercise 4.1b (optional extra credit!): Profile Likelihood confidence interval
+### **Exercise 4.1c (optional extra credit!): Profile Likelihood confidence interval
 
-In this exercise, you will add an option to construct *profile likelihood* confidence intervals instead of using the normal approximation (using the Hessian matrix, above).  parameter using repeated calls to the "optim()" function. You will need to modify your likelihood functions and "optim()" commands to estimate only the parameters *other than* the one you are trying to get a CI for (because you’ll be fixing that parameter at many values on either side of the MLE).
+In this optional (extra credit) exercise, you will add an option to construct *profile likelihood* confidence intervals instead of using the normal approximation (using the Hessian matrix, above).  parameter using repeated calls to the "optim()" function. 
 
-Again, you can assume that there is a dataframe in your environment named 'myxdat' with columns named 'days' and 'titer' that contain the data. 
+To do this you will need to modify your likelihood functions and "optim()" commands to estimate only the parameters *other than* the one you are trying to get a CI for (because you’ll be fixing that parameter at many values on either side of the MLE).
 
-```{r q3_4b-solution, echo=FALSE, context="data"}
+Again, you can assume that there is a dataframe in your environment named 'myxdat' with columns named 'days' and 'titer' that contain the data.
+
+Since this is for extra credit, I am not giving you a suggested algorithm here. Take this as a fun challenge! You might start by writing down some psuedocode to think through the problem before you start coding. Try to do it without help from a chatbot. If you do use a chatbot, ask it to help find solutions using base R. This course is about building custom algorithms so it's kind of cheating if you use higher level functions that "hide" the underlying algorithms.
+
++ **input**:         
+    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution)(names should be "a","b", and "rate") 
+    + H = the hessian matrix obtained from optimizing the negative-log-likelihood function (i.e., from 'optim()' with 'hessian=T')
+    + nll = the minimum negative-log-likelihood at the MLE
+    + profile = a logical T/F indicating whether or not to use the profile likelihood method. If not, the function should return confidence intervals using the normal approximation with the hessian matrix. 
+
++ **suggested algorithm**:   
+    Up to you!
+
++ **return**:    
+    + a matrix: each row is a parameter (in order: a, b, and rate) and there are three columns: first, the mle values, second, the lower bound of the confidence interval, and third, the upper bound of the confidence interval. 
+    
+
+```{r q3_4c-solution, echo=FALSE, context="data"}
 
 CI_myxRicker2 <- function(mle, H, nll, profile=T,alpha=0.05){
   if(profile){
@@ -758,7 +915,7 @@ CI_myxRicker2 <- function(mle, H, nll, profile=T,alpha=0.05){
 
 Finally, test the function and compare the profile likelihood method with the hessian method:
 
-```{r testq3_4b}
+```{r testq3_4c}
 
 CI_myxRicker2(MLE,H,MinNLL,profile=T,alpha=0.9)
 
