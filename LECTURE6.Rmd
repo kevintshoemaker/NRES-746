@@ -10,6 +10,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
+library(ggplot2)
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
@@ -24,27 +25,46 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 In the previous two lectures, discussed **model-based inference** using custom likelihood functions in a *frequentist* framework. Specifically, we constructed likelihood functions with one or more free parameters and then used numerical optimization techniques to find the maximum-likelihood estimate (MLE). 
 
-We quantified parameter uncertainty by relying on the asymptotic normality property of ML estimators, and by leaning on Wilks' theorem, which allows us to treat the deviance statistic (-2 * log likelihood ratio) as following a Chi-squared distribution under the null hypothesis of no difference. Regardless of the mathematical details, the key idea was that the curvature of the likelihood surface in the vicinity of the MLE (e.g., the *likelihood profile*) tells us something about how certain we are about our ML estimates. 
+We quantified parameter uncertainty by relying on the asymptotic normality property of ML estimators, and by leaning on Wilks' theorem, which allows us to treat the deviance statistic (-2 * log likelihood ratio) as Chi-squared distributed under the null hypothesis. 
+
+Regardless of the mathematical details, the key idea was that the curvature of the likelihood surface in the vicinity of the MLE (e.g., the *likelihood profile*) tells us something about how certain we are about our ML estimates. 
 
 Today we will start discussing **Bayesian inference**, which is less of a departure from these previous ideas than you might think. 
 
-Bayesian inference also requires us to develop likelihood functions that formalize our ideas about how our data were generated.
+Bayesian inference also requires us to develop likelihood functions that formalize our ideas about how our data were generated. 
 
-Bayesian methods also use the curvature of the likelihood surface to make inference about parameter uncertainty. 
+Bayesian methods also use the curvature of the likelihood surface to make inference about parameter uncertainty. The difference is that we are no longer interested in the maximum likelihood estimate (MLE) or the asymptotic properties of maximum likelihood estimators. Instead, we're interested in using the likelihood function to update our **degree of belief** about our parameter values. Effectively, we want to obtain a probability distribution (called the **joint posterior**) that reflects our updated beliefs about the plausibility of any given set of parameters after we observe the data.
 
-The difference is that we are no longer interested as much in the maximum likelihood estimate (MLE) or the asymptotic properties of maximum likelihood estimators. Instead, we're interested in using the likelihood function to update our **degree of belief** about our model and its parameter values. Effectively, we want to obtain a probability distribution (called the **joint posterior**) that reflects our beliefs about the plausibility of any given set of parameters.
-
-Remember, Bayesian inference allows us to represent parameter uncertainty as probability distributions, so the parameters of interest are no longer fixed but unknown values (point estimates), they are sets of potential values, each with an associated probability.
+Remember, Bayesian inference allows us to represent parameter uncertainty as a probability distribution. We no longer need to think of our parameters as fixed but unknown quantities with no inherent uncertainty- we can now express our uncertainty in the language of probability. 
 
 ### Play with binomial/beta (conjugate prior)
 
-Estimating the probability of an event using a binomial distribution is one of the simplest likelihood-based problems, so it provides a good starting point!
+Estimating the probability of an event using a binomial distribution provides a good entry point to Bayesian statistics!
 
-Let's imagine we know *N* (*N*, the number of independent trials, is fixed), but we want to estimate *p* (the probability of an event occurring). For now, we will assume we have no prior information about *p*, such that any value of *p* is equally likely.
+Let's imagine we we want to estimate *p* (the probability of an event occurring) based on the success rate of a fixed number of trials *N*. For now, we will assume we have no prior information about *p*.
 
 #### Set the prior
 
-To set the prior, let's assume *p* follows a uniform distribution between 0 and 1:
+To set the prior, let's assume *p* can take any value between 0 and 1 with equal probability:
+
+$$p \sim Uniform(0,1)$$
+This leads to a simple but strange looking probability density function:
+
+$$f(p) = \begin{cases}
+    0 & \text{if } p \lt 0 \\
+    1 & \text{if } 0 \le p < 1 \\
+    0 & \text{if } p \gt 1 \\
+    \end{cases}$$
+
+Does it make sense that this distribution is often used in Bayesian analyses to represent the lack of any prior knowledge about a parameter? 
+
+An alternative way to specify this same uniform (flat) prior is to use the beta distribution, with both parameters of the distribution ($\alpha$ and $\beta$) set to 1:
+
+$$p \sim Beta(1,1)$$
+
+$$f(p) = \frac{p^{\alpha-1}(1-p)^{\beta-1}}{B(\alpha,\beta)}$$,
+
+where $B(\alpha,\beta)=\frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)}$
 
 ```{r}
 
@@ -52,116 +72,107 @@ To set the prior, let's assume *p* follows a uniform distribution between 0 and 
 
 # first visualize the "prior" for the probability *p* as a uniform distribution
 
-curve(dunif(x),ylim=c(0,2),col="red", ylab = "probability", xlab="parameter \"p\"")
-
-#hist(runif(10000),freq=F,ylim=c(0,2),col="red")
-
-```
-
-An alternative way to specify this uniform (flat) prior is to use the beta distribution, with both parameters of the distribution (shape1 and shape2) set to 1
-
-
-```{r eval=FALSE}
-
-# Alternative prior: beta distribution (conjugate prior)
-
-curve(dbeta(x,1,1),ylim=c(0,2),col="red",ylab = "probability", xlab="parameter \"p\"")
-
-#hist(rbeta(10000,1,1),freq=F,ylim=c(0,2),col="red")   # histogram of random numbers from a flat beta distribution
+ggplot() +
+  scale_x_continuous(limits=c(0,1)) +
+  scale_y_continuous(limits=c(0,1.5)) +
+  stat_function(fun=dbeta,args = list(shape1 = 1, shape2 = 1),lwd=2,col=gray(.4)) +
+  labs(x="parameter \"p\"",y="probability") +
+  theme_classic()
 
 ```
 
 ### Conjugate prior
 
-Why choose the beta distribution here? The answer is that the beta distribution is the **conjugate prior** for the *p* parameter in the binomial distribution. This makes Bayesian estimation easy and straightforward, as we will see!
+Why choose the beta distribution here? The answer is that the beta distribution is the **conjugate prior** for the *p* parameter in the binomial distribution. This makes Bayesian estimation easy and straightforward, as we will see! See if you can see the mathematical similarity with the Binomial distribution:
+
+$$k ~ Bin(N,p)$$
+$$P(k) = {N \choose k}p^k(1-p)^{N-k}$$
 
 #### Definition: conjugate prior
 
-A conjugate prior is a distribution for a parameter that matches the data-generating model: that is, the prior has the same general form as the likelihood function. An important consequence of this is that prior and the posterior distribution can be represented with the same probability distribution (e.g., gamma, beta, normal). We will come back to this!
+A conjugate prior is a probability distribution for a parameter that takes the same form as the data-generating model. An important consequence of this is that prior and the posterior distribution can be represented with the same family of probability distributions (e.g., the prior and the posterior are both beta distributions).
 
 ### Worked example 
 
-Let's work through an example. Take the same frog-call survey we have imagined before (a simple problem with binomial data). Recall that a particular site is occupied. After visiting the site 10 times, we detected the frog (heard its call) 3 times out of 10 total visits. We are interested in determining the detection probability. 
+Let's work through an example. Take the same frog-call survey we have worked with before (a simple problem with binomial data): after visiting an occupied pond 10 times, we detected the frog (heard its call) 3 times out of 10 total visits (N=10, k=3). We are interested in estimating the detection probability. 
 
-We know the likelihood of the data across parameter space. So now we have both a prior distribution for our parameter of interest, as well as a likelihood surface. 
+We know how to express the likelihood of the data:
+
+$$\mathcal{L}(p) = {10 \choose 3}p^3(1-p)^{7}$$
+
+So now we have both a prior distribution for our parameter of interest (uniform from 0 to 1), as well as a likelihood surface (evaluating $\mathcal{L}(p)$ from p = 0 to 1). 
 
 ```{r}
 
 # frog call example: --------------
+
 #    imagine we detected the frog in 3 of 10 visits to a known-occupied wetland
-
 #    visualize the data likelihood alongside the prior probability
-
 #    recall that the likelihood surface is not a probability distribution (thus, the 2 y axes)
 
-data = 3
-param.space <- seq(0,1,by=0.001)
-likelihood <- dbinom(data,size=10,prob=param.space)
-par(mai=c(1,1,0,1))
-curve(dbeta(x,1,1),ylim=c(0,2),col="blue",lty=2,ylab="Probability density (prior)",xlab="parameter (p)")
-points(param.space,likelihood,type="l",col="red",lwd=2,lty=2)
-axis(4,at=seq(0,.3,length=4),labels = seq(0,0.3,length=4))
-mtext("Likelihood (relative plausibility)", side=4, col="red",line=3)
+lik = function(p) dbinom(3,10,p)
 
+ggplot() +
+  xlim(0,1) + ylim(0,2) + 
+  stat_function(fun=dbeta,args = list(shape1 = 1, shape2 = 1),lwd=1.5,col=gray(.4)) +
+  stat_function(fun=lik,lwd=1.5,col="darkorange") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
-Recall that the likelihood curve is NOT a probability distribution. It does not sum to 1! In Bayesian analyses, we translate the likelihood to a probability distribution using Bayes rule!!
+Recall that the likelihood curve is NOT a probability distribution. It does not sum to 1- as you might be able to tell from the above figure. 
 
-$Prob(Model|Data) = \frac{Prob(Data|Model)\cdot Prob(Model))}{Prob(Data)}$
+In Bayesian analyses, we translate the likelihood to a probability distribution using Bayes rule!!
 
-The $Prob(Data|Model)$ term is the likelihood curve...
+$P(\theta|D) = \frac{P(D|\theta)\cdot P(\theta))}{P(D)}$
 
-The $Prob(Model)$ term is the prior distribution
+The $P(D|\theta)$ term is the likelihood curve...
 
-BUT... what is the unconditional probability of the data ($Prob(Data)$)? 
+The $P(\theta)$ term is the prior distribution
 
-Well, it's the likelihood of the data, summed across all possible parameter values, weighted by the prior. This evaluates to a single number (also known as the "evidence").
+What is the marginal likelihood, or the unconditional probability of the data ($P(D)$)? 
 
-In practical terms, the denominator, $Prob(Data)$, can be seen as a normalizing constant that effectively converts the numerator $Prob(Data|Model)\cdot Prob(Model))$ into a true probability distribution. 
+Well, by the law of total probability, it's the integral of the numerator (likelihood weighted by the prior) across all possible parameter values:
 
-As always (in this class), let's do it first by brute force!!
+$$P(D) = \int{P(D|\theta)\cdot P(\theta) \;d\theta}$$
+
+This evaluates to a single number (also known as the "evidence" or "marginal likelihood").
+
+In practical terms, you can think of the denominator, $P(D)$, can be seen as a normalizing constant that effectively converts the weighted likelihood in the numerator $P(D|\theta)\cdot P(\theta))$ into a true probability distribution. 
+
+As always, let's start by doing it by brute force!!
 
 ```{r}
 
 # Brute-force Bayes ----------------------------
 
-####
 # prior across parameter space 
 
-prior <- dbeta(param.space,shape1=1,shape2=1)    # flat prior
-#prior
+prior <- function(p) dbeta(p,1,1)    # flat prior
 
-####
 ## Numerator for Bayes rule: weight the data likelihood by the prior
+numer <- function(p) lik(p)*prior(p)      # Numerator for Bayes rule
 
-weighted.likelihood <- likelihood*prior      # Numerator for Bayes rule
-
-####
 ## Denominator for Bayes rule: compute normalization constant
+marg_lik <- function() integrate(numer,0,1)$value   # marginal likelihood is a single constant number: the sum of the weighted likelihoods!
 
-normalization.constant <- sum(weighted.likelihood)   # "evidence" is a single constant number: the sum of the weighted likelihoods!
+## Posterior (numerator/denominator)
+posterior <- function(p) numer(p)/marg_lik()   # this is Bayes' rule!
 
-####
-## Posterior!! (numerator/denominator)
-
-posterior <- weighted.likelihood/normalization.constant   # this is Bayes' rule!
-
-#####
 ## Plot it out!
 
-par(mai=c(1,1,0,1))
-plot(param.space,prior,ylim=c(0,5),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)  # convert posterior probability to probability density
-points(param.space,likelihood,type="l",col="red",lwd=1,lty=2)
-axis(4,at=seq(0,.3,length=4),labels = seq(0,0.3,length=4))
-mtext("Likelihood", side=4, col="red",line=3)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=prior,lwd=1.5,col=gray(.4)) +
+  stat_function(fun=lik,lwd=1.5,col="darkorange") +
+  stat_function(fun=posterior,lwd=1.5,col="darkgreen") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
-Notice that the shape of the posterior distribution looks a lot like the shape of the likelihood surface. What this says to us is that the prior information has been *overwhelmed* by the information content of the data (as summarized by the likelihood surface).
-
-Again: recall that the likelihood surface is NOT a probability distribution- it is a way to assess the relative plausibility of the data across parameter space. The prior and the posterior are *true probability distributions*, and necessarily integrate to 1. 
+Notice that the shape of the posterior distribution looks a lot like the shape of the likelihood surface. What this says to us is that the posterior distribution is informed much more by the data than by the prior. This is nearly always the case when using a uniform prior. 
 
 What if we have a more informative prior?
 
@@ -169,31 +180,16 @@ What if we have a more informative prior?
 
 # Try an informative prior!  -------------
 
-prior <- dbeta(param.space,shape1=15,shape2=5)
-#prior
+prior <- function(p) dbeta(p,15,5)    # more informative prior
 
-## weight the data likelihood by the prior
-
-weighted.likelihood <- likelihood*prior
-
-## compute normalization constant
-
-normalization.constant <- sum(weighted.likelihood)
-
-## Posterior!!
-
-posterior <- weighted.likelihood/normalization.constant
-
-## Plot it out!
-par(mai=c(1,1,0,1))
-plot(param.space,prior,ylim=c(0,5),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)
-points(param.space,likelihood,type="l",col="red",lwd=1,lty=2)
-axis(4,at=seq(0,.3,length=4),labels = seq(0,0.3,length=4))
-mtext("Likelihood", side=4, col="red",line=3)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=prior,lwd=1.5,col=gray(.4)) +
+  stat_function(fun=lik,lwd=1.5,col="darkorange") +
+  stat_function(fun=posterior,lwd=1.5,col="darkgreen") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 ```
-
-What does this tell us?
 
 What about if we have more data? Let's imagine we visited 10 occupied ponds and observed the following data: 
 
@@ -201,35 +197,18 @@ What about if we have more data? Let's imagine we visited 10 occupied ponds and 
 
 ```{r}
 
-####
-# Collect more data and try again...
+# Collect more data and try again...   -----------
 
-moredata <- c(3, 1, 6, 2, 3, 2, 6, 1, 3, 3)
+dat <- c(3, 1, 6, 2, 3, 2, 6, 1, 3, 3)
+lik = function(p) sapply(p, function(t) prod(dbinom(dat,10,t)) )  # vectorized with sapply
 
-## prior
-prior <- dbeta(param.space,shape1=15,shape2=5)
-
-## likelihood
-likelihood <- sapply(param.space,function(t) prod(dbinom(moredata,size=10,prob=t)))
-
-## weight the data likelihood by the prior
-weighted.likelihood <- likelihood*prior
-
-## compute normalization constant
-
-normalization.constant <- sum(weighted.likelihood)
-
-## Posterior!!
-
-posterior <- weighted.likelihood/normalization.constant
-
-## Plot it out!
-par(mai=c(1,1,0,1))
-plot(param.space,prior,ylim=c(0,10),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)
-points(param.space,likelihood*1e9,type="l",col="red",lwd=1,lty=2)
-axis(4,at=seq(0,6,by=1),labels = seq(0,6e-9,by=1e-9))
-mtext("Likelihood", side=4, col="red",line=3)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=prior,lwd=1.5,col=gray(.4)) +
+  # stat_function(fun=lik,lwd=1.5,col="darkorange") +    # likelihood is too small to show up
+  stat_function(fun=posterior,lwd=1.5,col="darkgreen") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
@@ -238,58 +217,34 @@ What about a super informative prior??
 
 ```{r}
 
-####
-# Try a very informative prior!
+prior <- function(p) dbeta(p,150,50)    # super informative prior
 
-likelihood <- dbinom(data,size=10,prob=param.space)
-
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=prior,lwd=1.5,col=gray(.4)) +
+  stat_function(fun=posterior,lwd=1.5,col="darkgreen") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 ```
-
-```{r}
-prior <- dbeta(param.space,shape1=150,shape2=50)
-#prior
-
-## weight the data likelihood by the prior
-
-weighted.likelihood <- likelihood*prior
-
-## compute normalization constant
-
-normalization.constant <- sum(weighted.likelihood)
-
-## Posterior!!
-
-posterior <- weighted.likelihood/normalization.constant
-
-## Plot it out!
-par(mai=c(1,1,0,1))
-plot(param.space,prior,ylim=c(0,15),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)
-points(param.space,likelihood*5,type="l",col="red",lwd=1,lty=2)
-axis(4,at=seq(0,2,by=0.4),labels = seq(0,0.5,by=.1))
-mtext("Likelihood", side=4, col="red",line=3)
-```
-
 
 Okay, now let's do it the more mathematically elegant way! When we work with a conjugate prior, the updating process is easy. The posterior distribution for the *p* term in the above example can be computed by:
 
-$Beta(shape1=prior+k,shape2=prior+(N-k))$
+$p \sim Beta(prior+k,prior+(N-k))$
 
 Let's do the same thing, now using the conjugate prior method...
 
 ```{r}
 
 ## Conjugate priors ---------------------------
+
 # Do it again- this time with conjugate priors...
 
-### PRIOR
-
-prior_beta <- c(shape1=1,shape2=1)
-curve(dbeta(x,prior_beta['shape1'],prior_beta['shape2']),ylim=c(0,5),ylab="Prob Density",col="blue",lwd=1,lty=2,xlab="param.space")
-
-### POSTERIOR
-
-curve(dbeta(x,prior_beta['shape1']+data,prior_beta['shape2']+(10-data)),ylim=c(0,4),ylab="Prob Density",col="blue",lwd=2,lty=1,xlab="param.space",add=T)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 1, shape2 = 1),lwd=1.5,col=gray(.4)) +  # PRIOR
+  stat_function(fun=dbeta,args = list(shape1 = 1+3, shape2 = 1+(10-3)),lwd=1.5,col="darkgreen") +  # POSTERIOR (after observing 3 successes out of 10)
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
@@ -297,17 +252,14 @@ And again, this time with an informative prior!
 
 ```{r}
 
-####
 # With informative prior...
 
-### PRIOR
-prior_beta <- c(shape1=15,shape2=5)
-curve(dbeta(x,prior_beta['shape1'],prior_beta['shape2']),ylim=c(0,5),ylab="Prob Density",col="blue",lwd=1,lty=2,xlab="param.space")
-
-
-### POSTERIOR
-
-curve(dbeta(x,prior_beta['shape1']+data,prior_beta['shape2']+(10-data)),ylim=c(0,4),ylab="Prob Density",col="blue",lwd=2,lty=1,xlab="param.space",add=T)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 15, shape2 = 5),lwd=1.5,col=gray(.4)) +  # PRIOR
+  stat_function(fun=dbeta,args = list(shape1 = 15+3, shape2 = 5+(10-3)),lwd=1.5,col="darkgreen") +  # POSTERIOR (after observing 3 successes out of 10)
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
@@ -321,37 +273,33 @@ And the super informative prior??
 
 ```{r}
 
-####
 # And with super informative prior...
 
-### PRIOR
-prior_beta <- c(shape1=150,shape2=50)
-curve(dbeta(x,prior_beta['shape1'],prior_beta['shape2']),ylim=c(0,15),ylab="Prob Density",col="blue",lwd=1,lty=2,xlab="param.space")
-
-
-### POSTERIOR
-curve(dbeta(x,prior_beta['shape1']+data,prior_beta['shape2']+(10-data)),ylim=c(0,15),ylab="Prob Density",col="blue",lwd=2,lty=1,xlab="param.space",add=T)
-
-```
-
-```{r echo=FALSE}
-
-graphics.off()    # Return to R's default graphical parameters
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 150, shape2 = 50),lwd=1.5,col=gray(.4)) +  # PRIOR
+  stat_function(fun=dbeta,args = list(shape1 = 150+3, shape2 = 50+(10-3)),lwd=1.5,col="darkgreen") +  # POSTERIOR (after observing 3 successes out of 10)
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
 ### Bayesian point estimate
 
-One of the differences between the MLE and the Bayesian paradigm (although both use likelihood as a way to summarize the information content of the data) is that the point estimate is not usually the maximum (mode) of the posterior distribution (in MLE, we by definition try to find the parameter value that maximizes the likelihood function) but the **mean** (expected value) or the **median** of the posterior distribution. 
+One of the differences between the frequentist and the Bayesian paradigm (although both use the likelihood function as a way to summarize the information content of the data) is that the point estimate is not usually the maximum (mode) of the posterior distribution. Instead, our point estimate is usually the **mean** (expected value) or the **median** of the posterior distribution for our parameter. 
 
 Imagine you had a skewed posterior distribution that looked something like this (this is actually a lognormal distribution):
 
 ```{r}
 
 ## Bayesian point estimate -----------------------
-# Example: bayesian point estimates can differ markedly from MLE
+# Example: bayesian point estimates can differ from MLE
 
-curve(dlnorm(x,4,1),from=0.001,to=200,ylab="prob density")  # use a lognormal distribution for example of skewed posterior dist...
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 0.5+1, shape2 = 0.5+2),lwd=1.5,col="darkgreen") +  # skewed posterior
+  labs(x="parameter",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
@@ -359,48 +307,28 @@ Where is the mode? Where is the mean?
 
 ```{r}
 
-####
 # Compute and plot the mean and the mode of the distribution
 
-param.space2 <- seq(0.001,200,length=10000)
-skewed.posterior <- dlnorm(param.space2,4,1)
-mean <- mean(rlnorm(10000,4,1))
-mode <- param.space2[which.max(skewed.posterior)]
-plot(param.space2,skewed.posterior,type="l",ylab="prob density")
-abline(v=c(mean,mode),col=gray(c(0.5,0.2)),lwd=3,lty=2)   # add to plot
+posterior = function(p) dbeta(p,1.5,2.5)
+mean <- integrate(function(p){posterior(p)*p},0,1)$value
+mode <- optimize(posterior,c(0,1),maximum=T)$maximum
+
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 0.5+1, shape2 = 0.5+2),lwd=1.5,col="darkgreen") +  # skewed posterior
+  geom_vline(xintercept=c(mean,mode),col=c("red","blue"),lwd=2,lty=2) +
+  labs(x="parameter",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
-What about for the first worked example? Is there a big difference between the mean and the mode?
+Why don't we use the mean of the likelihood function in frequentist statistics? 
 
-```{r}
-
-####
-# Do the same for the frog detection example from above
-
-#graphics.off()
-### POSTERIOR
-posterior <- dbeta(param.space,1+data,1+(10-data))
-mean <- mean(rbeta(10000,1+data,1+(10-data)))
-mode <- param.space[which.max(posterior)]
-plot(param.space,posterior,type="l",col="blue",lwd=2)
-abline(v=c(mean,mode),col=gray(c(0.5,0.2)),lwd=3,lty=2)   # add to plot
-
-```
-
-```{r echo=FALSE}
-
-graphics.off()    # refresh graphical params
-
-```
-
-#### Thought question
-
-In MLE, we find the parameter value that maximizes the likelihood function. Why don't we use the mean of the likelihood function in Frequentist statistics? In Bayesian analysis, why don't we use the mode of the posterior distribution?
+In Bayesian analysis, why don't we use the mode of the posterior distribution?
 
 ### Bayesian parameter uncertainty
 
-We often call Bayesian confidence intervals *credible intervals* to distinguish from their frequentist analog. Bayesian (e.g., 95%) credible intervals can be interpreted in the way you probably have always wanted to interpret frequentist (95%) confidence intervals. It is way more satisfying for many people! 
+We often call Bayesian confidence intervals *credible intervals* to distinguish from their frequentist cousins. Bayesian (e.g., 95%) credible intervals can be interpreted in the way you probably have always wanted to interpret frequentist (95%) confidence intervals. 
 
 > You are 95% sure that the parameter value is between the lower and upper bound!!!
 
@@ -410,41 +338,38 @@ Let's try this:
 
 ```{r}
 
-####
 # A Bayesian confidence interval (95% credible interval)  -------------------
 
-### POSTERIOR
+credible.interval <- qbeta(c(0.025,0.975),1+3,1+(10-3))     # get the credible interval using the quantile method
 
-curve(dbeta(x,1+data,1+(10-data)),ylim=c(0,4),ylab="Prob Density",col="blue",lwd=2,lty=1,xlab="param.space")
-
-### CREDIBLE INTERVAL
-
-credible.interval <- qbeta(c(0.025,0.975),1+data,1+(10-data))     # get the credible interval using the quantile method
-
-abline(v=credible.interval,col=gray(0.5),lwd=3,lty=2)   # add to plot
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 1+3, shape2 = 1+(10-3)),lwd=1.5,col="darkgreen") +
+  geom_vline(xintercept=credible.interval,col="blue",lwd=1,lty=2) +
+  labs(x="p",y="probability/likelihood") +
+  theme_classic()
 
 ```
 
 #### Highest Posterior Density (HPD) intervals
 
-There are many possible Bayesian credible intervals, even assuming we want a 95% CI. That is, there are many intervals that enclose 95% of the posterior distribution. The Highest Posterior Density interval is the one that is the shortest out of all possible intervals. This is the natural choice for a Bayesian CI since it represents the collection of the most likely values for the parameters - every point within the interval is more plausible than any point outside the interval. 
+There are many possible Bayesian credible intervals, even assuming we want a 95% CI. That is, there are many intervals that enclose 95% of the posterior distribution. The Highest Posterior Density (HPD) interval is the one that is the shortest out of all possible intervals. This is the natural choice for a Bayesian CI since it represents the collection of the most likely values for the parameters - every point within the interval is more plausible than any point outside the interval. 
 
-NOTE: the HPD can be discontinuous for multimodal posterior distributions! 
-
+NOTE: the HPD can be discontinuous for multimodal posterior distributions! In practice, we often use quantiles to define our credible intervals!
 
 ### What if there is no nice easy conjugate prior?
 
-One of the reasons Bayesian analysis was less common historically was that there were no mathematically straightforward ways to do the analysis. *There still are not* BUT we have fast computers and ingenious computational algorithms. Basically, we can use various forms of more-or-less brute force computation, along with some mathematical tricks, to successfully conduct model-based inference in a Bayesian framework.
+One of the reasons Bayesian analysis was less common historically was that there were no mathematically straightforward ways to do the analysis. *There still are not* BUT we have fast computers and efficient computational algorithms. Basically, we can use computational methods to do Bayesian inference.
 
-Let's start with the brutest of brute-force methods (not possible in high-dimensional systems):
+Let's start with our grid-based brute-force method (not possible in high-dimensional systems):
 
 ### The brute force method
 
-For continuity we will continue the myxomatosis dataset. Recall that we are estimating the shape and scale (or alternatively, the rate) parameters of the Gamma distribution that describes the virus titer in Australian rabbits for the highest-grade infections. 
+For continuity we will continue the myxomatosis titer dataset. Recall that we are estimating the shape and rate parameters of the Gamma distribution that describes the virus titer in Australian rabbits for the highest-grade infections. 
 
 ```{r}
 
-#### Bayesian analysis without a conjugate prior
+## Bayesian analysis without a conjugate prior
 
 # Revisit the Myxomatosis example  --------------------------
 
@@ -464,66 +389,60 @@ hist(Myx$titer,freq=FALSE)    # visualize the data, again!
 
 ```
 
-
 And we are trying to fit a Gamma distribution to these data:
 
 ```{r}
 
 ### Error is modeled as gamma distributed
 
-hist(Myx$titer,freq=FALSE)
-curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")   # note here we are using scale and not rate...
+ggplot(Myx, aes(x = titer)) +
+      geom_histogram(aes(y = after_stat(density)), binwidth = 0.5, fill = "lightblue", color = "black") +
+      stat_function(fun=dgamma,args = list(shape = 40, rate = 6),lwd=1,lty=2,col="darkgreen") +
+      labs(x = "Titer", y = "Density") +
+      theme_classic()
 
 ```
-
 
 We already have a likelihood function for this problem! Note that we are now looking at raw likelihoods and not log likelihoods! 
 
 ```{r}
 
-####
 # recall our likelihood function for these data (not on log scale this time!)
 
-GammaLikelihoodFunction <- function(params){
-  prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale']))
+lik <- function(pars){
+  prod(dgamma(Myx$titer,shape=pars['shape'],rate=pars['rate']))
 }
 
-params <- c(40,0.15) 
-names(params) <- c("shape","scale")
-params
-GammaLikelihoodFunction(params)
+pars <- c(shape=40,rate=6) 
+lik(pars)
 
 ```
-
 And we recall that the 2D likelihood surface looks something like this (looks a bit different without the log transform though!):
 
 ```{r}
 
 # define 2-D parameter space (in real probability scale)!
 
-shapevec <- seq(10,100,by=0.1)   
-scalevec <- seq(0.01,0.3,by=0.001)
+shapevec <- seq(0,150,length=100)        # divide parameter space into tiny increments
+ratevec <- seq(0.5,30,length=100)
 
-# define the likelihood surface across this grid within parameter space
+liksurface <- expand.grid(shapevec,ratevec)
+colnames(liksurface) <- c("shape","rate")
+paramslist <- lapply(1:nrow(LLsurface),
+                     function(t){MLE['shape']=liksurface$shape[t];MLE['rate']=liksurface$rate[t];MLE } )
+liksurface$lik <- sapply(paramslist, function(t) lik(t))   # note minus sign to turn NLL to LL 
 
-likelihood2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
 
-newparams <- params
-for(i in 1:length(shapevec)){
-  newparams['shape'] <- shapevec[i]
-  for(j in 1:length(scalevec)){
-    newparams['scale'] <- scalevec[j]
-    likelihood2D[i,j] <- GammaLikelihoodFunction(newparams) 
-  }
-}
+likplot_2D <- ggplot(liksurface,mapping =aes(x=shape,y=rate)) +  # Visualize the likelihood surface
+  geom_raster(aes(fill=lik)) +
+  scale_fill_gradient(limits=c(1e-70,1e-17)) 
 
-# Visualize the likelihood surface
-
-image(x=shapevec,y=scalevec,z=likelihood2D,zlim=c(1e-70,1e-17),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=likelihood2D,levels=c(1e-18,1e-17),add=T)
+likplot_2D
 
 ```
 
+
+### START HERE
 
 Now let's use this 2-D likelihood surface as a jumping-off point for a brute-force Bayesian solution to this problem!
 
