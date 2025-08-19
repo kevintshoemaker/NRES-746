@@ -11,6 +11,7 @@ output:
 
 ```{r setup, include=FALSE}
 library(ggplot2)
+library(dplyr)
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
@@ -426,14 +427,11 @@ And we recall that the 2D likelihood surface looks something like this (looks a 
 shapevec <- seq(0,150,length=100)        # divide parameter space into tiny increments
 ratevec <- seq(0.5,30,length=100)
 
-liksurface <- expand.grid(shapevec,ratevec)
-colnames(liksurface) <- c("shape","rate")
-paramslist <- lapply(1:nrow(LLsurface),
-                     function(t){MLE['shape']=liksurface$shape[t];MLE['rate']=liksurface$rate[t];MLE } )
-liksurface$lik <- sapply(paramslist, function(t) lik(t))   # note minus sign to turn NLL to LL 
+parmsurface <- expand.grid(shapevec,ratevec)
+colnames(parmsurface) <- c("shape","rate")
+parmsurface$lik <- sapply(1:nrow(parmsurface), function(t) lik(unlist(parmsurface[t,1:2]))  )
 
-
-likplot_2D <- ggplot(liksurface,mapping =aes(x=shape,y=rate)) +  # Visualize the likelihood surface
+likplot_2D <- ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the likelihood surface
   geom_raster(aes(fill=lik)) +
   scale_fill_gradient(limits=c(1e-70,1e-17)) 
 
@@ -441,79 +439,68 @@ likplot_2D
 
 ```
 
+We'll use this 2-D likelihood surface as a jumping-off point for a brute-force Bayesian solution to this problem!
 
-### START HERE
-
-Now let's use this 2-D likelihood surface as a jumping-off point for a brute-force Bayesian solution to this problem!
-
-First we need to set priors for the shape and scale parameters... For example, we could set uniform distributions for these parameters. For this example, let's imagine a prior in which all pixels in the above image are equally likely and all pixels outside this range have posterior probability of zero:
+First we set priors for the shape and scale parameters... For example, we could set uniform distributions for these parameters. For this example, let's imagine a prior in which all pixels in the above image are equally likely and all pixels outside this range have posterior probability of zero:
 
 ```{r}
 
-# compute the area of each pixel (for probability density computation)
-
-pixelArea <- 0.0001  # for determining probability densities
+# compute the area of each pixel in parameter space (for probability density computation)
+pixelArea <- diff(range(shapevec))/100 * diff(range(ratevec))/100  
+npixels <- 100*100
 
 # define the prior probability surface across this grid within parameter space
 
-prior2D <- matrix(1, nrow=length(shapevec),ncol=length(scalevec))   # initialize prior
-prior2D <- prior2D/length(prior2D)
-
-# Visualize the 2-D prior distribution
-
-image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0,0.001),col=rainbow(10))
+prior <- function(pars) replicate(nrow(pars),pixelArea/(npixels*pixelArea) )    # set as uniform across the support
+parmsurface$prior <- prior(as.matrix(parmsurface[,c("shape","rate")]) )
 
 ```
 
-Okay, not very interesting! 
-
-But now we have the raw information we need to apply Bayes' rule!
+Now we have the raw information we need to apply Bayes' rule!
 
 ```{r}
 
 # Apply Bayes Rule!   -------------------
 
-weighted.likelihood <- prior2D * likelihood2D    # numerator of Bayes rule
-normalization.constant <- sum(weighted.likelihood)    # denominator of Bayes rule
+parmsurface$numer <- with(parmsurface, lik*prior  )    # numerator of Bayes rule
+denom <- sum(parmsurface$numer)     # denominator of Bayes rule
 
-posterior2D <- weighted.likelihood/normalization.constant
+parmsurface$post <- parmsurface$numer/denom    # apply Bayes rule
 
 # Visualize the 2-D posterior distribution
 
-image(x=shapevec,y=scalevec,z=(posterior2D/pixelArea),zlim=c(0,5),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=(posterior2D/pixelArea),levels=c(1:4),add=T,drawlabels=FALSE)
+postplot_2D <- ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the likelihood surface
+  geom_raster(aes(fill=post)) +
+  scale_fill_gradient(limits=c(1e-25,0.02562)) 
+
+postplot_2D
 
 ```
 
 Now we can use this posterior distribution to get our point estimates and parameter uncertainty estimates. We could just take the 2d posterior distribution surface and draw the contour containing 95% of the probability density:
 
-First let's find the contour line below which only 5% of the probability density is contained (this represents an HPD credible interval):
+First let's find the contour line below which only ~5% of the probability density is contained (this represents an HPD credible interval):
 
 ```{r}
 
-# try to find the contour that contains 95% of our degree of belief!  ----------------
+# find the contour that encloses approx. 95% of our degree of belief!  ----------------
 
-possible.contours <- data.frame(contour = seq(0.13e-4,1e-4,length=100), quantile = NA)
-i=1
-for(i in 1:nrow(possible.contours)){
-  ndx <- which(posterior2D<possible.contours$contour[i],arr.ind = T)
-  possible.contours$quantile[i] <- sum(posterior2D[ndx])
-}
-
-head(possible.contours,10)
+cntrconf <- function(c) with(parmsurface, sum(post[which(post>=c)]) )
+find_cntr <- function(c,conf) (cntrconf(c)-conf)^2  
+c = optimize(find_cntr, interval=c(1e-10,0.02562),conf=0.95)$objective 
+c
 
 ```
 
-From here we can see that the contour line at posterior probability 1.739394e-05 encloses ~95% of the probability density
+So the contour line at posterior probability 6.824e-06 encloses ~95% of the probability density
 
 ```{r}
 
 # Visualize the 2D credible region (HPD)
 
-q95 <- 1.739394e-05
-image(x=shapevec,y=scalevec,z=posterior2D,zlim=c(0.5e-11,5e-4),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=posterior2D,levels=q95,add=T,lwd=3,col="red",drawlabels=FALSE)
-
+postplot_2D <- postplot_2D +
+  geom_contour(aes(z=post),breaks=6.824e-06 ,lwd=1.2) 
+postplot_2D
 ```
 
 Where is our point estimate? Let's find the posterior mean and mode!
@@ -522,42 +509,58 @@ Where is our point estimate? Let's find the posterior mean and mode!
 
 # Visualize a point estimate
 
-image(x=shapevec,y=scalevec,z=posterior2D,zlim=c(0.5e-11,5e-4),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=posterior2D,levels=q95,add=T,lwd=3,col="red",drawlabels=FALSE)
+meanpars <- with(parmsurface, c(shape=sum(shape*post),rate=sum(rate*post) ) ) 
+modepars <- unlist(parmsurface[which.max(parmsurface$post),c("shape","rate")] ) 
+pts <- as.data.frame(rbind(meanpars,modepars)); pts$method=c("mean","mode")
 
-meanshape <- sum(shapevec*posterior2D) 
-meanscale <- sum(scalevec*posterior2D)
-points(meanshape,meanscale,pch=20,cex=2,col="red")  # posterior mean
-
-mode <- which(posterior2D==max(posterior2D),arr.ind = T)
-points(shapevec[mode[1]],scalevec[mode[2]], pch="X",col="black",cex=1.5)  # posterior mode
+postplot_2D + geom_point(data=pts,aes(x=shape,y=rate,col=method),size=3)
 
 ```
-
 
 We can also plot out the *marginal posterior distributions* for the parameters separately. For example, the probability that the 'shape' parameter falls within a given range, regardless of the other variable:
 
 ```{r}
 
+library(cowplot)
+
+shape_marginal = parmsurface |> 
+  group_by(shape) |> 
+  summarise(post = sum(post))
+
+rate_marginal = parmsurface |> 
+  group_by(rate) |> 
+  summarise(post = sum(post))
+
 # Plot out posterior distributions separately for each parameter  -------------
 
-marginal.dist.shape <- apply(posterior2D,1,mean)     # factor out the scale param- focus only on the shape param.
-plot(shapevec,(marginal.dist.shape/sum(marginal.dist.shape))/0.1,type="l",lwd=2,col="blue",ylab="probability density",main="Posterior probability")
-abline(v=meanshape)
+g1 = ggplot(shape_marginal,aes(shape,post)) + geom_path(lwd=2) + theme_classic() + ylab("density")
+g2 = ggplot(rate_marginal,aes(rate,post)) + geom_path(lwd=2) + theme_classic() + ylab("density")
+# g1
 
-marginal.dist.scale <- apply(posterior2D,2,mean)
-plot(scalevec,(marginal.dist.scale/sum(marginal.dist.scale))/0.001,type="l",lwd=2,col="blue",ylab="probability density",main="Posterior probability")
-abline(v=meanscale)
-
-meanshape
-meanscale
+cowplot::plot_grid(g1,g2)
 
 ```
 
 And from here we can compute the posterior mean and Bayesian credible intervals. 
 
-How do our Bayesian estimates compare with the maximum likelihood estimates?? (shape = 49.3666607 scale = 0.1402629)
+```{r}
 
+cdf_shape <- cumsum(shape_marginal$post)
+cdf_rate <- cumsum(rate_marginal$post)
+
+meanshape = with(shape_marginal, sum(shape*post) ) ; meanrate = with(rate_marginal, sum(rate*post) )
+ci95shape = shapevec[c(tail(which(cdf_shape<0.025),1),tail(which(cdf_shape<0.975),1) )]
+ci95rate = ratevec[c(tail(which(cdf_rate<0.025),1),tail(which(cdf_rate<0.975),1) )]
+cis = rbind(ci95shape,ci95rate); colnames(cis) <- c("lb","ub")
+
+stats = data.frame(parm=c("shape","rate"), mean=c(meanshape,meanrate))
+stats = cbind(stats,cis ) 
+stats
+
+```
+
+
+How do our Bayesian estimates compare with the maximum likelihood estimates?? (shape = 49.61 scale = 7.16)
 
 We can also *sample directly from this 2-D posterior distribution*:
 
@@ -566,12 +569,8 @@ We can also *sample directly from this 2-D posterior distribution*:
 # Sample parameters from the joint posterior
 
 SampleFromPosterior <- function(n){
-  shape <- rep(shapevec,times=length(scalevec))
-  scale <- rep(scalevec,each=length(shapevec))
-  jointparams <- data.frame(shape=shape,scale=scale)
-  probs <- as.vector(posterior2D)
-  samples <- sample(c(1:length(probs)),size=n,replace=TRUE,prob=probs)
-  jointparams[samples,]
+  samples <- sample(c(1:nrow(parmsurface)),size=n,replace=TRUE,prob=parmsurface$post)
+  parmsurface[samples,c("shape","rate")]
 }
 
 samples<-SampleFromPosterior(n=10000)
@@ -579,9 +578,9 @@ par(mfrow=c(3,2))
 plot(samples,col=1:10000)
 plot(samples,type="l")
 plot(ts(samples[,1]),xlab="sample",ylab="shape")
-plot(ts(samples[,2]),xlab="sample",ylab="scale")
+plot(ts(samples[,2]),xlab="sample",ylab="rate")
 hist(samples[,1],40,xlab="shape",main="histogram of shape param")
-hist(samples[,2],40,xlab="scale",main="histogram of scale param")
+hist(samples[,2],40,xlab="scale",main="histogram of rate param")
 par(mfrow=c(1,1))
 
 ```
@@ -589,7 +588,7 @@ par(mfrow=c(1,1))
 
 ### Markov Chain Monte Carlo
 
-Now in 99% of analysis we will undertake in the real world, we simply won't have the computational power to partition our parameter space into tiny discrete pixels and completely evaluate the posterior probability for all pixels in that *n*-dimensional space. In these cases, we tend to harness algorithms known as Markov-Chain Monte Carlo (MCMC). This is the focus of the next lecture.
+The brute force method we used just now is nice for learning the concepts but it's not useful in practice. In real life, we tend to harness algorithms known as Markov-Chain Monte Carlo (MCMC) to do Bayesian inference. This is the focus of the next lecture.
 
 
 
