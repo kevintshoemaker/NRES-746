@@ -25,21 +25,25 @@ For those wishing to follow along with the R-based demo in class, [click here](L
 
 ### Markov Chain Monte Carlo
 
-MCMC is a special type of random number generator that is designed to sample from difficult-to-describe (e.g., multivariate, hierarchical) probability distributions. In many/most cases, the posterior distribution for ecological problems is a very difficult-to-describe probability distribution.
+MCMC is designed to sample from difficult-to-describe (e.g., multivariate, hierarchical) probability distributions. 
 
-MCMC is kind of magical in that it allows you to sample from probability distributions that are impossible to fully define mathematically! The MCMC approach uses random jumps in parameter space that eventually end up sampling from the posterior distribution! The key to MCMC is the following:
+In many/most cases, the posterior distribution for ecological problems is a difficult-to-describe probability distribution. Therefore, MCMC is the most common method we use for doing Bayesian inference.
 
-> The probability of a successful jump in parameter space from point A to point B is proportional to the ratio of the posterior probabilities at these two points. 
+MCMC is kind of magical in that it allows you to sample from probability distributions that are impossible to fully define mathematically! The MCMC approach uses random jumps in parameter space that eventually (after a warm-up period) end up sampling from the joint posterior distribution! 
+
+The key to MCMC is the following:
+
+> The probability of a successful jump in parameter space from point A to point B is proportional to the ratio of the target probability densities at these two points. 
 
 The probability of a successful jump in parameter space can be characterized as:
 
-$Prob(jump) * Prob(accept)$
+$P(jump) \cdot P(accept)$
 
-That is: in order to jump, you need to *propose* a specific jump (according to some probability distribution) and then accept that jump!
+That is: in order to jump, you need to *propose* a specific jump (according to some probability distribution) and then accept that jump in parameter space!
 
 The ratio of jump probabilities can be characterized as:
 
-$\frac{Prob(jump_{a\rightarrow b})\cdot Prob(accept b|a)}{Prob(jump_{b\rightarrow a})\cdot Prob(accept a|b)}$
+$\frac{P(jump_{a\rightarrow b})\cdot P(accept b|a)}{P(jump_{b\rightarrow a})\cdot P(accept a|b)}$
 
 For this procedure to (eventually) extract random samples from the posterior distribution, _this ratio MUST be equal to the ratio of the posterior probabilities at points A and B_:
 
@@ -49,25 +53,23 @@ If this rule is met, then in the long run the chain will explore each segment of
 
 Note: if the proposal distribution is symmetrical, then the probability of proposing a jump from A to B is the same as the probability of proposing a jump from B to A. Therefore, the proposal probabilities drop out of the above equation...
 
-Amazingly, MCMC at its core is not that difficult to describe or even to implement. Let's look at a simple MCMC algorithm.
+Surprisingly, MCMC is not that difficult to describe or even to implement (although implementing an efficient MCMC algorithm takes some advanced skills!). Let's look at a simple MCMC algorithm.
 
 ## Metropolis-Hastings algorithm
 
-This algorithm is essentially the same as the simulated annealing algorithm we discussed in the "optimization" lecture! The main difference: the "temperature" doesn't decrease over time and the temperature parameter *k* is always set to 1.
+This algorithm is essentially the same as the *simulated annealing algorithm* we discussed in the "optimization" lecture! The main difference: the "temperature" doesn't decrease over time and the temperature parameter *k* is always set to 1.
 
 The M-H algorithm can be expressed as:
 
-$Prob(accept B|A) = min(1,\frac{Posterior(B)}{Posterior(A)}\cdot \frac{Prob(b\rightarrow a)}{Prob(a\rightarrow b)})$
+$P(accept B|A) = min(1,\frac{Posterior(B)}{Posterior(A)}\cdot \frac{P(b\rightarrow a)}{P(a\rightarrow b)})$
 
 **Q**: Does it make sense that this algorithm meets the basic rule of MCMC, that is, that the ratio of jump probabilities to/from any two points in parameter/model space is equal to the ratio of posterior probabilities evaluated at those two points? 
 
 ## Bivariate normal example
 
-This example is modified from [this link by Darren Wilkinson](http://www.mas.ncl.ac.uk/~ndjw1/teaching/sim/gibbs/gibbs.html)
-
 Remember that MCMC samplers are just a type of random number generator. We can use a Metropolis-Hastings sampler to develop our own random number generator for a simple known distribution. In this example, we use a M-H Sampler to generate random numbers from a standard bivariate normal probability distribution. 
 
-We don't need an MCMC sampler for this simple example (we already have 'perfect' random number generators, like the one below). One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution with a correlation parameter, $\rho$.
+We certainly don't need an MCMC sampler for this example (we already have 'perfect' random number generators, like the one below). One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution with a correlation parameter, $\rho$.
 
 ```{r}
 
@@ -75,8 +77,7 @@ We don't need an MCMC sampler for this simple example (we already have 'perfect'
 
 # first, let's build a function that generates random numbers from a bivariate standard normal distribution
 
-rbvn<-function (n, rho)   #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
-{
+rbvn<-function (n, rho){   #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
         x <- rnorm(n, 0, 1)
         y <- rnorm(n, rho * x, sqrt(1 - rho^2))
         cbind(x, y)
@@ -84,16 +85,21 @@ rbvn<-function (n, rho)   #function for drawing an arbitrary number of independe
 
 # Now, plot the random draws from this distribution, make sure this makes sense!
 
-bvn<-rbvn(10000,0.98)
-par(mfrow=c(3,2))
-plot(bvn,col=1:10000)
-plot(bvn,type="l")
+bvn<-rbvn(10000,0.9)
+par(mfrow=c(2,2))
 plot(ts(bvn[,1]))
 plot(ts(bvn[,2]))
 hist(bvn[,1],40)
 hist(bvn[,2],40)
 par(mfrow=c(1,1))
 
+
+```
+These look like two normal distributions- but when we view them together we can visualize the correlation/dependence:
+
+```{r}
+
+plot(bvn[,1],bvn[,2])
 
 ```
 
@@ -103,36 +109,22 @@ par(mfrow=c(1,1))
 
 # Metropolis-Hastings implementation of bivariate normal sampler... 
 
-library(mvtnorm)    # load a package that allows us to compute probability densities for mv normal distribution 
+proposal <- function(x) rnorm(1,x,0.4)
+cond_prob <- function(this,xval) dnorm(this,rho*xval,1-rho^2) 
+choose_mh <- function(prev,new,other){
+  r = min(cond_prob(new,other)/cond_prob(prev,other),1)
+  ifelse(r>runif(1),new,prev)
+}
 
-metropolisHastings <- function (n, rho=0.98){    # an MCMC sampler implementation of a bivariate random number generator
-    mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
-    x <- 0   # initial values for all parameters
-    y <- 0
-    prev <- mvtnorm::dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
-    mat[1, ] <- c(x, y)        # initialize the markov chain
-    counter <- 1
-    while(counter<=n) {
-      newx <- rnorm(1,x,0.5)     # make a jump. Note the symmetrical proposal distribution
-      newy <- rnorm(1,y,0.5)
-      
-      newprob <- mvtnorm::dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
-      ratio <- newprob/prev   # compute the ratio of probabilities at the old (jump from) and proposed (jump to) locations. 
-      
-      prob.accept <- min(1,ratio)     # decide the probability of accepting the new jump!
-      rand <- runif(1)
-      if(rand<=prob.accept){
-        x=newx;y=newy    # set x and y to the new location
-        mat[counter,] <- c(x,y)    # store this in the storage array 
-        prev <- newprob    # get ready for the next iteration
-      }else{
-        mat[counter,] <- c(x,y)
-      }
-      
-      counter=counter+1
-      
+n=1000;rho=.9
+metropolisHastings <- function (n, rho){    # an MCMC bivariate random number generator
+    mat <- matrix(NA,n,2)   # matrix for storing the random samples
+    prev = c(0,0); mat[1,] <- prev       # initial values for all parameters
+    for(i in 1:n){
+      for(j in 1:2) prev[j] <- choose_mh(prev[j],proposal(prev[j]),prev[setdiff(1:2,j)] )
+      mat[i,] <- prev
     }
-    return(mat)
+    mat
 }
 
 ```
@@ -144,7 +136,7 @@ Then we can use the M-H sampler to get random samples from this known distributi
 
 # Test the new M-H sampler
 
-bvn<-metropolisHastings(10000,0.98)
+bvn<-metropolisHastings(5000,0.9)
 par(mfrow=c(3,2))
 plot(bvn,col=1:10000)
 plot(bvn,type="l")
@@ -158,8 +150,7 @@ par(mfrow=c(1,1))
 
 **Q**: Why does the MCMC routine produce 'lower quality' random numbers than the first (bivariate normal) sampler we built?
 
-
-Okay, enough with super simple examples- let's try it for a non-trivial problem, like the Myxomatosis example from the Bolker book!
+Okay, let's try it for a non-trivial problem, like the Myxomatosis example from the Bolker book!
 
 ### Myxomatosis revisited (again!)
 
@@ -185,16 +176,9 @@ hist(Myx$titer,freq=FALSE)
 
 ```
 
-We need to estimate the gamma shape and scale parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
+We need to estimate the gamma shape and rate parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
 
-```{r}
-
-# ... and overlay a proposed data-generating model (gamma distribution)
-
-hist(Myx$titer,freq=FALSE)
-curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
-
-```
+### START HERE
 
 Recall that the 2-D (log) likelihood surface looks something like this:
 
@@ -695,11 +679,10 @@ par(mfrow=c(1,1))
 
 # Now construct a Gibbs sampler alternative ---------------
 
-gibbs<-function (n, rho){    # a gibbs sampler implementation of a bivariate random number generator
+gibbs<-function (n, rho){    # a Gibbs sampler implementation of a bivariate random number generator
     mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
-    x <- 0
-    y <- 0
-    mat[1, ] <- c(x, y)        # initialize the markov chain
+    x <- 0; y <- 0   # initialize the markov chain
+    mat[1, ] <- c(x, y)        
     for (i in 2:n) {
             x <- rnorm(1, rho * y, sqrt(1 - rho^2))        # sample from x conditional on y
             y <- rnorm(1, rho * x, sqrt(1 - rho^2))        # sample from y conditional on x
