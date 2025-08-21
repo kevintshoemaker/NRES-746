@@ -23,7 +23,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 
 For those wishing to follow along with the R-based demo in class, [click here](LECTURE7.R) for the companion R script for this lecture.
 
-### Markov Chain Monte Carlo
+### Markov Chain Monte Carlo (MCMC)
 
 MCMC is designed to sample from difficult-to-describe (e.g., multivariate, hierarchical) probability distributions. 
 
@@ -55,7 +55,13 @@ Note: if the proposal distribution is symmetrical, then the probability of propo
 
 Surprisingly, MCMC is not that difficult to describe or even to implement (although implementing an efficient MCMC algorithm takes some advanced skills!). Let's look at a simple MCMC algorithm.
 
-## Metropolis-Hastings algorithm
+## Bivariate normal example
+
+Remember that MCMC samplers are just a type of random number generator. We can use MCMC to develop our own random number generator for a simple known distribution. In this example, we use MCMC to generate random numbers from a standard bivariate normal probability distribution. I chose this example because its properties are fully worked out mathematically, so we can compare MCMC results with the "true" distribution. 
+
+We certainly don't need an MCMC sampler for this example (we already have 'perfect' random number generators, like the one below). One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution with a correlation parameter, $\rho$.
+
+### Metropolis-Hastings algorithm
 
 This algorithm is essentially the same as the *simulated annealing algorithm* we discussed in the "optimization" lecture! The main difference: the "temperature" doesn't decrease over time and the temperature parameter *k* is always set to 1.
 
@@ -64,12 +70,6 @@ The M-H algorithm can be expressed as:
 $P(accept B|A) = min(1,\frac{Posterior(B)}{Posterior(A)}\cdot \frac{P(b\rightarrow a)}{P(a\rightarrow b)})$
 
 **Q**: Does it make sense that this algorithm meets the basic rule of MCMC, that is, that the ratio of jump probabilities to/from any two points in parameter/model space is equal to the ratio of posterior probabilities evaluated at those two points? 
-
-## Bivariate normal example
-
-Remember that MCMC samplers are just a type of random number generator. We can use a Metropolis-Hastings sampler to develop our own random number generator for a simple known distribution. In this example, we use a M-H Sampler to generate random numbers from a standard bivariate normal probability distribution. 
-
-We certainly don't need an MCMC sampler for this example (we already have 'perfect' random number generators, like the one below). One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution with a correlation parameter, $\rho$.
 
 ```{r}
 
@@ -85,12 +85,12 @@ rbvn<-function (n, rho){   #function for drawing an arbitrary number of independ
 
 # Now, plot the random draws from this distribution, make sure this makes sense!
 
-bvn<-rbvn(10000,0.9)
+bvn_true<-rbvn(10000,0.9)
 par(mfrow=c(2,2))
-plot(ts(bvn[,1]))
-plot(ts(bvn[,2]))
-hist(bvn[,1],40)
-hist(bvn[,2],40)
+plot(ts(bvn_true[,1]))
+plot(ts(bvn_true[,2]))
+hist(bvn_true[,1],40)
+hist(bvn_true[,2],40)
 par(mfrow=c(1,1))
 
 
@@ -99,7 +99,19 @@ These look like two normal distributions- but when we view them together we can 
 
 ```{r}
 
-plot(bvn[,1],bvn[,2])
+plot(bvn_true[,1],bvn_true[,2])
+
+```
+Here's a function for visualizing the results from our various samplers:
+
+```{r}
+vis_mcmc2 <- function(mat){   # assume mat has 1 row per sample, and 2 columns (# params)
+  par(mfrow=c(3,ncol(mat)))
+  plot(mat,col=1:nrow(mat)) ; plot(mat,type="l")
+  plot(ts(mat[,1])) ; plot(ts(mat[,2]))
+  hist(mat[,1],40) ; hist(mat[,2],40)
+  par(mfrow=c(1,1))
+}
 
 ```
 
@@ -107,7 +119,7 @@ plot(bvn[,1],bvn[,2])
 
 ```{r}
 
-# Metropolis-Hastings implementation of bivariate normal sampler... 
+## Metropolis-Hastings implementation of bivariate normal sampler...   ----------
 
 proposal <- function(x) rnorm(1,x,0.4)
 cond_prob <- function(this,xval) dnorm(this,rho*xval,1-rho^2) 
@@ -116,7 +128,6 @@ choose_mh <- function(prev,new,other){
   ifelse(r>runif(1),new,prev)
 }
 
-n=1000;rho=.9
 metropolisHastings <- function (n, rho){    # an MCMC bivariate random number generator
     mat <- matrix(NA,n,2)   # matrix for storing the random samples
     prev = c(0,0); mat[1,] <- prev       # initial values for all parameters
@@ -134,25 +145,91 @@ Then we can use the M-H sampler to get random samples from this known distributi
 
 ```{r}
 
-# Test the new M-H sampler
+# Test our M-H sampler
 
-bvn<-metropolisHastings(5000,0.9)
-par(mfrow=c(3,2))
-plot(bvn,col=1:10000)
-plot(bvn,type="l")
-plot(ts(bvn[,1]))
-plot(ts(bvn[,2]))
-hist(bvn[,1],40)
-hist(bvn[,2],40)
-par(mfrow=c(1,1))
+bvn_mh<-metropolisHastings(5000,0.9)
+vis_mcmc2(bvn_mh)
 
 ```
 
 **Q**: Why does the MCMC routine produce 'lower quality' random numbers than the first (bivariate normal) sampler we built?
 
+The M-H algorithm is simple and widely applicable. The downside is computational. Many proposal steps are rejected, and this leads to low efficiency. Strong autocorrelation in the MCMC samples can also mean very low effective sample size (ess) despite a large number of MCMC samples. 
+
+### Gibbs sampler
+
+The Gibbs sampler is straightforward and efficient. Basically, the algorithm successively samples from the *full conditional* probability distribution -- that is, the posterior distribution for arbitrary parameter *i* conditional on known values for all other parameters in the model. Unlike the M-H algorithm, there is no rejection of proposed jumps when we use the Gibbs sampler!  
+
+In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is true if we use *conjugate priors* for our model specification (what BUGS/JAGS tries to do!). Even if not, the full conditional is often tractable. Nonetheless, even if it's not analytically tractable, we can use an M-H step as a last resort!
+
+**Q**: Why is a Gibbs sampler usually more efficient than a pure M-H sampler?  
+
+In this example (same as before), we use a Gibbs Sampler to generate random numbers from a standard bivariate normal probability distribution. Notice that the Gibbs sampler is in many ways more simple and straightforward than the M-H algorithm. 
+
+```{r}
+
+# Simple example of a Gibbs sampler ----------------
+
+# first, recall our 'true' bivariate normal sampler
+
+vis_mcmc2(bvn_true)
+
+```
+
+
+
+```{r}
+
+## Now construct a Gibbs sampler  ---------------
+
+conditional2 <- function(xval) rnorm(1, rho * xval, sqrt(1 - rho^2))   # sample random value from full conditional
+
+gibbs<-function (n, rho){    # a Gibbs sampler for bivariate normal
+    mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
+    prev <- c(0,0); mat[1, ] <- prev     # initialize the markov chain
+    for (i in 2:n) {
+      prev[1] <- conditional2(prev[2])   # sample from full conditional
+      prev[2] <- conditional2(prev[1])
+      mat[i,] <- prev
+    }
+    mat
+}
+
+```
+
+
+Then we can use the Gibbs sampler to get random samples from this known distribution...
+
+```{r}
+
+# Test the Gibbs sampler ------------------
+
+bvn_gbs <-gibbs(10000,0.9)
+vis_mcmc2(bvn_gbs)
+
+```
+
+This looks pretty good! However, it is important to note that Gibbs samplers frequently result in chains with fairly high autocorrelation, where the effective sample size (ess) is much lower than the number of MCMC samples. 
+
+### Hamiltonian Monte Carlo (HMC)
+
+Hamiltonian Monte Carlo (HMC) is more mathematically complex than M-H or HMC. However, it has some very nice properties. Most importantly, the samples from HMC are much less correlated, so we need fewer samples in total. HMC is also very good at sampling even in high dimensional problems that are too slow or poorly mixed in a Gibbs sampler. The term "Hamiltonian" comes from physics, where the Hamiltonian equations describe an objects movement in space as a function of the relationship between kinetic energy and potential energy. Imagine the negative log-posterior as a frictionless surface we want to explore. We can think of the MCMC sample as a ball rolling in that space. We give the ball a little push in some direction (this is governed by the momemtum function), giving it kinetic energy. The ball might roll downhill, converting some of the potential energy into kinetic energy. At some point is starts rolling up again until all the kinetic energy is converted back into potential energy. 
+
+Basically, this algorithm forces the MCMC sampler to stay within higher-probability regions of parameter space (called the "typical set"), making for a sampler that is efficient even when sampling from high dimensions (dealing with the curse of dimensionality). 
+
+One restriction in HMC is that the parameter space must be continuous and differentiable. But there are tricks for using HMC even in cases where we have discrete elements of parameter space- basically we just need to integrate these discrete elements out of the likelihood. Which is not too difficult in many cases. 
+
+The tuning parameters in HMC include the step size and the number of sub-steps between HMC draws, known as 'leap-frog' steps. There is a widely used algorithm called the 'no U-turn sampler' (NUTS) that is often used to define these tuning parameters in practice. 
+
+The following code is borrowed from https://jonnylaw.rocks/posts/2019-07-31-hmc/. 
+Law, Jonny. 2019. “Hamiltonian Monte Carlo in R.” July 31, 2019.
+
+#### START HERE
+
+
 Okay, let's try it for a non-trivial problem, like the Myxomatosis example from the Bolker book!
 
-### Myxomatosis revisited (again!)
+## Myxomatosis revisited (again!)
 
 ```{r}
 
@@ -177,8 +254,6 @@ hist(Myx$titer,freq=FALSE)
 ```
 
 We need to estimate the gamma shape and rate parameters that best fit this empirical distribution. Here is one example of a Gamma fit to this distribution:
-
-### START HERE
 
 Recall that the 2-D (log) likelihood surface looks something like this:
 
@@ -636,84 +711,6 @@ NOTE: BUGS implementations (e.g., JAGS) actually tend to use a combination of M-
 NOTE: M-H and Gibbs samplers aren't the only MCMC routines out there. For example, the popular program 'stan' uses a modification of M-H sampling called 'Hamiltonian Monte Carlo", which tends to explore parameter space more efficiently 
 
 
-## Gibbs sampler
-
-The Gibbs sampler is amazingly straightforward and efficient. Basically, the algorithm successively samples from the *full conditional* probability distribution -- that is, the posterior distribution for arbitrary parameter *i* conditional on known values for all other parameters in the model.  
-
-In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is especially true if we use *conjugate priors* for our model specification (what BUGS/JAGS tries to do!). Even if not, the full conditional is often analytically tractable. Nonetheless, even if it's not analytically tractable, we can use a M-H procedure as a "brute force" last resort!
-
-**Q**: Why is a Gibbs sampler usually much more efficient than a pure M-H sampler?  
-
-
-## Bivariate normal example
-
-Again, remember that MCMC samplers are just a type of random number generator. We can use a Gibbs sampler to develop our own random number generator for a fairly simple known distribution. In this example (same as before), we use a Gibbs Sampler to generate random numbers from a standard bivariate normal probability distribution. Notice that the Gibbs sampler is in many ways more simple and straightforward than the M-H algorithm. 
-
-```{r}
-
-# Simple example of a Gibbs sampler ----------------
-
-# first, recall our simple bivariate normal sampler
-
-rbvn<-function (n, rho){  #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
-        x <- rnorm(n, 0, 1)
-        y <- rnorm(n, rho * x, sqrt(1 - rho^2))
-        cbind(x, y)
-}
-
-bvn<-rbvn(10000,0.98)
-par(mfrow=c(3,2))
-plot(bvn,col=1:10000)
-plot(bvn,type="l")
-plot(ts(bvn[,1]))
-plot(ts(bvn[,2]))
-hist(bvn[,1],40)
-hist(bvn[,2],40)
-par(mfrow=c(1,1))
-
-```
-
-
-
-```{r}
-
-# Now construct a Gibbs sampler alternative ---------------
-
-gibbs<-function (n, rho){    # a Gibbs sampler implementation of a bivariate random number generator
-    mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
-    x <- 0; y <- 0   # initialize the markov chain
-    mat[1, ] <- c(x, y)        
-    for (i in 2:n) {
-            x <- rnorm(1, rho * y, sqrt(1 - rho^2))        # sample from x conditional on y
-            y <- rnorm(1, rho * x, sqrt(1 - rho^2))        # sample from y conditional on x
-            mat[i, ] <- c(x, y)
-    }
-    mat
-}
-
-```
-
-
-Then we can use the Gibbs sampler to get random samples from this known distribution...
-
-```{r}
-
-# Test the Gibbs sampler ------------------
-
-bvn<-gibbs(10000,0.98)
-par(mfrow=c(3,2))
-plot(bvn,col=1:10000)
-plot(bvn,type="l")
-plot(ts(bvn[,1]))
-plot(ts(bvn[,2]))
-hist(bvn[,1],40)
-hist(bvn[,2],40)
-par(mfrow=c(1,1))
-
-```
-
-
-There is quite a bit of apparent autocorrelation in the samples of the Markov chain here. Gibbs samplers frequently have this issue! 
 
 
 ### Back to Myxomatosis!
