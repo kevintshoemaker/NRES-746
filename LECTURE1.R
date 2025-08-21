@@ -1,50 +1,50 @@
 
 #  NRES 746, Lecture 1                          
 #   University of Nevada, Reno                        
-#   Computational algorithms vs standard statistics   
+#   Bespoke algorithms for inference   
 
 
 # SALMON EXAMPLE (made-up!) ------------------
 
-population.mean = 4.5
-population.sd = 0.9
+pop_mean = 4.5
+pop_sd = 0.9
 
-my.sample = c(3.14,3.27,2.56,3.77,3.34,4.32,3.84,2.19,5.24,3.09)
+mysample = c(3.14,3.27,2.56,3.77,3.34,4.32,3.84,2.19,5.24,3.09)
 
-sample.size <- length(my.sample)     # determine sample size   
+myN <- length(mysample)     # determine sample size   
 
-obs.samplemean = mean(my.sample)     # note the equal sign as assignment operator
+mysamplemean = mean(mysample)     # note the equal sign as alternative assignment operator
 
 ## visualize the population of conventional-raised salmon  -------------------
 
-curve(dnorm(x,population.mean,population.sd),0,10,
-      xlab="Body mass (kg)",ylab="Probability density")
+curve(dnorm(x,pop_mean,pop_sd),0,10,
+      xlab="Body mass (kg)",ylab="Probability density",lwd=2)
 
 ### now overlay this on the observed data  --------------------
 
-hist(my.sample,freq=F,
+hist(mysample,freq=F,
      xlab="Body mass (kg)",ylab="Probability density",main="",
      xlim=c(0,10))
-curve(dnorm(x,population.mean,population.sd),0,10,
+curve(dnorm(x,pop_mean,pop_sd),0,10,
       col="red",lwd=2,add=T)
-abline(v=obs.samplemean,col="blue",lwd=3)
+abline(v=mysamplemean,col="blue",lwd=3)
 
 
 # Perform "canned" z-test  ----------------------------
 
 library(BSDA)
-z.test(x=my.sample,mu=population.mean, sigma.x=population.sd,alternative = "less")
+z.test(x=mysample,mu=pop_mean, sigma.x=pop_sd,alternative = "less")
 
 
-# alternative "canned" z-test  -----------------------
+# alternative z-test in base R (no packages)  -----------------------
 
-std.err = population.sd/sqrt(sample.size)
+pop_se = pop_sd/sqrt(myN)   # standard deviation for sample means drawn from the null population
 
-curve(dnorm(x,population.mean,std.err),0,10,     # visualize the sampling distribution under null hypothesis
+curve(dnorm(x,pop_mean,pop_se),0,10,     # visualize the sampling distribution under null hypothesis
       xlab="Body mass (kg)",ylab="Probability density")     # versus the observed sample mean
-abline(v=obs.samplemean,col="blue",lwd=3)
+abline(v=mysamplemean,col="blue",lwd=3)
 
-p.val = pnorm(obs.samplemean,population.mean,std.err)
+p.val = pnorm(mysamplemean,pop_mean,pop_se)    # note that neither pop_mean or pop_se are random variables- they are known with certainty. Therefore we can use a normal distribution (the known data distribution under the null hypothesis, as specified above) to define the sampling error. 
 p.val     # this is the same as the p value from the z-test above...
 
 
@@ -52,128 +52,100 @@ p.val     # this is the same as the p value from the z-test above...
 
 ## Simulate the STATISTICAL POPULATION under the null hypothesis -----------------
 
-infinity <- 1000000  # large number approximating infinity 
+lots <- 1000000  # large number filling in for infinity 
 
-popData_null <- rnorm(n=infinity,mean=population.mean,sd=population.sd)    # the statistical "population" of interest (under null model w no 'treatment' effect)
+null_population <- rnorm(n=lots,mean=pop_mean,sd=pop_sd)    # the statistical "population" of interest (under null model w no 'treatment' effect)
 
 
-## Draw a SAMPLE from that null data ----------------
+## Draw a SAMPLE from the null population ----------------
 
-null.sample <- sample(popData_null,size=sample.size)    # use R's native "sample()" function to sample from the null distribution
+null_sample <- sample(null_population,size=myN)    # use R's native "sample()" function to sample randomly from the null distribution
 
-round(null.sample,2)
-null.samplemean <- mean(null.sample)  
-null.samplemean    # here is one sample mean that we can generate under the null hypothesis
+round(null_sample,2)
+null_statistic <- mean(null_sample)  
+null_statistic    # here is one sample mean that we can generate under the null hypothesis
 
 
 ## Repeat this process using a FOR loop ----------------------
 
-n.samples <- 1000                 # set the number of replicate samples to generate
-null.samplemeans <- numeric(n.samples)       # initialize a storage vector for sample means under the null hypothesis
+null_replicates <- 1000                 # set the number of replicate samples to generate  (yet another number intended to approximate infinity!)
+null_statistics <- numeric(null_replicates)       # initialize a storage vector for sample means under the null hypothesis
 
-for(i in 1:n.samples){            # for each replicate... 
-  this.nullsample <- sample(popData_null,size=sample.size)      # draw a sample of body masses assuming no treatment effect       
-  null.samplemeans[i] <- mean(this.nullsample)           # compute and store the sampling distribution produced under the null hypothesis
+for(i in 1:null_replicates){            # for each replicate... 
+  null_sample <- sample(null_population,size=myN)      # draw a random sample of body masses assuming no treatment effect       
+  null_statistics[i] <- mean(null_sample)           # compute and store the sampling distribution produced under the null hypothesis
 }
 
-hist(null.samplemeans,xlim=c(0,10))       # plot out the sampling distribution
-abline(v=obs.samplemean,col="green",lwd=3)     # overlay the observed sample statistic. 
+hist(null_statistics,xlim=c(0,10))       # plot out the sampling distribution using base R plotting
+abline(v=mysamplemean,col="green",lwd=3)     # overlay the observed sample statistic  
 
 
-## Generate a p-value algorithmically!!   --------------------------
+## Generate a p-value  --------------------------
 
-ordered_means <- sort(null.samplemeans)       # sort the vector of null sample means
-more_extreme <- length(which(ordered_means<=obs.samplemean))       # how many of these sampling errors equal or exceed the "extremeness" of the observed statistic?
-p_value <- more_extreme/n.samples       # compute a p-value! 
+more_extreme <- length(which(null_statistics<=mysamplemean))       # how many of these sampling errors equal or exceed the "extremeness" of the observed statistic?
+p_value <- more_extreme/null_replicates       # compute a p-value! 
 p_value    
 
 
 # Develop a function that wraps up all the above steps into one! ------------------
 
-z.test.algorithm <- function(sample, pop.mean, pop.sd){
-
-  # Compute the sample statistic
-  
-  observed_mean <- mean(sample)
-  
-  sample.size <- length(sample)   # compute sample size
-
-  # Generate SAMPLING DISTRIBUTION
-  
-  reps <- 1000                 # set the number of replicate samples
-  null_dist <- numeric(reps)       # initialize a storage structure for sampling distribution
-  
+ztest_bruteforce <- function(d, mu, sigma){
+  return_list <- list() # bundle results to return using a list object
+  return_list$Xbar <- mean(d)  # Compute the sample statistic
+  N <- length(d)   # compute sample size
+  reps <- 1000       # stand-in for infinity [compute lots of replicate samples under the null hypothesis] 
+  return_list$nulldist <- numeric(reps)       # initialize a storage structure for sampling distribution
   for(i in 1:reps){            # for each replicate... 
-    nullsamp <- rnorm(sample.size,pop.mean,pop.sd)      # draw a sample assuming no treatment effect       
-    null_dist[i] <- mean(nullsamp)           # compute and store the sample produced under the null hypothesis
+    return_list$nulldist[i] <- mean(rnorm(N,mu,sigma))           # Simulate random sample and generate sampling distribution
   }
-  
-  more.extreme <- length(which(null_dist<=observed_mean))       # how many of these are more extreme than the sample statistic?
-  p_value <- more.extreme/reps
-  
-  to_return <- list()   # initialize object to return
-  
-  to_return$null_dist <- null_dist
-  to_return$p_value <- p_value
-  to_return$observed_mean <- observed_mean
-  
-  return(to_return)
-
+  return_list$p_value <- sum(return_list$nulldist<=return_list$Xbar)/reps   # how many of these are more extreme than the sample statistic?
+  return(return_list)
 }
 
-ztest <- z.test.algorithm(sample = my.sample, pop.mean=population.mean, pop.sd=population.sd )   # try to run the new function
+ztest <- ztest_bruteforce(d = mysample, mu=4.5, sigma=0.9 )   # try to run the new function
 
 ztest$p_value     # get the p_value
 
-hist(ztest$null_dist)       # plot out all the samples under the null hypothesis as a histogram
-abline(v=ztest$observed_mean,col="green",lwd=3)     # indicate the observed sample statistic. 
+hist(ztest$nulldist,xlim=range(c(ztest$Xbar,ztest$nulldist)))       # plot out all the samples under the null hypothesis as a histogram
+abline(v=ztest$Xbar,col="green",lwd=3)     # indicate the observed sample statistic. 
 
 
 # Nonparametric t-test (permutation test) ------------------------
 
-## Start with a made-up data frame! ---------------------
-
+## Start with a made-up data frame ---------------------
 
 df <- data.frame(
-  A = c(175, 168, 168, 190, 156, 181, 182, 175, 174, 179),
-  B = c(185, 169, 173, 173, 188, 186, 175, 174, 179, 180) 
+  trtA = c(175, 168, 168, 190, 156, 181, 182, 175, 174, 179),
+  Control = c(185, 169, 173, 173, 188, 186, 175, 174, 179, 180) 
 )
 
 summary(df)    # summarize! 
 
-sample.size <- length(df$A)     # determine sample size    
+N <- nrow(df)     # determine sample size N   
 
 # Get data in proper format
 
 reshape_df <- data.frame(                # "reshape" the data frame so each observation gets its own row (standard 'tidy' format)
-  Treatment = rep(c("A","B"),each=sample.size),
-  Mass = c(df$A,df$B),
+  Treatment = rep(factor(c("trtA","Control"),levels=c("Control","trtA")),each=N),
+  Mass = c(df$trtA,df$Control),
   stringsAsFactors = T
 )
-
-
-## Alternative (commented out)- using the 'tidyverse'
-
-# library(tidyr)
-# reshape_df <- pivot_longer(df,everything(),names_to = "Treatment",values_to="Mass")
-
 
 plot(Mass~Treatment, data=reshape_df)    # explore/visualize the data
 
 ## Compute the observed difference between group means  -----------------
 
-observed_dif <- mean(reshape_df$Mass[reshape_df$Treatment=="A"])	- mean(reshape_df$Mass[reshape_df$Treatment=="B"])
+observed_dif <-  diff(with(reshape_df,tapply(Mass,Treatment,mean)))
 
 
 
 ## Run permutation t-test ----------------
 
-reps <- 5000            # Define the number of permutations to run (number of replicates)
+reps <- 5000            # Number of replicates - another number representing infinity!
 null_difs <- numeric(reps)   # initialize storage variable
 for (i in 1:reps){			# For each replicate:		
-  newGroup <- reshape_df$Treatment[sample(c(1:nrow(reshape_df)))]			   # randomly shuffle the observed data with respect to treatment group
-	dif <- mean(reshape_df$Mass[newGroup=="A"])	- mean(reshape_df$Mass[newGroup=="B"])	   #  compute the difference between the group means after reshuffling the data
-	null_difs[i] <- dif	    # store this value in a vector
+  newGroup <- reshape_df$Treatment[sample(c(1:nrow(reshape_df)))]			   # assign each observation a random treatment group
+	null_difs[i] <- mean(reshape_df$Mass[newGroup=="trtA"])	- mean(reshape_df$Mass[newGroup=="Control"])	   #  compute the difference between the group means after reshuffling the data
 }
 hist(null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
 abline(v=observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
@@ -183,60 +155,40 @@ abline(v=observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to 
 
   #just like we did before (except now 2-tailed)!
 
-
-more_extreme <- length(which(abs(null_difs)>=abs(observed_dif)))
-p_value <- more_extreme/reps  
+p_value <- sum(abs(null_difs)>=abs(observed_dif))/reps 
 p_value
 
 
 ## Develop a function that performs a permutation-t-test! -----------------------
 
-t.test.permutation <- function(dat = reshape_df, group = "Treatment", value = "Mass" ){
-
-  # Compute the sample statistic
-  
-  indexA <- which(dat[,group]=="A")     # rows representing treatment A
-  indexB <- which(dat[,group]=="B")     # rows representing treatment B
-  observed_dif <- mean(dat[indexA,value]) - mean(dat[indexB,value])
-  
-  reps <- 5000            # Define the number of permutations to run (number of replicates)
-  null_difs <- numeric(reps)   # initialize storage variable
+ttest_permutation <- function(dat = reshape_df, group = "Treatment", value = "Mass" ){
+  to_return <- list()   # initialize object to return
+  to_return$observed_dif = diff(tapply(dat[[value]],dat[[group]],mean)  )            # Compute the sample statistic
+  to_return$null_difs <- numeric(reps)   # initialize storage variable
   for (i in 1:reps){			# For each replicate:		
-    newGroup <- reshape_df$Treatment[sample(c(1:nrow(reshape_df)))]			   # randomly shuffle the observed data with respect to treatment group
-  	dif <- mean(reshape_df$Mass[newGroup=="A"])	- mean(reshape_df$Mass[newGroup=="B"])	   #  compute the difference between the group means after reshuffling the data
-  	null_difs[i] <- dif	    # store this value in a vector
+  	to_return$null_difs[i] <- diff(tapply(dat[[value]],sample(dat[[group]]),mean)  ) 	    # compute and store sample stat after permuting the treatments
   }
   
-  more_extreme <- length(which(abs(null_difs)>=abs(observed_dif)))
-  p_value <- more_extreme/reps  
-  
-  to_return <- list()   # initialize object to return
-  
-  to_return$null_difs <- null_difs
-  to_return$p_value <- p_value
-  to_return$observed_dif <- observed_dif
-  
+  to_return$p_value <- sum(abs(null_difs)>=abs(observed_dif))/reps  
   return(to_return)
-  
 }
 
-my.ttest <- t.test.permutation()   # use default values for all function arguments
+mytest <- ttest_permutation(reshape_df)   # use default values for all function arguments
 
-my.ttest$p_value
+mytest$p_value
 
-hist(my.ttest$null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
-abline(v=my.ttest$observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
+hist(mytest$null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
+abline(v=mytest$observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
 
 
 
 # Demonstration: bootstrapping a confidence interval! ---------------------
 
 ## use the "trees" dataset in R:
-
 head(trees)   # use help(trees) for more information
 
 
-## Basic data exploration  --------------------
+## Data exploration  --------------------
 
 plot(trees$Volume~trees$Height, main = 'Black Cherry Tree Height/Volume Relationship', xlab = 'Height', ylab = 'Volume', pch = 16, col ='blue')
 plot(trees$Volume~trees$Girth, main = 'Black Cherry Tree Girth/Volume Relationship', xlab = 'Girth', ylab = 'Volume', pch = 16, col ='red')
@@ -248,14 +200,12 @@ plot(trees$Volume~trees$Girth, main = 'Black Cherry Tree Girth/Volume Relationsh
 
 Rsquared <- function(df,responsevar="Volume"){    # univariate models only- interaction and multiple regression not implemented here
   response <- df[,responsevar]       # extract the response variable
-  names <- names(df)                  
-  rsq <- numeric(length(names))        # named storage vector
-  names(rsq) <- names(df)               
-  rsq <- rsq[names(rsq)!=responsevar]           # assume that all columns that are not the response variable are possible predictor variables
+  varnames <- setdiff(names(df),responsevar)      # extract all column names that are not the response    
+  rsq <- numeric(length(varnames))        # named storage vector
+  names(rsq) <- varnames               
   for(i in names(rsq)){         # loop through predictors
-      predictor <- df[,i]                  # extract this predictor
-      model <- lm(response~predictor)       # regress response on predictor
-      rsq[i] <- summary(model)$r.square       # extract R-squared statistic
+      model <- lm(as.formula(paste0(responsevar,"~",i)),df)       # regress response on predictor
+      rsq[i] <- summary(model)$r.square       # extract R-squared statistic   1-RSS/TSS
   }
   return(rsq)     
 }
@@ -267,35 +217,29 @@ stat <- Rsquared(trees,"Volume")
 stat
 
 
-# new function to generate "bootstrap" samples from a data frame  ----------------
+Rsquared(mtcars,"mpg")
 
-boot_sample <- function(df,statfunc,n_samples,responsevar="Volume"){
-  indices <- c(1:nrow(df))
-  output <- matrix(NA,nrow=n_samples,ncol=ncol(df)-1)        # storage object- to store a single bootstrapped sample from the original data
-  
-  for(i in 1:n_samples){              # for each bootstrap replicate:
-    boot_rows <- sample(indices,size=nrow(df),replace=T)         # randomly sample observations with replacement
-    newdf <- df[boot_rows,]                       # dataframe of bootstrapped observations
-    output[i,] <- statfunc(newdf,responsevar)                 # generate statistics from the bootstrapped sample  (e.g., compute Rsquared after regressing y on all possible x variables)
-  }
-  return(output)
+
+# new function to generate multiple "bootstrap" estimates of a test statistic  ----------------
+
+boot_sample <- function(df,fun,nboot,y){
+
+  t(replicate(nboot,fun(df[sample(1:nrow(df),replace=T),],responsevar=y) ))  #  randomly sample observations with replacement and generate statistics from the bootstrapped sample
 }
 
 
 # Generate a few bootstrapped samples!  ------------------
 
-boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=10)       # generate test stats from lots of bootstrapped samples
-colnames(boot) <- names(stat)         # name the columns to recall which predictor variables they represent
+boot <- boot_sample(trees,Rsquared,500, "Volume")       # generate test stats from lots of bootstrapped samples
 
-boot
+summary(boot)
 stat
 
 
 # use bootstrapping to generate confidence intervals for R-squared statistic!  ----------------
 
-boot <- boot_sample(df=trees,statfunc=Rsquared,n_samples=1000)   # generate test statistics (Rsquared vals) for 1000 bootstrap samples
+boot <- boot_sample(trees,Rsquared,1000, "Volume")    # generate test statistics (Rsquared vals) for 1000 bootstrap samples
 confint <- apply(boot,2,function(t)  quantile(t,c(0.025,0.5,0.975)))       # summarize the quantiles to generate confidence intervals for each predictor variable
-colnames(confint) <- names(stat)
-t(confint)
+confint
 
 

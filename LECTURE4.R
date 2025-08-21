@@ -3,7 +3,7 @@
 #   University of Nevada, Reno                       
 #   Likelihood                                       
 #     Assessing the probability of the data          
-#     under a known data-generating model        
+#     under a fully specified data-generating model        
 
 
 # Demo: using data simulation to make inferences ----------------
@@ -17,80 +17,67 @@ plot(mpg~disp, data = mtcars, las = 1, pch = 16, xlab = "Displacement (cu. in.)"
 
 # try an exponential model
 
-Deterministic_component <- function(xvals,a,b){
-  yexp <- a*exp(b*xvals)        # deterministic exponential decline (assuming b is negative)
-  return(yexp)
+mu_func <- function(x,a,b){
+  a*exp(b*x)        # deterministic exponential decline (assuming b is negative)
 }
 
-DataGenerator_exp <- function(xvals,params){
-  yexp <- Deterministic_component(xvals,params$a,params$b)  # get signal
-  yvals <- rnorm(length(yexp),yexp,sqrt(params$c))     # add noise (normally distributed)
-  return(yvals)
+DataGenerator <- function(x,params){
+  a=params[1]; b=params[2]; sigma=params[3]
+  rnorm(length(x),mu_func(x,a,b),sigma)     
 }
 
 
 ## generate data under an assumed process model -----------------
 
 xvals=mtcars$disp    # xvals same as data (there is no random component here- we can't really "sample" x values)
-params <- list()  
-params$a=30             # set model parameters arbitrarily (eyeballing to the data) (see Bolker book)
-params$b=-0.005   # = 1/200
-params$c=5
+params <- c(  
+  a = 30,             # set model parameters arbitrarily (eyeballing to the data) (see Bolker book)
+  b = -0.005,   # = 1/200
+  sigma=2
+)
 
-yvals <- DataGenerator_exp(xvals,params)
+yvals <- DataGenerator(xvals,params)
 
-plot(yvals~xvals)      # plot the simulated data
+plot(yvals~xvals,las = 1, pch = 16, xlab = "Displacement (cu. in.)", ylab = "Miles/Gallon")      # plot the simulated data
 
 
 
 ## assess goodness-of-fit of a known data-generating model --------------------
 
-PlotRangeOfPlausibleData <- function(xvals,params,reps=100){ 
-  samplesize <- length(xvals)
-  results <- array(0,dim=c(samplesize,reps))   # storage array for results
-  for(i in 1:reps){
-    yvals <- DataGenerator_exp(xvals,params)
-    results[,i] <- yvals
-  }
+VisualizeModelWithData <- function(x,params){ 
+  lots=1000
+  plotdat = data.frame(xseq=round(seq(min(x),max(x),length=25)))
+  results = replicate(lots,DataGenerator(plotdat$xseq,params))
       # now make a boxplot of the results
-  boxplot(lapply(1:nrow(results), function(i) results[i,]),at=xvals, xaxt="n",main="Plausible data under this model",ylab="mpg",xlab="Displacement",boxwex=6)
-  cleanseq <- (seq(0,max(round(xvals/100)),length=(max(round(xvals/100)))+1))*100
-  axis(1,at=cleanseq,labels = cleanseq)    # label the x axis properly
-  
+  bounds=sapply(1:nrow(results), function(t) c(lb=quantile(results[t,],0.025,names=F), ub=quantile(results[t,],0.975,names=F), mean=mean(results[t,]))  )
+  plotdat = cbind(plotdat,t(bounds))
+  plot = ggplot(plotdat,aes(x=xseq,y=mean)) +
+    geom_ribbon(aes(ymin=lb,ymax=ub),fill="gray") +
+    geom_path(lwd=2) + 
+    geom_point(data=mtcars,aes(x=disp,y=mpg),col="darkgreen") +
+    labs(x="Displacement",y="mpg",title ="Plausible data under this model" ) +
+    theme_classic()
+  print(plot)
 }
 
 
-reps <- 1000    # number of replicate datasets to generate
-
-PlotRangeOfPlausibleData(xvals,params,reps)    # run the function to visualize the range of data that could be produced under this model
-
-
-## finally, overlay the real data to evaluate goodness of fit! ---------------
-
-real_yvals <- mtcars$mpg
-PlotRangeOfPlausibleData(xvals,params,reps)
-points(xvals,real_yvals,pch=20,cex=3,col="green")
+VisualizeModelWithData(xvals,params)    # run the function to visualize the range of data that could be produced under this model
 
 
 # now change the parameters and see if the data fit to the model
 
-params$a=40       # was 30
-params$b=-0.001   # was 0.005
-
+params["a"]=45       # was 30
+params["b"]=-0.005   
     
-PlotRangeOfPlausibleData(xvals,params,reps)
-points(xvals,real_yvals,pch=20,cex=3,col="green")    # overlay the real data
+VisualizeModelWithData(xvals,params)   
 
 
 # try again- select a new set of parameters
 
-params$a=35       # was 40
-params$b=-0.0029   # was 0.001
-params$c=0.95
+params["b"]=-0.002   # was -0.005
+params["sigma"]=3    # was 2
     
-PlotRangeOfPlausibleData(xvals,params,reps)
-points(xvals,real_yvals,pch=20,cex=3,col="green")    # overlay the real data
-
+VisualizeModelWithData(xvals,params)   
 
 # Work with likelihood! ---------------------
 
@@ -100,31 +87,27 @@ obs.data
 
 ## "best fit" parameters from above   ----------------
 
+params["a"]=35            # fill the list with the "best fit" parameter set from above (this is still just an educated guess) 
+params["b"]= -0.0029   
+params["sigma"]=0.95
 
-params <- list()    # set up empty list to store parameters
-params$a=35            # fill the list with the "best fit" parameter set from above (this is still just an educated guess)   
-params$b= -0.0029   
-params$c=0.95
-
-params
-
-expected_val <- Deterministic_component(obs.data$disp,params$a,params$b)   
+expected_val <- mu_func(obs.data$disp,params["a"],params["b"])   
 expected_val      # expected mpg for the first observation in the "mtcars" dataset
 
 
 ## Visualize the likelihood of this single observation.  ------------------------
 
-mean = expected_val   # expected (mean) value for this observation, given the "known" data generating model
-stdev = sqrt(params$c)    # standard deviation
+mu_star = expected_val   # expected (mean) value for this observation, given the data generating model
+sigma_star = params['sigma']    # standard deviation
 
-curve(dnorm(x,mean,stdev),10,30,xlab="possible vals for mpg under the specified model",ylab="probability density")   # probability of all plausible mpg values under the data generating model.  
+curve(dnorm(x,mu_star,sigma_star),10,30,xlab="Response outcome under the specified model",ylab="probability density")   # probability of all plausible mpg values under the data generating model.  
 abline(v=obs.data$mpg,col="red",lwd=2)    # overlay the observed data
 
 
 ## compute the likelihood of the first observation  ---------------------
 
-likelihood = dnorm(obs.data$mpg,mean,stdev)
-likelihood
+likelihood1 = dnorm(obs.data$mpg,mu_star,sigma_star)
+likelihood1
 
 
 ## Visualize the likelihood of two observations. ---------------
@@ -135,17 +118,18 @@ obs.data
 par(mfrow=c(1,2))  # set up graphics!
 
 for(i in 1:nrow(obs.data)){
-  curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),10,30,xlab="mpg",ylab="probability density")   # probability density
+  curve(dnorm(x,mu_func(obs.data$disp[i],params['a'],params['b']),params['sigma']),10,30,xlab="mpg",ylab="probability density")   # probability density
   abline(v=obs.data$mpg[i],col="red",lwd=2)
 }
 
 
 ## compute the likelihood of observing BOTH data points  ----------------
 
-Likelihood <- dnorm(obs.data$mpg[1],Deterministic_component(obs.data$disp[1],params$a,params$b),sqrt(params$c)) *
-              dnorm(obs.data$mpg[2],Deterministic_component(obs.data$disp[2],params$a,params$b),sqrt(params$c))  
+Likelihood <- dnorm(obs.data$mpg[1],mu_func(obs.data$disp[1],params['a'],params['b']),params['sigma']) *
+              dnorm(obs.data$mpg[2],mu_func(obs.data$disp[2],params['a'],params['b']),params['sigma'])  
 Likelihood
 
+prod(dnorm(obs.data$mpg,mu_func(obs.data$disp,params['a'],params['b']),params['sigma']))
 
 # and now... four observations!
 
@@ -155,225 +139,183 @@ obs.data
 par(mfrow=c(2,2))  # set up graphics!
 
 for(i in 1:nrow(obs.data)){
-  curve(dnorm(x,Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c)),10,30,xlab="mpg",ylab="probability density")   # probability density
+  curve(dnorm(x,mu_func(obs.data$disp[i],params['a'],params['b']),params['sigma']),10,30,xlab="mpg",ylab="probability density")   # probability density
   abline(v=obs.data$mpg[i],col="red",lwd=2)
 }
 
 
 
-# compute the likelihood of observing all four data points
-
-Likelihood <- 1     # initialize the likelihood
-for(i in 1:nrow(obs.data)){
-  Likelihood <- Likelihood * dnorm(obs.data$mpg[i],Deterministic_component(obs.data$disp[i],params$a,params$b),sqrt(params$c))
-}
-Likelihood
+    # compute the likelihood of observing all four data points
+prod(dnorm(obs.data$mpg,mu_func(obs.data$disp,params['a'],params['b']),params['sigma']))
 
 
-## Alternatively, we can use the "prod" function in R  -----------------
-
-Likelihood <- prod(dnorm(obs.data$mpg,Deterministic_component(obs.data$disp,params$a,params$b),sqrt(params$c)))
-Likelihood
-
-
-# Finally, compute the likelihood of ALL data points in the entire data set, using the "prod()" function
-
+       # Finally, compute the likelihood of ALL data points in the entire data set, using the "prod()" function
 full.data <- mtcars[,c("mpg","disp")]
-Likelihood <- prod(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c)))
-Likelihood
+
+prod(dnorm(full.data$mpg,mu_func(full.data$disp,params['a'],params['b']),params['sigma']))
 
 
-## Compute the log-likelihood (much easier to work with!)  -----------------------
+## Compute the log-likelihood (easier to work with!)  -----------------------
 
-Log.Likelihood <- sum(dnorm(full.data$mpg,Deterministic_component(full.data$disp,params$a,params$b),sqrt(params$c),log=TRUE)) 
-Log.Likelihood  
-exp(Log.Likelihood)   # we can convert back to likelihood if we want...
+l <- sum(dnorm(full.data$mpg,mu_func(full.data$disp,params['a'],params['b']),params['sigma'],log=TRUE)) 
+l
+exp(l)   # we can convert back to likelihood if we want...
 
 
 # Example likelihood function!  --------------------------------
 
 # Arguments:
 #   params: bundled vector of free parameters for the known data-generating model
-#   df: a data frame that holds the observed data
+#   df: a data frame that holds the observed response variable and covariates
 #   yvar: the name of the response variable (ancillary)
 #   xvar: the name of the predictor variable (ancillary)
 
-LogLikFunction <- function(params,df,yvar,xvar){
-  LogLik <- sum(dnorm(df[,yvar],Deterministic_component(df[,xvar],params['a'],params['b']),sqrt(params['c']),log=TRUE))
-  return(LogLik)
+mtcars_LL <- function(params,df=mtcars,yvar="mpg",xvar="disp"){
+  sum(dnorm(df$mpg,mu_func(df$disp,params['a'],params['b']),params['sigma'],log=TRUE)) 
 }
-LogLikFunction(unlist(params),df=mtcars,yvar="mpg",xvar="disp")
+mtcars_LL(unlist(params),df=mtcars,yvar="mpg",xvar="disp")
 
 
 # Use numerical optimization methods to identify the maximum likelihood estimate (and the likelihood at the MLE)
 
-MLE <- optim(fn=LogLikFunction,par=unlist(params),df=mtcars,yvar="mpg",xvar="disp",control=list(fnscale=-1))  # note, the control param is set so that "optim" maximizes rather than minimizes the Log-likelihood. 
+optimizedLik <- optim(fn=mtcars_LL,par=params,control=list(fnscale=-1),hessian = T)  # note, the control param is set so that "optim" maximizes rather than minimizes the Log-likelihood. 
 
 
-MLE$par   # maximum likelihood parameter estimates
+MLE = optimizedLik$par   # maximum likelihood parameter estimates
+MLE
 
-
-MLE$value   # log likelihood for the best model
+LogLik = optimizedLik$value   # log likelihood for the best model
+LogLik
 
 
 # visualize goodness-of-fit for the best model  ----------------------
 
-bestParams <- as.list(MLE$par)   # extract the MLE parameter vals
-
 xvals <- mtcars$disp
 yvals <- mtcars$mpg
-PlotRangeOfPlausibleData(xvals,bestParams,1000)
-points(xvals,yvals,pch=20,cex=3,col="green")
+VisualizeModelWithData(xvals,MLE)
 
 
 # Estimating parameter uncertainty -------------------------
 
 # Visualize a "slice" of the likelihood function
 
-upperval <- -1/1000
-lowerval <- -1/200
-allvals <- seq(lowerval,upperval,length=1000)
-likelihood_slice <- numeric(1000)   # set up storage vector! 
-newParams <- bestParams 
-for(i in c(1:length(allvals))){
-  newParams$b <- allvals[i]
-  likelihood_slice[i] <- exp(LogLikFunction(unlist(newParams),mtcars,"mpg","disp"))    # get the data likelihood across slice of parameter space
-}
+allvals_b <- seq(-1/1000,-1/200,length=200)
+paramslist <- lapply(allvals_b, function(t){MLE['b']=t;MLE } )
+slice_b <- sapply(paramslist, function(t) exp(mtcars_LL(t))) 
 
-plot(allvals,likelihood_slice,type="l",main="Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Likelihood")
+plot(allvals_b,slice_b,type="l",main="Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Likelihood")
 
 
 # Work with log-likelihood instead...
 
-upperval <- -1/1000
-lowerval <- -1/200
-allvals <- seq(lowerval,upperval,length=1000)
-loglikelihood_slice <- numeric(1000)   # set up storage vector! 
-newParams <- bestParams 
-for(i in c(1:length(allvals))){
-  newParams$b <- allvals[i]
-  loglikelihood_slice[i] <- LogLikFunction(unlist(newParams),mtcars,"mpg","disp")    # get the data likelihood across slice of parameter space
-}
+slice_b <- sapply(paramslist, function(t) mtcars_LL(t))    # 
 
-plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+plot(allvals_b,slice_b,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
 
 
 # zoom in closer to the MLE
 
-upperval <- -1/550
-lowerval <- -1/350
-allvals <- seq(lowerval,upperval,length=1000)
-loglikelihood_slice <- numeric(1000)   # set up storage vector! 
-newParams <- bestParams 
-for(i in c(1:length(allvals))){
-  newParams$b <- allvals[i]
-  loglikelihood_slice[i] <- LogLikFunction(unlist(newParams),mtcars,"mpg","disp")    # get the data likelihood across slice of parameter space
-}
+allvals_b <- seq(-1/550,-1/350,length=200)
+paramslist <- lapply(allvals_b, function(t){MLE['b']=t;MLE } )
+slice_b <- sapply(paramslist, function(t) mtcars_LL(t)) 
 
-plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
-
+plot(allvals_b,slice_b,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
 
 # what parameter values are within 2 log likelihood units of the best value?  -------------
 
-bestVal <- bestParams$b
-bestVal
-
-
-
-plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
-abline(v=bestVal,lwd=3,col="blue")
-abline(h=(MLE$value-2))
+plot(allvals_b,slice_b,type="l",main="Log Likelihood Slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+abline(v=MLE['b'],lwd=3,col="blue")
+abline(h=(LogLik-2))
 
 
 # Generate an approximate 95% confidence interval for the "b" parameter -----------------
 
-reasonable_parameter_values <- allvals[loglikelihood_slice>=(MLE$value-2)]
-min(reasonable_parameter_values)
-max(reasonable_parameter_values)
-plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
-abline(v=bestVal,lwd=3,col="blue")
-abline(h=(MLE$value-2),lty=2)
-abline(v=min(reasonable_parameter_values),lwd=1,col="blue")
-abline(v=max(reasonable_parameter_values),lwd=1,col="blue")
+reasonable_b_slice <- allvals_b[slice_b>=(LogLik-2)]
+reasonable_b_limits <- c(min(reasonable_b_slice),max(reasonable_b_slice))
+
+plot(allvals_b,slice_b,type="l",main="Log Likelihood slice",xlab="Parameter Slice for \'b\'",ylab="Log-Likelihood")
+abline(v=MLE['b'],lwd=3,col="blue")
+abline(h=(LogLik-2))
+abline(v=reasonable_b_limits,lwd=1,col="blue")
 
 
 # A better confidence interval, using the likelihood "profile" -----------------
 
 # first, visualize the likelihood surface in 2 dimensions
 
-upperval_b <- -1/800
-lowerval_b <- -1/300
+a <- seq(5,50,length=200)
+b <- seq(-1/300,-1/800,length=200)
 
-upperval_a <- 50
-lowerval_a <- 5
+LLsurface <- expand.grid(a,b)
+colnames(LLsurface) <- c("a","b")
+paramslist <- lapply(1:nrow(LLsurface), function(t){MLE['a']=LLsurface$a[t];MLE['b']=LLsurface$b[t];MLE } )
+LLsurface$LL <- sapply(paramslist, function(t) mtcars_LL(t)) 
 
-allvals_a <- seq(lowerval_a,upperval_a,length=500)
-allvals_b <- seq(lowerval_b,upperval_b,length=500)
+summary(LLsurface)
 
-loglikelihood_surface <- matrix(0,nrow=500,ncol=500)   # set up storage matrix! 
-
-newParams <- bestParams 
-for(i in 1:length(allvals_a)){  # loop through possible a params
-  newParams$a <- allvals_a[i]
-  for(j in 1:length(allvals_b)){    # loop through possible b params
-    newParams$b <- allvals_b[j]
-    loglikelihood_surface[i,j] <- LogLikFunction(unlist(newParams),mtcars,"mpg","disp")    # get the data likelihood across slice of parameter space
-  }
-}
-
-image(x=allvals_a,y=allvals_b,z=loglikelihood_surface,zlim=c(-100,-75),col=topo.colors(12))
+ggplot(LLsurface,mapping =aes(x=a,y=b,z=LL)) +
+  geom_raster(aes(fill=LL)) +
+  geom_contour(breaks=seq(-100,-75,3) ,lwd=1.2) +
+  scale_fill_gradient(limits=c(-125,-75)) 
+  
 
 
 # add a contour line, assuming deviances follow a chi-squared distribution
 
 conf95 <- qchisq(0.95,2)/2  # this evaluates to around 3. Since we are varying freely across 2 dimensions, we use chisq with 2 degrees of freedom
-image(x=allvals_a,y=allvals_b,z=loglikelihood_surface,zlim=c(-100,-75),col=topo.colors(12))
-contour(x=allvals_a,y=allvals_b,z=loglikelihood_surface,levels=(MLE$value-conf95),add=TRUE,lwd=3,col=gray(0.3))
+
+ggplot(LLsurface,mapping =aes(x=a,y=b,z=LL)) +
+  geom_raster(aes(fill=LL)) +
+  geom_contour(breaks=seq(-100,-75,3) ,lwd=1.2) +
+  geom_contour(breaks=LogLik-conf95 ,lwd=2,col="black") +
+  scale_fill_gradient(limits=c(-125,-75)) +
+  labs(title = "Log Likelihood Surface with 2D Confidence Region")
 
 
-# visualize likelihood profile!
+# visualize likelihood profiles!
 
-              ### A parameter
-profile_A <- apply(loglikelihood_surface,1,max)
-reasonable_parameter_values_A <- allvals_a[profile_A >=(MLE$value-qchisq(0.95,1)/2)]
-min(reasonable_parameter_values_A)
-max(reasonable_parameter_values_A)
-plot(allvals_a,profile_A,type="l",main="Log Likelihood profile",xlab="Parameter \'a\'",ylab="Log-Likelihood")
-abline(v=MLE$par["a"],lwd=3,col="blue")
-abline(v=min(reasonable_parameter_values_A),lwd=1,col="blue")
-abline(v=max(reasonable_parameter_values_A),lwd=1,col="blue")
+profile_a <- LLsurface |> group_by(a) |> summarize(LL=max(LL)) 
+profile_b <- LLsurface |> group_by(b) |> summarize(LL=max(LL)) 
+
+reasonable_a <- profile_a$a[profile_a$LL >=(LogLik-qchisq(0.95,1)/2)]
+
+ggplot(profile_a,aes(a,LL)) + geom_path(lwd=2) + 
+  geom_vline(xintercept = c(min(reasonable_a),max(reasonable_a) )) +
+  xlim(c(25,40)) + ylim(c(-110,-75))
+
 
 
 # profile for the b parameter... 
 
-profile_B <- apply(loglikelihood_surface,2,max)
-reasonable_parameter_values_B <- allvals_b[profile_B >=(MLE$value-qchisq(0.95,1)/2)]
-min(reasonable_parameter_values_B)
-max(reasonable_parameter_values_B)
-plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter \'b\'",ylab="Log-Likelihood")
-abline(v=MLE$par["b"],lwd=3,col="blue")
-abline(v=min(reasonable_parameter_values_B),lwd=1,col="blue")
-abline(v=max(reasonable_parameter_values_B),lwd=1,col="blue")
+reasonable_b <- profile_b$b[profile_b$LL >=(LogLik-qchisq(0.95,1)/2)]
+
+ggplot(profile_b,aes(b,LL)) + geom_path(lwd=2) + 
+  geom_vline(xintercept = c(min(reasonable_b),max(reasonable_b) )) 
 
 
 # Compare profile and slice intervals
 
-par(mfrow=c(1,2))
-reasonable_parameter_values <- allvals[loglikelihood_slice>=(MLE$value-2)]
-plot(allvals,loglikelihood_slice,type="l",main="Log Likelihood slice",xlab="Parameter \'b\'",ylab="Log-Likelihood",xlim=c(-0.0035,-0.0013))
-abline(v=bestVal,lwd=3,col="blue")
-abline(h=(MLE$value-2),lty=2)
-abline(v=min(reasonable_parameter_values),lwd=1,col="blue")
-abline(v=max(reasonable_parameter_values),lwd=1,col="blue")
+compdf <- rbind(profile_b,data.frame(b=allvals_b,LL=slice_b))
+compdf$Method <- rep(c("Profile","Slice"),each=nrow(profile_b))
+
+ggplot(compdf,aes(x=b,y=LL,color=Method)) + geom_path(lwd=2) + 
+  geom_vline(xintercept = c(min(reasonable_b),max(reasonable_b) ),color="darkgreen",lty=2) +
+  geom_vline(xintercept = reasonable_b_limits ,color="purple",lty=2) +
+  scale_color_manual(values=c("darkgreen","purple"))
 
 
-profile_B <- apply(loglikelihood_surface,2,max)
-reasonable_parameter_values_B <- allvals_b[profile_B >=(MLE$value-2)]
-plot(allvals_b,profile_B,type="l",main="Log Likelihood profile",xlab="Parameter \'b\'",ylab="Log-Likelihood",xlim=c(-0.0035,-0.0013))
-abline(v=MLE$par["b"],lwd=3,col="blue")
-abline(h=(MLE$value-2),lty=2)
-abline(v=min(reasonable_parameter_values_B),lwd=1,col="blue")
-abline(v=max(reasonable_parameter_values_B),lwd=1,col="blue")
+## use the normal approximation to estimate confidence intervals!
+
+varcov <- solve(-optimizedLik$hessian)   # compute the variance covariance matrix for the coefficients from the hessian matrix
+
+# approximate confidence interval as 2 standard errors from the MLE
+lb = MLE - 2*sqrt(diag(varcov))
+ub = MLE + 2*sqrt(diag(varcov))
+
+cbind(MLE,lb,ub)
+
+# compare with profile likelihood method for b
+c(min(reasonable_b),max(reasonable_b) )    # close enough!?
 
 
 ###### Practice exercise: develop a likelihood function for estimating the probability of detection of a rare frog species

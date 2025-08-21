@@ -6,19 +6,23 @@
 
 # Classic Urn Example ------------------------
 
-n_red <- 104
-n_blue <- 55
-n_green <- 30
+Urn_summary <- c(
+  red=104,
+  blue=55,
+  green=30
+)
 
-allSpheres <- c(n_red,n_blue,n_green)           # create vector of urn contents
-names(allSpheres) <- c("red","blue","green")    # make it a named vector, for convenience!
+set.seed(1001)
+Urn_contents <- sample(rep(names(Urn_summary),times=Urn_summary))
+
+table(Urn_contents)   # verify that the contents are what you expect!
 
 
-P_blue <- allSpheres["blue"]/sum(allSpheres)     # probability of drawing a blue sphere
+P_blue <- sum(Urn_contents=="blue")/length(Urn_contents) # probability of drawing a blue sphere
 P_blue
 
 
-Prob <- allSpheres/sum(allSpheres)    # probability of drawing each type of sphere
+Prob <- table(Urn_contents)/length(Urn_contents)    # probability of drawing each type of sphere
 Prob
 
 
@@ -40,26 +44,26 @@ as.numeric( Prob["blue"] + Prob["red"] + Prob["green"] )      # P(blue OR green)
 
 # Urn example #2: color and shape --------------------------
 
-n_red_sphere <- 39       # contents of new urn
-n_blue_sphere <- 76
-n_red_cube <- 101
-n_blue_cube <- 25
+Urn_summary <- matrix(NA,2,2,dimnames = list(Color=c("red","blue"),Shape=c("sphere","cube") ))
+Urn_summary["red","sphere"] <- 39   # contents of new urn
+Urn_summary["blue","sphere"] <- 76
+Urn_summary["red","cube"] <- 101   
+Urn_summary["blue","cube"] <- 25
+Urn_summary
 
-allSpheres <- c(n_red_sphere,n_blue_sphere)         # build up matrix from vectors
-allCubes <- c(n_red_cube,n_blue_cube)
-allTypes <- c(allSpheres,allCubes)     
-allTypes <- matrix(allTypes,nrow=2,ncol=2,byrow=T)     # matrix of urn contents
-rownames(allTypes) <- c("sphere","cube")               # name rows and columns
-colnames(allTypes) <- c("red","blue")
-allTypes
+Prob = Urn_summary/sum(Urn_summary)
 
-allprobs <- (allTypes/sum(allTypes))
-allprobs
+
+Prob_Shape <- colSums(Urn_summary)/sum(Urn_summary)  # marginal probabilities of shape
+Prob_Shape
+
+Prob_Color <- rowSums(Urn_summary)/sum(Urn_summary)    # marginal probabilities of color
+Prob_Color
 
 
 as.numeric( Prob_Color["blue"] * Prob_Shape["cube"])      # joint probability of drawing a blue object that is a cube
 
-## NOTE: if the above answer is not correct, please correct it!  And would I be asking this if it were correct?
+## NOTE: if the above answer is not correct, please correct it! 
 
 
 as.numeric( Prob_Color["blue"] + Prob_Shape["cube"])        # probability of drawing something blue or something cube-shaped...
@@ -68,25 +72,25 @@ as.numeric( Prob_Color["blue"] + Prob_Shape["cube"])        # probability of dra
 
 
 
-allprobs["cube","blue"] / Prob_Shape["cube"]   # probability of drawing a blue object, given it is a cube
+Prob["blue","cube"] / Prob_Shape["cube"]   # probability of drawing a blue object, given it is a cube
 
 
-as.numeric( (allprobs["cube","blue"] / Prob_Shape["cube"]) * Prob_Shape["cube"])   # probability of drawing a blue cube... using conditional probabilities
+as.numeric( (Prob["blue","cube"] / Prob_Shape["cube"]) * Prob_Shape["cube"])   # probability of drawing a blue cube... using conditional probabilities
 
-allprobs["cube","blue"]   # check answer to make sure it's right
+Prob["blue","cube"]   # check answer to make sure it's right
 
 
 # unconditional probability of drawing a blue item.  Seems too complicated, but this method of computing unconditional probabilities will prove useful as we get into Bayesian statistics!
-uncond_prob_blue <- (allprobs["cube","blue"] /  Prob_Shape["cube"]) * Prob_Shape["cube"] + 
-              (allprobs["sphere","blue"] / Prob_Shape["sphere"]) * Prob_Shape["sphere"]       
+uncond_prob_blue <- (Prob["blue","cube"] /  Prob_Shape["cube"]) * Prob_Shape["cube"] + 
+              (Prob["blue","sphere"] / Prob_Shape["sphere"]) * Prob_Shape["sphere"]       
 
 as.numeric(uncond_prob_blue)
 
 
-Prob_Shape <- apply(allTypes,1,sum)/sum(allTypes)  # marginal probabilities of shape
+Prob_Shape <- colSums(Urn_summary)/sum(Urn_summary)  # marginal probabilities of shape
 Prob_Shape
 
-Prob_Color <- apply(allTypes,2,sum)/sum(allTypes)    # marginal probabilities of color
+Prob_Color <- rowSums(Urn_summary)/sum(Urn_summary)    # marginal probabilities of color
 Prob_Color
 
 Prob_Color["blue"]      # marginal probability of drawing a blue object (across all possible shapes)
@@ -94,8 +98,7 @@ Prob_Color["blue"]      # marginal probability of drawing a blue object (across 
 
 # Medical example (positive predictive value) --------------------------
 
-Prob_Disease <- c(1,999999)     # disease prevalence 
-Prob_Disease <- Prob_Disease/sum(Prob_Disease)      # probability of disease
+Prob_Disease <- c(0.000001, 0.999999)     # marginal probability of disease vs no disease
 names(Prob_Disease) <- c("yes","no")                # make it a named vector!
 Prob_Disease
 
@@ -161,8 +164,7 @@ monty(strat="switch",print_games=FALSE)
 # Probability distributions in R  ---------------------
 
 mean <- 5
-rpois(10,mean)    # the random numbers have no decimal component
-
+rpois(10,mean)    # the random numbers are integers with no decimal component
 
 ## Discrete -------------------------
 
@@ -180,16 +182,16 @@ sum(probs)   # just to make sure it sums to 1!  Does it???
 
 ## Continuous  --------------------
 
-shape1 = 0.5
-shape2 = 0.5
+alpha = 0.5
+beta = 0.5
 
-rbeta(10,shape1,shape2)
+rbeta(10,alpha,beta)
 
-curve(dbeta(x,shape1,shape2))   # probability density
+curve(dbeta(x,alpha,beta))   # probability density
 
-curve(pbeta(x,shape1,shape2))   # cumulative distribution
+curve(pbeta(x,alpha,beta))   # cumulative distribution
 
-integrate(f=dbeta,lower=0,upper=1,shape1=shape1,shape2=shape2)    # just to make sure it integrates to 1!!
+integrate(f=dbeta,lower=0,upper=1,shape1=alpha,shape2=beta)    # just to make sure it integrates to 1!!
 
 
 ## Binomial -----------------

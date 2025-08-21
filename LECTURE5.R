@@ -13,15 +13,15 @@ library(emdbook)    # this is the package provided to support the textbook!
 library(ggplot2)
 library(ggthemes)
 
-MyxDat <- MyxoTiter_sum         # load Bolker's example data
-MyxDat$grade <- as.factor(MyxDat$grade)
+Myx <- MyxoTiter_sum        
 
-ggplot(MyxDat,aes(day,titer)) + 
+ggplot(Myx,aes(day,titer)) + 
   geom_point(aes(col=grade))  +
   facet_wrap(vars(grade), scales = "free") +
-  theme_clean()
+  theme_classic() +
+  theme(legend.position = "none") 
 
-Myx <- subset(MyxDat,grade==1)    # subset: select most virulent
+Myx <- subset(Myx,grade==1)    # subset: select most virulent
 head(Myx)
 
 
@@ -34,195 +34,144 @@ hist(Myx$titer,freq=FALSE)     # note the "freq=FALSE", which displays densities
 curve(dgamma(x,shape=40,rate=6),add=T,col="red")
 
 
-# Build gamma likelihood function  ---------------------
+# Build gamma LL and NLL function  ---------------------
 
-GammaLikelihoodFunction <- function(params){           # only one argument (params)- the data are hard-coded here (this is often the case with simple likelihood functions)
+GammaNLL <- function(params){  
   -sum(dgamma(Myx$titer,shape=params['shape'],rate=params['rate'],log=T))     # use params and data to compute likelihood 
 }
 
 params <- c(shape=40,rate=6) 
-GammaLikelihoodFunction(params)    # test the function!
+GammaNLL(params)    # test the function!
+
+GammaLL <- function(params){     # same thing- but not using negative LL
+  sum(dgamma(Myx$titer,shape=params['shape'],rate=params['rate'],log=T))     # use params and data to compute likelihood 
+}
 
 
 # Optimize using R's built-in "optim()" function: find the maximum likelihood estimate
 
-MLE <- optim(params,GammaLikelihoodFunction)  
-
-MLE$par
-MLE$value
+opt1 <- optim(params,GammaNLL,hessian = T)  
+MLE = opt1$par   # store maximum likelihood estimates for params
+maxLL = -opt1$value    # store maximum log likelihood (note minus sign)  
 
 
 # visualize the maximum likelihood fit
 
-hist(Myx$titer,freq=FALSE)
-curve(dgamma(x,shape=MLE$par["shape"],rate=MLE$par["rate"]),add=T,col="red")
+hist(Myx$titer,freq=FALSE,xlab="titer")
+curve(dgamma(x,shape=MLE["shape"],rate=MLE["rate"]),add=T,col="darkgreen",lwd=2)
 
 
-# BRUTE FORCE ALTERNATIVE    ------------------------------
+# BRUTE FORCE OPTIMIZATION    ------------------------------
 
 # define 2-D parameter space!
 
-shapevec <- seq(10,100,by=0.1)        # divide parameter space into tiny increments
-ratevec <- seq(0.5,30,by=0.05)
+shapevec <- seq(0,150,length=100)        # divide parameter space into tiny increments
+ratevec <- seq(0.5,30,length=100)
 
 # define the likelihood surface across this grid within parameter space
 
+LLsurface <- expand.grid(shapevec,ratevec)
+colnames(LLsurface) <- c("shape","rate")
+LLsurface$LL <- sapply(1:nrow(LLsurface), function(t) -GammaNLL(unlist(LLsurface[t,])))   # note minus sign to turn NLL to LL 
 
-surface2D <- matrix(nrow=length(shapevec),ncol=length(ratevec))   # initialize storage variable
+summary(LLsurface)
 
-newparams <- params
-for(i in 1:length(shapevec)){
-  newparams['shape'] <- shapevec[i]
-  for(j in 1:length(ratevec)){
-    newparams['rate'] <- ratevec[j]
-    surface2D[i,j] <- -1*GammaLikelihoodFunction(newparams)   # compute likelihood for every point in 2-d parameter space
-  }
-}
-
-# Visualize the likelihood surface
-
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-250,-35),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-150),add=T)
+LL_plot_2D <- ggplot(LLsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the likelihood surface
+  geom_raster(aes(fill=LL)) +
+  geom_contour(aes(z=LL),breaks=seq(maxLL-25,maxLL,10) ,lwd=1.2) +
+  scale_fill_gradient(limits=c(maxLL-100,maxLL)) 
+LL_plot_2D
 
 
 # Find the MLE (brute force)  ------------------------
 
-ndx <- which(surface2D==max(surface2D),arr.ind=T)  # index of the max likelihood grid cell
-shapevec[ndx[,1]]     
-ratevec[ndx[,2]]
+with(LLsurface,c(shape=shape[which.max(LL)],rate=rate[which.max(LL)]) )
 
-MLE$par  # compare with the answer from "optim()"
+MLE  # compare with the answer from "optim()"
 
 
 # Derivative-based optimization methods   ------------------
 
-# function for estimating the slope of the likelihood surface at any point in parameter space....
+library(pracma)   # load package capable of computing gradient numerically at any point in parameter space
 
-## NOTE: even here I'm using a coarse, brute force method for estimating the first and second derivative of the likelihood function
-
-params <- MLE$par
-SlopeFunc <- function(shape_guess,tiny=0.001){      
-  params['shape'] <- shape_guess
-  high <- GammaLikelihoodFunction(params+c(tiny,0))
-  low <- GammaLikelihoodFunction(params-c(tiny,0))
-  slope <- (high-low)/(tiny*2)
-  return(slope)
-}
-
-SlopeFunc(shape_guess=30)    #try it!
+grad(GammaLL,MLE)   # confirm that the gradient at the MLE is around zero
+grad(GammaLL,unlist(LLsurface[50,1:2]))   # and it's mu
 
 
-# Visualize the slope of the likelihood function at different points in parameter space
+library(dplyr)
+param = slice_sample(LLsurface,n=25)
+thisgrad = sapply(1:nrow(param),function(t) grad(GammaLL,unlist(param[t,1:2])) ) 
+thisgrad = t(apply(thisgrad, 2, function(t) t / Norm(t,2) ) )*2  # normalize by dividing by the magnitude
+colnames(thisgrad) <- c("grad_shape","grad_rate")
+param <- cbind(param,thisgrad)
 
-shapevec <- seq(10,100,by=0.1)   
-
-# define the likelihood surface
-
-surface1D <- numeric(length(shapevec))   # initialize storage variable
-
-newparams <- params
-for(i in 1:length(shapevec)){
-  newparams['shape'] <- shapevec[i]
-  surface1D[i] <- GammaLikelihoodFunction(newparams) 
-}
-
-plot(surface1D~shapevec,type="l")
-point <- GammaLikelihoodFunction(c(shape=30,MLE$par['rate']))
-slope <- SlopeFunc(shape_guess=30)
-lines(c(20,40),c(point-slope*10,point+slope*10),col="red")
+# Visualize the gradient of the likelihood function at different points in parameter space
+LL_plot_2D +
+  geom_segment(data=param, aes(x=shape,y=rate,
+                    xend=shape+grad_shape,yend=rate+grad_rate),
+               arrow = arrow(length = unit(0.3, "cm")),col="yellow",lwd=2)
 
 
 # function for estimating the curvature of the likelihood function at any point in parameter space
 
-params <- MLE$par
-CurvatureFunc <- function(shape_guess,tiny=0.001){
-  params['shape'] <- shape_guess
-  high <- SlopeFunc(shape_guess+tiny)
-  low <- SlopeFunc(shape_guess-tiny)
-  curvature <- (high-low)/(tiny*2)   # how much the slope is changing in this region of the function
-  return(curvature)
-}
+hessian(GammaLL,MLE)   # confirm the curvature at the maximum likelihood estimate 
 
-CurvatureFunc(shape_guess=30)   # try it!
+-opt1$hessian
 
-
-# First- visualize the gradient of the likelihood function
-
-firstderiv <- numeric(length(shapevec))   # initialize storage variable
-for(i in 1:length(shapevec)){
-  firstderiv[i] <- SlopeFunc(shapevec[i]) 
-}
-
-plot(firstderiv~shapevec,type="l")
-abline(h=0,col="red")
+hessian(GammaLL,unlist(LLsurface[50,1:2]))   # and here's the curvature at a different point in space... 
 
 
 # Now we can perform a simple, derivative-based optimization!
 
-### Pick "80" as the starting value
+start = c(shape=50,rate=7)
 
-firstderiv <- SlopeFunc(80)           # evaluate the first and second derivatives
-secondderiv <- CurvatureFunc(80)
-firstderiv
-secondderiv
+thisgrad <- grad(GammaLL,start)
+thiscurv <- hessian(GammaLL,start)
+thisgrad
+thiscurv
 
 
 # Use this info to estimate the root
-
-oldguess <- 80
-newguess <- oldguess - firstderiv/secondderiv   # estimate the root (where first deriv is zero)
+newguess <- start - (solve(thiscurv)%*%thisgrad)[,1]
+# grad(GammaNLL,newguess)
+# hessian(GammaNLL,newguess)
 newguess
 
 
 # Repeat this process
 
-oldguess <- 41.31
-newguess <- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess) 
+do_newton <- function(oldguess){
+  thisgrad <- grad(GammaLL,oldguess); thiscurv <- hessian(GammaLL,oldguess)
+  oldguess - (solve(thiscurv)%*%thisgrad)[,1]
+}
+
+newguess = do_newton(newguess)
 newguess
 
 
 # again...
 
-oldguess<-newguess
-newguess <- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
-newguess
-
-
-# again...
-
-oldguess<-newguess
-newguess <- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
-newguess
-
-
-# again...
-
-oldguess<-newguess
-newguess <- oldguess - SlopeFunc(oldguess)/CurvatureFunc(oldguess)
+newguess = do_newton(newguess)
 newguess
 
 
 # Implement the Newton Method as a function!  ------------------
 
-NewtonMethod <- function(firstguess,tolerance=0.0000001){
-  deriv <- SlopeFunc(firstguess)
-  oldguess <- firstguess
-  counter <- 0
-  while(abs(deriv)>tolerance){
-    deriv <- SlopeFunc(oldguess)
-    newguess <- oldguess - deriv/CurvatureFunc(oldguess)
-    oldguess<-newguess
+NewtonMethod <- function(guess,tolerance=0.0000001){
+  counter=0
+  while(Norm(grad(GammaLL,guess),2)>tolerance){
+    guess = do_newton(guess)
     counter=counter+1
   }
-  mle <- list()
-  mle$estimate <- newguess
-  mle$likelihood <- GammaLikelihoodFunction(c(shape=newguess,MLE$par['rate']))
-  mle$iterations <- counter
-  return(mle)
+  list(
+    estimate = guess,
+    likelihood = GammaLL(guess),
+    iterations = counter
+  )
 }
 
 
-newMLE <- NewtonMethod(firstguess=80)
+newMLE <- NewtonMethod(start)
 newMLE
 
 
@@ -230,39 +179,35 @@ newMLE
 
 # set up an "initial" simplex
 
-firstguess <- c(shape=70,rate=5)   # "user" first guess 
+guess <- c(shape=60,rate=8)   # "user" first guess 
 
-simplex <- list()
- 
-           # set up the initial simplex based on the first guess...
-simplex[['vertex1']] <- firstguess + c(3,1)
-simplex[['vertex2']] <- firstguess + c(-3,-1)
-simplex[['vertex3']] <- firstguess + c(3,-1)
-
-simplex
-
-
-    ## first let's make a function to plot the simplex on a 2-D likelihood surface...
-
-addSimplex <- function(simplex,col="red"){
-  temp <- as.data.frame(simplex)    # easier to work with data frame here
-  points(x=temp[1,c(1,2,3,1)], y=temp[2,c(1,2,3,1)],type="b",lwd=2,col=col)
+make_simplex <- function(guess){
+  list(
+    vertex1 = guess,
+    vertex2 = guess + c(10,0),
+    vertex3 = guess + c(-5,-1) 
+  )
 }
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-300,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-120),add=T)
-addSimplex(simplex)
+thissimplex = make_simplex(guess)
 
+thissimplex
+    ## first let's visualize the simplex on a 2-D likelihood surface...
+
+simplex_dat = as.data.frame(do.call(rbind,thissimplex))
+
+LL_plot_2D  + 
+  geom_polygon(data=simplex_dat, aes(x=shape,y=rate),lwd=1.5,fill="pink",alpha=0.5)
 
 
 # Evaluate log-likelihood at each vertex of the simplex
 
 SimplexLik <- function(simplex){
-  newvec <- -1*unlist(lapply(simplex,GammaLikelihoodFunction))   # note use of apply instead of for loop...
+  newvec <- sapply(simplex,GammaLL)   # note use of apply instead of for loop...
   return(newvec)
 }
 
-SimplexLik(simplex)
+SimplexLik(thissimplex)
 
 
 
@@ -338,105 +283,59 @@ MoveTheSimplex <- function(oldsimplex){     # (incomplete) nelder-mead algorithm
   return(newsimplex)
 }
 
-# image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-# contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-# addSimplex(oldsimplex,col="red")
-# addSimplex(candidates$reflected,col="green")
-# addSimplex(candidates$half,col="green")
-
 # Visualize the simplex  ---------------------
 
-oldsimplex <- simplex
+trys = list()
+trys[[1]] <- simplex_dat
+oldsimplex <- thissimplex
 newsimplex <- MoveTheSimplex(oldsimplex)
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex,col="green")
+trys[[2]] <-  as.data.frame(do.call(rbind,newsimplex))
+trysdat <- do.call(rbind,trys); trysdat$iter = rep(c(1,2),each=3)
 
+LL_plot_2D  + 
+  geom_polygon(data=trysdat, aes(x=shape,y=rate,group=iter),lwd=0.5,fill="pink",linetype=1,alpha=0.7,color="black") 
+ 
 
+# Make another few moves  -------------
 
-# Make another move  -------------
-
-oldsimplex <- newsimplex
-newsimplex <- MoveTheSimplex(oldsimplex)
-
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex,col="green")
-
-
-# Make another move  ----------------------
-
-oldsimplex <- newsimplex
-newsimplex <- MoveTheSimplex(oldsimplex)
-
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex,col="green")
-
-
-# Make another move  ----------------
-
-oldsimplex <- newsimplex
-newsimplex <- MoveTheSimplex(oldsimplex)
-
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-addSimplex(oldsimplex,col="red")
-addSimplex(newsimplex,col="green")
-
-
-# Make another few moves  ----------------------
-
-par(mfrow=c(2,2))
-
-for(i in 1:4){
-  oldsimplex <- newsimplex
-  newsimplex <- MoveTheSimplex(oldsimplex)
-  
-  image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-  contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-125),add=T)
-  addSimplex(oldsimplex,col="red")
-  addSimplex(newsimplex,col="green")
+for(i in 3:6){
+  newsimplex <- MoveTheSimplex(newsimplex)
+  trys[[i]] <-  as.data.frame(do.call(rbind,newsimplex))
 }
 
+trysdat <- do.call(rbind,trys); trysdat$iter = rep(c(1:6),each=3)
+
+LL_plot_2D  + 
+  geom_polygon(data=trysdat, aes(x=shape,y=rate,group=iter),lwd=0.5,fill="pink",linetype=1,alpha=0.7,color="black")
+ 
 
 
 # Build a simplex optimization function!  -----------------
 
 SimplexMethod <- function(firstguess,tolerance=0.00001){
-  initsimplex <- list()
-  initsimplex[['vertex1']] <- firstguess + c(5,0.5)
-  initsimplex[['vertex2']] <- firstguess + c(-5,-0.5)
-  initsimplex[['vertex3']] <- firstguess + c(5,-0.5)
-  VertexLik <- SimplexLik(initsimplex)
-  oldbestlik <- VertexLik[which.max(VertexLik)]
-  deltalik <- 100
+  simplex <- make_simplex(firstguess)
+  VertexLik <- SimplexLik(simplex)
   counter <- 0
-  oldsimplex <- initsimplex
-  while((counter<250)&(any(abs(diff(VertexLik))>tolerance))){
-    newsimplex <- MoveTheSimplex(oldsimplex)
-    VertexLik <- SimplexLik(newsimplex)
+  while(any(abs(diff(VertexLik))>tolerance)){
+    simplex <- MoveTheSimplex(simplex)
+    VertexLik <- SimplexLik(simplex)
     bestlik <- VertexLik[which.max(VertexLik)]
-    oldsimplex <- newsimplex
     counter <- counter+1
   }
-  mle <- list()
-  mle$estimate <- newsimplex[[1]]
-  mle$likelihood <- bestlik
-  mle$iterations <- counter
-  return(mle)
+  list(estimate = simplex[[1]],
+    likelihood = bestlik,
+    iterations = counter)
 }
 
-SimplexMethod(firstguess = c(shape=39,rate=4))
+SimplexMethod(c(shape=60,rate=8))
+
+MLE
 
 
 # Simulated annealing!  -----------------------
 
 startingvals <- c(shape=80,rate=7)
-startinglik <- -GammaLikelihoodFunction(startingvals)
+startinglik <- GammaLL(startingvals)
 startinglik
 
 k = 100   # set the "temperature"
@@ -459,8 +358,8 @@ newGuess(oldguess=startingvals)
 # evaluate the difference in likelihood between the new proposal and the old point
 
 LikDif <- function(oldguess,newguess){
-  oldLik <- -GammaLikelihoodFunction(oldguess)
-  newLik <- -GammaLikelihoodFunction(newguess)
+  oldLik <- GammaLL(oldguess)
+  newLik <- GammaLL(newguess)
   return(newLik-oldLik)
 }
 
@@ -493,9 +392,8 @@ while(counter<100){
 
 # visualize!
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
-lines(guesses,col="red")
+LL_plot_2D +
+  geom_path(data=guesses,aes(x=shape,y=rate),lwd=.4,col="black")
 
 
 # Run it for longer!
@@ -523,9 +421,8 @@ while(counter<1000){
 
 # visualize!
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
-lines(guesses,col="red")
+LL_plot_2D +
+  geom_path(data=guesses,aes(x=shape,y=rate),lwd=.4,col="black")
 
 
 
@@ -536,7 +433,7 @@ oldguess <- startingvals
 counter <- 0
 guesses <- matrix(0,nrow=10000,ncol=2)
 colnames(guesses) <- names(startingvals)
-MLE <- list(vals=startingvals,lik=-GammaLikelihoodFunction(startingvals),step=0)
+MLE_sa <- list(vals=startingvals,lik=GammaLL(startingvals),step=0)
 while(counter<10000){
   newguess <- newGuess(oldguess)
   while(any(newguess<0)) newguess <- newGuess(oldguess)
@@ -552,18 +449,16 @@ while(counter<10000){
   counter <- counter + 1
   if(counter%%100==0) k <- k*0.8
   guesses[counter,] <- oldguess
-  thislik <- -GammaLikelihoodFunction(oldguess)
-  if(thislik>MLE$lik) MLE <- list(vals=oldguess,lik=-GammaLikelihoodFunction(oldguess),step=counter)
+  thislik <- GammaLL(oldguess)
+  if(thislik>MLE_sa$lik) MLE_sa <- list(vals=oldguess,lik=GammaLL(oldguess),step=counter)
 }
 
 # visualize!
 
-image(x=shapevec,y=ratevec,z=surface2D,zlim=c(-500,-30),col=topo.colors(12))
-contour(x=shapevec,y=ratevec,z=surface2D,levels=c(-30,-40,-80,-135),add=T)
-lines(guesses,col="red")
-points(MLE$vals[1],MLE$vals[2],col="green",pch=20,cex=3)
+LL_plot_2D +
+  geom_path(data=guesses,aes(x=shape,y=rate),lwd=.4,col="black") + 
+  annotate("point",x=MLE_sa$vals[1],y=MLE_sa$vals[2],col="green",pch=20,cex=3)
 
-MLE
+MLE_sa
 
-optim(params,GammaLikelihoodFunction)$par
 

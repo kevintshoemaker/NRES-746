@@ -7,239 +7,163 @@
 
 # first visualize the "prior" for the probability *p* as a uniform distribution
 
-curve(dunif(x),ylim=c(0,2),col="red", ylab = "probability", xlab="parameter \"p\"")
-
-#hist(runif(10000),freq=F,ylim=c(0,2),col="red")
-
-
-# Alternative prior: beta distribution (conjugate prior)
-
-curve(dbeta(x,1,1),ylim=c(0,2),col="red",ylab = "probability", xlab="parameter \"p\"")
-
-#hist(rbeta(10000,1,1),freq=F,ylim=c(0,2),col="red")   # histogram of random numbers from a flat beta distribution
+ggplot() +
+  scale_x_continuous(limits=c(0,1)) +
+  scale_y_continuous(limits=c(0,1.5)) +
+  stat_function(fun=dbeta,args = list(shape1 = 1, shape2 = 1),lwd=2,col=gray(.4)) +
+  labs(x="parameter \"p\"",y="probability") +
+  theme_classic()
 
 
 # frog call example: --------------
+
 #    imagine we detected the frog in 3 of 10 visits to a known-occupied wetland
-
 #    visualize the data likelihood alongside the prior probability
-
 #    recall that the likelihood surface is not a probability distribution (thus, the 2 y axes)
 
-data = 3
-param.space <- seq(0,1,by=0.001)
-likelihood <- dbinom(data,size=10,prob=param.space)
-par(mai=c(1,1,0,1))
-curve(dbeta(x,1,1),ylim=c(0,2),col="blue",lty=2,ylab="Probability density (prior)",xlab="parameter (p)")
-points(param.space,likelihood,type="l",col="red",lwd=2,lty=2)
-axis(4,at=seq(0,.3,length=4),labels = seq(0,0.3,length=4))
-mtext("Likelihood (relative plausibility)", side=4, col="red",line=3)
+lik = function(p) dbinom(3,10,p)
 
+ggplot() +
+  xlim(0,1) + ylim(0,2) + 
+  stat_function(fun=dbeta,args = list(shape1 = 1, shape2 = 1),lwd=1.5,col=gray(.4)) +
+  stat_function(fun=lik,lwd=1.5,col="darkorange") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 
 # Brute-force Bayes ----------------------------
 
-####
 # prior across parameter space 
 
-prior <- dbeta(param.space,shape1=1,shape2=1)    # flat prior
-#prior
+prior <- function(p) dbeta(p,1,1)    # flat prior
 
-####
 ## Numerator for Bayes rule: weight the data likelihood by the prior
+numer <- function(p) lik(p)*prior(p)      # Numerator for Bayes rule
 
-weighted.likelihood <- likelihood*prior      # Numerator for Bayes rule
-
-####
 ## Denominator for Bayes rule: compute normalization constant
+marg_lik <- function() integrate(numer,0,1)$value   # marginal likelihood is a single constant number: the sum of the weighted likelihoods!
 
-normalization.constant <- sum(weighted.likelihood)   # "evidence" is a single constant number: the sum of the weighted likelihoods!
+## Posterior (numerator/denominator)
+posterior <- function(p) numer(p)/marg_lik()   # this is Bayes' rule!
 
-####
-## Posterior!! (numerator/denominator)
-
-posterior <- weighted.likelihood/normalization.constant   # this is Bayes' rule!
-
-#####
 ## Plot it out!
 
-par(mai=c(1,1,0,1))
-plot(param.space,prior,ylim=c(0,5),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)  # convert posterior probability to probability density
-points(param.space,likelihood,type="l",col="red",lwd=1,lty=2)
-axis(4,at=seq(0,.3,length=4),labels = seq(0,0.3,length=4))
-mtext("Likelihood", side=4, col="red",line=3)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=prior,lwd=1.5,col=gray(.4)) +
+  stat_function(fun=lik,lwd=1.5,col="darkorange") +
+  stat_function(fun=posterior,lwd=1.5,col="darkgreen") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 
 # Try an informative prior!  -------------
 
-prior <- dbeta(param.space,shape1=15,shape2=5)
-#prior
+prior <- function(p) dbeta(p,15,5)    # more informative prior
 
-## weight the data likelihood by the prior
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=prior,lwd=1.5,col=gray(.4)) +
+  stat_function(fun=lik,lwd=1.5,col="darkorange") +
+  stat_function(fun=posterior,lwd=1.5,col="darkgreen") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
-weighted.likelihood <- likelihood*prior
+# Collect more data and try again...   -----------
 
-## compute normalization constant
+dat <- c(3, 1, 6, 2, 3, 2, 6, 1, 3, 3)
+lik = function(p) sapply(p, function(t) prod(dbinom(dat,10,t)) )  # vectorized with sapply
 
-normalization.constant <- sum(weighted.likelihood)
-
-## Posterior!!
-
-posterior <- weighted.likelihood/normalization.constant
-
-## Plot it out!
-par(mai=c(1,1,0,1))
-plot(param.space,prior,ylim=c(0,5),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)
-points(param.space,likelihood,type="l",col="red",lwd=1,lty=2)
-axis(4,at=seq(0,.3,length=4),labels = seq(0,0.3,length=4))
-mtext("Likelihood", side=4, col="red",line=3)
-
-####
-# Collect more data and try again...
-
-moredata <- c(3, 1, 6, 2, 3, 2, 6, 1, 3, 3)
-
-## prior
-prior <- dbeta(param.space,shape1=15,shape2=5)
-
-## likelihood
-likelihood <- sapply(param.space,function(t) prod(dbinom(moredata,size=10,prob=t)))
-
-## weight the data likelihood by the prior
-weighted.likelihood <- likelihood*prior
-
-## compute normalization constant
-
-normalization.constant <- sum(weighted.likelihood)
-
-## Posterior!!
-
-posterior <- weighted.likelihood/normalization.constant
-
-## Plot it out!
-par(mai=c(1,1,0,1))
-plot(param.space,prior,ylim=c(0,10),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)
-points(param.space,likelihood*1e9,type="l",col="red",lwd=1,lty=2)
-axis(4,at=seq(0,6,by=1),labels = seq(0,6e-9,by=1e-9))
-mtext("Likelihood", side=4, col="red",line=3)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=prior,lwd=1.5,col=gray(.4)) +
+  # stat_function(fun=lik,lwd=1.5,col="darkorange") +    # likelihood is too small to show up
+  stat_function(fun=posterior,lwd=1.5,col="darkgreen") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 
-####
-# Try a very informative prior!
+prior <- function(p) dbeta(p,150,50)    # super informative prior
 
-likelihood <- dbinom(data,size=10,prob=param.space)
-
-prior <- dbeta(param.space,shape1=150,shape2=50)
-#prior
-
-## weight the data likelihood by the prior
-
-weighted.likelihood <- likelihood*prior
-
-## compute normalization constant
-
-normalization.constant <- sum(weighted.likelihood)
-
-## Posterior!!
-
-posterior <- weighted.likelihood/normalization.constant
-
-## Plot it out!
-par(mai=c(1,1,0,1))
-plot(param.space,prior,ylim=c(0,15),type="l",lwd=1,lty=2,col="blue",ylab="Probability Density",xlab="param.space")
-points(param.space,posterior*length(param.space),type="l",col="blue",lwd=2,lty=1)
-points(param.space,likelihood*5,type="l",col="red",lwd=1,lty=2)
-axis(4,at=seq(0,2,by=0.4),labels = seq(0,0.5,by=.1))
-mtext("Likelihood", side=4, col="red",line=3)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=prior,lwd=1.5,col=gray(.4)) +
+  stat_function(fun=posterior,lwd=1.5,col="darkgreen") +
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 ## Conjugate priors ---------------------------
+
 # Do it again- this time with conjugate priors...
 
-### PRIOR
-
-prior_beta <- c(shape1=1,shape2=1)
-curve(dbeta(x,prior_beta['shape1'],prior_beta['shape2']),ylim=c(0,5),ylab="Prob Density",col="blue",lwd=1,lty=2,xlab="param.space")
-
-### POSTERIOR
-
-curve(dbeta(x,prior_beta['shape1']+data,prior_beta['shape2']+(10-data)),ylim=c(0,4),ylab="Prob Density",col="blue",lwd=2,lty=1,xlab="param.space",add=T)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 1, shape2 = 1),lwd=1.5,col=gray(.4)) +  # PRIOR
+  stat_function(fun=dbeta,args = list(shape1 = 1+3, shape2 = 1+(10-3)),lwd=1.5,col="darkgreen") +  # POSTERIOR (after observing 3 successes out of 10)
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 
-####
 # With informative prior...
 
-### PRIOR
-prior_beta <- c(shape1=15,shape2=5)
-curve(dbeta(x,prior_beta['shape1'],prior_beta['shape2']),ylim=c(0,5),ylab="Prob Density",col="blue",lwd=1,lty=2,xlab="param.space")
-
-
-### POSTERIOR
-
-curve(dbeta(x,prior_beta['shape1']+data,prior_beta['shape2']+(10-data)),ylim=c(0,4),ylab="Prob Density",col="blue",lwd=2,lty=1,xlab="param.space",add=T)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 15, shape2 = 5),lwd=1.5,col=gray(.4)) +  # PRIOR
+  stat_function(fun=dbeta,args = list(shape1 = 15+3, shape2 = 5+(10-3)),lwd=1.5,col="darkgreen") +  # POSTERIOR (after observing 3 successes out of 10)
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 
 graphics.off()
 
 
-####
 # And with super informative prior...
 
-### PRIOR
-prior_beta <- c(shape1=150,shape2=50)
-curve(dbeta(x,prior_beta['shape1'],prior_beta['shape2']),ylim=c(0,15),ylab="Prob Density",col="blue",lwd=1,lty=2,xlab="param.space")
-
-
-### POSTERIOR
-curve(dbeta(x,prior_beta['shape1']+data,prior_beta['shape2']+(10-data)),ylim=c(0,15),ylab="Prob Density",col="blue",lwd=2,lty=1,xlab="param.space",add=T)
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 150, shape2 = 50),lwd=1.5,col=gray(.4)) +  # PRIOR
+  stat_function(fun=dbeta,args = list(shape1 = 150+3, shape2 = 50+(10-3)),lwd=1.5,col="darkgreen") +  # POSTERIOR (after observing 3 successes out of 10)
+  labs(x="parameter \"p\"",y="probability/likelihood") +
+  theme_classic()
 
 
 ## Bayesian point estimate -----------------------
-# Example: bayesian point estimates can differ markedly from MLE
+# Example: bayesian point estimates can differ from MLE
 
-curve(dlnorm(x,4,1),from=0.001,to=200,ylab="prob density")  # use a lognormal distribution for example of skewed posterior dist...
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 0.5+1, shape2 = 0.5+2),lwd=1.5,col="darkgreen") +  # skewed posterior
+  labs(x="parameter",y="probability/likelihood") +
+  theme_classic()
 
 
-####
 # Compute and plot the mean and the mode of the distribution
 
-param.space2 <- seq(0.001,200,length=10000)
-skewed.posterior <- dlnorm(param.space2,4,1)
-mean <- mean(rlnorm(10000,4,1))
-mode <- param.space2[which.max(skewed.posterior)]
-plot(param.space2,skewed.posterior,type="l",ylab="prob density")
-abline(v=c(mean,mode),col=gray(c(0.5,0.2)),lwd=3,lty=2)   # add to plot
+posterior = function(p) dbeta(p,1.5,2.5)
+mean <- integrate(function(p){posterior(p)*p},0,1)$value
+mode <- optimize(posterior,c(0,1),maximum=T)$maximum
+
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 0.5+1, shape2 = 0.5+2),lwd=1.5,col="darkgreen") +  # skewed posterior
+  geom_vline(xintercept=c(mean,mode),col=c("red","blue"),lwd=2,lty=2) +
+  labs(x="parameter",y="probability/likelihood") +
+  theme_classic()
 
 
-####
-# Do the same for the frog detection example from above
-
-#graphics.off()
-### POSTERIOR
-posterior <- dbeta(param.space,1+data,1+(10-data))
-mean <- mean(rbeta(10000,1+data,1+(10-data)))
-mode <- param.space[which.max(posterior)]
-plot(param.space,posterior,type="l",col="blue",lwd=2)
-abline(v=c(mean,mode),col=gray(c(0.5,0.2)),lwd=3,lty=2)   # add to plot
-
-
-####
 # A Bayesian confidence interval (95% credible interval)  -------------------
 
-### POSTERIOR
+credible.interval <- qbeta(c(0.025,0.975),1+3,1+(10-3))     # get the credible interval using the quantile method
 
-curve(dbeta(x,1+data,1+(10-data)),ylim=c(0,4),ylab="Prob Density",col="blue",lwd=2,lty=1,xlab="param.space")
+ggplot() +
+  xlim(0,1) +
+  stat_function(fun=dbeta,args = list(shape1 = 1+3, shape2 = 1+(10-3)),lwd=1.5,col="darkgreen") +
+  geom_vline(xintercept=credible.interval,col="blue",lwd=1,lty=2) +
+  labs(x="p",y="probability/likelihood") +
+  theme_classic()
 
-### CREDIBLE INTERVAL
 
-credible.interval <- qbeta(c(0.025,0.975),1+data,1+(10-data))     # get the credible interval using the quantile method
-
-abline(v=credible.interval,col=gray(0.5),lwd=3,lty=2)   # add to plot
-
-
-#### Bayesian analysis without a conjugate prior
+## Bayesian analysis without a conjugate prior
 
 # Revisit the Myxomatosis example  --------------------------
 
@@ -255,138 +179,132 @@ hist(Myx$titer,freq=FALSE)    # visualize the data, again!
 
 ### Error is modeled as gamma distributed
 
-hist(Myx$titer,freq=FALSE)
-curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")   # note here we are using scale and not rate...
+ggplot(Myx, aes(x = titer)) +
+      geom_histogram(aes(y = after_stat(density)), binwidth = 0.5, fill = "lightblue", color = "black") +
+      stat_function(fun=dgamma,args = list(shape = 40, rate = 6),lwd=1,lty=2,col="darkgreen") +
+      labs(x = "Titer", y = "Density") +
+      theme_classic()
 
 
-####
 # recall our likelihood function for these data (not on log scale this time!)
 
-GammaLikelihoodFunction <- function(params){
-  prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale']))
+lik <- function(pars){
+  prod(dgamma(Myx$titer,shape=pars['shape'],rate=pars['rate']))
 }
 
-params <- c(40,0.15) 
-names(params) <- c("shape","scale")
-params
-GammaLikelihoodFunction(params)
+pars <- c(shape=40,rate=6) 
+lik(pars)
 
 
 # define 2-D parameter space (in real probability scale)!
 
-shapevec <- seq(10,100,by=0.1)   
-scalevec <- seq(0.01,0.3,by=0.001)
+shapevec <- seq(0,150,length=100)        # divide parameter space into tiny increments
+ratevec <- seq(0.5,30,length=100)
 
-# define the likelihood surface across this grid within parameter space
+parmsurface <- expand.grid(shapevec,ratevec)
+colnames(parmsurface) <- c("shape","rate")
+parmsurface$lik <- sapply(1:nrow(parmsurface), function(t) lik(unlist(parmsurface[t,1:2]))  )
 
-likelihood2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
+likplot_2D <- ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the likelihood surface
+  geom_raster(aes(fill=lik)) +
+  scale_fill_gradient(limits=c(1e-70,1e-17)) 
 
-newparams <- params
-for(i in 1:length(shapevec)){
-  newparams['shape'] <- shapevec[i]
-  for(j in 1:length(scalevec)){
-    newparams['scale'] <- scalevec[j]
-    likelihood2D[i,j] <- GammaLikelihoodFunction(newparams) 
-  }
-}
-
-# Visualize the likelihood surface
-
-image(x=shapevec,y=scalevec,z=likelihood2D,zlim=c(1e-70,1e-17),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=likelihood2D,levels=c(1e-18,1e-17),add=T)
+likplot_2D
 
 
-# compute the area of each pixel (for probability density computation)
-
-pixelArea <- 0.0001  # for determining probability densities
+# compute the area of each pixel in parameter space (for probability density computation)
+pixelArea <- diff(range(shapevec))/100 * diff(range(ratevec))/100  
+npixels <- 100*100
 
 # define the prior probability surface across this grid within parameter space
 
-prior2D <- matrix(1, nrow=length(shapevec),ncol=length(scalevec))   # initialize prior
-prior2D <- prior2D/length(prior2D)
-
-# Visualize the 2-D prior distribution
-
-image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0,0.001),col=rainbow(10))
+prior <- function(pars) replicate(nrow(pars),pixelArea/(npixels*pixelArea) )    # set as uniform across the support
+parmsurface$prior <- prior(as.matrix(parmsurface[,c("shape","rate")]) )
 
 
 # Apply Bayes Rule!   -------------------
 
-weighted.likelihood <- prior2D * likelihood2D    # numerator of Bayes rule
-normalization.constant <- sum(weighted.likelihood)    # denominator of Bayes rule
+parmsurface$numer <- with(parmsurface, lik*prior  )    # numerator of Bayes rule
+denom <- sum(parmsurface$numer)     # denominator of Bayes rule
 
-posterior2D <- weighted.likelihood/normalization.constant
+parmsurface$post <- parmsurface$numer/denom    # apply Bayes rule
 
 # Visualize the 2-D posterior distribution
 
-image(x=shapevec,y=scalevec,z=(posterior2D/pixelArea),zlim=c(0,5),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=(posterior2D/pixelArea),levels=c(1:4),add=T,drawlabels=FALSE)
+postplot_2D <- ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the likelihood surface
+  geom_raster(aes(fill=post)) +
+  scale_fill_gradient(limits=c(1e-25,0.02562)) 
+
+postplot_2D
 
 
-# try to find the contour that contains 95% of our degree of belief!  ----------------
+# find the contour that encloses approx. 95% of our degree of belief!  ----------------
 
-possible.contours <- data.frame(contour = seq(0.13e-4,1e-4,length=100), quantile = NA)
-i=1
-for(i in 1:nrow(possible.contours)){
-  ndx <- which(posterior2D<possible.contours$contour[i],arr.ind = T)
-  possible.contours$quantile[i] <- sum(posterior2D[ndx])
-}
-
-head(possible.contours,10)
+cntrconf <- function(c) with(parmsurface, sum(post[which(post>=c)]) )
+find_cntr <- function(c,conf) (cntrconf(c)-conf)^2  
+c = optimize(find_cntr, interval=c(1e-10,0.02562),conf=0.95)$objective 
+c
 
 
 # Visualize the 2D credible region (HPD)
 
-q95 <- 1.739394e-05
-image(x=shapevec,y=scalevec,z=posterior2D,zlim=c(0.5e-11,5e-4),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=posterior2D,levels=q95,add=T,lwd=3,col="red",drawlabels=FALSE)
-
+postplot_2D <- postplot_2D +
+  geom_contour(aes(z=post),breaks=6.824e-06 ,lwd=1.2) 
+postplot_2D
 
 # Visualize a point estimate
 
-image(x=shapevec,y=scalevec,z=posterior2D,zlim=c(0.5e-11,5e-4),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=posterior2D,levels=q95,add=T,lwd=3,col="red",drawlabels=FALSE)
+meanpars <- with(parmsurface, c(shape=sum(shape*post),rate=sum(rate*post) ) ) 
+modepars <- unlist(parmsurface[which.max(parmsurface$post),c("shape","rate")] ) 
+pts <- as.data.frame(rbind(meanpars,modepars)); pts$method=c("mean","mode")
 
-meanshape <- sum(shapevec*posterior2D) 
-meanscale <- sum(scalevec*posterior2D)
-points(meanshape,meanscale,pch=20,cex=2,col="red")  # posterior mean
+postplot_2D + geom_point(data=pts,aes(x=shape,y=rate,col=method),size=3)
 
-mode <- which(posterior2D==max(posterior2D),arr.ind = T)
-points(shapevec[mode[1]],scalevec[mode[2]], pch="X",col="black",cex=1.5)  # posterior mode
 
+library(cowplot)
+
+shape_marginal = parmsurface |> 
+  group_by(shape) |> 
+  summarise(post = sum(post))
+
+rate_marginal = parmsurface |> 
+  group_by(rate) |> 
+  summarise(post = sum(post))
 
 # Plot out posterior distributions separately for each parameter  -------------
 
-marginal.dist.shape <- apply(posterior2D,1,mean)     # factor out the scale param- focus only on the shape param.
-plot(shapevec,(marginal.dist.shape/sum(marginal.dist.shape))/0.1,type="l",lwd=2,col="blue",ylab="probability density",main="Posterior probability")
-abline(v=meanshape)
+g1 = ggplot(shape_marginal,aes(shape,post)) + geom_path(lwd=2) + theme_classic() + ylab("density")
+g2 = ggplot(rate_marginal,aes(rate,post)) + geom_path(lwd=2) + theme_classic() + ylab("density")
+# g1
 
-marginal.dist.scale <- apply(posterior2D,2,mean)
-plot(scalevec,(marginal.dist.scale/sum(marginal.dist.scale))/0.001,type="l",lwd=2,col="blue",ylab="probability density",main="Posterior probability")
-abline(v=meanscale)
+cowplot::plot_grid(g1,g2)
 
-meanshape
-meanscale
+
+cdf_shape <- cumsum(shape_marginal$post)
+cdf_rate <- cumsum(rate_marginal$post)
+
+meanshape = with(shape_marginal, sum(shape*post) ) ; meanrate = with(rate_marginal, sum(rate*post) )
+ci95shape = shapevec[c(tail(which(cdf_shape<0.025),1),tail(which(cdf_shape<0.975),1) )]
+ci95rate = ratevec[c(tail(which(cdf_rate<0.025),1),tail(which(cdf_rate<0.975),1) )]
+cis = rbind(ci95shape,ci95rate); colnames(cis) <- c("lb","ub")
+
+stats = data.frame(parm=c("shape","rate"), mean=c(meanshape,meanrate))
+stats = cbind(stats,cis ) 
+stats
 
 
 # Sample parameters from the joint posterior
 
 SampleFromPosterior <- function(n){
-  shape <- rep(shapevec,times=length(scalevec))
-  scale <- rep(scalevec,each=length(shapevec))
-  jointparams <- data.frame(shape=shape,scale=scale)
-  probs <- as.vector(posterior2D)
-  samples <- sample(c(1:length(probs)),size=n,replace=TRUE,prob=probs)
-  jointparams[samples,]
+  samples <- sample(c(1:nrow(parmsurface)),size=n,replace=TRUE,prob=parmsurface$post)
+  parmsurface[samples,c("shape","rate")]
 }
 
 samples<-SampleFromPosterior(n=10000)
-par(mfrow=c(3,2))
-plot(samples,col=1:10000)
-plot(samples,type="l")
+par(mfrow=c(2,2))
 plot(ts(samples[,1]),xlab="sample",ylab="shape")
-plot(ts(samples[,2]),xlab="sample",ylab="scale")
+plot(ts(samples[,2]),xlab="sample",ylab="rate")
 hist(samples[,1],40,xlab="shape",main="histogram of shape param")
-hist(samples[,2],40,xlab="scale",main="histogram of scale param")
+hist(samples[,2],40,xlab="scale",main="histogram of rate param")
 par(mfrow=c(1,1))
 
