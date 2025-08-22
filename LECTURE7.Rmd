@@ -58,7 +58,6 @@ Surprisingly, MCMC is not that difficult to describe or even to implement (altho
 ## Bivariate normal example
 
 Remember that MCMC samplers are just a type of random number generator. We can use MCMC to develop our own random number generator for a simple known distribution. In this example, we use MCMC to generate random numbers from a standard bivariate normal probability distribution. I chose this example because its properties are fully worked out mathematically, so we can compare MCMC results with the "true" distribution. 
-
 We certainly don't need an MCMC sampler for this example (we already have 'perfect' random number generators, like the one below). One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution with a correlation parameter, $\rho$.
 
 ### Metropolis-Hastings algorithm
@@ -122,9 +121,9 @@ vis_mcmc2 <- function(mat){   # assume mat has 1 row per sample, and 2 columns (
 ## Metropolis-Hastings implementation of bivariate normal sampler...   ----------
 
 proposal <- function(x) rnorm(1,x,0.4)
-cond_prob <- function(this,xval) dnorm(this,rho*xval,1-rho^2) 
-choose_mh <- function(prev,new,other){
-  r = min(cond_prob(new,other)/cond_prob(prev,other),1)
+cond_prob <- function(this,xval,rho) dnorm(this,rho*xval,1-rho^2) 
+choose_mh <- function(prev,new,other,rho){
+  r = min(cond_prob(new,other,rho)/cond_prob(prev,other,rho),1)
   ifelse(r>runif(1),new,prev)
 }
 
@@ -132,7 +131,7 @@ metropolisHastings <- function (n, rho){    # an MCMC bivariate random number ge
     mat <- matrix(NA,n,2)   # matrix for storing the random samples
     prev = c(0,0); mat[1,] <- prev       # initial values for all parameters
     for(i in 1:n){
-      for(j in 1:2) prev[j] <- choose_mh(prev[j],proposal(prev[j]),prev[setdiff(1:2,j)] )
+      for(j in 1:2) prev[j] <- choose_mh(prev[j],proposal(prev[j]),prev[setdiff(1:2,j)] ,rho)
       mat[i,] <- prev
     }
     mat
@@ -147,7 +146,7 @@ Then we can use the M-H sampler to get random samples from this known distributi
 
 # Test our M-H sampler
 
-bvn_mh<-metropolisHastings(5000,0.9)
+bvn_mh<-metropolisHastings(5000,rho=0.9)
 vis_mcmc2(bvn_mh)
 
 ```
@@ -182,14 +181,14 @@ vis_mcmc2(bvn_true)
 
 ## Now construct a Gibbs sampler  ---------------
 
-conditional2 <- function(xval) rnorm(1, rho * xval, sqrt(1 - rho^2))   # sample random value from full conditional
+cond_prob2 <- function(xval,rho) rnorm(1, rho * xval, sqrt(1 - rho^2))   # sample random value from full conditional
 
 gibbs<-function (n, rho){    # a Gibbs sampler for bivariate normal
     mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
     prev <- c(0,0); mat[1, ] <- prev     # initialize the markov chain
     for (i in 2:n) {
-      prev[1] <- conditional2(prev[2])   # sample from full conditional
-      prev[2] <- conditional2(prev[1])
+      prev[1] <- cond_prob2(prev[2],rho)   # sample from full conditional
+      prev[2] <- cond_prob2(prev[1],rho)
       mat[i,] <- prev
     }
     mat
@@ -221,8 +220,133 @@ One restriction in HMC is that the parameter space must be continuous and differ
 
 The tuning parameters in HMC include the step size and the number of sub-steps between HMC draws, known as 'leap-frog' steps. There is a widely used algorithm called the 'no U-turn sampler' (NUTS) that is often used to define these tuning parameters in practice. 
 
-The following code is borrowed from https://jonnylaw.rocks/posts/2019-07-31-hmc/. 
+The following code is modified from https://jonnylaw.rocks/posts/2019-07-31-hmc/. 
 Law, Jonny. 2019. “Hamiltonian Monte Carlo in R.” July 31, 2019.
+
+#### Ancillary functions for HMC
+
+First of all, you will not in general be writing MCMC code from scratch, never mind building your own HMC samplers (probably!). The goal of this demonstration is understanding, not providing code for use in "real" analysis.
+
+First, we need a function that evaluates the un-normalized log posterior density at any point in our 2D space:
+
+```{r}
+
+rho = 0.9  # set correlation as a global constant
+
+  # compute the unnormalized log posterior
+log_posterior <- function(x) dnorm(x[1],log=T) + dnorm(x[2],rho*x[1],1-rho^2,log=T)
+
+```
+
+Here, x is a 2D vector. We are treating rho as a fixed quantity here. Note that it would be easy to compute a log posterior function that included some data. We would just need to add the log likelihood to the log prior! In this example, we are essentially sampling from a bivariate prior (thinking of each of the two dimensions as a free parameter). 
+
+Then we need a function that evaluates the gradient of the log posterior at any point in parameter space. The gradient is the first derivative of the un-normalized log posterior with respect to the k free parameters. Geometrically, the gradient is a vector field of dimension k that points in the direction of steepest ascent (ie, where the posterior is increasing most rapidly). This function outputs a vector. 
+
+```{r}
+
+library(pracma)   # load package capable of computing gradient numerically at any point in parameter space
+
+   # compute the gradient of the log posterior density function at a point x
+gradient <- function(x) pracma::grad(log_posterior,x)
+
+```
+
+Technically we don't need to use numerical methods to compute the gradient here- there is an analytical solution. But generally we will rely on numerical algorithms for complex posterior surfaces. 
+
+Then we write a function that implements the "leapfrog" step. Multiple leapfrog steps constitute a single HMC iteration. This function takes: 
+
+* gradient -- see above
+* step_size -- A tuning parameter representing how far to move in parameter space
+* position -- the current position in parameter space (where the gradient is to be evaluated)
+* momentum -- a vector (length k) representing the current momentum of the sampler in parameter space. This vector helps to "push" our sampler through space, fully exploring the space rather than simply floating up to the posterior mode. 
+* d is the number of parameters-- i.e., the dimension of the space we are exploring
+
+This function outputs a row vector with dx2 columns representing first position and then momenum. 
+
+```{r}
+# Ancillary code for HMC ----------
+  # modified from https://jonnylaw.rocks/posts/2019-07-31-hmc/
+
+leapfrog_step <- function(gradient, step_size, position, momentum, d) {
+  momentum1 <- momentum + gradient(position) * 0.5 * step_size
+  position1 <- position + step_size * momentum1
+  momentum2 <- momentum1 + gradient(position1) * 0.5 * step_size
+  matrix(c(position1, momentum2), ncol = d*2)
+}
+
+```
+
+This next function simply runs a set of l leapfrog steps. This completes one full sample from the HMC algorithm. This function also returns a matrix with k rows and 2 columns (position and momentum). 
+
+```{r}
+
+leapfrogs <- function(gradient, step_size, l, position, momentum, d) {
+  for (i in 1:l) {
+    pos_mom <- leapfrog_step(gradient, step_size, position, momentum, d)
+    position <- pos_mom[seq_len(d)]   # position is the first d elements of the row vector
+    momentum <- pos_mom[-seq_len(d)] # momentum is the final d elements of the row vector
+  }
+  pos_mom
+}
+
+```
+
+This next function computes the log of the acceptance probability of the full jump. We assume the momentum follows a standard normal distribution. 
+
+```{r}
+log_acceptance <- function(propPosition,
+                           propMomentum,
+                           position,
+                           momentum,
+                           log_posterior) {
+  log_posterior(propPosition) + sum(dnorm(propMomentum, log = T)) - 
+    log_posterior(position) - sum(dnorm(momentum, log = T))
+}
+```
+
+We're getting there. This function does one full HMC step. We give it our log_posterior and gradient functions, along with our step size, number of leapfrog steps, and a starting position.
+
+```{r}
+hmc_step <- function(log_posterior, gradient, step_size, l, position) {
+  d <- length(position)
+  momentum <- rnorm(d)    # initial momentum- a kick to get the sampler going
+  pos_mom <- leapfrogs(gradient, step_size, l, position, momentum, d)   # position and momentum vectors  
+  propPosition <- pos_mom[seq_len(d)]    # separate into position and momentum vectors
+  propMomentum <- pos_mom[-seq_len(d)]
+  a <- log_acceptance(propPosition, propMomentum, position, momentum, log_posterior)
+  if (log(runif(1)) < a) {    # this is a metropolis procedure! 
+    propPosition
+  } else {
+    position
+  }
+}
+```
+
+Note that we don't care about momentum- we only save the position information.
+
+Finally, here's a function to implement the full HMC algorithm:
+
+```{r}
+hmc <- function(log_posterior, gradient, step_size, l, initP, m) {
+  out <- matrix(NA_real_, nrow = m, ncol = length(initP))   # initialize the output matrix
+  out[1, ] <- initP   # get the sampler started
+  for (i in 2:m) {
+    out[i, ] <- hmc_step(log_posterior, gradient, step_size, l, out[i-1,]) # one HMC step
+  }
+  out  # fully filled-in matrix of steps in parameter space
+}
+```
+
+Let's try it out!
+
+```{r}
+# Test the HMC sampler ------------------
+
+bvn_hmc <-hmc(log_posterior, gradient, .2, 10, c(0,0), 1000)  
+vis_mcmc2(bvn_hmc)
+```
+Of course, we would need to tune our step size and number of leapfrog steps to get an optimized sampler. But hopefully this gives you the idea!!
+
 
 #### START HERE
 
