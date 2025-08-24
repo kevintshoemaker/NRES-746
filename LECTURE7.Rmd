@@ -10,6 +10,10 @@ output:
 ---
 
 ```{r setup, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(cmdstanr)
+library(bayesplot)
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
@@ -348,16 +352,13 @@ vis_mcmc2(bvn_hmc)
 Of course, we would need to tune our step size and number of leapfrog steps to get an optimized sampler. But hopefully this gives you the idea!!
 
 
-#### START HERE
-
-
 Okay, let's try it for a non-trivial problem, like the Myxomatosis example from the Bolker book!
 
 ## Myxomatosis revisited (again!)
 
 ```{r}
 
-# MCMC implementation of the Myxomatosis example from the Bolker book --------------
+# Using MCMC to fit the Myxomatosis example from the Bolker book --------------
 
 library(emdbook)
 
@@ -385,110 +386,56 @@ Recall that the 2-D (log) likelihood surface looks something like this:
 
 # define 2-D parameter space!
 
-shapevec <- seq(3,100,by=0.1)   
-scalevec <- seq(0.01,0.5,by=0.001)
+shapevec <- seq(1,150,length=200)        # divide parameter space into tiny increments
+ratevec <- seq(0.5,30,length=200)
 
 # define the likelihood surface  -------------
 
-GammaLogLikelihoodFunction <- function(params){
-  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))
-}
-surface2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
-
-newparams <- c(shape=50,scale=0.2)
-for(i in 1:length(shapevec)){
-  newparams['shape'] <- shapevec[i]
-  for(j in 1:length(scalevec)){
-    newparams['scale'] <- scalevec[j]
-    surface2D[i,j] <- GammaLogLikelihoodFunction(newparams) 
-  }
+loglik <- function(pars){
+  sum(dgamma(Myx$titer,shape=pars['shape'],rate=pars['rate'],log = T))
 }
 
-# Visualize the likelihood surface
+parmsurface <- expand.grid(shapevec,ratevec); colnames(parmsurface) <- c("shape","rate")
+parmsurface$ll <- sapply(1:nrow(parmsurface), function(t) loglik(unlist(parmsurface[t,1:2]))  )
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+library(ggplot2)
+ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the log likelihood surface
+  geom_raster(aes(fill=ll)) +
+  scale_fill_gradient(limits=c(-150,-37)) +
+  geom_contour(aes(z=ll),breaks=c(-45,-40) ,lwd=1.2)
 
 ```
 
 
 Here is an implementation of the M-H algorithm to find the joint posterior distribution!
 
-First, we need a likelihood function (our old friend!)- this time, we will return real probabilities-- NOT log-transformed probabilities 
+First, we need a prior distribution for our parameters! Let's assign relatively flat univariate priors for both of our parameters. In this case, we will assign a $gamma(shape=0.001,rate=0.001)$ for both parameters (which has a mean of 1 and very large variance- it is an uninformative prior... ):
 
 ```{r}
 
-# Write a non-log-transformed likelihood function ------------
-
-GammaLikelihoodFunction <- function(params){
-  prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=F))   
+# Function for returning the log prior probability density for any 2D parameter vector 
+logprior <- function(params){
+  dgamma(params['shape'],0.001,0.001,log=T)  +  
+  dgamma(params['rate'],0.001,0.001,log=T)
 }
 
-  # and here's the log likelihood function
-GammaLogLikelihoodFunction <- function(params){
-  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))   
-}
+# curve(dgamma(x,shape=0.001,rate=0.001),3,100)   # visualize gamma
+# params <- c(shape=40,rate=7)    # test function
+# logprior(params)
 
-params <- c(shape=40,scale=0.15) 
-params
-GammaLikelihoodFunction(params)
-GammaLogLikelihoodFunction(params)
+parmsurface$pr <- sapply(1:nrow(parmsurface), function(t) logprior(unlist(parmsurface[t,1:2]))  )
+ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the log likelihood surface
+  geom_raster(aes(fill=pr)) +
+  scale_fill_gradient(limits=c(-25,-13.14)) 
 
 ```
+From this image you can tell that the prior is very uninformative here- the likelihood will easily overwhelm any information in this prior distribution. 
 
-Then, we need a prior distribution for our parameters! Let's assign relatively flat priors for both of our parameters. In this case, let's assign a $gamma(shape=0.001,scale=1000)$ for both parameters (mean of 1 and very large variance):
+Note that we are also assuming that the shape and rate are *independent* in the prior (multiplicative probabilities for the joint prior). 
 
-```{r}
+However, this does not impose the same assumption on the posterior- parameter correlations in the likelihood can and will be reflected in the posterior distribution (driven by the likelihood surface, just like the Hessian matrix imposed correlations among parameters in maximum likelihood inference). 
 
-# Function for returning the prior probability density for any point in parameter space 
-
-GammaPriorFunction <- function(params){
-  prior <- c(shape=NA,scale=NA)
-  prior['shape'] <- dgamma(params['shape'],shape=0.001,scale=1000)
-  prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000)
-  # prior['shape'] <- dunif(params['shape'],3,100)        # alternative: could use uniform prior!
-  # prior['scale'] <- dunif(params['scale'],0.01,0.5)
-  return(prod(prior))
-}
-
-GammaLogPriorFunction <- function(params){
-  prior <- c(shape=NA,scale=NA)
-  prior['shape'] <- dgamma(params['shape'],shape=0.001,scale=1000,log=T)
-  prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000,log=T)
-  # prior['shape'] <- dunif(params['shape'],3,100)        # alternative: could use uniform prior!
-  # prior['scale'] <- dunif(params['scale'],0.01,0.5)
-  return(sum(prior))
-}
-
-curve(dgamma(x,shape=0.001,scale=1000),3,100)
-
-params <- c(shape=40,scale=0.15) 
-params
-GammaPriorFunction(params)
-
-prior2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
-
-newparams <- c(shape=50,scale=0.2)
-for(i in 1:length(shapevec)){
-  newparams['shape'] <- shapevec[i]
-  for(j in 1:length(scalevec)){
-    newparams['scale'] <- scalevec[j]
-    prior2D[i,j] <- GammaPriorFunction(newparams) 
-  }
-}
-
-# Visualize the prior likelihood surface
-
-image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.000000001,0.001),col=topo.colors(12))
-#contour(x=shapevec,y=scalevec,z=prior2D,levels=c(-30,-40,-80,-500),add=T)
-
-
-
-```
-
-Note that we are also assuming that the shape and scale are *independent* in the prior (multiplicative probabilities for the joint prior). However, this does not impose the same assumption on the posterior- parameter correlations in the likelihood can and will be reflected in the posterior distribution. 
-
-Then, we need a function that can compute the ratio of posterior probabilities for any given jump in parameter space. Because we are dealing with a *ratio* of posterior probabilities, _we do NOT need to compute the normalization constant_. 
+For Metropolis-Hastings MCMC (a simple and general, yet relatively inefficient, method), we need a function that can compute the ratio of posterior probabilities for any given jump in parameter space. Because we are dealing with a *ratio* of posterior probabilities, _we do NOT need to compute the normalization constant_. 
 
 Without the need for a normalization constant, we just need to compute the ratio of weighted likelihoods (that is, the likelihood weighted by the prior)
 
@@ -496,67 +443,44 @@ Without the need for a normalization constant, we just need to compute the ratio
 
 # Function for computing the ratio of posterior densities -----------------
 
-PosteriorRatio <- function(oldguess,newguess){
-  oldLik <- max(1e-90,GammaLikelihoodFunction(oldguess))   # compute likelihood and prior density at old guess
-  oldPrior <- max(1e-90,GammaPriorFunction(oldguess))
-  newLik <- GammaLikelihoodFunction(newguess)             # compute likelihood and prior density at new guess
-  newPrior <- GammaPriorFunction(newguess)
-  return((newLik*newPrior)/(oldLik*oldPrior))          # compute ratio of weighted likelihoods
+eval_jump <- function(old,new){
+  oldnum <- loglik(old) + logprior(old)   # compute likelihood and prior density at old guess
+  newnum <- loglik(new) + logprior(new)              # compute likelihood and prior density at new guess
+  c(diff= unname(newnum-oldnum) )         # compute ratio of weighted likelihoods (log scale)
 }
 
-PosteriorRatio2 <- function(oldguess,newguess){
-  oldLogLik <- GammaLogLikelihoodFunction(oldguess)   # compute likelihood and prior density at old guess
-  oldLogPrior <- GammaLogPriorFunction(oldguess)
-  newLogLik <- GammaLogLikelihoodFunction(newguess)             # compute likelihood and prior density at new guess
-  newLogPrior <- GammaLogPriorFunction(newguess)
-  return(exp((newLogLik+newLogPrior)-(oldLogLik+oldLogPrior)))          # compute ratio of weighted likelihoods
-}
-
-oldguess <- params
-newguess <- c(shape=39,scale=0.15)
-
-PosteriorRatio(oldguess,newguess)
-PosteriorRatio2(oldguess,newguess)
+params <- c(shape=37,rate=6)
+old <- params    # test function
+new <- c(shape=39,rate=7)
+eval_jump(old,new)
 
 ```  
 
-Then we need a function for making new guesses, or jumps in parameter space:
+For M-H, we also need a function for making new guesses, or jumps in parameter space- this is our 'proposal distribution'.
 
 ```{r}
 
 # Define proposal distribution --------------------------
-    #for jumps in parameter space (use normal distribution)!
+    # use bivariate normal distribution to make a guess
+
+jump_vcv <- matrix(c(1,0.3,0.3,0.4),ncol=2)    # in real life, we would tune these parameters to optimize our sampler
 
      # function for making new guesses
-newGuess <- function(oldguess){
-  sdshapejump <- 3 #4
-  sdscalejump <- 0.05
-  corjump <- -0.6
-  vcv <- diag(2)*c(sdshapejump^2,sdscalejump^2)
-  vcv[2,1] <- vcv[1,2] <- corjump*sqrt(sdshapejump^2*sdscalejump^2)
-  newguess <- mvtnorm::rmvnorm(1,oldguess,vcv)[1,] # c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
-  # newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
-  newguess <- ifelse(newguess<0.001,0.001,newguess)
-  return(newguess)
+make_guess <- function(old){
+  newguess <- mvtnorm::rmvnorm(1,old,jump_vcv)[1,] 
+  ifelse(newguess<0.001,0.001,newguess)   # make sure we don't get any negative guesses. This induces an asymmetry, but we won't worry about that right now as it is unlikely to influence our MCMC samples
 }
-  # set a new "guess" near to the original guess
-
-newGuess(oldguess=params)   
-newGuess(oldguess=params)
-newGuess(oldguess=params)
+params
+make_guess(params)     # set a new "guess" near to the original guess
 
 ```
-
-Now we are ready to implement the Metropolis-Hastings MCMC algorithm:
-
-
-We need a starting point:
+We also need a starting point:
 
 ```{r}
 
 # Set a starting point in parameter space -------------------
 
-startingvals <- c(shape=75,scale=0.28)    # starting point for the algorithm
+startingvals <- c(shape=75,rate=4)    # starting point for the algorithm
 
 ```
 
@@ -566,46 +490,42 @@ Let's play with the different functions we have so far...
 
 # Try our new functions  ------------------
 
-startingvals
-newguess <- newGuess(startingvals)    # take a jump in parameter space
+newguess <- make_guess(startingvals)    # take a jump in parameter space
 newguess
 
-PosteriorRatio2(startingvals,newguess)   # difference in posterior ratio
+eval_jump(startingvals,newguess)   # difference in posterior ratio
 
 ```
-
-
-Now let's look at the Metropolis-Hastings routine:
+Now let's visualize the Metropolis-Hastings routine:
 
 ```{r}
 
 # Visualize the Metropolis-Hastings routine: ---------------
 
-chain.length <- 11
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-  }else{
-    guesses[counter,] <- oldguess 
+mh <- function(n,st){    # function for doing M-H MCMC
+  chain <- matrix(nrow=n,ncol=length(st),dimnames=list(1:n,names(st)))
+  chain[1,] <- startingvals
+  for(i in 2:n){
+    prop <- make_guess(chain[i-1,])    # proposal jump
+    prob_accept <- min(1,exp(eval_jump(chain[i-1,],prop)) )
+    if(prob_accept >= runif(1)){    # choose the jump in accordance with its relative probability under the posterior
+      chain[i,] = prop
+    }else{
+      chain[i,] <- chain[i-1,]  
+    }
   }
-  counter=counter+1
+  chain
 }
 
-# visualize!
+chain= mh(100,startingvals)
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
+# visualize!
+parmsurface$post <- parmsurface$ll + parmsurface$pr
+post_plot = ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the log likelihood surface
+  geom_raster(aes(fill=post)) +
+  scale_fill_gradient(limits=c(-150,-57)) +
+  geom_contour(aes(z=post),breaks=c(-65,-59) ,lwd=1.2)
+post_plot +  geom_path(data=chain,aes(x=shape,y=rate),lwd=1.2,col="white")
 
 ```
 
@@ -617,32 +537,8 @@ Let's run it for longer...
 
 # Get more MCMC samples --------------
 
-chain.length <- 1000
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-  }else{
-    guesses[counter,] <- oldguess 
-  }
-  counter=counter+1
-}
-
-# visualize!
-
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
+chain= mh(1000,startingvals)
+post_plot +  geom_path(data=chain,aes(x=shape,y=rate),lwd=1.2,col="white")
 
 ```
 
@@ -653,32 +549,8 @@ How about for even longer??
 
 # And more... -------------------
 
-chain.length <- 10000
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-  }else{
-    guesses[counter,] <- oldguess 
-  }
-  counter=counter+1
-}
-
-# visualize!
-
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
+chain= mh(10000,startingvals)
+post_plot +  geom_path(data=chain,aes(x=shape,y=rate),lwd=1.2,col="white")
 
 ```
 
@@ -692,85 +564,58 @@ Now, let's look at the chain for the "shape" parameter
 
 ## Shape parameter
 
-plot(1:chain.length,guesses[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:nrow(chain),chain[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 
 ```
 
-And for the scale parameter...
+And for the rate parameter...
 
 ```{r}
 
-## Scale parameter
+## Rate parameter
 
-plot(1:chain.length,guesses[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+plot(1:nrow(chain),chain[,'rate'],type="l",main="rate parameter",xlab="iteration",ylab="rate")
 
 ```
 
-Can we say that these chains have converged on the posterior distribution for the shape parameter??
+Can we say that these chains have converged on the posterior distribution??
 
-
-First of all, the beginning of the chain "remembers" the starting value, and is therefore not a stationary distribution. We need to remove the first part of the chain, called the **'burn-in'**.
+First of all, the beginning of the chain "remembers" the starting value, and is therefore not a stationary distribution. We need to remove the first part of the chain, called the 'burn-in', or 'warm-up' period.
 
 ```{r}
 
 # Remove "burn-in" (allow MCMC routine some time to get to the posterior) --------------
 
-burn.in <- 1000
-MCMCsamples <- guesses[-c(1:burn.in),]
+chain <- chain[-c(1:1000),]    # remove first 1000 sample
 
-chain.length=chain.length-burn.in
-plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
-plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+plot(1:nrow(chain),chain[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:nrow(chain),chain[,'rate'],type="l",main="rate parameter",xlab="iteration",ylab="rate")
 
 ```
 
-
-But it still doesn't look all that great. Let's run it for even longer, and see if we get something that looks more like a proper random number generator (white noise)...
+But it still doesn't look all that great. Let's tune our proposal distribution, and run the chain for even longer, and see if we get something that looks more like a proper random number generator (white noise)...
 
 
 ```{r}
+
+# Change the VCV for proposal distribution
+
+jump_vcv <- matrix(c(1.1,0.7,0.7,.8),ncol=2) 
 
 # Try again- run for much longer ---------------------
 
-chain.length <- 100000
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-  }else{
-    guesses[counter,] <- oldguess 
-  }
-  counter=counter+1
-}
-
-# visualize!
-
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
+chain= mh(100000,startingvals)   # takes ~10 seconds to run
 
 ```
 
-
-Let's first remove the first 5000 samples as a burn-in
+Let's first remove the first 25000 samples as a burn-in
 
 ```{r}
 
-# Use longer "burn-in" ------------------
+# Use longer "burn-in" and thin ------------------
 
-burn.in <- 25000
-MCMCsamples <- guesses[-c(1:burn.in),]
-chain.length=chain.length-burn.in
+chain <- chain[-c(1:25000),]    # remove first 25000 sample
+chain <- chain[seq(1,nrow(chain),5),]   # keep every fifth sample
 
 ```
 
@@ -779,242 +624,159 @@ Now, let's look at the chains again
 
 ```{r}
 
-plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
-plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+plot(1:nrow(chain),chain[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:nrow(chain),chain[,'rate'],type="l",main="rate parameter",xlab="iteration",ylab="rate")
 
 ```
 
-
-When evaluating these trace plots, we are hoping to see a "stationary distribution" that looks like white noise. This trace plot looks like it might have a little autocorrelation. One way to "fix" this is to thin the MCMC samples:
+When evaluating these trace plots, we are hoping to see a "stationary distribution" that looks like white noise. This trace plot still has high autocorrelation. We would need to tune our proposal distribution even more to do a better job. 
 
 ```{r}
 
-# "thin" the MCMC samples  -----------------------
-
-thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=10),]
-plot(1:nrow(thinnedMCMC),thinnedMCMC[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
-plot(1:nrow(thinnedMCMC),thinnedMCMC[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+acf(chain[,"shape"],lag.max=500)
 
 ```
 
-
-
-Now we can examine our posterior distribution!
+Let's examine our posterior distribution, despite the less-than-perfect performance of our MCMC algorithm.
 
 ```{r}
 
 # Visualize the posterior!
 
-plot(density(thinnedMCMC[,'scale']),main="scale parameter",xlab="scale")
-plot(density(thinnedMCMC[,'shape']),main="shape parameter",xlab="shape")
+plot(density(chain[,'rate']),main="rate parameter",xlab="rate")
+plot(density(chain[,'shape']),main="shape parameter",xlab="shape")
 
 ```
 
 And we can visualize as before.
 
- 
 ```{r}
 
 # More visual posterior checks... -----------------
 
-par(mfrow=c(3,2))
-plot(thinnedMCMC,col=1:10000)
-plot(thinnedMCMC,type="l")
-plot(ts(thinnedMCMC[,1]))
-plot(ts(thinnedMCMC[,2]))
-hist(thinnedMCMC[,1],40)
-hist(thinnedMCMC[,2],40)
-par(mfrow=c(1,1))
+vis_mcmc2(chain)
 
 ```
 
-Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most efficient- and it can be very difficult to develop proposal distributions for multi-dimensional parameter space. The **Gibbs sampler** tends to be a more effective sampler for multi-dimensional joint posterior distributions. In lab we will play around with Gibbs samplers, mostly using a modeling language called **BUGS** (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling). 
+Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most efficient- and it can be very difficult to develop good proposal distributions for multidimensional parameter space. 
 
-NOTE: BUGS implementations (e.g., JAGS) actually tend to use a combination of M-H and Gibbs sampling! 
+The **Gibbs sampler** tends to be a more effective sampler for multi-dimensional joint posterior distributions. Gibbs samplers can be implemented in the **BUGS** language (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling) -- one of the first widely adopted probabilistic programming languages (PPLs). 
 
-NOTE: M-H and Gibbs samplers aren't the only MCMC routines out there. For example, the popular program 'stan' uses a modification of M-H sampling called 'Hamiltonian Monte Carlo", which tends to explore parameter space more efficiently 
+BUGS implementations (e.g., JAGS, which is still widely used in ecology and environmental science) actually use a combination of M-H and Gibbs sampling! 
 
-
-
-
-### Back to Myxomatosis!
-
-#### Aside: the BUGS language
-
-Finally, let's build a Gibbs sampler for our favorite Myxomatosis example! To do this, we will use the BUGS language (as implemented in JAGS), to help us!
-
-The BUGS language looks similar to R, but there are several key differences:  
-
-* First of all, BUGS is a compiled language, so the order of operations in your code doesn't really matter
-* BUGS is not vectorized- you need to use FOR loops for just about everything!
-* Several probability distributions are parameterized very differently in BUGS. Notably, the normal distribution is parameterized with a mean and a precision ($1/Variance$).
+The popular open-source PPL 'stan' uses Hamiltonian Monte Carlo to explore multidimensional parameter space much more efficiently. 
 
 
-Here is the myxomatosis example, as implemented in the BUGS language:
+## Myxomatosis in stan!
 
-NOTE: this code looks a little like R, but don't be confused- this is not R! 
+Finally, let's build a sampler for our favorite Myxomatosis example! To do this, we will use the 'stan' language. To run stan, we will use 'command' stan via package 'cmdstanr'. 
+
+To get started with cmdstanr, follow the instructions here: https://mc-stan.org/cmdstanr/articles/cmdstanr.html. It should just take a couple minutes. We will work with stan in lab 4. 
+
+The stan language looks a bit like R, but there are many key differences as well.   
+
+Here is the myxomatosis example, as implemented in the PPL 'stan':
 
 ```
+
+data {
+  int<lower=0> N;
+  vector[N] titer;
+}
+
+parameters {
+  real<lower=0> shape;
+  real<lower=0> rate;
+}
 
 model {
-  
-  #############
-  # LIKELIHOOD
-  ############
-  for(obs in 1:n.observations){
-    titer[obs] ~ dgamma(shape,rate)
-  }
-  
-  #############
-  # PRIORS
-  ############
-  shape ~ dgamma(0.001,0.001)
-  scale ~ dgamma(0.001,0.001)
-  rate <- 1/scale   # convert the scale parameter to a "rate" for BUGS
+  shape ~ gamma(0.001,0.001);   // prior on shape
+  rate ~ gamma(0.001,0.001);   // prior on rate
+  titer ~ gamma(shape, rate);   // likelihood
 }
 
 ```
 
-We can use the "cat" function in R to write out this model to a text file in your working directory:
+Note that we use double forward slash to indicate comments in stan. 
+
+You first need to save this file to your working directory using the file extension ".stan". 
+
+I named my file "myx.stan". 
+
+Now that we have the stan model packaged in a text file, we compile the stan model (stan is a compiled language):
 
 ```{r}
 
-# Myxomatosis example in BUGS modeling language ---------------
-
-# Write the BUGS model to file
-
-cat("
-  model {
-    
-    #############
-    # LIKELIHOOD
-    ############
-    for(obs in 1:n.observations){
-      titer[obs] ~ dgamma(shape,rate)
-    }
-    
-    #############
-    # PRIORS
-    ############
-    shape ~ dgamma(0.001,0.001)
-    scale ~ dgamma(0.001,0.001)
-    rate <- 1/scale
-  }
-", file="BUGSmodel.txt")
-
+library(cmdstanr)
+mod1 <- cmdstan_model("myx.stan") # Compile stan model
 
 ```
 
-Now that we have the BUGS model packaged as a text file, we bundle the data into a single list object that contains all the relevant data referenced in the BUGS code:
+
+bundle the data into a single list object that contains all the relevant data referenced in the stan code:
 
 ```{r}
 
 # Encapsulate the data into a single "list" object ------------------
 
-myx.data.for.bugs <- list(
-  titer = Myx$titer,
-  n.observations = length(Myx$titer)
+stan_data <- list(
+    N = nrow(Myx),
+    titer = Myx$titer
 )
 
-myx.data.for.bugs
-
 ```
 
-Then we need to define the initial values for all parameters. It is convenient to define this as a function, so that each MCMC chain can be initialized with different starting values. This will become clear later!
+
+Now we can run our compiled sampler!
+
+```{r, warning=FALSE}
+
+# Run stan  ------------------
+
+fit1 <- mod1$sample(
+  data = stan_data,
+  chains = 4,
+  iter_warmup = 200,
+  iter_sampling = 500
+)
+
+fit1$summary()
+
+samples <- fit1$draws(format="draws_df")
+bayesplot::mcmc_trace(samples,"shape")
+bayesplot::mcmc_trace(samples,"rate")
+
+```
+A couple things you might notice right off the bat: the HMC chain looks much less autocorrelated than our custom M-H sampler. This will generally be the case, since HMC is much more efficient than M-H in general. Also, we only ran 500 iterations, unlike the 100,000 iterations of the M-C algorithm.  
 
 ```{r}
-
-# Function for generating random initial values --------------
-
-init.vals.for.bugs <- function(){
-  list(
-    shape=runif(1,20,100),
-    scale=runif(1,0.05,0.3)
-  )
-}
-
-init.vals.for.bugs()
-init.vals.for.bugs()
-init.vals.for.bugs()
-
+acf(samples$shape,lag.max=100)
 ```
-
-Now we can call JAGS!
-
-```{r}
-
-# Run JAGS!!!!  ------------------
-
-#library(R2jags)
-library(jagsUI)
-
-library(coda)
-
-params.to.store <- c("shape","scale")
-
-jags.fit <- jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=5000,n.chains = 3,n.adapt = 100,n.burnin = 0)
-
-jagsfit.mcmc <- jags.fit$samples   # extract "MCMC" object
-
-summary(jagsfit.mcmc)
-
-plot(jagsfit.mcmc)
-
-```
+The difference in autocorrelation is remarkable, and illustrates the advantages of HMC. 
 
 ### Assessing convergence
 
-This is probably a good time to talk about convergence of MCMC chains on the stationary posterior distribution. The above plots don't look great. We want to see white noise, and we want to see chains that look similar to one another. 
+This is probably a good time to talk about convergence of MCMC chains on the stationary posterior distribution. The HMC plots look pretty good: we want to see white noise, and we want to see chains that look similar to one another. 
 
 The first check is just visual- we look for the following to assess convergence:
 
 * The chains for each parameter, when viewed as a "trace plot" should look like white noise (fuzzy caterpillar!), or similar.
 * Multiple chains with different starting conditions should look the same!! 
 
-One way we might be able to do a better job here is to run the chains for longer and discard the initial samples as a *burn in*!
+#### The Gelman-Rubin diagnostic (R-hat)
 
-We can also try to reduce serial autocorrelation by thinning our chain- here we retain only 1 out of every 100 samples.
-
-```{r}
-
-# Run the chains for longer! -----------------
-
-jags.fit <- jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,
-                     n.iter = 100000,n.chains = 3,n.adapt = 1000,n.burnin = 10000,
-                     n.thin=100,parallel=T )
-
-jagsfit.mcmc <- jags.fit$samples   # convert to "MCMC" object (coda package)
-
-summary(jagsfit.mcmc)
-
-plot(jagsfit.mcmc)
-
-```
-
-Just visually, this looks better. Now we can use some more quantitative convergence metrics. 
-
-#### The Gelman-Rubin diagnostic
-
-One simple and intuitive convergence diagnostic is the *Gelman-Rubin diagnostic*, which assesses whether chains are more different from one another than they should be on the basis of simple Monte Carlo error:
+One simple and intuitive convergence diagnostic is the *Gelman-Rubin diagnostic*, also known as the "potential scale reduction factor" or "Rhat" which assesses whether chains are more different from one another than they should be on the basis of simple Monte Carlo error. The Rhat statistic is reported in the stan summary table:
 
 ```{r}
 
 # Run convergence diagnostics  ------------------
-
-gelman.diag(jagsfit.mcmc)
+fit1$summary()
 
 ```
 
-In general, values of 1.1 or higher are considered poorly converged. Compute the G-R diagnostic for all free parameters in your model. If your tests fail, you should try running longer chains!
+In general, we like to see values of 1.01 or lower - so we might consider running our stan model for a bit longer. 
 
-So this model looks pretty good!!
-
-
-
-## Useful links for MCMC
-
-[Darren Winkinson's research blog](https://darrenjw.wordpress.com/2011/07/16/gibbs-sampler-in-various-languages-revisited/)   
-
+We will play around with stan much more in lab!.
 
 [--go to next lecture--](LECTURE8.html) 
 
