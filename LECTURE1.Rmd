@@ -1,5 +1,5 @@
 ---
-title: "Why focus on algorithms?"
+title: "Why Simulation?"
 author: "NRES 746"
 date: "Fall 2025"
 output: 
@@ -12,6 +12,7 @@ output:
 ```{r setup, include=FALSE}
 
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+library(ggplot2)
 
 ```
 
@@ -24,11 +25,11 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
 
-**NOTE:** if you'd like to follow along with the R-based demo in class, [click here](LECTURE1.R) for an R-script that contains all of the code blocks in this lecture.   
+To follow along with the R-based demo in class, [click here](LECTURE1.R) for an R-script that contains all of the code blocks in this lecture.   
 
-## Brute force, do-it-yourself statistics: a brief demonstration
+## Do-it-yourself statistics: a brief demonstration
 
-### Standard z-test
+### Z-test
 
 Here is a made-up data set. 
 
@@ -53,32 +54,38 @@ Finally, our (alternative) hypothesis is that the fish raised on the new diet wi
 
 Let's read this information into R:
 
-```{r}
+```{r warning=FALSE}
 
-# SALMON EXAMPLE (made-up!) ------------------
+# SALMON EXAMPLE ------------------
+
+   #  NOTE: these data are made up!
 
 pop_mean = 4.5
 pop_sd = 0.9
 
 mysample = c(3.14,3.27,2.56,3.77,3.34,4.32,3.84,2.19,5.24,3.09)
-
-myN <- length(mysample)     # determine sample size   
+N <- length(mysample)     # determine sample size   
 
 mysamplemean = mean(mysample)     # note the equal sign as alternative assignment operator
 
 ## visualize the population of conventional-raised salmon  -------------------
 
-curve(dnorm(x,pop_mean,pop_sd),0,10,
-      xlab="Body mass (kg)",ylab="Probability density",lwd=2)
+library(ggplot2)
+g1 = ggplot() +
+  stat_function(fun = dnorm,
+                args = list(mean = pop_mean, sd = pop_sd),
+                color = "red",
+                linewidth = 2) +
+  xlim(c(0,10)) + ylim(c(0,.7)) +
+  labs(x="Body mass (kg)",y="Prob. Density") +
+  theme_classic()
+g1
 
-### now overlay this on the observed data  --------------------
+### now overlay the observed data  --------------------
 
-hist(mysample,freq=F,
-     xlab="Body mass (kg)",ylab="Probability density",main="",
-     xlim=c(0,10))
-curve(dnorm(x,pop_mean,pop_sd),0,10,
-      col="red",lwd=2,add=T)
-abline(v=mysamplemean,col="blue",lwd=3)
+g1 +
+  geom_histogram(aes(x=mysample,y=after_stat(density)),bins=11,fill="darkgreen",alpha=0.5) +
+  geom_vline(xintercept = mysamplemean,col="blue",lwd=3)
 
 ```
 
@@ -105,11 +112,21 @@ Here's an alternative z-test performed using base R:
 
 # alternative z-test in base R (no packages)  -----------------------
 
-pop_se = pop_sd/sqrt(myN)   # standard deviation for sample means drawn from the null population
+pop_se = pop_sd/sqrt(N)   # standard deviation for sample means drawn from the null population
 
-curve(dnorm(x,pop_mean,pop_se),0,10,     # visualize the sampling distribution under null hypothesis
-      xlab="Body mass (kg)",ylab="Probability density")     # versus the observed sample mean
-abline(v=mysamplemean,col="blue",lwd=3)
+g2 = ggplot() +
+  stat_function(fun = dnorm,
+                args = list(mean = pop_mean, sd = pop_sd),
+                color = "red", lty=2,
+                linewidth = 1) +
+  stat_function(fun = dnorm,
+                args = list(mean = pop_mean, sd = pop_se),
+                color = "darkgreen", lty=1,
+                linewidth = 2) +
+  xlim(c(0,10)) +
+  labs(x="Body mass (kg)",y="Prob. Density") +
+  theme_classic()
+g2 + geom_vline(xintercept = mysamplemean,col="blue",lwd=3)
 
 p.val = pnorm(mysamplemean,pop_mean,pop_se)    # note that neither pop_mean or pop_se are random variables- they are known with certainty. Therefore we can use a normal distribution (the known data distribution under the null hypothesis, as specified above) to define the sampling error. 
 p.val     # this is the same as the p value from the z-test above...
@@ -134,7 +151,7 @@ Recall the difference between a "population" and a "sample" in statistics:
 
 Ultimately, we want to make inference about a **population**, but all we have to go on is the **sample**. So we compute **statistics** from our sample and use probabilistic reasoning to infer the extent to which our sample says something meaningful about the population-level **parameters**. Because we didn't observe the whole population (the sample typically represents only a small fraction of the total population), there's often substantial uncertainty about how well the sample statistic actually represents the population of interest- this is called **sampling uncertainty**. 
 
-Here, the *population* we are referring to is farm-raised Atlantic salmon raised on the new vegetarian diet. The population *parameter* we are interested in is the mean body mass of these salmon after one year (or alternatively, the difference in mass relative to fish raised on the standard diet). The *sample* refers to all salmon measured as part of this study. Finally, the *statistic* is the observed mean body mass of all individuals in our sample.     
+Here, the *population* we are referring to is farm-raised Atlantic salmon raised on the new vegetarian diet. The population *parameter* we are interested in is the mean body mass of these salmon after one year (or alternatively, the difference in mass relative to fish raised on the standard diet). The *sample* refers to all salmon measured as part of this study. Finally, the *statistic* is the sample mean, or x bar.     
 
 Let's start by simulating a *population* under the null hypothesis (no treatment effect):  
 
@@ -142,11 +159,11 @@ Let's start by simulating a *population* under the null hypothesis (no treatment
 
 # ALTERNATIVE ALGORITHMIC Z-TEST! ----------------------
 
-## Simulate the STATISTICAL POPULATION under the null hypothesis -----------------
+## Simulate the DATA POPULATION under the null hypothesis -----------------
 
 lots <- 1000000  # large number filling in for infinity 
 
-null_population <- rnorm(n=lots,mean=pop_mean,sd=pop_sd)    # the statistical "population" of interest (under null model w no 'treatment' effect)
+null_population <- rnorm(n=lots,mean=pop_mean,sd=pop_sd)    # the "population" of interest (potential data collected under null model with no 'treatment' effect)
 
 ```
 
@@ -156,7 +173,7 @@ Then we can draw a **sample** from the null distribution:
 
 ## Draw a SAMPLE from the null population ----------------
 
-null_sample <- sample(null_population,size=myN)    # use R's native "sample()" function to sample randomly from the null distribution
+null_sample <- sample(null_population,size=N)    # use R's native "sample()" function to sample randomly from the null distribution
 
 round(null_sample,2)
 null_statistic <- mean(null_sample)  
@@ -184,7 +201,7 @@ null_replicates <- 1000                 # set the number of replicate samples to
 null_statistics <- numeric(null_replicates)       # initialize a storage vector for sample means under the null hypothesis
 
 for(i in 1:null_replicates){            # for each replicate... 
-  null_sample <- sample(null_population,size=myN)      # draw a random sample of body masses assuming no treatment effect       
+  null_sample <- sample(null_population,size=N)      # draw a random sample of body masses assuming no treatment effect       
   null_statistics[i] <- mean(null_sample)           # compute and store the sampling distribution produced under the null hypothesis
 }
 
@@ -264,7 +281,7 @@ abline(v=ztest$Xbar,col="green",lwd=3)     # indicate the observed sample statis
 ```
 
 #### Take-home message
-The value of the brute-force approach to statistics is the flexibility. If we fully understand the problem we want to solve, we can build an algorithm to help solve it. 
+The value of the brute-force simulation approach to statistics is the flexibility. If we fully understand the problem we want to solve, we can build a simulation algorithm to help solve it. 
 
 We always need to be aware of the assumptions we are making, but when we build custom algorithms, we can easily "relax" these assumptions as needed. Only make the assumptions you are comfortable making. And when you write our own simulation routines, you are forced to code those assumptions explicitly!
 
@@ -274,7 +291,7 @@ For example:
 
 What if we don't want to make any assumptions about the process that generated the data? By the central limit theorem, the distribution of the sum of many i.i.d. random variables will be normally distributed- that's why we find bell shaped distributions so commonly in the real world!. However, many data-generating processes **don't** result in a normal distribution and we shouldn't blindly assume our data behave "nicely" and follow any normality assumptions. 
 
-A *permutation test* allows us to test hypotheses without making distributional assumptions like normality. This is a *nonparametric* (or distribution-free) test.
+A *permutation test* allows us to test hypotheses without making any distributional assumptions like the normality of our test statistic. This type of test is a *nonparametric* (or distribution-free) test.
 
 #### example: pygmy short-horned lizard
 
@@ -301,18 +318,16 @@ N <- nrow(df)     # determine sample size N
 
 # Get data in proper format
 
-reshape_df <- data.frame(                # "reshape" the data frame so each observation gets its own row (standard 'tidy' format)
-  Treatment = rep(factor(c("trtA","Control"),levels=c("Control","trtA")),each=N),
-  Mass = c(df$trtA,df$Control),
-  stringsAsFactors = T
-)
+library(tidyr)
+reshape_df <- df |> pivot_longer(everything(), names_to = "Treatment", values_to = "Mass")
+reshape_df$Treatment <- factor(reshape_df$Treatment,levels=c("Control","trtA"))
 
 plot(Mass~Treatment, data=reshape_df)    # explore/visualize the data
 
 ## Compute the observed difference between group means  -----------------
 
 observed_dif <-  diff(with(reshape_df,tapply(Mass,Treatment,mean)))
-
+observed_dif
 
 ```
 
@@ -341,7 +356,8 @@ reps <- 5000            # Number of replicates - another number representing inf
 null_difs <- numeric(reps)   # initialize storage variable
 for (i in 1:reps){			# For each replicate:		
   newGroup <- reshape_df$Treatment[sample(c(1:nrow(reshape_df)))]			   # assign each observation a random treatment group
-	null_difs[i] <- mean(reshape_df$Mass[newGroup=="trtA"])	- mean(reshape_df$Mass[newGroup=="Control"])	   #  compute the difference between the group means after reshuffling the data
+	null_difs[i] <- mean(reshape_df$Mass[newGroup=="trtA"])	- 
+	      mean(reshape_df$Mass[newGroup=="Control"])	   #  compute the difference between the group means after reshuffling the data
 }
 hist(null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
 abline(v=observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
@@ -395,7 +411,7 @@ What if we want to compare different predictor variables in terms of how strong 
 
 But... no standard R package provides a confidence interval for the $R^2$ value... What to do??
 
-Getting stuck is not an option if we know how to code...
+Getting stuck is not an option if we know how to code up some simulations...
 
 Let's use the "trees" dataset provided in base R:
 
@@ -512,6 +528,7 @@ Again, don't feel bad if you don't understand all the code yet. But I hope you a
 * Can you come up with any other reasons?
 
 Plus...
+
 * It's fun!
 
 But with great power comes great responsibility! 

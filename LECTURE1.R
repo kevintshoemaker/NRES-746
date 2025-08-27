@@ -4,30 +4,36 @@
 #   Bespoke algorithms for inference   
 
 
-# SALMON EXAMPLE (made-up!) ------------------
+# SALMON EXAMPLE ------------------
+
+   #  NOTE: these data are made up!
 
 pop_mean = 4.5
 pop_sd = 0.9
 
 mysample = c(3.14,3.27,2.56,3.77,3.34,4.32,3.84,2.19,5.24,3.09)
-
-myN <- length(mysample)     # determine sample size   
+N <- length(mysample)     # determine sample size   
 
 mysamplemean = mean(mysample)     # note the equal sign as alternative assignment operator
 
 ## visualize the population of conventional-raised salmon  -------------------
 
-curve(dnorm(x,pop_mean,pop_sd),0,10,
-      xlab="Body mass (kg)",ylab="Probability density",lwd=2)
+library(ggplot2)
+g1 = ggplot() +
+  stat_function(fun = dnorm,
+                args = list(mean = pop_mean, sd = pop_sd),
+                color = "red",
+                linewidth = 2) +
+  xlim(c(0,10)) + ylim(c(0,.7)) +
+  labs(x="Body mass (kg)",y="Prob. Density") +
+  theme_classic()
+g1
 
-### now overlay this on the observed data  --------------------
+### now overlay the observed data  --------------------
 
-hist(mysample,freq=F,
-     xlab="Body mass (kg)",ylab="Probability density",main="",
-     xlim=c(0,10))
-curve(dnorm(x,pop_mean,pop_sd),0,10,
-      col="red",lwd=2,add=T)
-abline(v=mysamplemean,col="blue",lwd=3)
+g1 +
+  geom_histogram(aes(x=mysample,y=after_stat(density)),bins=11,fill="darkgreen",alpha=0.5) +
+  geom_vline(xintercept = mysamplemean,col="blue",lwd=3)
 
 
 # Perform "canned" z-test  ----------------------------
@@ -38,11 +44,21 @@ z.test(x=mysample,mu=pop_mean, sigma.x=pop_sd,alternative = "less")
 
 # alternative z-test in base R (no packages)  -----------------------
 
-pop_se = pop_sd/sqrt(myN)   # standard deviation for sample means drawn from the null population
+pop_se = pop_sd/sqrt(N)   # standard deviation for sample means drawn from the null population
 
-curve(dnorm(x,pop_mean,pop_se),0,10,     # visualize the sampling distribution under null hypothesis
-      xlab="Body mass (kg)",ylab="Probability density")     # versus the observed sample mean
-abline(v=mysamplemean,col="blue",lwd=3)
+g2 = ggplot() +
+  stat_function(fun = dnorm,
+                args = list(mean = pop_mean, sd = pop_sd),
+                color = "red", lty=2,
+                linewidth = 1) +
+  stat_function(fun = dnorm,
+                args = list(mean = pop_mean, sd = pop_se),
+                color = "darkgreen", lty=1,
+                linewidth = 2) +
+  xlim(c(0,10)) +
+  labs(x="Body mass (kg)",y="Prob. Density") +
+  theme_classic()
+g2 + geom_vline(xintercept = mysamplemean,col="blue",lwd=3)
 
 p.val = pnorm(mysamplemean,pop_mean,pop_se)    # note that neither pop_mean or pop_se are random variables- they are known with certainty. Therefore we can use a normal distribution (the known data distribution under the null hypothesis, as specified above) to define the sampling error. 
 p.val     # this is the same as the p value from the z-test above...
@@ -50,16 +66,16 @@ p.val     # this is the same as the p value from the z-test above...
 
 # ALTERNATIVE ALGORITHMIC Z-TEST! ----------------------
 
-## Simulate the STATISTICAL POPULATION under the null hypothesis -----------------
+## Simulate the DATA POPULATION under the null hypothesis -----------------
 
 lots <- 1000000  # large number filling in for infinity 
 
-null_population <- rnorm(n=lots,mean=pop_mean,sd=pop_sd)    # the statistical "population" of interest (under null model w no 'treatment' effect)
+null_population <- rnorm(n=lots,mean=pop_mean,sd=pop_sd)    # the "population" of interest (potential data collected under null model with no 'treatment' effect)
 
 
 ## Draw a SAMPLE from the null population ----------------
 
-null_sample <- sample(null_population,size=myN)    # use R's native "sample()" function to sample randomly from the null distribution
+null_sample <- sample(null_population,size=N)    # use R's native "sample()" function to sample randomly from the null distribution
 
 round(null_sample,2)
 null_statistic <- mean(null_sample)  
@@ -72,7 +88,7 @@ null_replicates <- 1000                 # set the number of replicate samples to
 null_statistics <- numeric(null_replicates)       # initialize a storage vector for sample means under the null hypothesis
 
 for(i in 1:null_replicates){            # for each replicate... 
-  null_sample <- sample(null_population,size=myN)      # draw a random sample of body masses assuming no treatment effect       
+  null_sample <- sample(null_population,size=N)      # draw a random sample of body masses assuming no treatment effect       
   null_statistics[i] <- mean(null_sample)           # compute and store the sampling distribution produced under the null hypothesis
 }
 
@@ -125,18 +141,16 @@ N <- nrow(df)     # determine sample size N
 
 # Get data in proper format
 
-reshape_df <- data.frame(                # "reshape" the data frame so each observation gets its own row (standard 'tidy' format)
-  Treatment = rep(factor(c("trtA","Control"),levels=c("Control","trtA")),each=N),
-  Mass = c(df$trtA,df$Control),
-  stringsAsFactors = T
-)
+library(tidyr)
+reshape_df <- df |> pivot_longer(everything(), names_to = "Treatment", values_to = "Mass")
+reshape_df$Treatment <- factor(reshape_df$Treatment,levels=c("Control","trtA"))
 
 plot(Mass~Treatment, data=reshape_df)    # explore/visualize the data
 
 ## Compute the observed difference between group means  -----------------
 
 observed_dif <-  diff(with(reshape_df,tapply(Mass,Treatment,mean)))
-
+observed_dif
 
 
 ## Run permutation t-test ----------------
@@ -145,7 +159,8 @@ reps <- 5000            # Number of replicates - another number representing inf
 null_difs <- numeric(reps)   # initialize storage variable
 for (i in 1:reps){			# For each replicate:		
   newGroup <- reshape_df$Treatment[sample(c(1:nrow(reshape_df)))]			   # assign each observation a random treatment group
-	null_difs[i] <- mean(reshape_df$Mass[newGroup=="trtA"])	- mean(reshape_df$Mass[newGroup=="Control"])	   #  compute the difference between the group means after reshuffling the data
+	null_difs[i] <- mean(reshape_df$Mass[newGroup=="trtA"])	- 
+	      mean(reshape_df$Mass[newGroup=="Control"])	   #  compute the difference between the group means after reshuffling the data
 }
 hist(null_difs)    # Plot a histogram of null differences between group A and group B under the null hypothesis (sampling errors)
 abline(v=observed_dif,col="green",lwd=3)   # Add a vertical line to the plot to indicate the observed difference
