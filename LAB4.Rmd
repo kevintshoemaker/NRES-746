@@ -15,7 +15,11 @@ library(ggplot2)
 library(cmdstanr)
 library(bayesplot)
 library(posterior)
+cmdstanr::register_knitr_engine(override = TRUE)
 knitr::opts_chunk$set(echo = TRUE,cache = TRUE)
+
+options(mc.cores = 4) # Use all available cores
+
 ```
 
 
@@ -36,110 +40,128 @@ If you haven't already installed stan on your computer, use [this link](https://
 
 In this lab we will be applying a Bayesian approach to model fitting using the same myxomatosis dataset and data generating model that we used in the previous lab (lab 3: maximum likelihood inference). To do this, we’ll be using the program 'stan' which is currently one of the most popular "probabilistic programming languages" (PPL). Other PPLs you may encounter include BUGS (one implementation of which is called "JAGS"), and "pyMC" (a python package for Bayesian inference). 
 
-In general, probabilistic programming languages provide a clean language for specifying a probabilistic data-generating model. The program takes a fully specified 
+In general, PPLs provide a clean language for specifying a probabilistic data-generating model. The program takes a fully specified data generating model (all deterministic and stochastic components specified explicitly), along with data (observed realizations of the specified data generating model), and outputs samples from the posterior (usually using MCMC). 
 
-JAGS runs on all platforms and runs seamlessly with R, if you download the "jagsUI" package! JAGS is not the only way to do Bayesian analyses, nor is it the only implementation of the BUGS (Bayesian inference Using Gibbs Sampler) language. Others that you may have heard of include WinBUGS, OpenBUGS and NIMBLE (R package). STAN is another widely used software for Bayesian inference, but STAN doesn't use the BUGS language (it has its own language!)
+Stan runs on all platforms and although it is written in C++, it interfaces seamlessly with R, if you download the "cmdstanr" package or 'rstan' package! Stan is not the only way to do Bayesian analyses. Stan uses an efficient implementation of Hamiltonian Monte Carlo, called the No-U-turn (NUTS) sampler. 
 
-To familiarize ourselves with the BUGS language, let's look at some BUGS code (for our favorite myxomatosis dataset). 
+To familiarize ourselves with the stan language, let's look at some stan code (for our favorite myxomatosis dataset). 
 
-```
 
-#############
-# sample BUGS code       
+```{stan output.var="myx.stan"}
+
+data {
+  int<lower=0> N;
+  vector[N] titer;
+}
+
+parameters {
+  real<lower=0> shape;
+  real<lower=0> rate;
+}
 
 model {
-      
-      #############
-      # LIKELIHOOD
-      ############
-      for(obs in 1:n.observations){
-        titer[obs] ~ dgamma(shape,rate)
-      }
-      
-      #############
-      # PRIORS
-      ############
-      shape ~ dgamma(0.001,0.001)
-      scale ~ dgamma(0.001,0.001)
-      rate <- 1/scale   # in BUGS, gamma distribution needs a "rate" parameter rather than a scale 
-    }
+  shape ~ gamma(0.001,0.001);   // prior on shape
+  rate ~ gamma(0.001,0.001);   // prior on rate
+  titer ~ gamma(shape, rate);   // likelihood
+}
     
 ```
 
-The syntax in BUGS/JAGS is very similar to R, but there are a few key differences. Notably, *assignment must always be done by the arrow (<-) instead of an equals sign* and the *tilde (~) is used to define stochastic processes*.
+The syntax in Stan has some similarities with R, but it's really a different beast. Luckily the Stan user guide and reference manual are excellent and thorough: https://mc-stan.org/  
 
-The arrow operator (<-) is used to define deterministic relationships, and can be read as "is defined as:" 
+Stan is a strongly typed language: types of all variables must always be declared before you use a variable. 
 
-The tilde operator (~) is used to define random variables, and can be read as "is distributed as:"  
+Every line of code must end with a semicolon. 
 
-In the model code, you must also specify your priors. Here we are using 'vague' priors, meaning that the probability is 'spread out' fairly evenly over a wide parameter space. The Gamma distribution is always parameterized according to a shape and rate parameter (in that order) in BUGS (rate = 1/scale). If you wanted to see what this distribution looked like, you could plot in R ('dgamma()' allows you to specify a rate or a scale parameter): 
+Comments are preceded by two forward slashes ("//") instead of a hash symbol ("#")
 
-```{r fig.dim = c(5, 7)}
+The equals sign is used to define deterministic relationships (the arrow is not allowed). 
 
-par(mfrow=c(2,1))
-curve(dgamma(x, shape=0.001, rate=0.001),0,100,ylim=c(0,0.1),xlab="shape parameter",ylab="probability density", main="Prior")
-curve(dgamma(x, shape=0.001, rate=0.001),0.01,0.5,ylim=c(0,1),xlab="scale parameter",ylab="probability density")
+The tilde operator (~) is used to define random variables, and can be read as "is distributed as:". You will also see the posterior distribution specified by incrementing the target log probability. For example, the following two lines do the same thing:
+
+```
+target += poisson_lpmf(count | lambda);   // increment target distribution
+count ~ poisson(lambda);    // same thing
 
 ```
 
-In this case we want a prior distribution that has little to no information about which values of the parameter are most probable. These distributions have no peaks within the range of parameter space of interest, and the probability for any particular x-value is very low, so it does a fairly good job of representing a vague prior for the shape and rate parameters.
+In the model code, you may specify your priors. If no priors are specified, stan assumes a flat (potentially improper) prior across the range of support you provide in the 'parameters' block.  Here we are using 'vague' priors, meaning that the probability is 'spread out' fairly evenly over a relatively wide parameter space. 
 
-## Running JAGS through R
+
+## Running Stan through R
 
 **Setting up the model!**      
 
-We can use the 'jagsUI' package in R (or runjags, or R2jags: there are several packages available that do basically the same thing) to run JAGS through R and have the output returned to R so that we can analyze and manipulate it further.
+We can use the 'cmdstanr' package in R (or rstan) to run Stan through R and have the output returned to R so that we can analyze and manipulate it further.
 
-First, let's install and load the 'jagsUI' package. While you're at it, install and load the coda package, which has some great utilities for visualizing and working with MCMC data.
+First, let's install and load the 'cmdstanr' package.
 
-```{r}
+```{r eval=FALSE}
 
-### load key packages for running Bayesian analysis in JAGS
-
-library(jagsUI)
-library(coda)
-library(HDInterval)
-library(emdbook)
-
-
-#library(R2jags)    # alternatives
-#library(runjags)
+install.packages("cmdstanr", repos = c('https://stan-dev.r-universe.dev', getOption("repos")))
 
 ```
+
+More detailed instructions can be found here: https://mc-stan.org/cmdstanr/articles/cmdstanr.html. 
 
 **Writing out the model**
 
-We can use the 'cat' function in R to write out a text file- it can be useful to use this functionality to embed the JAGS code within our R script!
+In general it's easiest to write your stan model in a separate script with the '.stan' extension. Do do this you can open a new 'stan' model script in Rstudio- this gives nice syntax highlighting and some tools that allow you to check your code. You may need to install 'rstan' package to use the convenient 'check on save' function. 
+
+To take advantage of parallel processing, use the following line of code at the top of your script:
 
 ```{r}
 
-filename <- "BUGSmodel.txt"
-cat("
-    model {
-      
-      #############
-      # LIKELIHOOD
-      ############
-      for(obs in 1:n.observations){
-        titer[obs] ~ dgamma(shape,rate)
-      }
-      
-      #############
-      # PRIORS
-      ############
-      shape ~ dgamma(0.01,0.01)
-      scale ~ dgamma(0.001,0.001)
-      rate <- 1/scale
-    }
-  ",file=filename
-)
-
+options(mc.cores = 4)
 
 ```
 
+There are a couple other packages that will help us make sense of the results:
+
+```{r}
+library(cmdstanr)
+library(bayesplot)
+library(posterior)
+
+```
+
+
+Here is the stan script for the basic myxomatosis model again:
+
+```{stan output.var="myx.stan"}
+
+data {
+  int<lower=0> N;
+  vector[N] titer;
+}
+
+parameters {
+  real<lower=0> shape;
+  real<lower=0> rate;
+}
+
+model {
+  shape ~ gamma(0.001,0.001);   // prior on shape
+  rate ~ gamma(0.001,0.001);   // prior on rate
+  titer ~ gamma(shape, rate);   // likelihood
+}
+    
+```
+
+**Compile the model**
+
+Stan is a compiled language, so we need to compile our model before running it. Here's how we do it in cmdstanr:
+
+```{r}
+
+mod1 <- cmdstan_model("myx.stan") # Compile stan model
+
+```
+
+
 **Bundling the data**
 
-We will need to tell BUGS/JAGS what the data are. To be read into JAGS (via the R2JAGS package), the data need to be bundled together in a list object. The data (list elements) need to have the same names as specified in the BUGS model file: 
+We will need to pass the data from R to Stan. To be read into Stan, the data need to be bundled together in a list object. The data (list elements) need to have the same names as specified in the Stan model file: 
 
 First we get the data we want into R (we know the drill!):
 
@@ -157,401 +179,194 @@ Then we bundle the data as a list, which is what JAGS wants!
 
 ```{r}
 
-myx.data.for.bugs <- list(
-  titer = Myx$titer,
-  n.observations = length(Myx$titer)
-)
+# Encapsulate the data into a single "list" object ------------------
 
-myx.data.for.bugs
+stan_data <- list(
+    N = nrow(Myx),
+    titer = Myx$titer
+)
+stan_data
 
 ```
 
 **Setting the initial values for our Markov chain(s)**
 
-It is convenient to define an "initial value generator" function that randomly generates a list of initial values-- this way, each MCMC chain can automatically be initialized with different starting values!
+It can be helpful to define an "initial value generator" function that randomly generates a list of initial values for each parameter-- this way, each MCMC chain can automatically be initialized with different starting values! By default, stan uses random values between -2 and 2 to initialize your chain...
 
 ```{r}
 
-init.vals.for.bugs <- function(){
+inits <- function(){
   list(
     shape=runif(1,20,100),
-    scale=runif(1,0.05,0.3)
+    rate=runif(1,1,10)
   )
 }
-init.vals.for.bugs()
-init.vals.for.bugs()
+inits()
 
 ```
 
-Alternatively, we can specify exact initial values for our chains (in this case, we initialize three Markov chains)
+
+Now we’ll run this model through Stan:
 
 ```{r}
 
-inits = list(list(shape=90,scale=0.1), list(shape=50,scale=0.2), list(shape=150,scale=0.04))  # a list of lists!
+# Run stan  ------------------
+
+fit1 <- mod1$sample(    # run hamiltonian monte carlo
+  data = stan_data,
+  chains = 4,
+  init = inits,
+  iter_warmup = 500,
+  iter_sampling = 1000
+)
 
 ```
-
-
-Note that we need three different sets of starting values in order to run three different chains. Just like an optimization algorithm in ML analysis, JAGS may not work if you specify unreasonable initial parameters (and it won’t necessarily tell you that is the problem).  
-
-Now we’ll run this model through JAGS:
+Like almost anything in R, there is a 'summary()' method for fitted stan objects:
 
 ```{r}
-
-params.to.store <- c("shape","scale")    # specify the parameters we want to get the posteriors for
-
-jags.fit <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel.txt",n.chains = 3,n.burnin = 5000,n.thin = 20,parallel=TRUE )
-
-jags.fit
+fit1$summary()
 
 ```
 
-For each parameter, n.eff is a crude measure of effective sample size, and Rhat is the potential scale reduction factor (Gelman-Rubin diagnostic: at convergence, Rhat=1).
+Rhat is a measure of convergence, or potential scale reduction factor (Gelman-Rubin diagnostic: at convergence, Rhat=1)
 
-DIC is an information criterion (Deviance Information Criterion), similar to AIC (lower DIC is better).
+'mad' is median absolute deviation- similar to standard error
 
-You can see the means and variance for the parameters as well as the DIC for the model. We can summarize these in plots of the posterior distributions. First, we define the MCMC output as a 'coda' object (for storing, visualizing and analyzing MCMC results) that R knows how to work with.
+'ess_bulk' is effective sample size.
 
-```{r fig.dim=c(5,7)}
+We can also extract our MCMC samples for further examination:
 
-jagsfit.mcmc <- jags.fit$samples   # retrieve results as 'coda' object (coda package)
+```{r}
+samples <- fit1$draws(format="draws_df")
 
-summary(jagsfit.mcmc)
+```
 
-plot(jagsfit.mcmc)
 
-library(lattice)
-densityplot(jagsfit.mcmc)
+Let's look at the traceplots:
 
+```{r}
+bayesplot::mcmc_trace(samples,"shape")
+bayesplot::mcmc_trace(samples,"rate")
 ```
 
 You can visually check for convergence here, using the traceplots – a converged run will look like white noise (fuzzy caterpillar) and the samples will not be hitting any ceilings or floors.  
 
 **Parameter uncertainty: credible intervals**
 
-We can estimate the 95% credible interval for each parameter using the quantile method or the HPD interval method. The 'sims.list' part of the output has all of the MCMC samples that were created during the run (combining all chains).
+We can estimate the credible interval for each parameter using the quantile method or the HPD interval method. 
 
 ```{r}
 
 ## quantile method
 
-shape95 = quantile(jags.fit$sims.list$shape,c(0.025,0.975))
-scale95 = quantile(jags.fit$sims.list$scale,c(0.025,0.975))
+shape95 = quantile(samples$shape,c(0.025,0.975))
+rate95 = quantile(samples$rate,c(0.025,0.975))
 shape95
-scale95
+rate95
 
 ## HPD method (highest posterior density intervals)
 
 library(HDInterval)
 
-shape95 = hdi(jags.fit$sims.list$shape,0.95)
-scale95 = hdi(jags.fit$sims.list$scale,0.95)
+shape95 = hdi(samples$shape,0.95)
+rate95 = hdi(samples$rate,0.95)
 shape95
-scale95
+rate95
 
 ```
 
-Either way we compute it, the probability that the *a* parameter is between these 2 numbers is 95%! 
+Either way we compute it, the probability that the parameter is between these 2 numbers is 95%! 
 
-So, what’s so great about this?  Using a vague prior, we get almost the exact same parameter estimates that we did when we just did a straight up maximum-likelihood analysis. This is usually the case with simple models like the run we ran here. However, answers can be quite different with more complicated models, and in fact the Bayesian approach allows us to simultaneously fit complex models that we could not easily fit using maximum-likelihood approaches. 
 
-That said, there are several advantages to the Bayesian approach, having to do with the fact that the answer comes in the form of a probability distribution (or random samples from a probability distribution) instead of a point estimate. 
-
-For one, the credible interval is much nicer to interpret than a confidence interval.  There’s none of this "given that the null hypothesis is true", and "were we to re-sample the data 100000 times…". You can state simply that there’s a 95% probability that the value of the parameter lies within the credible interval. Period.  
-
-For another, when running simulations you can draw from posterior probability distributions to create simulations that include the full variability of outcomes instead of just point estimates, which will demonstrate the implications of uncertainty in your parameter estimates (e.g. under different management scenarios, climate change, etc.). We’ll explore how to do this a little later.
-
-## Exercise 4.1: Myxomatosis analysis in JAGS #1 
+## Exercise 4.1: Myxomatosis analysis in Stan #1 
 
 In this exercise, you are asked to implement a Ricker deterministic function to the Myxomatosis data in JAGS.
 
-## **Exercise 4.1a**. 
+### **Exercise 4.1a (stan)**. 
 
-Write a function called "Myx_Ricker_JAGS()" that runs the Myxomatosis/Ricker example from the previous (likelihood) lab in JAGS. Recall that we are modeling titer levels (grade 1 only) as a function of the days since infection. Submit this function as part of your R script.  
+Write a stan script that runs the Myxomatosis/Ricker example from the previous (likelihood- Lab 3) lab. 
 
-+ **input**:         
-    + data = a matrix of 2 columns and one row per observation. The first column should represent the days since infection, and the second column should represent the virus titer.
-    + CImethod = a text string, representing whether the CI should be computed using the quantile method ("quantile") or the HPD method ("HPD"). See the Bayesian lecture for more information.    
-    + CIlevel = a number from 0 to 1 indicating what confidence level you want for the CI: set the default value to 0.95.     
+Recall that we are modeling titer levels (grade 1 only) as a function of the days since infection. Submit this stan code as a stan file (.stan extension) via WebCampus.  
 
-+ **suggested algorithm**:  
-    + Write and store the JAGS model as a text file (you can name the file whatever you'd like!) [NOTE: the code for writing the JAGS model as a text file should be embedded in the function]
-    + Package the data for JAGS (store all data in a named list object)    
-    + Write a function that returns a list for initializing the MCMC chains [this could be defined inside or outside the Myx_Ricker_JAGS() function]    
-    + Run the 'jags()' function from the 'jagsUI' package with 3 chains, specifying the parameters for which you wish to store the MCMC output ("a", "b", and "shape"), and store the results as an R object.    
-    + Display the trace plots and density plots for the three parameters (you may need to comment this part out for testing in the 'sandbox' below due to graphical constraints)
-    + compute the posterior means for the a, b and shape params and store as a named vector (three elements, named "a", "b", and "shape", in that order).
-    + Plot the raw data (days on x axis and titer on y axis), and overlay the fitted Ricker curve, with Bayesian point estimates (posterior means) to evaluate fit.   
-    + compute the credible interval (CI) for the three parameters using either the quantile method or the HPD method (as requested by the user), and store as a 2x3 matrix (see below). HINT: use the 'HDInterval’ package to help compute the HPD.   
-    + compute the overall Gelman-Rubin diagnostic ('gelman.diag' function, quantity labeled 'Multivariate psrf') for all three parameters using the JAGS raw mcmc results (e.g., 'myjagsmodel$samples') as input to the 'gelman.diag()' function).    
+```{stan q4_1a-solution, echo=FALSE, output.var="myx2.stan"}
 
-+ **return**:    
-    + a list of length 3 containing (list element 1) a named vector of point estimates (posterior means) for parameters a, b, and shape, (list element 2) a matrix with 2 rows and 3 columns, containing the 95% credible interval (row 1 is the lower bound, row 2 is the upper bound, columns represent parameters a, b, and shape), and (list element 3) a single number representing the 'multivariate' Gelman-Rubin diagnostic (potential scale reduction factor)- a tool for assessing MCMC convergence.  
-    
-    
-Include your function in your submitted r script!
-
-You can use this "sandbox" (below) to develop and test your function!
-
-NOTE: you need to include code that writes out your BUGS textfile, whether or not it is inside or outside your function. If your BUGS code (text file) is not named "BUGSmodel_ricker.txt" you will have to change the file name in the test code (last line in the "sandbox" below). 
-
-NOTE: to test your code in the "sandbox" you may need to suppress (comment out) the part of the function that generates multi-panel plots, or you may get the dreaded "figure margins too large" error.
-
-
-```{r q4_1a, exercise=TRUE}
-Myx_Ricker_JAGS <- function(data,CImethod,CIlevel){
-    # [add code here!]
+data {
+  int<lower=0> N;
+  vector[N] titer, day;
 }
 
-# MyxDat <- emdbook::MyxoTiter_sum
-# Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
-# this <- Myx_Ricker_JAGS(data=Myx[,-1],CImethod = "HPD", CIlevel = 0.95)
-# test <- this$conf.ints
+parameters {
+  real<lower=0> a,b,rate;
+}
+
+model {
+  a ~ exponential(0.3);   // prior on a
+  b ~ exponential(1);   // prior on b
+  rate ~ gamma(0.01,0.01);   // prior on rate
+  vector[N] m = (a * day) .* exp( -b * day);   // mean expected titer  // note elementwise mult - '.*'
+  vector[N] shape = rate * m;     // compute gamma shape parameter
+  titer ~ gamma(shape, rate);   // likelihood
+}
+    
 ```
 
-        
-```{r q4_1a-solution, echo=FALSE, context="data"}
 
-########
-# 4.1a
+Compile and generate sample from your stan code using the following syntax. I named my stan file 'myx2.stan'.
 
-library(HDInterval)
-library(emdbook)
-library(jagsUI)
+```{r}
 
-Ricker <- function(x,a,b){
-  a*x*exp(-b*x)
-}
+## exercise 4.1 ---------
 
+# test your stan code:
 
-#params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
+mod2 <- cmdstan_model("myx2.stan") # Compile stan model
 
-#jags.fit_1a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel_ricker.txt",n.chains = 3,n.burnin = 5000,n.thin = 20 )
-
-#jags.fit_1a   # test the model fit
-
-
-########
-# package into function
-
-Myx_Ricker_JAGS <- function(data=Myx[,-1],CImethod="HPD",CIlevel=0.95){
-  
-  filename <- "BUGSmodel_ricker.txt"
-  cat("
-      model {
-        
-        #############
-        # LIKELIHOOD
-        ############
-        for(obs in 1:n.observations){
-          titer[obs] ~ dgamma(shape,rate[obs])
-          rate[obs] <- shape/exp.titer[obs]
-          exp.titer[obs] <- a*days[obs]*exp(-1*b*days[obs])
-        }
-        
-        #############
-        # PRIORS
-        ############
-        shape ~ dgamma(0.01,0.01)
-        a ~ dgamma(0.01,0.01)
-        b ~ dgamma(0.01,0.01)
-      }
-    ",file=filename
-  )
-
-  
-  myx.data.for.bugs <- list(
-    titer = data[,2],
-    days =data[,1],
-    n.observations = nrow(data)
-  )
-  
-  init.vals.for.bugs <- function(){
-    list(
-      shape=runif(1,20,30),
-      a=runif(1,0.05,0.3),
-      b=runif(1,1,1.3)
-    )
-  }
-  
-  params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
-  
-  jags.fit_1a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file=filename,n.chains = 3,n.burnin = 5000,n.thin = 20,parallel=TRUE )
-  jags.fit_1a_coda <- jags.fit_1a$samples
-  #summary(jagsfit.mcmc.1a)
-  plot(jags.fit_1a_coda)
-  temp <- densityplot(jags.fit_1a_coda)
-  print(temp)
-  plot(data[,1],data[,2],xlab="days",ylab="titer",ylim=c(1,13),xlim=c(0,10))
-  amean <- mean(jags.fit_1a$sims.list$a)
-  bmean <- mean(jags.fit_1a$sims.list$b)
-  shapemean <- mean(jags.fit_1a$sims.list$shape)
-  curve(Ricker(x,amean,bmean),0,10,add=T,lwd=2,col="green")
-  posterior_mean <- c(amean,bmean,shapemean)
-  
-  cintervals <- matrix(NA,nrow=2,ncol=3)
-  colnames(cintervals) <- c("a","b","shape")
-  if(CImethod=="HPD"){
-    cintervals[,"a"] <- hdi(jags.fit_1a$sims.list$a,credMass = CIlevel)
-    cintervals[,"b"] <- hdi(jags.fit_1a$sims.list$b,credMass = CIlevel)
-    cintervals[,"shape"] <- hdi(jags.fit_1a$sims.list$shape,credMass = CIlevel)
-  }else{
-    cintervals[,"a"] <- quantile(jags.fit_1a$sims.list$a,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-    cintervals[,"b"] <- quantile(jags.fit_1a$sims.list$b,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-    cintervals[,"shape"] <- quantile(jags.fit_1a$sims.list$shape,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-  }
-  gelmandiag <- gelman.diag(jags.fit_1a_coda)
-
-  output = list(
-    post.mean = posterior_mean,
-    conf.ints = cintervals,
-    gelman.rubin = gelmandiag$mpsrf 
-  )
-  return(output)  
-}
-
-
-```
-
-```{r dataq4_1a0, echo=FALSE, context="data"}
-
-########
-# 4.1a
-
-library(HDInterval)
-library(emdbook)
-library(jagsUI)
-
-Ricker <- function(x,a,b){
-  a*x*exp(-b*x)
-}
-
-
-#params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
-
-#jags.fit_1a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel_ricker.txt",n.chains = 3,n.burnin = 5000,n.thin = 20 )
-
-#jags.fit_1a   # test the model fit
-
-
-########
-# package into function
-
-Myx_Ricker_JAGS <- function(data=Myx[,-1],CImethod="HPD",CIlevel=0.95){
-  
-  filename <- "BUGSmodel_ricker.txt"
-cat("
-    model {
-      
-      #############
-      # LIKELIHOOD
-      ############
-      for(obs in 1:n.observations){
-        titer[obs] ~ dgamma(shape,rate[obs])
-        rate[obs] <- shape/exp.titer[obs]
-        exp.titer[obs] <- a*days[obs]*exp(-1*b*days[obs])
-      }
-      
-      #############
-      # PRIORS
-      ############
-      shape ~ dgamma(0.01,0.01)
-      a ~ dgamma(0.01,0.01)
-      b ~ dgamma(0.01,0.01)
-    }
-  ",file=filename
+stan_data <- list(   # bundle data for stan
+    N = nrow(Myx),
+    titer = Myx$titer,
+    day=Myx$day
 )
 
-  myx.data.for.bugs <- list(
-    titer = data[,2],
-    days =data[,1],
-    n.observations = nrow(data)
+inits <- function(){
+  list(
+    a=runif(1,1,10),
+    b=runif(1,.01,0.1),
+    rate=runif(1,1,10)
   )
-  
-  init.vals.for.bugs <- function(){
-    list(
-      shape=runif(1,20,30),
-      a=runif(1,0.05,0.3),
-      b=runif(1,1,1.3)
-    )
-  }
-  
-  params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
-  
-  jags.fit_1a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file=filename,n.chains = 3,n.burnin = 5000,n.thin = 20,parallel=TRUE )
-  jags.fit_1a_coda <- jags.fit_1a$samples
-  #summary(jagsfit.mcmc.1a)
-  plot(jags.fit_1a_coda)
-  temp <- densityplot(jags.fit_1a_coda)
-  print(temp)
-  plot(data[,1],data[,2],xlab="days",ylab="titer",ylim=c(1,13),xlim=c(0,10))
-  amean <- mean(jags.fit_1a$sims.list$a)
-  bmean <- mean(jags.fit_1a$sims.list$b)
-  shapemean <- mean(jags.fit_1a$sims.list$shape)
-  curve(Ricker(x,amean,bmean),0,10,add=T,lwd=2,col="green")
-  posterior_mean <- c(amean,bmean,shapemean)
-  
-  cintervals <- matrix(NA,nrow=2,ncol=3)
-  colnames(cintervals) <- c("a","b","shape")
-  if(CImethod=="HPD"){
-    cintervals[,"a"] <- hdi(jags.fit_1a$sims.list$a,credMass = CIlevel)
-    cintervals[,"b"] <- hdi(jags.fit_1a$sims.list$b,credMass = CIlevel)
-    cintervals[,"shape"] <- hdi(jags.fit_1a$sims.list$shape,credMass = CIlevel)
-  }else{
-    cintervals[,"a"] <- quantile(jags.fit_1a$sims.list$a,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-    cintervals[,"b"] <- quantile(jags.fit_1a$sims.list$b,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-    cintervals[,"shape"] <- quantile(jags.fit_1a$sims.list$shape,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-  }
-  gelmandiag <- gelman.diag(jags.fit_1a_coda)
-
-  output = list(
-    post.mean = posterior_mean,
-    conf.ints = cintervals,
-    gelman.rubin = gelmandiag$mpsrf 
-  )
-  return(output)  
 }
+# inits()
+
+fit2 <- mod2$sample(
+  data = stan_data,
+  chains = 4,
+  init = inits,
+  iter_warmup = 500,
+  iter_sampling = 1000
+)
+
+fit2$summary()
+
+samples <- fit2$draws(format="draws_df")
+bayesplot::mcmc_trace(samples,"a")
+bayesplot::mcmc_trace(samples,"b")
+bayesplot::mcmc_trace(samples,"rate")
 
 
-```
-
-Here is some test code, along with a sample of the results you should expect to see when running your new function:
-
-```{r testq4_1a, fig.dim = c(5, 7)}
-
-Ricker_results <- Myx_Ricker_JAGS(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)
-Ricker_results
-  
-Ricker_results <- Myx_Ricker_JAGS(data=Myx[,-1],CImethod="quantile",CIlevel=0.88)
-Ricker_results
-
-```
-
-
-```{r q4_1a-check, echo=F}
-
-grade_this({
-  fail_if(!length(.result(data=Myx[,-1],CImethod="HPD",CIlevel=0.88))==3, "your function output should be a list with three elements")
-  fail_if(!near(.result(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)[[1]][1],
-              .solution(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)[[1]][1],0.2))
-  pass_if(near(.result(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)[[2]][1,1],
-              .solution(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)[[2]][1,1],0.2))
-  fail()
-})
 
 ```
 
-        
-## **Exercise 4.1b**. 
+   
+### **Exercise 4.1b (written)**. 
 
-Can you identify any differences between the parameter estimates from the analysis in a likelihood vs Bayesian perspective? Compare your results from Lab 3, and briefly describe your findings in your Word document, along with a brief description of why these differences might arise. 
+Can you identify any differences between the parameter estimates from the analysis in a likelihood vs Bayesian perspective? Compare your results from Lab 3, and briefly describe your findings. Try running the model with a different prior for the "a" parameter -- describe the new prior you used and how this change affected your posterior estimate for this parameter. 
 
-## **Exercise 4.1c**. 
+### **Exercise 4.1c (written)**. 
 
-Did your MCMC chains converge on the joint posterior distribution? Briefly explain your reasoning in your Word document! Use several lines of reasoning, and provide figures where appropriate!   
+Did your MCMC chains converge on the joint posterior distribution? Briefly explain your reasoning! Use at least two separate pieces of evidence for or against the convergence of the chains.    
 
+#### START HERE
 
-## Exercise 4.2: Myxomatosis in JAGS with Michaelis-Menten deterministic function 
+## Exercise 4.2: Myxomatosis in Stan with Michaelis-Menten deterministic function 
 
 Recalling our plot (from the last lab) of the Ricker function with the maximum-likelihood parameter estimates drawn over the scatterplot of titers by day, there really isn’t much evidence in the data for that downward turn in the function after day 6. We chose a model that indicated decline in titer levels following a peak based on the behavior of other myxomytosis grades, but given the virulence of this particular grade most animals die once the titer levels reach their maximum. Might it be more appropriate to fit a model (titer as a function of days since exposure) that levels off at some asymptote instead of declining following the peak? Let's find out! 
 
@@ -861,9 +676,9 @@ grade_this({
 ```
 
 
-## **Exercise 4.2b**.  
+### **Exercise 4.2b (figure upload)**.  
 
-In your Word document, please answer the following question: overlay both the best-fit M-M and the best-fit Ricker curves on a plot of the data (please include this figure in your Word document). On the basis of simple visual cues, does the M-M function seem to fit better than the Ricker function to describe this relationship? Explain your reasoning.
+In Webcampus, please answer the following question: overlay both the best-fit M-M and the best-fit Ricker curves on a plot of the data (please include this figure in your Word document). On the basis of simple visual cues, does the M-M function seem to fit better than the Ricker function to describe this relationship? Explain your reasoning.
 
 
 And here is an example of what your figure should look like with the best-fit M-M and Ricker functions overlaid on the same plot:  
@@ -1231,7 +1046,7 @@ grade_this({
 
 ## **Exercise 4.3b**.  
 
-In your Word document, please explain how you interpret the Bayesian p-value in the previous example. What Bayesian p-value would you expect if the model fit was perfect? What would you expect if the model fit was poor? What does the Bayesian p-value tell us about how well the Ricker and M-M models fit the data? Does one model fit better than the other? 
+In WebCampus, please explain how you interpret the Bayesian p-value in the previous example. What Bayesian p-value would you expect if the model fit was perfect? What would you expect if the model fit was poor? What does the Bayesian p-value tell us about how well the Ricker and M-M models fit the data? Does one model fit better than the other? 
 
 ## Exercise 4.4 (optional)
 
