@@ -8,9 +8,9 @@ parameters {
 }
 
 model {
-  a ~ exponential(0.3);   // prior on a
-  b ~ exponential(1);   // prior on b
-  rate ~ gamma(0.01,0.01);   // prior on rate
+  a ~ exponential(.1);   // prior on a
+  b ~ exponential(.1);   // prior on b
+  rate ~ exponential(.1);   // prior on rate
   vector[N] m = (a * day) .* exp( -b * day);   // mean expected titer
   vector[N] shape = rate * m;     // compute gamma shape parameter
   titer ~ gamma(shape, rate);   // likelihood

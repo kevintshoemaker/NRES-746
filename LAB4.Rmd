@@ -300,9 +300,9 @@ parameters {
 }
 
 model {
-  a ~ exponential(0.3);   // prior on a
-  b ~ exponential(1);   // prior on b
-  rate ~ gamma(0.01,0.01);   // prior on rate
+  a ~ exponential(.1);   // prior on a
+  b ~ exponential(.1);   // prior on b
+  rate ~ exponential(.1);   // prior on rate
   vector[N] m = (a * day) .* exp( -b * day);   // mean expected titer  // note elementwise mult - '.*'
   vector[N] shape = rate * m;     // compute gamma shape parameter
   titer ~ gamma(shape, rate);   // likelihood
@@ -310,10 +310,9 @@ model {
     
 ```
 
+Compile and generate samples from your stan code using the following syntax. I named my stan file 'myx2.stan'.
 
-Compile and generate sample from your stan code using the following syntax. I named my stan file 'myx2.stan'.
-
-```{r}
+```{r q4_1a-solution2}
 
 ## exercise 4.1 ---------
 
@@ -346,15 +345,14 @@ fit2 <- mod2$sample(
 
 fit2$summary()
 
-samples <- fit2$draws(format="draws_df")
-bayesplot::mcmc_trace(samples,"a")
-bayesplot::mcmc_trace(samples,"b")
-bayesplot::mcmc_trace(samples,"rate")
-
+samples_rick <- fit2$draws(format="draws_df")
+bayesplot::mcmc_trace(samples_rick,"a")
+bayesplot::mcmc_trace(samples_rick,"b")
+bayesplot::mcmc_trace(samples_rick,"rate")
 
 
 ```
-
+Please submit your stan script via WebCampus. 
    
 ### **Exercise 4.1b (written)**. 
 
@@ -364,13 +362,11 @@ Can you identify any differences between the parameter estimates from the analys
 
 Did your MCMC chains converge on the joint posterior distribution? Briefly explain your reasoning! Use at least two separate pieces of evidence for or against the convergence of the chains.    
 
-#### START HERE
-
 ## Exercise 4.2: Myxomatosis in Stan with Michaelis-Menten deterministic function 
 
 Recalling our plot (from the last lab) of the Ricker function with the maximum-likelihood parameter estimates drawn over the scatterplot of titers by day, there really isn’t much evidence in the data for that downward turn in the function after day 6. We chose a model that indicated decline in titer levels following a peak based on the behavior of other myxomytosis grades, but given the virulence of this particular grade most animals die once the titer levels reach their maximum. Might it be more appropriate to fit a model (titer as a function of days since exposure) that levels off at some asymptote instead of declining following the peak? Let's find out! 
 
-## **Exercise 4.2a**. 
+### **Exercise 4.2a** (stan script). 
 
 Repeat the myxomatosis example in BUGS/JAGS, but this time use the **Michaelis-Menten function**, which has the same number of parameters as the Ricker function, but increases to an asymptote (see below). Continue to use a Gamma distribution to describe the error! Please name your new function "Myx_MM_JAGS()". The inputs and outputs should be the same as for "Myx_Ricker_JAGS()". Please save this new function in your R script for submission.
 
@@ -393,379 +389,113 @@ curve(mm(x,a=5,b=0.8),from=0,to=10,add=T,col="red",lwd=2)
 
 ```
 
-Include your function in your submitted r script!
+Submit your stan script in WebCampus where prompted. 
 
-You can use this "sandbox" (below) to develop and test your function!
+```{stan q4_2a-solution, echo=FALSE, output.var="myx3.stan"}
 
-NOTE: you need to include code that writes out your BUGS textfile, whether or not it is inside or outside your function. If your BUGS code (text file) is not named "BUGSmodel_mm.txt" you will have to change the file name in the test code (last line in the "sandbox" below). 
-
-NOTE: to test your code in the "sandbox" you may need to suppress (comment out) the part of the function that generates multi-panel plots, or you may get the dreaded "figure margins too large" error.
-
-```{r q4_2a, exercise=TRUE}
-Myx_MM_JAGS <- function(data,CImethod,CIlevel){
-    # [add code here!]
+functions {
+  vector mm(vector x, real a, real b){
+    return( (a*x) ./ (b+x));
+  } 
 }
 
-# MyxDat <- emdbook::MyxoTiter_sum
-# Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
-# this <- Myx_MM_JAGS(data=Myx[,-1], CImethod = "HPD", CIlevel = 0.95)
-# test <- this$conf.ints
-```
-
-
-```{r q4_2a-solution, echo=FALSE, context="data"}
-
-library(HDInterval)
-library(emdbook)
-library(jagsUI)
-
-#####
-# 4.2a
-
-MMFunc <- function(x,a,b){
-  (a*x)/(b+x)
+data {
+  int<lower=0> N;
+  vector[N] titer, day;
 }
 
-
-# MyxDat <- MyxoTiter_sum
-# Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
-# #head(Myx)
-# 
-# myx.data.for.bugs <- list(
-#   titer = Myx$titer,
-#   days = Myx$day,
-#   n.observations = nrow(Myx)
-# )
-# 
-# init.vals.for.bugs2 <- function(){
-#   list(
-#     shape=runif(1,20,30),
-#     a=runif(1,8,9),
-#     b=runif(1,1,1.5)
-#   )
-# }
-#init.vals.for.bugs()
-
-params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
-
-#jags.fit_2a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel_mm.txt",n.chains = 3,n.burnin = 5000,n.thin = 20, parallel=TRUE )
-
-#jags.fit_2a   # test the model fit
-
-
-########
-# package into function
-
-Myx_MM_JAGS <- function(data=Myx[,-1],CImethod="HPD",CIlevel=0.95){
-  filename <- "BUGSmodel_mm.txt"
-  cat("
-      model {
-        
-        #############
-        # LIKELIHOOD
-        ############
-        for(obs in 1:n.observations){
-          titer[obs] ~ dgamma(shape,rate[obs])
-          rate[obs] <- shape/exp.titer[obs]
-          exp.titer[obs] <- (a*days[obs]) / (b+days[obs])
-        }
-        
-        #############
-        # PRIORS
-        ############
-        shape ~ dgamma(0.01,0.01)
-        a ~ dgamma(0.01,0.01)
-        b ~ dgamma(0.01,0.01)
-      }
-    ",file=filename
-  )
-
-  myx.data.for.bugs <- list(
-    titer = data[,2],
-    days =data[,1],
-    n.observations = nrow(data)
-  )
-  
-  init.vals.for.bugs2 <- function(){
-    list(
-      shape=runif(1,20,30),
-      a=runif(1,8,9),
-      b=runif(1,1,1.5)
-    )
-  }
-  
-  params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
-  
-  jags.fit_2a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs2,parameters.to.save=params.to.store,n.iter=50000,model.file=filename,n.chains = 3,n.burnin = 5000,n.thin = 20,parallel=TRUE )
-  jags.fit_2a_coda <- jags.fit_2a$samples
-  plot(jags.fit_2a_coda)
-  temp <- densityplot(jags.fit_2a_coda)
-  print(temp)
-  plot(data[,1],data[,2],xlab="days",ylab="titer",ylim=c(1,13),xlim=c(0,10))
-  amean <- mean(jags.fit_2a$sims.list$a)
-  bmean <- mean(jags.fit_2a$sims.list$b)
-  shapemean <- mean(jags.fit_2a$sims.list$shape)
-  curve(MMFunc(x,amean,bmean),0,10,add=T,lwd=2,col="green")
-  posterior_mean <- c(amean,bmean,shapemean)
-  
-  cintervals <- matrix(NA,nrow=2,ncol=3)
-  colnames(cintervals) <- c("a","b","shape")
-  if(CImethod=="HPD"){
-    cintervals[,"a"] <- hdi(jags.fit_2a$sims.list$a,credMass = CIlevel)
-    cintervals[,"b"] <- hdi(jags.fit_2a$sims.list$b,credMass = CIlevel)
-    cintervals[,"shape"] <- hdi(jags.fit_2a$sims.list$shape,credMass = CIlevel)
-  }else{
-    cintervals[,"a"] <- quantile(jags.fit_2a$sims.list$a,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-    cintervals[,"b"] <- quantile(jags.fit_2a$sims.list$b,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-    cintervals[,"shape"] <- quantile(jags.fit_2a$sims.list$shape,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-  }
-  gelmandiag <- gelman.diag(jags.fit_2a_coda)
-
-  output = list(
-    post.mean = posterior_mean,
-    conf.ints = cintervals,
-    gelman.rubin = gelmandiag$mpsrf 
-  )
-  return(output)  
+parameters {
+  real<lower=0> a,b,rate;
 }
 
-
-```
-
-```{r dataq4_2a0, echo=FALSE, context="data"}
-
-library(HDInterval)
-library(emdbook)
-library(jagsUI)
-
-#####
-# 4.2a
-
-MMFunc <- function(x,a,b){
-  (a*x)/(b+x)
+model {
+  a ~ exponential(.1);   // prior on a
+  b ~ exponential(.1);   // prior on b
+  rate ~ exponential(.1);   // prior on rate
+  vector[N] m = mm(day,a,b);   // mean expected titer  
+  vector[N] shape = rate * m;     // compute gamma shape parameter
+  titer ~ gamma(shape, rate);   // likelihood
 }
-
-
-# MyxDat <- MyxoTiter_sum
-# Myx <- subset(MyxDat,grade==1)  #Data set from grade 1 of myxo data
-# #head(Myx)
-# 
-# myx.data.for.bugs <- list(
-#   titer = Myx$titer,
-#   days = Myx$day,
-#   n.observations = nrow(Myx)
-# )
-# 
-# init.vals.for.bugs2 <- function(){
-#   list(
-#     shape=runif(1,20,30),
-#     a=runif(1,8,9),
-#     b=runif(1,1,1.5)
-#   )
-# }
-#init.vals.for.bugs()
-
-params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
-
-#jags.fit_2a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=50000,model.file="BUGSmodel_mm.txt",n.chains = 3,n.burnin = 5000,n.thin = 20, parallel=TRUE )
-
-#jags.fit_2a   # test the model fit
-
-
-########
-# package into function
-
-Myx_MM_JAGS <- function(data=Myx[,-1],CImethod="HPD",CIlevel=0.95){
-  filename <- "BUGSmodel_mm.txt"
-  cat("
-      model {
-        
-        #############
-        # LIKELIHOOD
-        ############
-        for(obs in 1:n.observations){
-          titer[obs] ~ dgamma(shape,rate[obs])
-          rate[obs] <- shape/exp.titer[obs]
-          exp.titer[obs] <- (a*days[obs]) / (b+days[obs])
-        }
-        
-        #############
-        # PRIORS
-        ############
-        shape ~ dgamma(0.01,0.01)
-        a ~ dgamma(0.01,0.01)
-        b ~ dgamma(0.01,0.01)
-      }
-    ",file=filename
-  )
     
-  myx.data.for.bugs <- list(
-    titer = data[,2],
-    days =data[,1],
-    n.observations = nrow(data)
-  )
-  
-  init.vals.for.bugs2 <- function(){
-    list(
-      shape=runif(1,20,30),
-      a=runif(1,8,9),
-      b=runif(1,1,1.5)
-    )
-  }
-  
-  params.to.store <- c("shape","a","b")    # specify the parameters we want to get the posteriors for
-  
-  jags.fit_2a <- jags(data=myx.data.for.bugs,inits=init.vals.for.bugs2,parameters.to.save=params.to.store,n.iter=50000,model.file=filename,n.chains = 3,n.burnin = 5000,n.thin = 20,parallel=TRUE )
-  jags.fit_2a_coda <- jags.fit_2a$samples
-  plot(jags.fit_2a_coda)
-  temp <- densityplot(jags.fit_2a_coda)
-  print(temp)
-  plot(data[,1],data[,2],xlab="days",ylab="titer",ylim=c(1,13),xlim=c(0,10))
-  amean <- mean(jags.fit_2a$sims.list$a)
-  bmean <- mean(jags.fit_2a$sims.list$b)
-  shapemean <- mean(jags.fit_2a$sims.list$shape)
-  curve(MMFunc(x,amean,bmean),0,10,add=T,lwd=2,col="green")
-  posterior_mean <- c(amean,bmean,shapemean)
-  
-  cintervals <- matrix(NA,nrow=2,ncol=3)
-  colnames(cintervals) <- c("a","b","shape")
-  if(CImethod=="HPD"){
-    cintervals[,"a"] <- hdi(jags.fit_2a$sims.list$a,credMass = CIlevel)
-    cintervals[,"b"] <- hdi(jags.fit_2a$sims.list$b,credMass = CIlevel)
-    cintervals[,"shape"] <- hdi(jags.fit_2a$sims.list$shape,credMass = CIlevel)
-  }else{
-    cintervals[,"a"] <- quantile(jags.fit_2a$sims.list$a,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-    cintervals[,"b"] <- quantile(jags.fit_2a$sims.list$b,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-    cintervals[,"shape"] <- quantile(jags.fit_2a$sims.list$shape,c((1-CIlevel)/2 ,CIlevel+((1-CIlevel)/2)))
-  }
-  gelmandiag <- gelman.diag(jags.fit_2a_coda)
+```
 
-  output = list(
-    post.mean = posterior_mean,
-    conf.ints = cintervals,
-    gelman.rubin = gelmandiag$mpsrf 
+Compile and generate samples from your stan code using the following syntax. I named my stan file 'myx3.stan'.
+
+```{r q4_2a-solution2}
+
+## exercise 4.1 ---------
+
+# test your stan code:
+
+mod3 <- cmdstan_model("myx3.stan") # Compile stan model
+
+stan_data <- list(   # bundle data for stan
+    N = nrow(Myx),
+    titer = Myx$titer,
+    day=Myx$day
+)
+
+inits <- function(){
+  list(
+    a=runif(1,1,10),
+    b=runif(1,.01,0.1),
+    rate=runif(1,1,10)
   )
-  return(output)  
 }
+# inits()
+
+fit3 <- mod3$sample(
+  data = stan_data,
+  chains = 4,
+  init = inits,
+  iter_warmup = 500,
+  iter_sampling = 1000
+)
+
+fit3$summary()
+
+samples_mm <- fit3$draws(format="draws_df")
+bayesplot::mcmc_trace(samples_mm,"a")
+bayesplot::mcmc_trace(samples_mm,"b")
+bayesplot::mcmc_trace(samples_mm,"rate")
+
 
 
 ```
-
-And here are some test commands with output:  
-
-```{r test4.2a, fig.dim = c(5, 7)}
-
-MM_results <- Myx_MM_JAGS(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)
-MM_results
-  
-MM_results <- Myx_MM_JAGS(data=Myx[,-1],CImethod="quantile",CIlevel=0.88)
-MM_results
-
-```
-
-
-```{r q4_2a-check, echo=F}
-grade_this({
-  fail_if(!length(.result(data=Myx[,-1],CImethod="HPD",CIlevel=0.88))==3, "your function output should be a list with three elements")
-  fail_if(!near(.result(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)[[1]][1],
-              .solution(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)[[1]][1],0.5))
-  pass_if(near(.result(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)[[2]][1,1],
-              .solution(data=Myx[,-1],CImethod="HPD",CIlevel=0.88)[[2]][1,1],0.5))
-  fail()
-})
-```
-
 
 ### **Exercise 4.2b (figure upload)**.  
 
-In Webcampus, please answer the following question: overlay both the best-fit M-M and the best-fit Ricker curves on a plot of the data (please include this figure in your Word document). On the basis of simple visual cues, does the M-M function seem to fit better than the Ricker function to describe this relationship? Explain your reasoning.
-
+In Webcampus, please answer the following question: overlay both the best-fit M-M and the best-fit Ricker curves on a plot of the data (please upload the figure in WebCampus). On the basis of simple visual cues, does the M-M function seem to fit better than the Ricker function to describe this relationship? Explain your reasoning.
 
 And here is an example of what your figure should look like with the best-fit M-M and Ricker functions overlaid on the same plot:  
 
-```{r answer4.2b, echo=FALSE}
+```{r solution4.2b, echo=FALSE}
 
 ######
 # 2b
 
+ricker = function(x,a,b) (a * x) * exp( -b * x)
+
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,10))
-curve(MMFunc(x,a=MM_results[[1]][1],b=MM_results[[1]][2]),from=0,to=10,add=T,col="red",lwd=2)
-curve(Ricker(x,a=Ricker_results[[1]][1],b=Ricker_results[[1]][2]),from=0,to=10,add=T,col="green",lty=2,lwd=2)
+curve(mm(x,a=mean(samples_mm$a),b=mean(samples_mm$b)),add=T,col="red",lwd=2)
+curve(ricker(x,a=mean(samples_rick$a),b=mean(samples_rick$b)),add=T,col="green",lty=2,lwd=2)
 legend("topleft",lwd=c(2,2),lty=c(1,2),col=c("red","green"),legend=c("MM","Ricker"),bty="n")
 
 ```
-
-
-```{r echo=FALSE, message=FALSE, warning=FALSE}
-
-inits <- list(list(a=8, b=0.5, shape=90), list(a=10, b=1, shape=100), list(a=7, b=1.2, shape=70))
-
-#Make a model file:
-
-cat("
-  model {
-  	for (i in 1:n) {
-  		mean [ i ] <- a*day[ i ]/ (b + day[ i ])
-  		rate [ i ] <- shape/mean[ i ]
-  		titer [ i ] ~ dgamma (shape, rate[ i ])
-  	}
-    ##priors
-    a ~ dgamma (0.1, 0.1)
-    b ~ dgamma (0.1, 0.1)
-    shape ~ dgamma (0.01, 0.01)
-  }
-", file="myxomodel2.txt")
-
-```
-
-
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
-
-datalist <- list(
-  titer=Myx$titer,
-  day=Myx$day,
-  n=nrow(Myx)
-)
-
-myxo2.bugs <- jags(data=datalist, inits=inits, parameters.to.save=c("a", "b", "shape"), model.file= "myxomodel2.txt", n.thin=5, n.chains=3, n.burnin=500, n.iter=5000,parallel=TRUE)
-#myxo2.bugs
-
-```
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
-#Run this model through JAGS.
-
-
-myxo2.mcmc <- myxo2.bugs$samples
- #summary(myxo2.mcmc)
-
-library(lattice)
-#plot(myxo2.mcmc)
-densityplot(myxo2.mcmc)
-```
-
-
-```{r eval=FALSE, echo=FALSE}
-
-plot(titer~day,data=Myx,xlim=c(0,10),ylim=c(0,10))
-curve(Ricker(x,a=3.5612,b=0.1713),from=0,to=10,add=T,col="black")
-
-```
-
-
 
 ## Exercise 4.3. Goodness-of-fit and model comparison
 
 Let's try a different approach for visualizing the goodness-of-fit of these two models. For each of these models, follow the instructions provided below to evaluate goodness-of-fit. On the basis of a *posterior predictive check* (see below), how well would you say each model fits the observed data? Do you see any red flags that would indicate poor goodness-of-fit? 
 
-## **Exercise 4.3a**. 
+### **Exercise 4.3a** (R function) 
 
 Write a function called "Myx_PostPredCheck()" that compares the goodness-of-fit for the two models (ricker vs M-M) using a posterior predictive check.  
 
 + **input**:         
-    + MCMC1 = the object generated from running the 'jags()' function with the Ricker function.     
-    + MCMC2 = the object generated from running the 'jags()' function with the Michaelis-Menten function.    
+    + MCMC1 = the object generated from running the 'samples()' function with the Ricker formulation.     
+    + MCMC2 = the object generated from running the 'samples()' function with the Michaelis-Menten formulation.
+    
+#### START HERE
 
 + **suggested algorithm**:  
     + For each model (Ricker, M-M), generate new data under the fitted model. For each of an arbitrarily large number (e.g., 1000) of replicates, sample from the joint posterior distribution:     
