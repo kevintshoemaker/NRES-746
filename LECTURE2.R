@@ -98,7 +98,7 @@ Prob_Color["blue"]      # marginal probability of drawing a blue object (across 
 
 # Medical example (positive predictive value) --------------------------
 
-Prob_Disease <- c(0.000001, 0.999999)     # marginal probability of disease vs no disease
+Prob_Disease <- c(1e-4, 1-1e-4)     # marginal probability of disease vs no disease
 names(Prob_Disease) <- c("yes","no")                # make it a named vector!
 Prob_Disease
 

@@ -8,8 +8,7 @@
 
 # first, let's build a function that generates random numbers from a bivariate standard normal distribution
 
-rbvn<-function (n, rho)   #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
-{
+rbvn<-function (n, rho){   #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
         x <- rnorm(n, 0, 1)
         y <- rnorm(n, rho * x, sqrt(1 - rho^2))
         cbind(x, y)
@@ -17,67 +16,148 @@ rbvn<-function (n, rho)   #function for drawing an arbitrary number of independe
 
 # Now, plot the random draws from this distribution, make sure this makes sense!
 
-bvn<-rbvn(10000,0.98)
-par(mfrow=c(3,2))
-plot(bvn,col=1:10000)
-plot(bvn,type="l")
-plot(ts(bvn[,1]))
-plot(ts(bvn[,2]))
-hist(bvn[,1],40)
-hist(bvn[,2],40)
+bvn_true<-rbvn(10000,0.9)
+par(mfrow=c(2,2))
+plot(ts(bvn_true[,1]))
+plot(ts(bvn_true[,2]))
+hist(bvn_true[,1],40)
+hist(bvn_true[,2],40)
 par(mfrow=c(1,1))
 
 
 
-# Metropolis-Hastings implementation of bivariate normal sampler... 
+plot(bvn_true[,1],bvn_true[,2])
 
-library(mvtnorm)    # load a package that allows us to compute probability densities for mv normal distribution 
-
-metropolisHastings <- function (n, rho=0.98){    # an MCMC sampler implementation of a bivariate random number generator
-    mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
-    x <- 0   # initial values for all parameters
-    y <- 0
-    prev <- mvtnorm::dmvnorm(c(x,y),mean=c(0,0),sigma = matrix(c(1,rho,rho,1),ncol=2))   # probability density of the distribution at the starting values
-    mat[1, ] <- c(x, y)        # initialize the markov chain
-    counter <- 1
-    while(counter<=n) {
-      newx <- rnorm(1,x,0.5)     # make a jump. Note the symmetrical proposal distribution
-      newy <- rnorm(1,y,0.5)
-      
-      newprob <- mvtnorm::dmvnorm(c(newx,newy),sigma = matrix(c(1,rho,rho,1),ncol=2))    # assess whether the new jump is good!
-      ratio <- newprob/prev   # compute the ratio of probabilities at the old (jump from) and proposed (jump to) locations. 
-      
-      prob.accept <- min(1,ratio)     # decide the probability of accepting the new jump!
-      rand <- runif(1)
-      if(rand<=prob.accept){
-        x=newx;y=newy    # set x and y to the new location
-        mat[counter,] <- c(x,y)    # store this in the storage array 
-        prev <- newprob    # get ready for the next iteration
-      }else{
-        mat[counter,] <- c(x,y)
-      }
-      
-      counter=counter+1
-      
-    }
-    return(mat)
+vis_mcmc2 <- function(mat){   # assume mat has 1 row per sample, and 2 columns (# params)
+  par(mfrow=c(3,ncol(mat)))
+  plot(mat,col=1:nrow(mat)) ; plot(mat,type="l")
+  plot(ts(mat[,1])) ; plot(ts(mat[,2]))
+  hist(mat[,1],40) ; hist(mat[,2],40)
+  par(mfrow=c(1,1))
 }
 
 
-# Test the new M-H sampler
+## Metropolis-Hastings implementation of bivariate normal sampler...   ----------
 
-bvn<-metropolisHastings(10000,0.98)
-par(mfrow=c(3,2))
-plot(bvn,col=1:10000)
-plot(bvn,type="l")
-plot(ts(bvn[,1]))
-plot(ts(bvn[,2]))
-hist(bvn[,1],40)
-hist(bvn[,2],40)
-par(mfrow=c(1,1))
+proposal <- function(x) rnorm(1,x,0.4)
+cond_prob <- function(this,xval,rho) dnorm(this,rho*xval,1-rho^2) 
+choose_mh <- function(prev,new,other,rho){
+  r = min(cond_prob(new,other,rho)/cond_prob(prev,other,rho),1)
+  ifelse(r>runif(1),new,prev)
+}
+
+metropolisHastings <- function (n, rho){    # an MCMC bivariate random number generator
+    mat <- matrix(NA,n,2)   # matrix for storing the random samples
+    prev = c(0,0); mat[1,] <- prev       # initial values for all parameters
+    for(i in 1:n){
+      for(j in 1:2) prev[j] <- choose_mh(prev[j],proposal(prev[j]),prev[setdiff(1:2,j)] ,rho)
+      mat[i,] <- prev
+    }
+    mat
+}
 
 
-# MCMC implementation of the Myxomatosis example from the Bolker book --------------
+# Test our M-H sampler
+
+bvn_mh<-metropolisHastings(5000,rho=0.9)
+vis_mcmc2(bvn_mh)
+
+
+# Simple example of a Gibbs sampler ----------------
+
+# first, recall our 'true' bivariate normal sampler
+
+vis_mcmc2(bvn_true)
+
+
+## Now construct a Gibbs sampler  ---------------
+
+cond_prob2 <- function(xval,rho) rnorm(1, rho * xval, sqrt(1 - rho^2))   # sample random value from full conditional
+
+gibbs<-function (n, rho){    # a Gibbs sampler for bivariate normal
+    mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
+    prev <- c(0,0); mat[1, ] <- prev     # initialize the markov chain
+    for (i in 2:n) {
+      prev[1] <- cond_prob2(prev[2],rho)   # sample from full conditional
+      prev[2] <- cond_prob2(prev[1],rho)
+      mat[i,] <- prev
+    }
+    mat
+}
+
+
+# Test the Gibbs sampler ------------------
+
+bvn_gbs <-gibbs(10000,0.9)
+vis_mcmc2(bvn_gbs)
+
+
+rho = 0.9  # set correlation as a global constant
+
+  # compute the unnormalized log posterior
+log_posterior <- function(x) dnorm(x[1],log=T) + dnorm(x[2],rho*x[1],1-rho^2,log=T)
+
+
+library(pracma)   # load package capable of computing gradient numerically at any point in parameter space
+
+   # compute the gradient of the log posterior density function at a point x
+gradient <- function(x) pracma::grad(log_posterior,x)
+
+# Ancillary code for HMC ----------
+  # modified from https://jonnylaw.rocks/posts/2019-07-31-hmc/
+
+leapfrog_step <- function(gradient, step_size, position, momentum, d) {
+  momentum1 <- momentum + gradient(position) * 0.5 * step_size
+  position1 <- position + step_size * momentum1
+  momentum2 <- momentum1 + gradient(position1) * 0.5 * step_size
+  matrix(c(position1, momentum2), ncol = d*2)
+}
+
+
+leapfrogs <- function(gradient, step_size, l, position, momentum, d) {
+  for (i in 1:l) {
+    pos_mom <- leapfrog_step(gradient, step_size, position, momentum, d)
+    position <- pos_mom[seq_len(d)]   # position is the first d elements of the row vector
+    momentum <- pos_mom[-seq_len(d)] # momentum is the final d elements of the row vector
+  }
+  pos_mom
+}
+
+log_acceptance <- function(propPosition,
+                           propMomentum,
+                           position,
+                           momentum,
+                           log_posterior) {
+  log_posterior(propPosition) + sum(dnorm(propMomentum, log = T)) - 
+    log_posterior(position) - sum(dnorm(momentum, log = T))
+}
+hmc_step <- function(log_posterior, gradient, step_size, l, position) {
+  d <- length(position)
+  momentum <- rnorm(d)    # initial momentum- a kick to get the sampler going
+  pos_mom <- leapfrogs(gradient, step_size, l, position, momentum, d)   # position and momentum vectors  
+  propPosition <- pos_mom[seq_len(d)]    # separate into position and momentum vectors
+  propMomentum <- pos_mom[-seq_len(d)]
+  a <- log_acceptance(propPosition, propMomentum, position, momentum, log_posterior)
+  if (log(runif(1)) < a) {    # this is a metropolis procedure! 
+    propPosition
+  } else {
+    position
+  }
+}
+hmc <- function(log_posterior, gradient, step_size, l, initP, m) {
+  out <- matrix(NA_real_, nrow = m, ncol = length(initP))   # initialize the output matrix
+  out[1, ] <- initP   # get the sampler started
+  for (i in 2:m) {
+    out[i, ] <- hmc_step(log_posterior, gradient, step_size, l, out[i-1,]) # one HMC step
+  }
+  out  # fully filled-in matrix of steps in parameter space
+}
+# Test the HMC sampler ------------------
+
+bvn_hmc <-hmc(log_posterior, gradient, .2, 10, c(0,0), 1000)  
+vis_mcmc2(bvn_hmc)
+
+# Using MCMC to fit the Myxomatosis example from the Bolker book --------------
 
 library(emdbook)
 
@@ -91,470 +171,223 @@ head(Myx)
 hist(Myx$titer,freq=FALSE)
 
 
-# ... and overlay a proposed data-generating model (gamma distribution)
-
-hist(Myx$titer,freq=FALSE)
-curve(dgamma(x,shape=40,scale=0.15),add=T,col="red")
-
-
 # define 2-D parameter space!
 
-shapevec <- seq(3,100,by=0.1)   
-scalevec <- seq(0.01,0.5,by=0.001)
+shapevec <- seq(1,150,length=200)        # divide parameter space into tiny increments
+ratevec <- seq(0.5,30,length=200)
 
 # define the likelihood surface  -------------
 
-GammaLogLikelihoodFunction <- function(params){
-  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))
-}
-surface2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
-
-newparams <- c(shape=50,scale=0.2)
-for(i in 1:length(shapevec)){
-  newparams['shape'] <- shapevec[i]
-  for(j in 1:length(scalevec)){
-    newparams['scale'] <- scalevec[j]
-    surface2D[i,j] <- GammaLogLikelihoodFunction(newparams) 
-  }
+loglik <- function(pars){
+  sum(dgamma(Myx$titer,shape=pars['shape'],rate=pars['rate'],log = T))
 }
 
-# Visualize the likelihood surface
+parmsurface <- expand.grid(shapevec,ratevec); colnames(parmsurface) <- c("shape","rate")
+parmsurface$ll <- sapply(1:nrow(parmsurface), function(t) loglik(unlist(parmsurface[t,1:2]))  )
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
+library(ggplot2)
+ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the log likelihood surface
+  geom_raster(aes(fill=ll)) +
+  scale_fill_gradient(limits=c(-150,-37)) +
+  geom_contour(aes(z=ll),breaks=c(-45,-40) ,lwd=1.2)
 
 
-# Write a non-log-transformed likelihood function ------------
-
-GammaLikelihoodFunction <- function(params){
-  prod(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=F))   
+# Function for returning the log prior probability density for any 2D parameter vector 
+logprior <- function(params){
+  dgamma(params['shape'],0.001,0.001,log=T)  +  
+  dgamma(params['rate'],0.001,0.001,log=T)
 }
 
-  # and here's the log likelihood function
-GammaLogLikelihoodFunction <- function(params){
-  sum(dgamma(Myx$titer,shape=params['shape'],scale=params['scale'],log=T))   
-}
+# curve(dgamma(x,shape=0.001,rate=0.001),3,100)   # visualize gamma
+# params <- c(shape=40,rate=7)    # test function
+# logprior(params)
 
-params <- c(shape=40,scale=0.15) 
-params
-GammaLikelihoodFunction(params)
-GammaLogLikelihoodFunction(params)
-
-
-# Function for returning the prior probability density for any point in parameter space 
-
-GammaPriorFunction <- function(params){
-  prior <- c(shape=NA,scale=NA)
-  prior['shape'] <- dgamma(params['shape'],shape=0.001,scale=1000)
-  prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000)
-  # prior['shape'] <- dunif(params['shape'],3,100)        # alternative: could use uniform prior!
-  # prior['scale'] <- dunif(params['scale'],0.01,0.5)
-  return(prod(prior))
-}
-
-GammaLogPriorFunction <- function(params){
-  prior <- c(shape=NA,scale=NA)
-  prior['shape'] <- dgamma(params['shape'],shape=0.001,scale=1000,log=T)
-  prior['scale'] <- dgamma(params['scale'],shape=0.001,scale=1000,log=T)
-  # prior['shape'] <- dunif(params['shape'],3,100)        # alternative: could use uniform prior!
-  # prior['scale'] <- dunif(params['scale'],0.01,0.5)
-  return(sum(prior))
-}
-
-curve(dgamma(x,shape=0.001,scale=1000),3,100)
-
-params <- c(shape=40,scale=0.15) 
-params
-GammaPriorFunction(params)
-
-prior2D <- matrix(nrow=length(shapevec),ncol=length(scalevec))   # initialize storage variable
-
-newparams <- c(shape=50,scale=0.2)
-for(i in 1:length(shapevec)){
-  newparams['shape'] <- shapevec[i]
-  for(j in 1:length(scalevec)){
-    newparams['scale'] <- scalevec[j]
-    prior2D[i,j] <- GammaPriorFunction(newparams) 
-  }
-}
-
-# Visualize the prior likelihood surface
-
-image(x=shapevec,y=scalevec,z=prior2D,zlim=c(0.000000001,0.001),col=topo.colors(12))
-#contour(x=shapevec,y=scalevec,z=prior2D,levels=c(-30,-40,-80,-500),add=T)
-
-
+parmsurface$pr <- sapply(1:nrow(parmsurface), function(t) logprior(unlist(parmsurface[t,1:2]))  )
+ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the log likelihood surface
+  geom_raster(aes(fill=pr)) +
+  scale_fill_gradient(limits=c(-25,-13.14)) 
 
 
 # Function for computing the ratio of posterior densities -----------------
 
-PosteriorRatio <- function(oldguess,newguess){
-  oldLik <- max(1e-90,GammaLikelihoodFunction(oldguess))   # compute likelihood and prior density at old guess
-  oldPrior <- max(1e-90,GammaPriorFunction(oldguess))
-  newLik <- GammaLikelihoodFunction(newguess)             # compute likelihood and prior density at new guess
-  newPrior <- GammaPriorFunction(newguess)
-  return((newLik*newPrior)/(oldLik*oldPrior))          # compute ratio of weighted likelihoods
+eval_jump <- function(old,new){
+  oldnum <- loglik(old) + logprior(old)   # compute likelihood and prior density at old guess
+  newnum <- loglik(new) + logprior(new)              # compute likelihood and prior density at new guess
+  c(diff= unname(newnum-oldnum) )         # compute ratio of weighted likelihoods (log scale)
 }
 
-PosteriorRatio2 <- function(oldguess,newguess){
-  oldLogLik <- GammaLogLikelihoodFunction(oldguess)   # compute likelihood and prior density at old guess
-  oldLogPrior <- GammaLogPriorFunction(oldguess)
-  newLogLik <- GammaLogLikelihoodFunction(newguess)             # compute likelihood and prior density at new guess
-  newLogPrior <- GammaLogPriorFunction(newguess)
-  return(exp((newLogLik+newLogPrior)-(oldLogLik+oldLogPrior)))          # compute ratio of weighted likelihoods
-}
-
-oldguess <- params
-newguess <- c(shape=39,scale=0.15)
-
-PosteriorRatio(oldguess,newguess)
-PosteriorRatio2(oldguess,newguess)
+params <- c(shape=37,rate=6)
+old <- params    # test function
+new <- c(shape=39,rate=7)
+eval_jump(old,new)
 
 
 # Define proposal distribution --------------------------
-    #for jumps in parameter space (use normal distribution)!
+    # use bivariate normal distribution to make a guess
+
+jump_vcv <- matrix(c(1,0.3,0.3,0.4),ncol=2)    # in real life, we would tune these parameters to optimize our sampler
 
      # function for making new guesses
-newGuess <- function(oldguess){
-  sdshapejump <- 3 #4
-  sdscalejump <- 0.05
-  corjump <- -0.6
-  vcv <- diag(2)*c(sdshapejump^2,sdscalejump^2)
-  vcv[2,1] <- vcv[1,2] <- corjump*sqrt(sdshapejump^2*sdscalejump^2)
-  newguess <- mvtnorm::rmvnorm(1,oldguess,vcv)[1,] # c(shape=rnorm(1,mean=0,sd=sdshapejump),scale=rnorm(1,0,sdscalejump))
-  # newguess <- abs(oldguess + jump)    # note: by taking the abs val to avoid negative numbers, our proposal jump probs are not strictly symmetrical, but this should not present a big issue in practice
-  newguess <- ifelse(newguess<0.001,0.001,newguess)
-  return(newguess)
+make_guess <- function(old){
+  newguess <- mvtnorm::rmvnorm(1,old,jump_vcv)[1,] 
+  ifelse(newguess<0.001,0.001,newguess)   # make sure we don't get any negative guesses. This induces an asymmetry, but we won't worry about that right now as it is unlikely to influence our MCMC samples
 }
-  # set a new "guess" near to the original guess
-
-newGuess(oldguess=params)   
-newGuess(oldguess=params)
-newGuess(oldguess=params)
+params
+make_guess(params)     # set a new "guess" near to the original guess
 
 
 # Set a starting point in parameter space -------------------
 
-startingvals <- c(shape=75,scale=0.28)    # starting point for the algorithm
+startingvals <- c(shape=75,rate=4)    # starting point for the algorithm
 
 
 # Try our new functions  ------------------
 
-startingvals
-newguess <- newGuess(startingvals)    # take a jump in parameter space
+newguess <- make_guess(startingvals)    # take a jump in parameter space
 newguess
 
-PosteriorRatio2(startingvals,newguess)   # difference in posterior ratio
+eval_jump(startingvals,newguess)   # difference in posterior ratio
 
 
 # Visualize the Metropolis-Hastings routine: ---------------
 
-chain.length <- 11
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-  }else{
-    guesses[counter,] <- oldguess 
+mh <- function(n,st){    # function for doing M-H MCMC
+  chain <- matrix(nrow=n,ncol=length(st),dimnames=list(1:n,names(st)))
+  chain[1,] <- startingvals
+  for(i in 2:n){
+    prop <- make_guess(chain[i-1,])    # proposal jump
+    prob_accept <- min(1,exp(eval_jump(chain[i-1,],prop)) )
+    if(prob_accept >= runif(1)){    # choose the jump in accordance with its relative probability under the posterior
+      chain[i,] = prop
+    }else{
+      chain[i,] <- chain[i-1,]  
+    }
   }
-  counter=counter+1
+  chain
 }
 
-# visualize!
+chain= mh(100,startingvals)
 
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
+# visualize!
+parmsurface$post <- parmsurface$ll + parmsurface$pr
+post_plot = ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the log likelihood surface
+  geom_raster(aes(fill=post)) +
+  scale_fill_gradient(limits=c(-150,-57)) +
+  geom_contour(aes(z=post),breaks=c(-65,-59) ,lwd=1.2)
+post_plot +  geom_path(data=chain,aes(x=shape,y=rate),lwd=1.2,col="white")
 
 
 # Get more MCMC samples --------------
 
-chain.length <- 1000
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-  }else{
-    guesses[counter,] <- oldguess 
-  }
-  counter=counter+1
-}
-
-# visualize!
-
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
+chain= mh(1000,startingvals)
+post_plot +  geom_path(data=chain,aes(x=shape,y=rate),lwd=1.2,col="white")
 
 
 # And more... -------------------
 
-chain.length <- 10000
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-  }else{
-    guesses[counter,] <- oldguess 
-  }
-  counter=counter+1
-}
-
-# visualize!
-
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
+chain= mh(10000,startingvals)
+post_plot +  geom_path(data=chain,aes(x=shape,y=rate),lwd=1.2,col="white")
 
 
 # Evaluate "traceplot" for the MCMC samples... ---------------------
 
 ## Shape parameter
 
-plot(1:chain.length,guesses[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:nrow(chain),chain[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
 
 
-## Scale parameter
+## Rate parameter
 
-plot(1:chain.length,guesses[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+plot(1:nrow(chain),chain[,'rate'],type="l",main="rate parameter",xlab="iteration",ylab="rate")
 
 
 # Remove "burn-in" (allow MCMC routine some time to get to the posterior) --------------
 
-burn.in <- 1000
-MCMCsamples <- guesses[-c(1:burn.in),]
+chain <- chain[-c(1:1000),]    # remove first 1000 sample
 
-chain.length=chain.length-burn.in
-plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
-plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+plot(1:nrow(chain),chain[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:nrow(chain),chain[,'rate'],type="l",main="rate parameter",xlab="iteration",ylab="rate")
 
+
+# Change the VCV for proposal distribution
+
+jump_vcv <- matrix(c(1.1,0.7,0.7,.8),ncol=2) 
 
 # Try again- run for much longer ---------------------
 
-chain.length <- 100000
-oldguess <- startingvals
-guesses <- matrix(0,nrow=chain.length,ncol=2)
-colnames(guesses) <- names(startingvals)
-guesses[1,] <- startingvals
-
-counter <- 2
-while(counter <= chain.length){
-  newguess <- newGuess(oldguess)
-  post.rat <- PosteriorRatio2(oldguess,newguess)
-  prob.accept <- min(1,post.rat)
-  rand <- runif(1)
-  if(rand<=prob.accept){
-    oldguess <- newguess
-    guesses[counter,] <- newguess 
-  }else{
-    guesses[counter,] <- oldguess 
-  }
-  counter=counter+1
-}
-
-# visualize!
-
-image(x=shapevec,y=scalevec,z=surface2D,zlim=c(-1000,-30),col=topo.colors(12))
-contour(x=shapevec,y=scalevec,z=surface2D,levels=c(-30,-40,-80,-500),add=T)
-lines(guesses,col="red")
+chain= mh(100000,startingvals)   # takes ~10 seconds to run
 
 
-# Use longer "burn-in" ------------------
+# Use longer "burn-in" and thin ------------------
 
-burn.in <- 25000
-MCMCsamples <- guesses[-c(1:burn.in),]
-chain.length=chain.length-burn.in
-
-
-plot(1:chain.length,MCMCsamples[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
-plot(1:chain.length,MCMCsamples[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+chain <- chain[-c(1:25000),]    # remove first 25000 sample
+chain <- chain[seq(1,nrow(chain),5),]   # keep every fifth sample
 
 
-# "thin" the MCMC samples  -----------------------
+plot(1:nrow(chain),chain[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
+plot(1:nrow(chain),chain[,'rate'],type="l",main="rate parameter",xlab="iteration",ylab="rate")
 
-thinnedMCMC <- MCMCsamples[seq(1,chain.length,by=10),]
-plot(1:nrow(thinnedMCMC),thinnedMCMC[,'shape'],type="l",main="shape parameter",xlab="iteration",ylab="shape")
-plot(1:nrow(thinnedMCMC),thinnedMCMC[,'scale'],type="l",main="scale parameter",xlab="iteration",ylab="scale")
+
+acf(chain[,"shape"],lag.max=500)
 
 
 # Visualize the posterior!
 
-plot(density(thinnedMCMC[,'scale']),main="scale parameter",xlab="scale")
-plot(density(thinnedMCMC[,'shape']),main="shape parameter",xlab="shape")
+plot(density(chain[,'rate']),main="rate parameter",xlab="rate")
+plot(density(chain[,'shape']),main="shape parameter",xlab="shape")
 
 
 # More visual posterior checks... -----------------
 
-par(mfrow=c(3,2))
-plot(thinnedMCMC,col=1:10000)
-plot(thinnedMCMC,type="l")
-plot(ts(thinnedMCMC[,1]))
-plot(ts(thinnedMCMC[,2]))
-hist(thinnedMCMC[,1],40)
-hist(thinnedMCMC[,2],40)
-par(mfrow=c(1,1))
+vis_mcmc2(chain)
 
 
-# Simple example of a Gibbs sampler ----------------
-
-# first, recall our simple bivariate normal sampler
-
-rbvn<-function (n, rho){  #function for drawing an arbitrary number of independent samples from the bivariate standard normal distribution. 
-        x <- rnorm(n, 0, 1)
-        y <- rnorm(n, rho * x, sqrt(1 - rho^2))
-        cbind(x, y)
+data {
+  int<lower=0> N;
+  vector[N] titer;
 }
 
-bvn<-rbvn(10000,0.98)
-par(mfrow=c(3,2))
-plot(bvn,col=1:10000)
-plot(bvn,type="l")
-plot(ts(bvn[,1]))
-plot(ts(bvn[,2]))
-hist(bvn[,1],40)
-hist(bvn[,2],40)
-par(mfrow=c(1,1))
+parameters {
+  real<lower=0> shape;
+  real<lower=0> rate;
+}
 
-
-# Now construct a Gibbs sampler alternative ---------------
-
-gibbs<-function (n, rho){    # a gibbs sampler implementation of a bivariate random number generator
-    mat <- matrix(ncol = 2, nrow = n)   # matrix for storing the random samples
-    x <- 0
-    y <- 0
-    mat[1, ] <- c(x, y)        # initialize the markov chain
-    for (i in 2:n) {
-            x <- rnorm(1, rho * y, sqrt(1 - rho^2))        # sample from x conditional on y
-            y <- rnorm(1, rho * x, sqrt(1 - rho^2))        # sample from y conditional on x
-            mat[i, ] <- c(x, y)
-    }
-    mat
+model {
+  shape ~ gamma(0.001,0.001);   // prior on shape
+  rate ~ gamma(0.001,0.001);   // prior on rate
+  titer ~ gamma(shape, rate);   // likelihood
 }
 
 
-# Test the Gibbs sampler ------------------
-
-bvn<-gibbs(10000,0.98)
-par(mfrow=c(3,2))
-plot(bvn,col=1:10000)
-plot(bvn,type="l")
-plot(ts(bvn[,1]))
-plot(ts(bvn[,2]))
-hist(bvn[,1],40)
-hist(bvn[,2],40)
-par(mfrow=c(1,1))
-
-
-# Myxomatosis example in BUGS modeling language ---------------
-
-# Write the BUGS model to file
-
-cat("
-  model {
-    
-    #############
-    # LIKELIHOOD
-    ############
-    for(obs in 1:n.observations){
-      titer[obs] ~ dgamma(shape,rate)
-    }
-    
-    #############
-    # PRIORS
-    ############
-    shape ~ dgamma(0.001,0.001)
-    scale ~ dgamma(0.001,0.001)
-    rate <- 1/scale
-  }
-", file="BUGSmodel.txt")
-
+library(cmdstanr)
+mod1 <- cmdstan_model("myx.stan") # Compile stan model
 
 
 # Encapsulate the data into a single "list" object ------------------
 
-myx.data.for.bugs <- list(
-  titer = Myx$titer,
-  n.observations = length(Myx$titer)
+stan_data <- list(
+    N = nrow(Myx),
+    titer = Myx$titer
 )
 
-myx.data.for.bugs
 
+# Run stan  ------------------
 
-# Function for generating random initial values --------------
+fit1 <- mod1$sample(
+  data = stan_data,
+  chains = 4,
+  iter_warmup = 200,
+  iter_sampling = 500
+)
 
-init.vals.for.bugs <- function(){
-  list(
-    shape=runif(1,20,100),
-    scale=runif(1,0.05,0.3)
-  )
-}
+fit1$summary()
 
-init.vals.for.bugs()
-init.vals.for.bugs()
-init.vals.for.bugs()
+samples <- fit1$draws(format="draws_df")
+bayesplot::mcmc_trace(samples,"shape")
+bayesplot::mcmc_trace(samples,"rate")
 
-
-# Run JAGS!!!!  ------------------
-
-#library(R2jags)
-library(jagsUI)
-
-library(coda)
-
-params.to.store <- c("shape","scale")
-
-jags.fit <- jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,n.iter=5000,n.chains = 3,n.adapt = 100,n.burnin = 0)
-
-jagsfit.mcmc <- jags.fit$samples   # extract "MCMC" object
-
-summary(jagsfit.mcmc)
-
-plot(jagsfit.mcmc)
-
-
-# Run the chains for longer! -----------------
-
-jags.fit <- jags(model="BUGSmodel.txt",data=myx.data.for.bugs,inits=init.vals.for.bugs,parameters.to.save=params.to.store,
-                     n.iter = 100000,n.chains = 3,n.adapt = 1000,n.burnin = 10000,
-                     n.thin=100,parallel=T )
-
-jagsfit.mcmc <- jags.fit$samples   # convert to "MCMC" object (coda package)
-
-summary(jagsfit.mcmc)
-
-plot(jagsfit.mcmc)
-
+acf(samples$shape,lag.max=100)
 
 # Run convergence diagnostics  ------------------
-
-gelman.diag(jagsfit.mcmc)
+fit1$summary()
 
