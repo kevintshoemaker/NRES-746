@@ -166,14 +166,11 @@ exp(l)   # we can convert back to likelihood if we want...
 
 # Arguments:
 #   params: bundled vector of free parameters for the known data-generating model
-#   df: a data frame that holds the observed response variable and covariates
-#   yvar: the name of the response variable (ancillary)
-#   xvar: the name of the predictor variable (ancillary)
 
-mtcars_LL <- function(params,df=mtcars,yvar="mpg",xvar="disp"){
-  sum(dnorm(df$mpg,mu_func(df$disp,params['a'],params['b']),params['sigma'],log=TRUE)) 
+mtcars_LL <- function(params){
+  sum(dnorm(mtcars$mpg,mu_func(mtcars$disp,params['a'],params['b']),params['sigma'],log=TRUE)) 
 }
-mtcars_LL(unlist(params),df=mtcars,yvar="mpg",xvar="disp")
+mtcars_LL(params)
 
 
 # Use numerical optimization methods to identify the maximum likelihood estimate (and the likelihood at the MLE)
@@ -193,6 +190,23 @@ LogLik
 xvals <- mtcars$disp
 yvals <- mtcars$mpg
 VisualizeModelWithData(xvals,MLE)
+
+
+powerlaw = function(x,t){
+  t[1] * x^t[2]
+}
+
+mtcars_NLL2 = function(params){
+  -sum(dnorm(mtcars$mpg,powerlaw(mtcars$disp,params[1:2]),params['sigma'],log=TRUE)) 
+}
+
+params=c(a=40,b=-0.1,sigma=2)
+optimizedLik2 <- optim(fn=mtcars_NLL2,par=params,,hessian = T)
+MLE2 = optimizedLik2$par
+MLE2
+
+plot(mtcars$disp,mtcars$mpg)
+curve(powerlaw(x,MLE2),add=T)
 
 
 # Estimating parameter uncertainty -------------------------

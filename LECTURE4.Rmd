@@ -170,11 +170,14 @@ Q: Why did you NOT just increase the "noise" parameter until the data were consi
 
 So, we have used simulation, along with trial and error, to infer the most **likely** parameter values for our model! 
 
-A _likelihood function_, very generally, is a *function* that has 1 input argument:
+A _likelihood function_, very generally, is a *function* that has 1 input argument:     
+
 + the **parameters** for an hypothesized data generating model
+
 NOTE: we could consider the **data** as another input, but we assume this is fixed and known with certainty
 
-The likelihood function takes these inputs and produces a single output:
+The likelihood function takes these inputs and produces a single output:      
+
 + the *likelihood* (probability of the data under the data generating model with the specified parameters)
 
 The likelihood is a single number representing the plausibility of the data under this model. 
@@ -187,13 +190,13 @@ The higher the relative plausibility of generating the data, the higher the valu
 
 First of all, what does "data likelihood" really mean, in a formal sense?      
 
-$\mathcal{L_{model}}  (data) \equiv  Prob(data|Model)$
+$\mathcal{L_{model}}  (\theta) \equiv  Prob(data|\theta)$
 
 ### Definition, in English!
 
 The likelihood value of a model with parameters $\theta$ is equal to the *probability* of observing the data under the defined model with these specific parameter values. 
 
-Higher likelihoods correspond to a higher probability of the model producing the observed data (the data "fit" the model).
+Higher likelihoods correspond to a higher probability of the model generating the observed data (the data "fit" the model).
 
 In statistics, we often try to identify the parameter values that maximize the likelihood function across all possible parameter values.
 
@@ -246,7 +249,7 @@ $$L(\theta) = P(y=21;\theta=\theta^*)$$
 $$y_i \sim Normal\left \{  \alpha\cdot e^{\beta \cdot x_i} ,sigma\right \}$$
 $$L(\{\alpha,\beta,\sigma \}) = f_{normal} (y_i,\sigma) = \frac{1}{\sigma \sqrt{2\pi}}exp(\frac{-(y_i-\alpha\cdot e^{\beta \cdot x_i})^2}{2\sigma^2}$$ 
 
-Note that here we are treating a probability density as a probability (likelihood). Technically we would need to multiply this density by some distance/area/volume (e.g., $\Delta v$). But since we only care about relative likelihoods this doesn't change anything about our calculations.
+Note that here we are treating a probability density as a probability (likelihood). Technically we would need to multiply this density by some distance/area/volume (e.g., $\Delta v$) to get a non-zero probability (with probability mass > 0). But since we only care about *relative* likelihoods it is not necessary to work with probability masses.
 
 Recall that when we are trying to calculate the probability density of any particular number out of a known probability distribution in R, we can use the "d*x*" version of the probability distribution function (e.g., "dnorm()", "dunif()", "dpois()"):
 
@@ -312,7 +315,6 @@ Or, we can use the 'prod()' function to compute the product of the two probabili
 prod(dnorm(obs.data$mpg,mu_func(obs.data$disp,params['a'],params['b']),params['sigma']))
 ```
 
-
 Let's consider four observations:
 
 ```{r}
@@ -342,7 +344,7 @@ prod(dnorm(obs.data$mpg,mu_func(obs.data$disp,params['a'],params['b']),params['s
 
 ```
 
-Okay, so it should be fairly obvious how we might get the likelihood of the entire dataset. Assuming independence of observations of course!
+Okay, so it should be fairly obvious how we might obtain the likelihood of the entire dataset. Assuming independence of observations, of course!
 
 ```{r}
 
@@ -353,7 +355,7 @@ prod(dnorm(full.data$mpg,mu_func(full.data$disp,params['a'],params['b']),params[
 
 ```
 
-You may notice that that's a pretty small number. When you multiply lots of really small numbers together, we get much smaller numbers. This can be very undesirable, especially when you run into overflow/underflow errors (meaning the number is beyond the range that can be represented in computer memory). For this reason, and because we generally like sums more than products, we generally _log-transform_ likelihoods. As you recall,
+You may notice that that's a pretty small number. When you multiply lots of really small numbers together, we get much smaller numbers. This can be very undesirable, especially when you run into overflow/underflow errors (meaning the number is beyond the range that can be represented in computer memory). For this reason, and because we generally like sums more than products, we generally _log transform_ likelihoods. As you recall,
 
 $log(a\cdot b\cdot c)=log(a)+log(b)+log(c)$
 
@@ -372,20 +374,24 @@ exp(l)   # we can convert back to likelihood if we want...
 ## Maximum Likelihood Estimation (MLE)
 Maximum likelihood estimation is a general, flexible, reliable method for drawing *inference* about models from data (with very nice theoretical justifications and mathematical properties!).
 
-The basic idea is simple: given a data generating model and a set of free parameters, search through parameter space for the set of parameter values (specific values for each of the free parameters) that maximizes the likelihood of the observed data (the value returned by the likelihood function)!
+The basic idea is simple: given a data generating model and a set of free parameters, search through parameter space for the set of parameter values (specific values for each of the free parameters) that maximizes the likelihood of the observed data (the scalar value returned by the likelihood function)!
 
 $$\underset{\theta}{\operatorname{argmax}} f(\theta;data)$$
 
 Every *likelihood function* has the following inputs and outputs: 
 
-The **inputs** are:
-+ One or more **free parameters** (often a vector of parameters $\theta$) which are the parameters we are trying to estimate! + + An observed response vector 
-+ Covariates for computing the expected response vector (can be multiple vectors, often organized as a data frame or matrix)        
-+ [optional] Any additional fixed parameters        
+The **inputs** are:    
+
++ A vector of **free parameters** (often denoted $\theta$) which are the parameters we are trying to estimate!    
+    + NOTE: we assume the data are fixed and can therefore be hard-coded into the likelihood function. You could make the data an input to the function though... 
++ The **body** of the likelihood function does the following:     
+    + Compute the expected response vector given the current parameter vector $\theta$ (deterministic component- usually a function of covariates)   
+    + Compute the probability of each observation under the model given the current parameter vector $\theta$ (assuming some well-defined error distribution- e.g., Beta, Normal, Gamma, Poisson). 
+    + Add up the log-likelihood of all observation (assuming independent observations)
 
 The **output** is:    
-+ The log-likelihood of the dataset, given the model (sum of the log likelihoods of individual observations)  
 
++ The log-likelihood of the full dataset, given the model and parameter vector $\theta$  
 
 NOTE: instead of log-likelihood, we often use the *negative log-likelihood* (it is more common to identify the minimum rather than the maximum of an *objective function*. For example, the optimization function in base R, "optim()", minimized the objective function by default.
 
@@ -395,9 +401,9 @@ It is important to note that the likelihood function essentially contains all th
 
 The steps of a typical MLE analysis are as follows:
 
-1. Construct a *likelihood function* 
-2. Use *numerical optimization algorithms* to find the set of parameters that maximize the likelihood function (MLE)
-3. Use the shape of the likelihood function around the MLE to make inference about parameter uncertainty (e.g., confidence intervals)
+1. Construct a *likelihood function*    
+2. Use *numerical optimization* to find the parameter vector that maximizes the likelihood function (MLE)       
+3. Use the shape of the likelihood function around the MLE to make inference about parameter uncertainty (e.g., confidence intervals)      
 
 Okay, let's build our first *likelihood function*? We basically already have this for the cars example:
 
@@ -407,14 +413,11 @@ Okay, let's build our first *likelihood function*? We basically already have thi
 
 # Arguments:
 #   params: bundled vector of free parameters for the known data-generating model
-#   df: a data frame that holds the observed response variable and covariates
-#   yvar: the name of the response variable (ancillary)
-#   xvar: the name of the predictor variable (ancillary)
 
-mtcars_LL <- function(params,df=mtcars,yvar="mpg",xvar="disp"){
-  sum(dnorm(df$mpg,mu_func(df$disp,params['a'],params['b']),params['sigma'],log=TRUE)) 
+mtcars_LL <- function(params){
+  sum(dnorm(mtcars$mpg,mu_func(mtcars$disp,params['a'],params['b']),params['sigma'],log=TRUE)) 
 }
-mtcars_LL(unlist(params),df=mtcars,yvar="mpg",xvar="disp")
+mtcars_LL(params)
 
 ```
 
@@ -423,7 +426,6 @@ Now that we have a likelihood function, we need to search parameter space for th
 The "optim()" function in R wants (1) a likelihood function, (2) a named vector of free parameters, along with their *starting values* (3) any other ancillary variables that the likelihood function requires, and (4) parameters specifying aspects of the optimization algorithm (e.g., which numerical algorithm to use, whether to maximize rather than minimize). 
 
 Often, we will 'hard code' the data into the likelihood function, since we treat the data as fixed/immutable. 
-
 Let's find the MLE for the three parameters in the cars example!!
 
 ```{r}
@@ -465,15 +467,36 @@ VisualizeModelWithData(xvals,MLE)
 
 What do you think? Is this a good fit??
 
-Using this same basic strategy, we can fit countless models to data!
+Using this same basic strategy, we could just as well have fit any number of alternative model formulations (different deterministic functions and "noise" distributions). Maximum Likelihood is a powerful and flexible framework. 
 
-We just performed a non-linear regression. But we could just as well have fit any number of alternative model formulations (different deterministic functions and "noise" distributions). Maximum Likelihood is a powerful and flexible framework. 
+For example, what about a power law? 
+
+```{r}
+
+powerlaw = function(x,t){
+  t[1] * x^t[2]
+}
+
+mtcars_NLL2 = function(params){
+  -sum(dnorm(mtcars$mpg,powerlaw(mtcars$disp,params[1:2]),params['sigma'],log=TRUE)) 
+}
+
+params=c(a=40,b=-0.1,sigma=2)
+optimizedLik2 <- optim(fn=mtcars_NLL2,par=params,,hessian = T)
+MLE2 = optimizedLik2$par
+MLE2
+
+plot(mtcars$disp,mtcars$mpg)
+curve(powerlaw(x,MLE2),add=T)
+
+```
+Hmm, not bad...
 
 We will have plenty of more opportunities to work with likelihood functions, both in a frequentist and a Bayesian context.
 
 ### Aside: generating initial values
 
-Note that the 'optim' function requires specification of initial values for every free parameter in your model. In general, it is not critical that the initial values fit the data very well. However, you should put serious thought into our initial values. Using values that are too far away from the best-fit parameter estimates can cause our optimization algorithms to fail- especially for more complex, non-linear problems! The strategy I recommend for setting initial values is:
+Note that the 'optim()' function requires specification of initial values for every free parameter in your model. In general, it is not critical that the initial values fit the data very well. However, you should put serious thought into our initial values. Using values that are too far away from the best-fit parameter estimates can cause our optimization algorithms to fail- especially for more complex, non-linear problems! The strategy I recommend for setting initial values is:
 
 * If possible, use general understanding of the meaning of the parameters to identify an approximate value for each parameter           
 * Write a data-generation function and compare the data generated by this function against the observed data. If the fit is "close-ish" then you should be able to use these values for your initial values. If not, continue to tweak the parameters until you find something that is "close-ish".        
