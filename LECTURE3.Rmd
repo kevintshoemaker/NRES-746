@@ -125,7 +125,7 @@ Because the variance of a normal distribution is independent from the mean, thes
 
 First, let's look at the **deterministic component**. The deterministic component maps covariate (predictor variable, or independent variable) values to an expected response $\mu$. It is deterministic because the answer will be the same every time, given any specific input (covariate) value(s):
 
-$$\hat{\mu}_i = \alpha +\mathbf{x^T_i} \mathbf{\beta}$$
+$$\hat{\mu}_i = \alpha +\mathbf{x}_i \cdot \mathbf{\vec\beta}$$
 
 OR, for the univariate case:
 
@@ -152,7 +152,7 @@ xvals = seq(0,100,5)  # define the values of a hypothetical predictor variable (
 expected_vals <- deterministic_component(xvals,175,-1.5)   # use the deterministic component to determine the expected response (e.g., tree volume)
 expected_vals
 
-plot(xvals,expected_vals)   # plot out the relationship
+plot(xvals,expected_vals,ylab="response mean", xlab="predictor", type="l")   # plot out the relationship
 
 # plot(xvals,expected_vals,type="l")    # alternatively, plot as a line
 
@@ -167,9 +167,9 @@ You will also see this set of equations for representing a linear regression:
 $$\hat{\mu}_i = \alpha + \beta x_i + \epsilon_i$$
 $$\epsilon_i \sim Normal(0,\sigma_{\epsilon})$$
 
-We can consider the deterministic component as representing the **mean** of the response for any given set of covariates/attributes of the observation unit i. 
+We can consider the deterministic component as representing the expected (mean) response value given the covariate vector for unit i. 
 
-Since a normal distribution is fully defined by its mean and variance, this is all we need to generate data from the linear regression model (it is fully specified!). 
+Since a normal distribution is fully defined by its mean and variance, this is is now a fully specified model. 
 
 ```{r}
 
@@ -218,7 +218,7 @@ For example, consider a set of "real" data:
 
 # Imagine you have the following "real" data (e.g., tree volumes). 
 
-realdata <- data.frame(Volume=c(125,50,90,110,80,75,100,400,350,290,350),Girth=seq(0,100,10))
+realdata <- data.frame(Volume=c(0.4, 2.7, 5.3, 13.3, 42.4, 63.5, 45.8, 233.4, 213.7, 383.1),Girth=seq(1,10,length=10))
 plot(realdata$Girth,realdata$Volume)
 
 ```
@@ -226,17 +226,17 @@ plot(realdata$Girth,realdata$Volume)
 The following parameters together fully specify a data-generating model that we hypothesize is the true model that generated our data. Is this fully specified linear regression model a good fit to our data?
 
 ```
-intercept (a) = 10         # these parameters together specify a model that could have generated our data
-slope (b) = 4
+intercept (a) = 10         # these parameters together specify a model that hypothetically could have generated our data
+slope (b) = 45
 sd(sd) = 31
 
 ```
 
-We can evaluate this question by brute force programming...
+We can evaluate this question by generating data.
 
-First we specify the data generating model. Then we simulate multiple datasets under this model that are comparable to our observed dataset (same sample size). Then we evaluate (visually for now) whether our data generating model is capable of generating our observed data. 
+First we specify the data generating model. Then we simulate multiple datasets under this model that are comparable to our observed dataset (same sample size). Then we visually evaluate whether our data generating model is plausible. 
 
-$$Volume \sim Normal(\alpha + \beta x_i, \sigma_{\epsilon})$$
+$$Volume_i \sim Normal(\alpha + \beta x_i, \sigma_{\epsilon})$$
 
 ```{r}
 
@@ -245,7 +245,7 @@ $$Volume \sim Normal(\alpha + \beta x_i, \sigma_{\epsilon})$$
 lots <- 1000    # specify number to approximate infinity
 N <- nrow(realdata)    # define the number of data points we should generate for each simulation "experiment"
 
-simresults = replicate(lots, rnorm(N,10+realdata$Girth*4,31))
+simresults = replicate(lots, rnorm(N,10+realdata$Girth*40,31))
 
     # now make a boxplot of the results
 boxplot(t(simresults),xaxt="n",ylab="Volume",xlab="Girth")    # (repeat) make a boxplot of the simulation results
@@ -270,7 +270,7 @@ How well does this model fit the data?
 
 Is this model likely to produce these data? (we will revisit this concept more quantitatively when we get to likelihood-based model fitting!)
 
-What about if we try an intercept-only null model with expected Volume of 100 and sd of 400 ? What happens now?
+What about if we try an intercept-only null model with expected Volume of 200 and sd of 400 ? What happens now?
 
 ```{r}
 
@@ -282,20 +282,52 @@ axis(1,at=c(1:N),labels=realdata$Girth)                          # add x axis la
 points(c(1:N),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # this time, overlay the "real" data 
 
 
-
-
-
 ```
 
 Could this model have generated the data?
 
-Is this model **likely** to be the model that generated the data? What's your intuition? 
+What is the probability that this is the model that generated the data? What's your intuition? 
 
-Is this model **useful**? 
+All models are wrong. Some are useful. Is this model **useful**? 
+
+### Revisiting the tree example
+
+Okay, let's get real. Tree volume should not be a linear function of its girth. You learned the formula for the volume of a cylinder - how can you apply this formula here? 
+
+*Linear regression and statistics in general should not be a substitute for thinking about your problem.* Try to avoid thinking about statistics until you have thoroughly thought through your data and your system. Draw a DAG, think about mechanistic relationships. Statistics only comes at the end.  
+
+```{r echo=FALSE, eval=FALSE}
+
+c=30; a = c*pi; sig = 10; r= (Girth/pi)/2
+simresults = replicate(lots, rnorm(N,a*r^3,sig)  )  
+
+    # now make a boxplot of the results
+boxplot(t(simresults),xaxt="n",ylab="Volume",xlab="Girth")    # (repeat) make a boxplot of the simulation results
+axis(1,at=c(1:N),labels=realdata$Girth)     
+points(c(1:N),realdata$Volume,pch=20,cex=3,col="red",xaxt="n") 
+
+   # try lognormal
+sig=0.4; c=28; a = c*pi
+simresults = replicate(lots, exp(rnorm(N,log(a)+3*log(r),sig) )  )  
+
+    # now make a boxplot of the results
+boxplot(t(simresults),xaxt="n",ylab="Volume",xlab="Girth")    # (repeat) make a boxplot of the simulation results
+axis(1,at=c(1:N),labels=realdata$Girth)     
+points(c(1:N),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")
+
+mod1 = lm(log(Volume)~log(Girth), realdata)
+summary(mod1)
+
+realdata$Radius = (realdata$Girth/pi)/2
+mod2 = lm(log(Volume)~log(Radius), realdata)
+summary(mod2)
+
+```
+
 
 ### Generating *sampling distributions* (i.e., simulate the distribution of summary statistics under a null hypothesis)
 
-A null hypothesis can usually be expressed as a data-generating model.
+A null hypothesis can nearly always be expressed as a data-generating model.
 
 If so, you should be able to generate sampling distributions of any test statistic under your assumed null distribution. 
 

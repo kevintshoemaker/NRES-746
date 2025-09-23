@@ -61,7 +61,7 @@ xvals = seq(0,100,5)  # define the values of a hypothetical predictor variable (
 expected_vals <- deterministic_component(xvals,175,-1.5)   # use the deterministic component to determine the expected response (e.g., tree volume)
 expected_vals
 
-plot(xvals,expected_vals)   # plot out the relationship
+plot(xvals,expected_vals,ylab="response mean", xlab="predictor", type="l")   # plot out the relationship
 
 # plot(xvals,expected_vals,type="l")    # alternatively, plot as a line
 
@@ -90,7 +90,7 @@ sim_vals <- stochastic_component(deterministic_component(xvals,175,-1.5),10)    
 
 # Imagine you have the following "real" data (e.g., tree volumes). 
 
-realdata <- data.frame(Volume=c(125,50,90,110,80,75,100,400,350,290,350),Girth=seq(0,100,10))
+realdata <- data.frame(Volume=c(0.4, 2.7, 5.3, 13.3, 42.4, 63.5, 45.8, 233.4, 213.7, 383.1),Girth=seq(1,10,length=10))
 plot(realdata$Girth,realdata$Volume)
 
 
@@ -99,7 +99,7 @@ plot(realdata$Girth,realdata$Volume)
 lots <- 1000    # specify number to approximate infinity
 N <- nrow(realdata)    # define the number of data points we should generate for each simulation "experiment"
 
-simresults = replicate(lots, rnorm(N,10+realdata$Girth*4,31))
+simresults = replicate(lots, rnorm(N,10+realdata$Girth*40,31))
 
     # now make a boxplot of the results
 boxplot(t(simresults),xaxt="n",ylab="Volume",xlab="Girth")    # (repeat) make a boxplot of the simulation results
@@ -120,9 +120,6 @@ simresults = replicate(lots, rnorm(N,100,400))
 boxplot(t(simresults),xaxt="n",ylab="Volume",xlab="Girth")    # (repeat) make a boxplot of the simulation results
 axis(1,at=c(1:N),labels=realdata$Girth)                          # add x axis labels 
 points(c(1:N),realdata$Volume,pch=20,cex=3,col="red",xaxt="n")     # this time, overlay the "real" data 
-
-
-
 
 
 
