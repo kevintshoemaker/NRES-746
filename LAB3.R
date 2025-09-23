@@ -1,197 +1,181 @@
 
-############################################################
-####                                                    ####  
-####  NRES 746, Lab 3                                   ####
-####                                                    ####
-####  Kevin Shoemaker                                   #### 
-####  University of Nevada, Reno                        ####
-####                                                    #### 
-############################################################
+#  NRES 746, Lab 3                              
+#  University of Nevada, Reno                      
+#  DIY Likelihood Functions       ---------------------                
 
 
-############################################################
-####  DIY Likelihood Functions                          ####
-############################################################
+# Reed frog example ----------------
+
+rfp <- emdbook::ReedfrogPred  # load the data using the 'emdbook' package:
+head(rfp)
 
 
+# Take a subset of the data
 
-#########
-# Exercise 3.1a
+rfp_sub <- subset(rfp, (rfp$pred=='pred')&(rfp$size=="small")&(rfp$density==10))
+rfp_sub
 
-NLL_frogOccupancy <- function(params=0.5,data=c(3,2,6),N=10){
-  -sum(dbinom(data,prob=params,size = N,log=T))
+
+rfp_sub$killed <- with(rfp_sub, density-surv)  # make column for number killed in each replicate trial
+with(rfp_sub, sum(dbinom(killed, 10, prob=0.5, log=TRUE)) )    # expression of data likelihood(log scale)
+
+
+L = dbinom(rfp_sub$killed,size=10,prob=0.5)  # evaluate data likelihood with p=0.5
+L
+
+prod(L)    # joint data likelihood
+
+
+p_seq <- seq(0.01, 1, length=100)     # prepare for visualizing the likelihood across parameter space
+
+
+Lik <- sapply(p_seq, function(t) prod(dbinom(rfp_sub$killed,10,prob=t)) )
+
+plot(Lik~p_seq,lty="solid",type="l", xlab="Predation Probability", ylab="Likelihood")
+
+
+# plot out the log-likelihood
+
+LogLik <- sapply(p_seq, function(t) sum(dbinom(rfp_sub$killed,10,prob=t,log=T)) )
+plot(LogLik~p_seq,lty="solid",type="l", xlab="Predation Probability", ylab="Log Likelihood")
+
+
+p_seq[which.max(LogLik)]     # MLE for probability of predation
+
+
+plot(LogLik~p_seq,lty="solid",type="l", xlab="Predation Probability", ylab="Log Likelihood")
+abline(v=0.25,lwd=3)
+
+
+# Write a likelihood function
+
+binomNLL1 <- function(p) {
+  -sum(dbinom(rfp_sub$killed, size=10, prob=p, log=TRUE))
 }
 
 
-NLL_frogOccupancy(params=0.5,data=c(3,2,6),N=10)   # test your function
+# use "optim()" to find the MLE
+
+opt1 <- optim(fn=binomNLL1, par = c(p=0.5), method = "BFGS")   # use "optim()" to estimate the parameter value that maximizes the likelihood function 
 
 
-###########
-# 3.1b
+opt1    # check out the results of "optim()"
 
-xvals <- seq(0.001,0.999,0.001)
-nlls <- sapply(1:length(xvals),function(t) NLL_frogOccupancy(xvals[t],data=c(3,2,6),N=10) ) 
-plot(nlls~xvals,xlab="parameter \"p\"",ylab="neg log lik",type="l")
-
-MLE <- xvals[which.min(nlls)]
-ML <- min(nlls)
-
-CI95 <- range(xvals[nlls<=(ML+2)])
-
-abline(v=MLE,col="green",lwd=2)
-abline(h=ML+2,col="blue")
-abline(v=CI95,col="green",lty=2)
+MLE = opt1$par
+MaxLik = opt1$value
 
 
+opt1$convergence
 
-#####
-# 3.2a
 
-rffr <- read.csv("ReedfrogFuncResp.csv",row.names = 1)
-  # alternative: data(ReedfrogFuncresp)     # from Bolker's "emdbook" package
+hist(rfp_sub$killed,xlim=c(0,10),freq=F,main="",xlab="Number of tadpoles killed")
+curve(dbinom(x,prob=MLE,size=10),add=T,from=0,to=10,n=11,lwd=2, col="darkgreen")
+
+
+NLL_frogOccupancy(p=0.5)   # test your function
+
+
+# 3.2a ------------------
+
+rffr <- emdbook::ReedfrogFuncresp     # from Bolker's "emdbook" package
   # ?Reedfrog      # learn more about this dataset
 head(rffr)
 
 
-#########
-# define a Holling type II functional response, with an initial guess about parameter values
+hist(rffr$Killed/rffr$Initial)
 
-Holl2<-function(x, a, h){(a*x)/(1+(a*h*x))}
-plot(rffr$Killed~rffr$Initial)
-curve(Holl2(x, a=0.5, h=1/80), add=TRUE,col="red")
+binomNLL2(c(a=0.4,h=1/200),c(5,10,15),c(3,5,6))
 
-
-###########
-# Write a likelihood function
-
-#    params: vector of params to estimate (a and h from the Holling type II functional response)
-#    k: number killed per trial   (data)
-#    N: number of tadpoles per trial (data)
-
-binomNLL2<-function(params,N,k){
-	a=params[1]
-	h=params[2]
-	predprob=a/(1+a*h*N)	
-	-sum(dbinom(k,prob=predprob,size=N,log=TRUE))
-}
+opt2 <- optim(c(a=0.5,h=(1/80)), binomNLL2, N=rffr$Initial, k=rffr$Killed)  #use default simplex algorithm
+MLE = opt2$par
+MaxLik = opt2$value
 
 
-quantilefunc <- function(x,pars,q){
-  ifelse(x>0.5,
-    qbinom(q,prob=Holl2(round(x),pars["a"],pars["h"])/round(x),size=round(x)),
-    0
-  )
-}
-
-inits <- c(a=0.6,h=(1/60))
-Rffuncresp <- function(params=inits,data=rffr){
-  temp <- suppressWarnings( optim(fn=binomNLL2,  par=inits, N=data[,1], k=data[,2])   )
-  MLE <- temp$par
-  plot(data[,2]~data[,1],ylab="Killed",xlab="Init Density")
-  curve(Holl2(x,inits["a"],inits["h"]),add=T,col="red")
-  curve(Holl2(x,MLE["a"],MLE["h"]),add=T,col="green",lwd=2)
-  curve(quantilefunc(x,pars=MLE,0.975),add=T,col="green",lty=2)
-  curve(quantilefunc(x,pars=MLE,0.025),add=T,col="green",lty=2)
-  return(MLE)
-}
+plot(rffr$Killed~rffr$Initial, xlab="Initial density",ylab="# eaten")
+curve(Holl2(x, a=MLE["a"], h=MLE["h"]), add=TRUE,col="red")
 
 
-inits <- c(a=0.6,h=(1/60))    # test the function
-Rffuncresp(params=inits,data=rffr)
+Rffuncresp(params=MLE,dat=rffr)
 
 
-#######
-# Exercise 3.3a
+# how to generate 'plug-in' prediction intervals
 
-########
-# Myxomatosis data
+xvec <- seq(40,80,5)
+yvec <- 0.5/(1+0.5*0.015*xvec) * xvec
+upper<-qbinom(0.975,prob=yvec/xvec, size=xvec) 
+lower<-qbinom(0.025,prob=yvec/xvec, size=xvec)
+
+upper
+lower
+
+
+# Exercise 3.3a -----------
 
 library(emdbook)
 data(MyxoTiter_sum)      # load the data
-head(MyxoTiter_sum)   
-
-
-myxdat <- subset(MyxoTiter_sum, grade==1)    # select just the least virulent strain
+# head(MyxoTiter_sum)   
+myxdat <- subset(MyxoTiter_sum, grade==1)    # select just the most virulent strain
 
 plot(myxdat$titer~myxdat$day,xlim=c(0,10))    # visualize the relationship
 
 
+NLL_myxRicker(params=c(a=4,b=0.2,rate=2))   # test the function
 
-Ricker <- function(x,a,b){
-  a*x*exp(-b*x)
-}
-
-NLL_myxRicker <- function(params=c(a=1,b=0.2,shape=1),data=myxdat[,-1]){
-  exp_titer <- Ricker(data[,1],params["a"],params["b"])
-  scale <- exp_titer/params["shape"]
-  -sum(dgamma(data[,2],shape=params["shape"],scale=scale,log=TRUE))
-}
+temp <- optim(NLL_myxRicker,par = c(a=2,b=0.2,rate=2))
+MLE = temp$par
+MinNLL = temp$value 
+MLE
 
 
-NLL_myxRicker(params=c(a=4,b=0.2,shape=40),data=myxdat[,-1])   # test the function
+# Plug-in prediction intervals!
+
+upper<-qgamma(0.975,shape=?, rate=?)   # remember that the mean of the gamma distribution is shape*scale
+lower<-qgamma(0.025,shape=?, rate=?)
 
 
-##########
-# 3.3b
+predict_myxRicker1(mle=MLE)   # test the function
 
-MyxRicker <- function(params=c(a=2,b=0.2,shape=30),data=myxdat[,-1]){
-  temp <- optim(NLL_myxRicker,par = params,data=data)
-  MLE <- temp$par
-  plot(data[,2]~data[,1],xlab="days",ylab="titer",xlim=c(0,10),ylim=c(0,10))
-  curve(Ricker(x,MLE["a"],MLE["b"]),add=T,col="green",lwd=2)
-  curve(qgamma(0.975,shape=MLE["shape"],scale=Ricker(x,MLE["a"],MLE["b"])/MLE["shape"]),0.01,10,add=T,col="green",lty=2)
-  curve(qgamma(0.025,shape=MLE["shape"],scale=Ricker(x,MLE["a"],MLE["b"])/MLE["shape"]),0.01,10,add=T,col="green",lty=2)
-  return(MLE)
-}
+temp <- optim(NLL_myxRicker,par = c(a=2,b=0.2,rate=2),hessian = T)
+MLE = temp$par
+MinNLL = temp$value 
+H = temp$hessian
+H
+
+CI_myxRicker1(MLE,H)   # test the function
 
 
-MyxRicker(params=c(a=2,b=0.2,shape=30),data=myxdat[,-1])   # test the function
+# assume X is a random variable with mean of c(2.2, 4.1)
+
+exp_X = c(2.2,4.1)   # expected value of random MVN variable
+vcv_X = matrix(c(1,.2,.2,1.5),nrow=2)  # vcv matrix of X
+
+# imagine we want to evaluate a transformation of X: 1/(x1^2 + log(x2))
+
+myfun = function(x) 1/(x[1]^2+log(x[2]))   # write a function for your transformation
+
+# compute the gradient of the transformation with respect to the components of X,
+      # evaluated at the mean values of X
+f_prime_X = numDeriv::grad(myfun,exp_X)
+
+# apply the delta method to obtain an approximate standard error:
+var_fX = (t(f_prime_X) %*% vcv_X %*% f_prime_X)[1,1] 
+
+# compute the standard error:
+se_fX = sqrt(var_fX)
+
+# compute the critical value for 95% CI
+z_crit = qnorm(0.025,lower=F)
+
+# compute confidence interval
+ci_fX = myfun(exp_X) + z_crit*se_fX * c(mean=0,lower=-1,upper=1)
+ci_fX
 
 
-###############
-# exercise 3.4
-
-MyxRicker_ci <- function(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","b"), data=myxdat[,-1], param1_lims= c(0.1,10),param2_lims=c(0.01,1)){
-  temp <- optim(LikFunc,par = params,data=data)
-  MLE <- temp$par
-  ML <- temp$value
-  notselected <- setdiff(names(MLE),params_selected)
-  notselected_ndx <- which(names(MLE)==notselected)
-  param_ndx <- match(params_selected,names(MLE))
-  
-  var1 <- seq(param1_lims[1],param1_lims[2],length=100)
-  var2 <- seq(param2_lims[1],param2_lims[2],length=100)
-  
-  pars <- params
-  pars[notselected_ndx] <- MLE[notselected]
-  likarr <- matrix(NA,nrow=length(var1),ncol=length(var2))
-  v1=1;v2=1
-  for(v1 in 1:length(var1)){
-    pars[param_ndx[1]] <- var1[v1]
-    for(v2 in 1:length(var2)){
-      pars[param_ndx[2]] <- var2[v2]
-      likarr[v1,v2] <- -NLL_myxRicker(params=pars,data=data)
-    }
-  }
-  
-  image(x=var1,y=var2,z=likarr,zlim=c(-130,-29),col=topo.colors(12))
-  contour(x=var1,y=var2,z=likarr,levels=(-ML-c(2,4,6,8,10)),add=TRUE,lwd=1,col=gray(0.3))
-  
-  ci1 <- range(var1[apply(likarr,1,max)>(-ML-2)])
-  ci2 <- range(var2[apply(likarr,2,max)>(-ML-2)])
-  
-  out<- data.frame(var1 = ci1,var2=ci2)
-  return(out)
-}
+predict_myxRicker2(MLE,H,prediction = T)   # test the function
+predict_myxRicker2(MLE,H,prediction = F)
 
 
-#  test: Ricker params "a" and "b"
-testab <- MyxRicker_ci(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","b"), data=myxdat[,-1], param1_lims= c(0.1,9),param2_lims=c(0.01,0.5))
+CI_myxRicker2(MLE,H,MinNLL,profile=T,alpha=0.9)
 
-# test: Ricker param "a" and gamma "shape" 
-testas <- MyxRicker_ci(LikFunc = NLL_myxRicker, params=c(a=2,b=0.2,shape=30), params_selected = c("a","shape"), data=myxdat[,-1], param1_lims= c(1,8),param2_lims=c(10,150))
-
-
-testab
-testas
+CI_myxRicker2(MLE,H,MinNLL,profile=F,alpha=0.9)
 
