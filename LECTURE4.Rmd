@@ -309,6 +309,7 @@ Likelihood <- dnorm(obs.data$mpg[1],mu_func(obs.data$disp[1],params['a'],params[
 Likelihood
 
 ```
+
 Or, we can use the 'prod()' function to compute the product of the two probabilities
 
 ```{r}
@@ -642,7 +643,7 @@ ggplot(LLsurface,mapping =aes(x=a,y=b,z=LL)) +
 
 So, what is the "**profile likelihood**" confidence interval for the a parameter?
 
-By "profile likelihood" confidence interval, we mean this: we have a parameter of interest, and one or more free parameters that we also have some uncertainty about. For every value of the parameter of interest, we find the highest likelihood value across all possible values of all the other uncertain parameters (parameter of interest is a sequence of fixed points across its range, other parameter(s) are free to vary). This way we can define a likelihood surface that accounts for our uncertainty about all the other free parameters in our model.   
+By "profile likelihood" confidence interval, we mean this: we have a parameter of interest, and one or more other free parameters that we don't know with certainty. For every value of the parameter of interest, we identify the highest likelihood attainable across all possible values of the other uncertain parameters (parameter of interest is a sequence of fixed points across its range, other parameter(s) are free to vary). This way we can define a likelihood surface that accounts for our uncertainty about all the other free parameters in our model.   
 
 ```{r warning=FALSE}
 
@@ -651,7 +652,7 @@ By "profile likelihood" confidence interval, we mean this: we have a parameter o
 profile_a <- LLsurface |> group_by(a) |> summarize(LL=max(LL)) 
 profile_b <- LLsurface |> group_by(b) |> summarize(LL=max(LL)) 
 
-reasonable_a <- profile_a$a[profile_a$LL >=(LogLik-qchisq(0.95,1)/2)]
+reasonable_a <- profile_a$a[profile_a$LL >= (LogLik-qchisq(0.95,1)/2)]
 
 ggplot(profile_a,aes(a,LL)) + geom_path(lwd=2) + 
   geom_vline(xintercept = c(min(reasonable_a),max(reasonable_a) )) +
@@ -690,11 +691,15 @@ ggplot(compdf,aes(x=b,y=LL,color=Method)) + geom_path(lwd=2) +
 
 **Does it make sense why there is a difference (i.e., why the profile-likelihood CI is wider than the slice CI)??**
 
+The profile likelihood method is the 'gold standard' for estimating confidence intervals for ML parameter estimates. However, the profile likelihood can be computationally expensive.  
+
 ## The usual way to generate CIs for MLE!
 
-Most software doesn't use the profile likelihood method- instead, it uses a fast and usually very accurate approximation. This approximation involves evaluating the shape of the likelihood surface at the MLE using a theory that states that the MLE is asymptotically normally distributed. This method involves using the second derivative of the log likelihood function evaluated at the MLE to estimate the standard errors of all parameters (formally, use the "Hessian" matrix!).   
+Most software doesn't use the profile likelihood method- instead, it uses a fast and usually very accurate approximation. This approximation involves evaluating the shape of the likelihood surface at the MLE using a theory that states that the MLE is asymptotically normally distributed. This method involves using the second derivative of the log likelihood function evaluated at the MLE to estimate the standard errors of all parameters (the infamous "Hessian" matrix!).   
 
-The theory behind this is intuitive. Steeper gradients (slopes) in the likelihood surface in the neighborhood of the maximum likelihood estimate correspond to narrower confidence intervals. The gradient of the likelihood surface at the MLE is zero by definition (when you find a maximum, you identify those points on the surface where the derivative is zero). The degree to which the gradient drops off with distance (in parameter space) from the MLE is a measure of how much better the model fits near to the MLE vs. further away. The "change in the gradient" around the MLE feels a lot like a second derivative, right? It's the gradient of the slope of your log likelihood at the MLE... The hessian matrix encapsulates the second-order partial derivatives of your log likelihood function. So hopefully it makes sense that the hessian matrix is related to computing confidence intervals in maximum likelihood estimation. 
+The theory behind this is intuitive. Steep gradients (slopes) in the likelihood surface in the neighborhood of the maximum likelihood estimate mean that the data are highly informative with respect to that parameter. More informed parameters will have narrower confidence intervals (higher information content means narrower confidence intervals. 
+
+The gradient of the likelihood surface at the MLE is zero by definition (when you find a maximum, you identify those points on the surface where the derivative is zero). The degree to which the gradient drops off with distance (in parameter space) from the MLE is a measure of how much better the model fits near to the MLE vs. further away. The "change in the gradient" around the MLE feels a lot like a second derivative, right? It's the gradient of the slope of your log likelihood, evaluated at the MLE... The hessian matrix encapsulates the second-order partial derivatives of your log likelihood function. So hopefully it makes sense that the hessian matrix is related to computing confidence intervals in maximum likelihood estimation. 
 
 To use this method "from scratch" for custom likelihood functions in R, you can use the 'hessian=TRUE' argument in 'optim'. The inverse of the hessian matrix of the negative log-likelihood function (multiply the Hessian by -1 if you minimized the LL instead of the negative LL) is the variance-covariance matrix for your parameters. The diagonals of the variance-covariance matrix represent the parameter variances. Taking the square root of the variances results in standard error estimates for each of your free parameters!
 
@@ -702,7 +707,7 @@ To use this method "from scratch" for custom likelihood functions in R, you can 
 
 ## use the normal approximation to estimate confidence intervals!
 
-varcov <- solve(-optimizedLik$hessian)   # compute the variance covariance matrix for the coefficients from the hessian matrix
+varcov <- solve(-optimizedLik$hessian)   # compute the variance covariance matrix for the coefficients from the hessian matrix  [negative hessian is used because we maximized the log likelihood]
 
 # approximate confidence interval as 2 standard errors from the MLE
 lb = MLE - 2*sqrt(diag(varcov))
@@ -754,14 +759,16 @@ The *likelihood Ratio* is defined as:
 
 $\frac{\mathcal{L}_{r}}{\widehat{\mathcal{L}}}$
 
-Where $\widehat{\mathcal{L}}$ is the maximum likelihood of the full fitted model and $\mathcal{L} _{r}$ is the Likelihood of a model for which one or more parameters have been 'fixed' at some value (in model selection, this is often fixed at zero to remove the effect of one or more covariates).
+Where $\widehat{\mathcal{L}}$ is the maximum likelihood of the full fitted model and $\mathcal{L} _{r}$ is the likelihood of a model for which one or more parameters have been 'fixed' at some value (in model selection, this is often fixed at zero to remove the effect of one or more covariates- we'll get to model selection in a few lectures).
 
 #### Likelihood Ratio Test
 
-Twice the negative log likelihood ratio, $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$, is an important test statistic that is asymptotically chi-squared distributed under the null hypothesis in which the reduced model is the true model!
+Twice the negative log likelihood ratio, $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$, is an important test statistic that is asymptotically Chi-square distributed under the null hypothesis in which the reduced model is the true model!
+
+This test statistic is sometimes called the **deviance**. Higher deviance values indicate greater log-difference between the true model and the full or 'saturated' model. Deviance is often used in model selection, hypothesis testing, and goodness of fit testing. 
 
 ##### Sampling distribution of the deviance statistic (frequentist!)
-For some reason ([Wilks theorem](https://en.wikipedia.org/wiki/Wilks%27_theorem)) the sampling distribution of the deviance (test statistic) under the null hypothesis (H0: the reduced model is in fact the true model) is *asymptotically* $\chi^2$ ("chi-squared") distributed with *r* degrees of freedom, where *r* is the number of dimensions by which the full model has been reduced (number of parameters "fixed"- i.e., the number of dimensions by which parameter space is reduced).  
+For some reason ([Wilks theorem](https://en.wikipedia.org/wiki/Wilks%27_theorem)) the sampling distribution of the deviance statistic under the null hypothesis (H0: the reduced model is in fact the true model) is *asymptotically* $\chi^2$ ("chi-squared") distributed with *r* degrees of freedom, where *r* is the number of dimensions by which the full model has been reduced (number of parameters "fixed"- i.e., the number of dimensions by which parameter space is reduced).  
 
 That is, if our full model has three free parameters and we fix the value of two of these parameters at their true values to build a reduced model, *r* is equal to 2. 
 
@@ -799,8 +806,7 @@ Okay, so now we know that the quantity defined as $-2*ln(\frac{\mathcal{L} _{r}}
 
 First of all, the log-likelihood ratio is a statistic representing a kind of standardized difference between the two models. 
 
-Under a null hypothesis in which the reduced model is TRUE, the deviance statistic (2X the log-likelihood ratio) will be asymptotically Chi-squared distributed with df=r. That is, the Chi squared distribution describes the degree to which the deviance statistic may be thrown off by random sampling processes.  
-
+Under a null hypothesis in which the reduced model is TRUE, the deviance statistic (2X the log-likelihood ratio) will be asymptotically Chi-squared distributed with df=r. That is, the Chi squared distribution describes the distribution of deviances (relative to the true model) arising from random sampling processes.  
 So, if we want to determine a range in parameter space that can plausibly contain the true parameter value, we can select the range of parameter space for which $-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}})$ is less than or equal to 3.84. (values of the statistic less than this cutoff value could plausibly be an artifact of random sampling error)
 
 $$-2*ln(\frac{\mathcal{L} _{r}}{\widehat{\mathcal{L}}}) \leq  3.84$$  
@@ -809,6 +815,9 @@ $$[ln({\widehat{\mathcal{L}}}) - ln(\mathcal{L} _{r})] \leq  1.92$$
   
 
 There we have it: the approximate 'rule of 2'!
+
+
+One more quick point: the deviance statistic is often used in goodness of fit testing. Here the important thing to know is that the expected value of the Chi squared distribution is equal to its degrees of freedom. In the case where the true model is your fitted model, and the full model is a "saturated model" with one parameter per observation, the deviance statistic should be Chi-squared distributed with the degrees of freedom equal to the difference in parameter number between your fitted model and the saturated model. Therefore, for a correctly specified model, the deviance divided by its degrees of freedom (mean deviance) should be close to one. That's why you see the deviance and degrees of freedom displayed prominently in many statstical model summaries in R.   
 
 
 
