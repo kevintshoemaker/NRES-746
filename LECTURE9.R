@@ -15,27 +15,28 @@ head(Myx)
 
 Ricker <- function(a,b,predvar) a*predvar*exp(-b*predvar)
   
-NegLogLik_func <- function(params,data){
-  expected <- Ricker(params[1],params[2],data$day)
-  -sum(dgamma(data$titer,shape=params[3],scale=expected/params[3],log = T))
+NLL_myx <- function(params){
+  expected <- Ricker(params[1],params[2],Myx$day)
+  -sum(dgamma(Myx$titer,shape=expected*params[3],rate=params[3],log = T))
 }
 
-init.params <- c(a=1,b=0.2,shape=50)
-NegLogLik_func(init.params,data=Myx)
+params <- c(a=1,b=0.2,rate=1)
+NLL_myx(params)
 
-MaxLik <- optim(par=init.params, fn=NegLogLik_func, data=Myx)
+opt <- optim(params, NLL_myx)
 
-MaxLik
+MLE = opt$par
+maxlik = opt$value
   
 
 # Plug-in prediction interval -------------------------
 
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15))
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
+expected <- Ricker(MLE['a'],MLE['b'],1:10)
 points(1:10,expected,type="l",col="green")
 
-upper <- qgamma(0.975,shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
-lower <- qgamma(0.025,shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
+upper <- qgamma(0.975,shape=expected*MLE['rate'],rate=MLE['rate'])
+lower <- qgamma(0.025,shape=expected*MLE['rate'],rate=MLE['rate'])
 
 points(1:10,upper,type="l",col="red",lty=2)
 points(1:10,lower,type="l",col="red",lty=2)
@@ -44,15 +45,13 @@ points(1:10,lower,type="l",col="red",lty=2)
 # Parametric bootstrap!  -------------------------------------
 
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15),type="n")
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
-points(1:10,expected,type="l",col="green")
+expected <- Ricker(MLE['a'],MLE['b'],1:10)
+points(1:10,expected,type="l",col="darkgreen")
 
 uniquedays <- sort(unique(Myx$day))
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],uniquedays)
-simdata <- array(0,dim=c(1000,length(uniquedays)))
-for(i in 1:1000){
-  simdata[i,] <- rgamma(length(uniquedays),shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
-}
+expected <- Ricker(MLE['a'],MLE['b'],uniquedays)
+
+simdata = t(replicate(1000,rgamma(length(uniquedays),shape=expected * MLE['rate'],rate=MLE['rate'])))
 
 upper <- apply(simdata,2,function(t) quantile(t,0.975))
 lower <- apply(simdata,2,function(t) quantile(t,0.025))
@@ -66,17 +65,14 @@ points(Myx$day,Myx$titer,cex=1.5,pch=20)
 
 # Compare observed error statistic with expected range of error statistic as part of parametric bootstrap analysis
 
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],Myx$day)
-simdata <- array(0,dim=c(1000,length(Myx$day)))
-for(i in 1:1000){
-  simdata[i,] <- rgamma(length(Myx$day),shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
-}
+expected <- Ricker(MLE['a'],MLE['b'],Myx$day)
+simdata = t(replicate(1000,rgamma(length(Myx$day),shape=expected * MLE['rate'],rate=MLE['rate'])))
  
 rmse_observed <- sqrt(mean((Myx$titer-expected)^2))
 rmse_simulated <- apply(simdata,1,function(t) mean((t-expected)^2))
 
 hist(rmse_simulated,freq=F)
-abline(v=rmse_observed,col="green",lwd=3)
+abline(v=rmse_observed,col="darkgreen",lwd=3)
 
 
 # Bayesian goodness-of-fit  -------------------------

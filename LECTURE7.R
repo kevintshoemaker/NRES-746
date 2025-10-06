@@ -377,7 +377,8 @@ fit1 <- mod1$sample(
   data = stan_data,
   chains = 4,
   iter_warmup = 200,
-  iter_sampling = 500
+  iter_sampling = 500,
+  refresh = 0
 )
 
 fit1$summary()
