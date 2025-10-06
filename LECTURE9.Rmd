@@ -1,7 +1,7 @@
 ---
 title: "Model Performance Evaluation"
 author: "NRES 746"
-date: "Fall 2023"
+date: "Fall 2025"
 output: 
   html_document: 
     theme: cerulean
@@ -22,7 +22,7 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
 
 
-For those wishing to follow along with the R-based demo in class, [click here](LECTURE9.R) for the companion R script for this lecture.
+[Click here](LECTURE9.R) for the companion R script for this lecture.
 
 In this course so far, we have constructed data-generating models and fitted these models to observed data using likelihood-based methods (ML and Bayesian inference). We also have explored a range of methods to account for *structural uncertainty* (which of a set of candidate models could plausibly have generated our observed data). 
 
@@ -37,7 +37,7 @@ Usually, we mean one or more of the following:
 3. **Generality**: The model performs well at extrapolating responses for out-of-sample data that are outside the range of those in the training set (the model is really useful!)
 
 ## Goodness-of-fit
-We have already looked at a variety of methods for evaluating goodness-of-fit. In general, you can use data simulation (virtual ecology) to evaluate whether your fitted model is capable of generating the observed data. In a frequentist/ML context this is often called a **parametric bootstrap**     
+We have already looked at a variety of methods for evaluating goodness-of-fit. In general, you can use data simulation to evaluate whether your fitted model is capable of generating the observed data. In a frequentist/ML context this is often called a **parametric bootstrap**.
 
 **Q**: What is the difference between a non-parametric bootstrap (usually just called a 'bootstrap') and a parametric bootstrap?
 
@@ -46,7 +46,6 @@ For example, we can overlay the observed data (or a model performance statistic 
 Or, we can use a "plug-in" prediction bounds as a substitute for the cloud of data sets possibly produced under the model.
 
 Often, we compare a target summary statistic (e.g., Deviance, RMSE, R-squared) for the observed data with the range of that target summary statistic produced under the inferred, stochastic data generating model.   
-
 Let's return to the Myxomatosis dataset!
 
 ```{r}
@@ -68,17 +67,18 @@ Now let's use ML to fit the Ricker model with a gamma error distribution.
 
 Ricker <- function(a,b,predvar) a*predvar*exp(-b*predvar)
   
-NegLogLik_func <- function(params,data){
-  expected <- Ricker(params[1],params[2],data$day)
-  -sum(dgamma(data$titer,shape=params[3],scale=expected/params[3],log = T))
+NLL_myx <- function(params){
+  expected <- Ricker(params[1],params[2],Myx$day)
+  -sum(dgamma(Myx$titer,shape=expected*params[3],rate=params[3],log = T))
 }
 
-init.params <- c(a=1,b=0.2,shape=50)
-NegLogLik_func(init.params,data=Myx)
+params <- c(a=1,b=0.2,rate=1)
+NLL_myx(params)
 
-MaxLik <- optim(par=init.params, fn=NegLogLik_func, data=Myx)
+opt <- optim(params, NLL_myx)
 
-MaxLik
+MLE = opt$par
+maxlik = opt$value
   
 ```
 
@@ -93,11 +93,11 @@ The simplest way is just to plot the expected value along with "plug-in" bounds 
 # Plug-in prediction interval -------------------------
 
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15))
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
+expected <- Ricker(MLE['a'],MLE['b'],1:10)
 points(1:10,expected,type="l",col="green")
 
-upper <- qgamma(0.975,shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
-lower <- qgamma(0.025,shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
+upper <- qgamma(0.975,shape=expected*MLE['rate'],rate=MLE['rate'])
+lower <- qgamma(0.025,shape=expected*MLE['rate'],rate=MLE['rate'])
 
 points(1:10,upper,type="l",col="red",lty=2)
 points(1:10,lower,type="l",col="red",lty=2)
@@ -115,15 +115,13 @@ Alternatively, we could generate simulated data sets under the best-fit model (p
 # Parametric bootstrap!  -------------------------------------
 
 plot(Myx$titer~Myx$day,xlim=c(0,10),ylim=c(0,15),type="n")
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],1:10)
-points(1:10,expected,type="l",col="green")
+expected <- Ricker(MLE['a'],MLE['b'],1:10)
+points(1:10,expected,type="l",col="darkgreen")
 
 uniquedays <- sort(unique(Myx$day))
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],uniquedays)
-simdata <- array(0,dim=c(1000,length(uniquedays)))
-for(i in 1:1000){
-  simdata[i,] <- rgamma(length(uniquedays),shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
-}
+expected <- Ricker(MLE['a'],MLE['b'],uniquedays)
+
+simdata = t(replicate(1000,rgamma(length(uniquedays),shape=expected * MLE['rate'],rate=MLE['rate'])))
 
 upper <- apply(simdata,2,function(t) quantile(t,0.975))
 lower <- apply(simdata,2,function(t) quantile(t,0.025))
@@ -136,34 +134,30 @@ points(Myx$day,Myx$titer,cex=1.5,pch=20)
 
 ```
 
-Using simulated data, we can go further- we can compare the simulated data vs the observed data more quantitatively. For example, we can compute the root mean squared error (RMSE) for the simulated datasets and compare that with the root mean squared error for the observed data. 
+Using simulated data, we can go further- we can compare the simulated data vs the observed data more quantitatively. For example, we can compute the root mean squared error (RMSE) for the simulated datasets and compare that with the root mean squared error for the observed data. Alternatively, we could use the deviance statistic instead of RMSE.
 
 ```{r}
 
 # Compare observed error statistic with expected range of error statistic as part of parametric bootstrap analysis
 
-expected <- Ricker(MaxLik$par['a'],MaxLik$par['b'],Myx$day)
-simdata <- array(0,dim=c(1000,length(Myx$day)))
-for(i in 1:1000){
-  simdata[i,] <- rgamma(length(Myx$day),shape=MaxLik$par['shape'],scale=expected/MaxLik$par['shape'])
-}
+expected <- Ricker(MLE['a'],MLE['b'],Myx$day)
+simdata = t(replicate(1000,rgamma(length(Myx$day),shape=expected * MLE['rate'],rate=MLE['rate'])))
  
 rmse_observed <- sqrt(mean((Myx$titer-expected)^2))
 rmse_simulated <- apply(simdata,1,function(t) mean((t-expected)^2))
 
 hist(rmse_simulated,freq=F)
-abline(v=rmse_observed,col="green",lwd=3)
+abline(v=rmse_observed,col="darkgreen",lwd=3)
 
 ```
 
 So, is this a good model?
 
-Of course, the goodness-of-fit tests you can run with simulated data are limited only by your imagination! **Be dangerous!**
+Of course, the goodness-of-fit tests you can run with simulated data are limited only by your imagination!
 
 NOTE: the above methods *do not account for parameter uncertainty*. This model is the maximum likelihood model- that is, the point estimates are assumed to represent the true model!
 
 If we wanted to account for parameter uncertainty in the ML framework, we could (for example) use profile-likelihood CIs to estimate parameter bounds and we could plug-in bounds that incorporate parameter uncertainty. Or we could treat the CIs for the parameter estimates as a probability distribution (e.g., uniform) and simulate datasets across this range of parameter uncertainty (but what would a frequentist statistician say about this?). 
-
 
 ### Bayesian!
 
@@ -171,9 +165,9 @@ Accounting for prediction uncertainty is simple in a Bayesian framework... (this
 
 In general, a **posterior predictive check** involves generating new data sets under the fitted model that are equivalent to the observed data set (i.e., same sample size and covariate values) and comparing with the observed data. 
 
-First we need to fit the model in JAGS.
+First we need to fit the model in stan.
 
-Note that we can write the predictions directly into the JAGS code
+## START HERE
 
 ```{r}
 
