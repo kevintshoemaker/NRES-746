@@ -66,6 +66,8 @@ Surprisingly, MCMC is not that difficult to describe or even to implement (altho
 Remember that MCMC samplers are just a type of random number generator. We can use MCMC to develop our own random number generator for a simple known distribution. In this example, we use MCMC to generate random numbers from a standard bivariate normal probability distribution. I chose this example because its properties are fully worked out mathematically, so we can compare MCMC results with the "true" distribution. 
 We certainly don't need an MCMC sampler for this example (we already have 'perfect' random number generators, like the one below). One way to do this would be to use the following code, which draws and visualizes an arbitrary number of independent samples from the bivariate standard normal distribution with a correlation parameter, $\rho$.
 
+We are treating rho as a fixed quantity in these examples. Note that we could compute a posterior (or log posterior) function that included some data. We would just need to multiply the prior by the likelihood (or add the log likelihood to the log prior)! In this example, we are essentially sampling from a bivariate prior (thinking of each of the two dimensions as a free parameter)
+
 ### Metropolis-Hastings algorithm
 
 This algorithm is essentially the same as the *simulated annealing algorithm* we discussed in the "optimization" lecture! The main difference: the "temperature" doesn't decrease over time and the temperature parameter *k* is always set to 1.
@@ -164,9 +166,9 @@ The M-H algorithm is simple and widely applicable. The downside is computational
 
 ### Gibbs sampler
 
-The Gibbs sampler is straightforward and efficient. Basically, the algorithm successively samples from the *full conditional* probability distribution -- that is, the posterior distribution for arbitrary parameter *i* conditional on known values for all other parameters in the model. Unlike the M-H algorithm, there is no rejection of proposed jumps when we use the Gibbs sampler!  
+The Gibbs sampler is straightforward and more efficient than M-H. Basically, the algorithm successively samples from the *full conditional* probability distribution -- that is, the posterior distribution for arbitrary parameter *i* conditional on known values for all other parameters in the model. Unlike the M-H algorithm, there is no rejection of proposed jumps when we use the Gibbs sampler!  
 
-In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is true if we use *conjugate priors* for our model specification (what BUGS/JAGS tries to do!). Even if not, the full conditional is often tractable. Nonetheless, even if it's not analytically tractable, we can use an M-H step as a last resort!
+In many cases, we can't work out the full posterior distribution for our model directly, but we **CAN** work out the conditional posterior distribution analytically if all parameters except for the parameter in question were known with certainty. This is true if we use *conjugate priors* for our model specification (what BUGS/JAGS tries to do!). Even if not (if the conditional posterior is still analytically intractable), we can use an M-H step as a last resort!
 
 **Q**: Why is a Gibbs sampler usually more efficient than a pure M-H sampler?  
 
@@ -219,20 +221,22 @@ This looks pretty good! However, it is important to note that Gibbs samplers fre
 
 ### Hamiltonian Monte Carlo (HMC)
 
-Hamiltonian Monte Carlo (HMC) is more mathematically complex than M-H or HMC. However, it has some very nice properties. Most importantly, the samples from HMC are much less correlated, so we need fewer samples in total. HMC is also very good at sampling even in high dimensional problems that are too slow or poorly mixed in a Gibbs sampler. The term "Hamiltonian" comes from physics, where the Hamiltonian equations describe an objects movement in space as a function of the relationship between kinetic energy and potential energy. Imagine the negative log-posterior as a frictionless surface we want to explore. We can think of the MCMC sample as a ball rolling in that space. We give the ball a little push in some direction (this is governed by the momemtum function), giving it kinetic energy. The ball might roll downhill, converting some of the potential energy into kinetic energy. At some point is starts rolling up again until all the kinetic energy is converted back into potential energy. 
+Hamiltonian Monte Carlo (HMC) is more mathematically complex than M-H or HMC. However, it has some very nice properties. Most importantly, the samples from HMC are much less correlated, so we need fewer samples to characterize the target distribution. HMC is also very good at sampling even in high dimensional problems that would be too slow or poorly mixed in a Gibbs sampler. 
 
-Basically, this algorithm forces the MCMC sampler to stay within higher-probability regions of parameter space (called the "typical set"), making for a sampler that is efficient even when sampling from high dimensions (dealing with the curse of dimensionality). 
+The term "Hamiltonian" comes from physics, where the Hamiltonian equations describe an object's movement in space as a function of the relationship between kinetic energy and potential energy. Imagine the negative log-posterior as a frictionless surface we want to explore. We can think of the MCMC sample as a ball rolling in that space. We give the ball a little push in some direction (this is governed by the momemtum function), giving it kinetic energy. The ball might roll downhill, converting some of the potential energy into kinetic energy. At some point is starts rolling up again until all the kinetic energy is converted back into potential energy. 
+
+Basically, this algorithm forces the MCMC sampler to stay within higher-probability regions of parameter space (called the "typical set"), making for a sampler that is efficient even when sampling from high dimensions- HMC is a great weapon when battling against the curse of dimensionality. 
 
 One restriction in HMC is that the parameter space must be continuous and differentiable. But there are tricks for using HMC even in cases where we have discrete elements of parameter space- basically we just need to integrate these discrete elements out of the likelihood. Which is not too difficult in many cases. 
 
-The tuning parameters in HMC include the step size and the number of sub-steps between HMC draws, known as 'leap-frog' steps. There is a widely used algorithm called the 'no U-turn sampler' (NUTS) that is often used to define these tuning parameters in practice. 
+The tuning parameters in HMC include the number of steps between HMC draws, known as 'leap-frog' steps, and the size of these steps. There is a widely used algorithm called the 'no U-turn sampler' (NUTS) that is often used to help in tuning these parameters. This is what stan and PyMC use by default. 
 
 The following code is modified from https://jonnylaw.rocks/posts/2019-07-31-hmc/. 
 Law, Jonny. 2019. “Hamiltonian Monte Carlo in R.” July 31, 2019.
 
 #### Ancillary functions for HMC
 
-First of all, you will not in general be writing MCMC code from scratch, never mind building your own HMC samplers (probably!). The goal of this demonstration is understanding, not providing code for use in "real" analysis.
+First of all, you will not in general be writing MCMC code from scratch, never mind building your own HMC samplers (probably!). The goal of this demonstration is understanding, not providing code for use in real world analyses.
 
 First, we need a function that evaluates the un-normalized log posterior density at any point in our 2D space:
 
@@ -245,9 +249,13 @@ log_posterior <- function(x) dnorm(x[1],log=T) + dnorm(x[2],rho*x[1],1-rho^2,log
 
 ```
 
-Here, x is a 2D vector. We are treating rho as a fixed quantity here. Note that it would be easy to compute a log posterior function that included some data. We would just need to add the log likelihood to the log prior! In this example, we are essentially sampling from a bivariate prior (thinking of each of the two dimensions as a free parameter). 
+Here, x is a 2D vector. Again, we can think of each dimension as a free parameter- in which case we are sampling from a bivariate prior. If we were doing real Bayesian inference we would incorporate data by adding the log-likelihood to the log prior as part of our evaluation at each point in parameter space. 
 
-Then we need a function that evaluates the gradient of the log posterior at any point in parameter space. The gradient is the first derivative of the un-normalized log posterior with respect to the k free parameters. Geometrically, the gradient is a vector field of dimension k that points in the direction of steepest ascent (ie, where the posterior is increasing most rapidly). This function outputs a vector. 
+Next, we need a function that evaluates the gradient of the log posterior at any point in parameter space. The gradient is the first derivative of the log posterior with respect to the k free parameters. Effectively, this is just the numerator of Bayes rule, since the numerator fully defines the rate of change (the denominator is a constant).
+
+Geometrically, the gradient is a vector field of dimension k that points in the direction of steepest ascent (ie, where the posterior is increasing most rapidly). This function outputs a vector for each point in continuous parameter space. 
+
+NOTE: for the target distribution to have a gradient, it must be continuous and differentiable. Therefore, discrete parameters are not allowed in HMC (although discrete outcomes are allowed). 
 
 ```{r}
 
@@ -258,32 +266,32 @@ gradient <- function(x) pracma::grad(log_posterior,x)
 
 ```
 
-Technically we don't need to use numerical methods to compute the gradient here- there is an analytical solution. But generally we will rely on numerical algorithms for complex posterior surfaces. 
+Technically we don't need to use numerical methods to compute the gradient here- there is an analytical solution. But usually we need to rely on numerical algorithms for complex posterior surfaces, so we'll do that here as well. 
 
-Then we write a function that implements the "leapfrog" step. Multiple leapfrog steps constitute a single HMC iteration. This function takes: 
+Then we write a function that implements a single "leapfrog" integration step. Multiple leapfrog steps constitute a single HMC iteration. This function takes: 
 
 * gradient -- see above
-* step_size -- A tuning parameter representing how far to move in parameter space
+* step_size -- A tuning parameter representing how far to move in parameter space between each evaluation of the target distribution.
 * position -- the current position in parameter space (where the gradient is to be evaluated)
 * momentum -- a vector (length k) representing the current momentum of the sampler in parameter space. This vector helps to "push" our sampler through space, fully exploring the space rather than simply floating up to the posterior mode. 
 * d is the number of parameters-- i.e., the dimension of the space we are exploring
 
-This function outputs a row vector with dx2 columns representing first position and then momenum. 
+This function outputs a dX2 matrix representing first position and then momentum. 
 
 ```{r}
 # Ancillary code for HMC ----------
   # modified from https://jonnylaw.rocks/posts/2019-07-31-hmc/
 
 leapfrog_step <- function(gradient, step_size, position, momentum, d) {
-  momentum1 <- momentum + gradient(position) * 0.5 * step_size
+  momentum1 <- momentum + gradient(position) * 0.5 * step_size  # half step
   position1 <- position + step_size * momentum1
-  momentum2 <- momentum1 + gradient(position1) * 0.5 * step_size
+  momentum2 <- momentum1 + gradient(position1) * 0.5 * step_size  # complete a full step
   matrix(c(position1, momentum2), ncol = d*2)
 }
 
 ```
 
-This next function simply runs a set of l leapfrog steps. This completes one full sample from the HMC algorithm. This function also returns a matrix with k rows and 2 columns (position and momentum). 
+This next function simply runs a set of l leapfrog integration steps. This completes one full sample from the HMC algorithm. This function also returns a matrix with k rows and 2 columns (position and momentum). 
 
 ```{r}
 
@@ -298,7 +306,7 @@ leapfrogs <- function(gradient, step_size, l, position, momentum, d) {
 
 ```
 
-This next function computes the log of the acceptance probability of the full jump. We assume the momentum follows a standard normal distribution. 
+This next function computes the log of the acceptance probability of the full jump. We use a standard normal distribution to provide the "nudges" to momentum that define each HMC iteration. 
 
 ```{r}
 log_acceptance <- function(propPosition,
@@ -329,7 +337,7 @@ hmc_step <- function(log_posterior, gradient, step_size, l, position) {
 }
 ```
 
-Note that we don't care about momentum- we only save the position information.
+Note that we don't care about momentum in the end- we only save the position information, which is our sample in parameter space.
 
 Finally, here's a function to implement the full HMC algorithm:
 
@@ -355,9 +363,9 @@ vis_mcmc2(bvn_hmc)
 Of course, we would need to tune our step size and number of leapfrog steps to get an optimized sampler. But hopefully this gives you the idea!!
 
 
-Okay, let's try it for a non-trivial problem, like the Myxomatosis example from the Bolker book!
-
 ## Myxomatosis revisited (again!)
+
+Okay, let's try MCMC for a non-trivial problem, like the Myxomatosis example from the Bolker book!
 
 ```{r}
 
@@ -426,13 +434,13 @@ logprior <- function(params){
 # params <- c(shape=40,rate=7)    # test function
 # logprior(params)
 
-parmsurface$pr <- sapply(1:nrow(parmsurface), function(t) logprior(unlist(parmsurface[t,1:2]))  )
+parmsurface$log_pr <- sapply(1:nrow(parmsurface), function(t) logprior(unlist(parmsurface[t,1:2]))  )
 ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the log likelihood surface
-  geom_raster(aes(fill=pr)) +
+  geom_raster(aes(fill=log_pr)) +
   scale_fill_gradient(limits=c(-25,-13.14)) 
 
 ```
-From this image you can tell that the prior is very uninformative here- the likelihood will easily overwhelm any information in this prior distribution. 
+From this image you can tell that the prior is very uninformative here- the information in the data (likelihood surface) will easily overwhelm any information in this prior distribution. 
 
 Note that we are also assuming that the shape and rate are *independent* in the prior (multiplicative probabilities for the joint prior). 
 
@@ -661,7 +669,7 @@ vis_mcmc2(chain)
 
 ```
 
-Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most efficient- and it can be very difficult to develop good proposal distributions for multidimensional parameter space. 
+Hopefully it is clear that the Metropolis-Hastings MCMC method could be modified to fit arbitrary numbers of free parameters for arbitrary models. However, the M-H algorithm by itself is not necessarily the most efficient- and it can be very difficult to develop good proposal distributions for a multidimensional parameter space. 
 
 The **Gibbs sampler** tends to be a more effective sampler for multi-dimensional joint posterior distributions. Gibbs samplers can be implemented in the **BUGS** language (**B**ayesian **I**nference **U**sing **G**ibbs **S**ampling) -- one of the first widely adopted probabilistic programming languages (PPLs). 
 
@@ -756,6 +764,7 @@ A couple things you might notice right off the bat: the HMC chain looks much les
 ```{r}
 acf(samples$shape,lag.max=100)
 ```
+
 The difference in autocorrelation is remarkable, and illustrates the advantages of HMC. 
 
 ### Assessing convergence
@@ -778,9 +787,9 @@ fit1$summary()
 
 ```
 
-In general, we like to see values of 1.01 or lower - so we might consider running our stan model for a bit longer. 
+In general, we like to see values of 1.01 or lower. 
 
-We will play around with stan much more in lab!.
+We will play around with stan much more in lab!
 
 [--go to next lecture--](LECTURE8.html) 
 
