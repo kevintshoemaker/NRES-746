@@ -5,7 +5,7 @@
 
 
 
-# Load the balsam fir dataset (finally, no more rabbits and virus titers!)
+# Load the balsam fir dataset
 
 library(emdbook)
 data(FirDBHFec)
@@ -28,8 +28,8 @@ legend("topleft",pch=c(1,4),col=c("black","red"),legend=c("Wave","Non-wave"),bty
 # build likelihood function for the full model: CONES ~ negBINOM( a(wave)*DBH^b(wave), dispersion(wave))
 
    
-NegBinomLik_full <- function(params){
-  wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos    # note: we are hard-coding the data into our likelihood function here!
+NLL_full <- function(params){
+  wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos
   a <- c(params[1],params[2])[wave.code]     # a parameters (two for wave and one for non-wave)
   b <- c(params[3],params[4])[wave.code]      # b parameter (two for wave and one for non-wave)
   k <- c(params[5],params[6])[wave.code]       # over-dispersion parameters (two for wave and one for non-wave)
@@ -39,22 +39,21 @@ NegBinomLik_full <- function(params){
 
 params <- c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1)
 
-NegBinomLik_full(params)
+NLL_full(params)
 
 
-#### Find the MLE -----------------------
+## Find the MLE -----------------------
 
-MLE_full <- optim(fn=NegBinomLik_full,par=c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1),method="L-BFGS-B")
+pars = c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1)
+opt_full <- optim(pars,NLL_full,method="BFGS")
 
-MLE_full$par
-
-MLE_full$value
+MLE_full <- opt_full$par
+MinNLL_full <- opt_full$value
 
 
 # build likelihood function for a reduced model: CONES ~ negBINOM( a(wave)*DBH^b, dispersion(wave))
 
-
-NegBinomLik_constb <- function(params){
+NLL_constb <- function(params){
   wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos
   a <- c(params[1],params[2])[wave.code]      # a parameters
   b <- params[3]                              # b parameter (not a function of wave/nonwave)
@@ -65,29 +64,28 @@ NegBinomLik_constb <- function(params){
 
 params <- c(a.n=1,a.w=1,b=1,k.n=1,k.w=1)
 
-NegBinomLik_constb(params)
+NLL_constb(params)
 
 
 ### Find the MLE
 
-MLE_constb <- optim(fn=NegBinomLik_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="L-BFGS-B")
+opt_constb <- optim(fn=NLL_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="L-BFGS-B")
 
-MLE_constb$par
+MLE_constb = opt_constb$par
 
-MLE_constb$value
+MinNLL_constb = opt_constb$value
 
 
 # compute -2*loglik for each model at the MLE
 
-ms_full <- 2*MLE_full$value     # this is 2 * min.nll = -2*logLik_at_MLE
-
-ms_constb <- 2*MLE_constb$value
+ms_full <- 2*MinNLL_full     # this is 2 * min.nll = -2*logLik_at_MLE
+ms_constb <- 2*MinNLL_constb
 
 ms_full
 ms_constb
 
 
-# Likelihood-Ratio test (frequentist) -----------------------
+# Likelihood-Ratio test -----------------------
 
 Deviance <- ms_constb - ms_full 
 Deviance
@@ -108,7 +106,7 @@ abline(v=Deviance,col="red",lwd=4)
 
 # Try a different reduced model: CONES ~ negBINOM( a*DBH^b, dispersion)
 
-NegBinomLik_nowave <- function(params){
+NLL_nowave <- function(params){
   a <- params[1]      # a parameters
   b <- params[2]      # b parameter (not a function of wave/nonwave)
   k <- params[3]      # dispersion parameters
@@ -118,23 +116,23 @@ NegBinomLik_nowave <- function(params){
 
 params <- c(a=1,b=1,k=1)
 
-NegBinomLik_nowave(params)
+NLL_nowave(params)
 
 
 # Find the MLE
 
-MLE_nowave <- optim(fn=NegBinomLik_nowave,par=params,method="L-BFGS-B")
+opt_nowave <- optim(fn=NLL_nowave,par=params,method="L-BFGS-B")
 
-MLE_nowave$par
+MLE_nowave = opt_nowave$par
 
-MLE_nowave$value
+MinNLL_nowave = opt_nowave$value
 
 
 # Perform LRT -- this time with three fewer free parameters in the reduced model
 
-ms_full <- 2*MLE_full$value
+ms_full <- 2*MinNLL_full
 
-ms_nowave <- 2*MLE_nowave$value
+ms_nowave <- 2*MinNLL_nowave
 
 Deviance <- ms_nowave - ms_full 
 Deviance
@@ -156,9 +154,9 @@ abline(v=Deviance,col="red",lwd=4)
 
 # Akaike's Information Criterion (AIC)
 
-#### First, let's build another likelihood function: whereby only the "b" parameter differs by "wave" sites
+## First, let's build another likelihood function: whereby only the "b" parameter differs by "wave" sites
 
-NegBinomLik_constak <- function(params){
+NLL_constak <- function(params){
   wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos
   a <- params[1]                             # a parameters
   b <- c(params[2],params[3])[wave.code]                              # b parameter (not a function of wave/nonwave)
@@ -169,18 +167,18 @@ NegBinomLik_constak <- function(params){
 
 params <- c(a=1,b.n=1,b.w=1,k=1)  
 
-NegBinomLik_constak(params)
+NLL_constak(params)
 
 
 ### Fit the new model
 
-MLE_constak <- optim(fn=NegBinomLik_constak,par=params)
+opt_constak <- optim(fn=NLL_constak,par=params)
 
-MLE_constak$par
+MLE_constak= opt_constak$par
 
-MLE_constak$value
+MinNLL_constak = opt_constak$value
 
-ms_constak <- 2*MLE_constak$value
+ms_constak <- 2*MinNLL_constak
 
 
 ### Now, let's build and fit one more final model- this time with no wave effect and a Poisson error distribution
@@ -196,13 +194,13 @@ params <- c(a=1,b=1)
 
 PoisLik_nowave(params)
 
-MLE_pois <- optim(fn=PoisLik_nowave,par=params)
+opt_pois <- optim(fn=PoisLik_nowave,par=params)
 
-MLE_pois$par
+MLE_pois= opt_pois$par
 
-MLE_pois$value
+MinNLL_pois= opt_pois$value
 
-ms_pois <- 2*MLE_pois$value
+ms_pois <- 2*MinNLL_pois
 
 
 # Compare all five models using AIC!
@@ -382,474 +380,205 @@ BIC_complex
 
 
 
-# Bayesian model selection: Bolker's fir dataset
+data {
+  int<lower = 1> N;
+  array [N] int<lower=0> obs_cones;
+  vector<lower=0> [N] DBH;
+  array [N] int<lower=1,upper=2> wave_ndx; 
+}
 
-cat("
+parameters {
+  vector[2] loga, b, logbeta;
+}
+
+transformed parameters {
+  vector[2] a = exp(loga);
+  vector[2] beta = exp(logbeta);
+}
 
 model  {
-
-### Likelihood
-
-  for(i in 1:n.obs){
-    expected.cones[i] <- a[wave[i]]*pow(DBH[i],b[wave[i]])   # power function: a*DBH^b
-    p[i] <- r[wave[i]] / (r[wave[i]] + expected.cones[i])
-    observed.cones[i] ~ dnegbin(p[i],r[wave[i]])
-  }
-  
-  
-  ### Priors
-  for(j in 1:2){   # estimate separately for wave and non-wave
-    a[j] ~ dunif(0.001,2)
-    b[j] ~ dunif(0.5,4)
-    r[j] ~ dunif(0.5,5)
-  }
-  
+  vector[N] mean_cones = exp(loga[wave_ndx] + b[wave_ndx] .* DBH);   // power function: a*DBH^b
+  vector[N] alpha = mean_cones .* beta[wave_ndx];
+  obs_cones ~ neg_binomial(alpha,beta[wave_ndx]);
 }
-    
-",file="BUGS_fir.txt")
+
+generated quantities {   // need log_lik of each data point for model selection
+  vector[N] log_lik; // N is the number of data points
+  {
+    real m2, a2, b2;
+    for (n in 1:N) {
+       m2 = exp(loga[wave_ndx[n]] + b[wave_ndx[n]] * DBH[n]);   // power function: a*DBH^b
+       a2 = m2 * beta[wave_ndx[n]];
+       log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta[wave_ndx[n]]);
+    }
+  }
+}
 
 
-# Package the data for JAGS
 
-data.package1 <- list(
-  observed.cones = fir$TOTCONES,
-  n.obs = nrow(fir),
-  wave = as.numeric(fir$WAVE_NON),
+
+# Package the data for stan
+
+stan_data <- list(
+  N = nrow(fir),
+  obs_cones = fir$TOTCONES,
+  wave_ndx = as.numeric(fir$WAVE_NON),
   DBH = fir$DBH
 )
 #data.package
 
 
-# Make a function for generating initial guesses
+# Run the model in stan
 
-init.generator1 <- function(){ list(
-  a = runif(2, 0.2,0.5),
-  b = runif(2, 2,3),
-  r = runif(2, 1,2)
-  
-  )
-}
-init.generator1()
+library(cmdstanr)    # load packages
+library(bayesplot)
+library(posterior)
+options(mc.cores = 4) 
 
+# compile the model using:
+firmodel_full <- cmdstan_model("firmodel_full.stan") # Compile stan model
 
+fit_full <- suppressMessages( firmodel_full$sample(
+  data = stan_data,
+  chains = 4,
+  iter_warmup = 200,
+  iter_sampling = 500,
+  refresh = 0
+)  )
 
-# Run the model in JAGS
+# fit_full$summary()
+samples <- fit_full$draws(format="draws_df")
+bayesplot::mcmc_trace(samples,"a[1]")
+bayesplot::mcmc_trace(samples,"b[2]")
+bayesplot::mcmc_trace(samples,"beta[1]")
 
-library(jagsUI)    # load packages
-library(coda)
-library(lattice)
+meanrep_wave = exp(samples$`loga[2]` + samples$`b[2]`*mean(stan_data$DBH))
+meanrep_nonwave = exp(samples$`loga[1]` + samples$`b[1]`*mean(stan_data$DBH))
 
-params.to.monitor <- c("a","b","r")
+hist(meanrep_nonwave,ylab="Prob Density",xlab="number of cones",freq = F,xlim=c(25,60),ylim=c(0,0.15),main="")
+hist(meanrep_wave,density=20,col="darkgreen",add=T,freq=F)
+legend("topleft",col=c("darkgreen","white"),density=c(20,0),legend=c("wave","nonwave"),bty="n")
 
-jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.adapt=1000, n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5,parallel=TRUE )
 
-jagsfit1.mcmc <- jags.fit1$samples   # extract "MCMC" object (coda package)
+# Extract the WAIC for the full model!
 
-summary(jagsfit1.mcmc)
+library(loo)
 
-#plot(jagsfit1.mcmc)
+loglik_names <- sapply (1:stan_data$N,
+                          function(t) sprintf("log_lik[%s]",t) )
+lls = as.matrix(samples)[,loglik_names]
 
-
-
-# Visualize the model fit
-
-plot(jagsfit1.mcmc)
-
-lattice::densityplot(jagsfit1.mcmc)
-
-hist(jags.fit1$sims.list$r[,1],main="dispersion param",ylab="Prob Density",xlab="dispersion param",freq = F,ylim=c(0,2),xlim=c(0.5,2.5))
-hist(jags.fit1$sims.list$r[,2],density=20,col="green",add=T,freq=F)
-legend("topright",col=c("green","white"),density=c(20,0),legend=c("wave","nonwave"),bty="n")
-
-
-# Extract the DIC for the full model!
-
-DIC_full <- jags.fit1$DIC
-DIC_full
-
-
-# Build JAGS code for the reduced model --------------
-
-cat("
-
-model  {
-
-### Likelihood
-
-  for(i in 1:n.obs){
-    expected.cones[i] <- a*pow(DBH[i],b)   # a*DBH^b
-    p[i] <- r / (r + expected.cones[i])
-    observed.cones[i] ~ dnegbin(p[i],r)
-  }
-  
-  
-  ### Priors
-  
-  a ~ dunif(0.001,2)
-  b ~ dunif(0.5,4)
-  r ~ dunif(0.5,5)
-
-  
-}
-    
-",file="BUGS_fir_reduced.txt")
-
-
-# Package data for JAGS
-
-data.package2 <- list(
-  observed.cones = fir$TOTCONES,
-  n.obs = nrow(fir),
-  #wave = as.numeric(fir$WAVE_NON),
-  DBH = fir$DBH
-)
-
-
-# Function for generating initial guesses for all params
-
-init.generator2 <- function(){ list(
-  a = runif(1, 0.2,0.5),
-  b = runif(1, 2,3),
-  r = runif(1, 1,2)
-  
-  )
-}
-init.generator2()
-
-
-# Run the reduced model and visualize the JAGS fit
-
-params.to.monitor <- c("a","b","r")
-
-jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.adapt=1000, n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
-
-jagsfit2.mcmc <- jags.fit2$samples   # "MCMC" object (coda package)
-
-summary(jagsfit2.mcmc)
-
-plot(jagsfit2.mcmc[,"a"])
-plot(jagsfit2.mcmc[,"b"])
-plot(jagsfit2.mcmc[,"r"])
-
-
-
-lattice::densityplot(jagsfit2.mcmc)
-
-
-# Compute DIC
-
-DIC_reduced <- jags.fit2$DIC
-
-DIC_reduced
-DIC_full
-
-
-# Use WAIC for bayesian model selection!
-
-library(loo)    # load the "loo" package, which allows us to compute WAIC from JAGS output'
-
-
-####
-# First, re-make the JAGS code, this time recording the likelihood as a derived parameter
-
-cat("
-
-model  {
-
-### Likelihood
-
-  for(i in 1:n.obs){
-    expected.cones[i] <- a[wave[i]]*pow(DBH[i],b[wave[i]])   # power function: a*DBH^b
-    p[i] <- r[wave[i]] / (r[wave[i]] + expected.cones[i])
-    observed.cones[i] ~ dnegbin(p[i],r[wave[i]])
-    LogLik[i] <- log(dnegbin(observed.cones[i],p[i],r[wave[i]]))   # add log likelihood computation for each observation!
-  }
-  
-  
-  ### Priors
-  for(j in 1:2){   # estimate separately for wave and non-wave
-    a[j] ~ dunif(0.001,2)
-    b[j] ~ dunif(0.5,4)
-    r[j] ~ dunif(0.5,5)
-  }
-  
-}
-    
-",file="BUGS_fir.txt")
-
-
-# Build JAGS code for the reduced model ------------
-
-cat("
-
-model  {
-
-### Likelihood
-
-  for(i in 1:n.obs){
-    expected.cones[i] <- a*pow(DBH[i],b)   # a*DBH^b
-    p[i] <- r / (r + expected.cones[i])
-    observed.cones[i] ~ dnegbin(p[i],r)
-    LogLik[i] <- log(dnegbin(observed.cones[i],p[i],r))   # add log likelihood computation for each observation!
-  }
-  
-  
-  ### Priors
-  
-  a ~ dunif(0.001,2)
-  b ~ dunif(0.5,4)
-  r ~ dunif(0.5,5)
-
-  
-}
-    
-",file="BUGS_fir_reduced.txt")
-
-
-# re-fit the models
-
-params.to.monitor <- c("a","b","r","LogLik")    # now monitor the log likelihood
-
-jags.fit1 <- jags(data=data.package1,inits=init.generator1,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=10000,model.file="BUGS_fir.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
-
-jags.fit2 <- jags(data=data.package2,inits=init.generator2,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=10000,model.file="BUGS_fir_reduced.txt",n.chains = 2,n.burnin = 2000,n.thin=5 )
-
-
-
-# Compute WAIC!
-
-loglik_full <- jags.fit1$sims.list$LogLik
-loglik_red <- jags.fit2$sims.list$LogLik
-
-waic_full <- waic(loglik_full)
-waic_red <- waic(loglik_red)
-
+waic_full = loo::waic(lls)
 waic_full$estimates["waic",]
-waic_red$estimates["waic",]
-
-loo_compare(waic_full, waic_red)
 
 
-# Explicit Bayesian model selection
+loo_full <- fit_full$loo()
+loo_full
 
-cat("
+
+data {
+  int<lower = 1> N;
+  array [N] int<lower=0> obs_cones;
+  vector<lower=0> [N] DBH;
+}
+
+parameters {
+  real loga, b, logbeta;
+}
+
+transformed parameters {
+  real a = exp(loga);
+  real beta = exp(logbeta);
+}
 
 model  {
-
-  ### Likelihood for model 1: full
-
-  for(i in 1:n.obs){
-    expected.cones[i,1] <- a1[wave[i]]*pow(DBH[i],b1[wave[i]])       # a*DBH^b
-    spread.cones[i,1] <- r1[wave[i]]
-    p[i,1] <- spread.cones[i,1] / (spread.cones[i,1] + expected.cones[i,1])
-    observed.cones[i,1] ~ dnegbin(p[i,1],spread.cones[i,1])
-    predicted.cones[i,1] ~ dnegbin(p[i,1],spread.cones[i,1])
-    SE_obs[i,1] <- pow(observed.cones[i,1]-expected.cones[i,1],2)
-    SE_pred[i,1] <- pow(predicted.cones[i,1]-expected.cones[i,1],2)
-  }
-  
-  
-  ### Priors, model 1
-  for(j in 1:2){   # estimate separately for wave and non-wave
-    a1[j] ~ dunif(0.001,2)
-    b1[j] ~ dunif(0.5,4)
-    r1[j] ~ dunif(0.5,5)
-  }
-
-  ### Likelihood for model 2: reduced
-
-  for(i in 1:n.obs){
-    expected.cones[i,2] <- a2*pow(DBH[i],b2)       # a*DBH^b
-    spread.cones[i,2] <- r2
-    p[i,2] <- spread.cones[i,2] / (spread.cones[i,2] + expected.cones[i,2])
-    observed.cones[i,2] ~ dnegbin(p[i,2],spread.cones[i,2])
-    predicted.cones[i,2] ~ dnegbin(p[i,2],spread.cones[i,2])
-    SE_obs[i,2] <- pow(observed.cones[i,2]-expected.cones[i,2],2)
-    SE_pred[i,2] <- pow(predicted.cones[i,2]-expected.cones[i,2],2)
-  }
-  
-  
-  ### Priors, model 2
-  a2 ~ dunif(0.001,2)
-  b2 ~ dunif(0.5,4)
-  r2 ~ dunif(0.5,5)
-
-  ### Likelihood for model 3: constant a and b
-
-  for(i in 1:n.obs){
-    expected.cones[i,3] <- a3*pow(DBH[i],b3)       # a*DBH^b
-    spread.cones[i,3] <- r3[wave[i]]
-    p[i,3] <- spread.cones[i,3] / (spread.cones[i,3] + expected.cones[i,3])
-    observed.cones[i,3] ~ dnegbin(p[i,3],spread.cones[i,3])
-    predicted.cones[i,3] ~ dnegbin(p[i,3],spread.cones[i,3])
-    SE_obs[i,3] <- pow(observed.cones[i,3]-expected.cones[i,3],2)
-    SE_pred[i,3] <- pow(predicted.cones[i,3]-expected.cones[i,3],2)
-  }
-  
-  SSE_obs[1] <- sum(SE_obs[,1]) 
-  SSE_pred[1] <- sum(SE_pred[,1])
-  SSE_obs[2] <- sum(SE_obs[,2]) 
-  SSE_pred[2] <- sum(SE_pred[,2])
-  SSE_obs[3] <- sum(SE_obs[,3]) 
-  SSE_pred[3] <- sum(SE_pred[,3])
-
-  ### Priors, model 3
-  for(j in 1:2){   # estimate separately for wave and non-wave
-    r3[j] ~ dunif(0.5,5)
-  }
-  a3 ~ dunif(0.001,2)
-  b3 ~ dunif(0.5,4)
-
-  #####################
-  ### SELECT THE BEST MODEL!!! 
-  #####################
-
-  for(i in 1:n.obs){
-    observed.cones2[i] ~ dnegbin(p[i,selected],spread.cones[i,selected])
-    predicted.cones2[i] ~ dnegbin(p[i,selected],spread.cones[i,selected])     # for posterior predictive check!
-    SE2_obs[i] <- pow(observed.cones2[i]-expected.cones[i,selected],2)
-    SE2_pred[i] <- pow(predicted.cones2[i]-expected.cones[i,selected],2)
-  }
-  
-  SSE2_obs <- sum(SE2_obs[])
-  SSE2_pred <- sum(SE2_pred[])
-
-
-  ### Priors
-  
-    # model selection...
-  prior[1] <- 1/3
-  prior[2] <- 1/3     # you can put substantially more weight because fewer parameters (there are more rigorous ways to do this!!)
-  prior[3] <- 1/3
-  selected ~ dcat(prior[])   
-  
-  
+  vector[N] mean_cones = exp(loga + b .* DBH);   // power function: a*DBH^b
+  vector[N] alpha = mean_cones .* beta;
+  obs_cones ~ neg_binomial(alpha,beta);
 }
-    
-",file="BUGS_fir_modelselection.txt")
 
+generated quantities {   // need log_lik of each data point for model selection
+  vector[N] log_lik; // N is the number of data points
+  {
+    real m2, a2, b2;
+    for (n in 1:N) {
+       m2 = exp(loga + b * DBH[n]);   // power function: a*DBH^b
+       a2 = m2 * beta;
+       log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta);
+    }
+  }
+}
 
+# compile the model using:
+firmodel_reduced <- cmdstan_model("firmodel_reduced.stan") # Compile stan model
 
-# Package the data for JAGS
+fit_reduced <- suppressMessages( firmodel_reduced$sample(
+  data = stan_data,
+  chains = 4,
+  iter_warmup = 200,
+  iter_sampling = 500,
+  refresh = 0
+)  )
 
-data.package3 <- list(
-  observed.cones = matrix(rep(fir$TOTCONES,times=3),ncol=3,byrow=F),
-  observed.cones2 = fir$TOTCONES,
-  n.obs = nrow(fir),
-  wave = as.numeric(fir$WAVE_NON),
-  #n.models = 3,
-  DBH = fir$DBH
-)
-#data.package
+# fit_full$summary()
+samples_red <- fit_reduced$draws(format="draws_df")
+bayesplot::mcmc_trace(samples_red,"a")
+# bayesplot::mcmc_trace(samples_red,"b")
+# bayesplot::mcmc_trace(samples_red,"beta")
 
+# Compute LOOIC
 
-# Run JAGS
+loo_reduced <- fit_reduced$loo()
 
-params.to.monitor <- c("a1","b1","r1","a2","b2","r2","a3","b3","r3","selected","predicted.cones2","predicted.cones","SSE_obs","SSE_pred","SSE2_obs","SSE2_pred")
-
-jags.fit3 <- jags(data=data.package3,parameters.to.save=params.to.monitor,n.adapt=1000,n.iter=5000,model.file="BUGS_fir_modelselection.txt",n.chains = 2,n.burnin = 1000,n.thin=2 )
-
-jagsfit3.mcmc <- jags.fit3$samples   # convert to "MCMC" object (coda package)
-
-BUGSlist <- as.data.frame(jags.fit3$sims.list)
-#summary(jagsfit.mcmc)
-
-#plot(jagsfit.mcmc)
-
-
-
-# Visualize the model fit
-
-#plot(jagsfit.mcmc[,"selected"])
-
-plot(jagsfit3.mcmc[,"a1[1]"])
-plot(jagsfit3.mcmc[,"a1[2]"])
-plot(jagsfit3.mcmc[,"a2"])
-plot(jagsfit3.mcmc[,"a3"])
-
-plot(jagsfit3.mcmc[,"r1[1]"])
-plot(jagsfit3.mcmc[,"r1[2]"])
-plot(jagsfit3.mcmc[,"r2"])
-plot(jagsfit3.mcmc[,"r3[1]"])
-
-
-
-# Perform explicit model selection
-
-n.iterations <- length(jags.fit3$sims.list$selected)
-selected <- table(jags.fit3$sims.list$selected)
-names(selected) <- c("Full model","No wave","Fixed a&b")
-selected
-
-barplot(selected/n.iterations,ylab="Degree of belief")
+loo_reduced
 
 
 # Goodness of fit
 
-n.data <- length(fir$DBH)
+N <- stan_data$N
 
 plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
 
-for(d in 1:n.data){
-  tofind <- sprintf("predicted.cones[%s,1]",d)
-  model1 <- as.vector(jagsfit3.mcmc[,tofind])
-  points(rep(fir$DBH[d],times=100),sample(model1[[1]],100),pch=20,col="gray",cex=0.4)
+# which.max(stan_data$DBH)
+# which.min(stan_data$DBH)
+
+a_param <- samples_red$a
+b_param <- samples_red$b
+beta_param <- samples_red$beta
+mu_rep <- sapply(1:N,function(t) a_param * stan_data$DBH[t]^b_param)
+
+sim_dat <- function(s){
+  thismean = mu_rep[s,]
+  thisbeta <- samples_red$beta[s]
+  thisalpha <- thismean * thisbeta 
+  thismu = thisalpha / thisbeta
+  rnbinom(N,size=thisalpha,mu=thismu)
 }
 
+nMCMC = length(samples_red$b)
 
-# Perform posterior predictive check
-
-plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
-
-for(d in 1:n.data){
-  tofind <- sprintf("predicted.cones[%s,2]",d)
-  model1 <- as.vector(jagsfit3.mcmc[,tofind])
-  points(rep(fir$DBH[d],times=100),sample(model1[[1]],100),pch=20,col="gray",cex=0.4)
+for(d in 1:N){
+  dat= sim_dat(sample(1:nMCMC,1))
+  points(stan_data$DBH,dat,pch=20,col="gray",cex=0.4)
 }
-
-
-plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
-
-for(d in 1:n.data){
-  tofind <- sprintf("predicted.cones[%s,3]",d)
-  model1 <- as.vector(jagsfit3.mcmc[,tofind])
-  points(rep(fir$DBH[d],times=100),sample(model1[[1]],100),pch=20,col="gray",cex=0.4)
-}
+points(fir$DBH,fir$TOTCONES,cex=2)
 
 
 # Posterior Predictive Checks!
 
-plot(as.vector(jagsfit3.mcmc[,"SSE_pred[1]"][[1]])~as.vector(jagsfit3.mcmc[,"SSE_obs[1]"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
-abline(0,1,col="red")
-p.value=length(which(as.vector(jagsfit3.mcmc[,"SSE_pred[1]"][[1]])>as.vector(jagsfit3.mcmc[,"SSE_obs[1]"][[1]])))/length(as.vector(jagsfit3.mcmc[,"SSE_pred[1]"][[1]]))
-p.value 
-
-
-plot(as.vector(jagsfit3.mcmc[,"SSE_pred[2]"][[1]])~as.vector(jagsfit3.mcmc[,"SSE_obs[2]"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
-abline(0,1,col="red")
-p.value=length(which(as.vector(jagsfit3.mcmc[,"SSE_pred[2]"][[1]])>as.vector(jagsfit3.mcmc[,"SSE_obs[2]"][[1]])))/length(as.vector(jagsfit3.mcmc[,"SSE_pred[2]"][[1]]))
-p.value 
-
-
-plot(as.vector(jagsfit3.mcmc[,"SSE_pred[3]"][[1]])~as.vector(jagsfit3.mcmc[,"SSE_obs[3]"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
-abline(0,1,col="red")
-p.value=length(which(as.vector(jagsfit3.mcmc[,"SSE_pred[3]"][[1]])>as.vector(jagsfit3.mcmc[,"SSE_obs[3]"][[1]])))/length(as.vector(jagsfit3.mcmc[,"SSE_pred[3]"][[1]]))
-p.value   
-
-
-plot(fir$TOTCONES~fir$DBH,ylim=c(0,900),cex=2)
-
-for(d in 1:n.data){
-  tofind <- sprintf("predicted.cones2[%s]",d)
-  model1 <- as.vector(jagsfit3.mcmc[,tofind])
-  points(rep(fir$DBH[d],times=100),sample(model1[[1]],100),pch=20,col="gray",cex=0.4)
+nreps = 500 
+SSE_obs= numeric(nreps)
+SSE_sim = numeric(nreps)
+r=1
+for(r in 1:nreps){
+  this= sample(1:nMCMC,1,replace = T)
+  SSE_obs[r] = sum((stan_data$obs_cones - mu_rep[this,])^2)
+  simdat = sim_dat(this)
+  SSE_sim[r] = sum((simdat - mu_rep[this,])^2)
 }
 
-
-# Posterior predictive check with model-averaged model!
-
-plot(as.vector(jagsfit3.mcmc[,"SSE2_pred"][[1]])~as.vector(jagsfit3.mcmc[,"SSE2_obs"][[1]]),xlab="SSE, real data",ylab="SSE, perfect data",main="Posterior Predictive Check")
+plot(SSE_sim~SSE_obs,xlab="SSE, real data",ylab="SSE, simulated data",main="Posterior Predictive Check")
 abline(0,1,col="red")
-p.value=length(which(as.vector(jagsfit3.mcmc[,"SSE2_pred"][[1]])>as.vector(jagsfit3.mcmc[,"SSE2_obs"][[1]])))/length(as.vector(jagsfit3.mcmc[,"SSE2_pred"][[1]]))
+p.value=mean(SSE_sim>SSE_sim)
 p.value 
 

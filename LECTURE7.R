@@ -107,9 +107,9 @@ gradient <- function(x) pracma::grad(log_posterior,x)
   # modified from https://jonnylaw.rocks/posts/2019-07-31-hmc/
 
 leapfrog_step <- function(gradient, step_size, position, momentum, d) {
-  momentum1 <- momentum + gradient(position) * 0.5 * step_size
+  momentum1 <- momentum + gradient(position) * 0.5 * step_size  # half step
   position1 <- position + step_size * momentum1
-  momentum2 <- momentum1 + gradient(position1) * 0.5 * step_size
+  momentum2 <- momentum1 + gradient(position1) * 0.5 * step_size  # complete a full step
   matrix(c(position1, momentum2), ncol = d*2)
 }
 
@@ -202,9 +202,9 @@ logprior <- function(params){
 # params <- c(shape=40,rate=7)    # test function
 # logprior(params)
 
-parmsurface$pr <- sapply(1:nrow(parmsurface), function(t) logprior(unlist(parmsurface[t,1:2]))  )
+parmsurface$log_pr <- sapply(1:nrow(parmsurface), function(t) logprior(unlist(parmsurface[t,1:2]))  )
 ggplot(parmsurface,mapping =aes(x=shape,y=rate)) +  # Visualize the log likelihood surface
-  geom_raster(aes(fill=pr)) +
+  geom_raster(aes(fill=log_pr)) +
   scale_fill_gradient(limits=c(-25,-13.14)) 
 
 
