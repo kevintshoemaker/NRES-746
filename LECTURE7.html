@@ -584,7 +584,7 @@ can think of the MCMC sample as a ball rolling in that space. We give
 the ball a little push in some direction (this is governed by the
 momemtum function), giving it kinetic energy. The ball might roll
 downhill, converting some of the potential energy into kinetic energy.
-At some point is starts rolling up again until all the kinetic energy is
+At some point it starts rolling up again until all the kinetic energy is
 converted back into potential energy.</p>
 <p>Basically, this algorithm forces the MCMC sampler to stay within
 higher-probability regions of parameter space (called the “typical
@@ -654,12 +654,14 @@ parameter space between each evaluation of the target distribution.</li>
 gradient is to be evaluated)</li>
 <li>momentum – a vector (length k) representing the current momentum of
 the sampler in parameter space. This vector helps to “push” our sampler
-through space, fully exploring the space rather than simply floating up
-to the posterior mode.</li>
+through space (the magnitude and direction of the vector describes our
+movement velocity in parameter space). This ‘push’ helps us fully
+explore the space rather than simply floating up to the posterior
+mode.</li>
 <li>d is the number of parameters– i.e., the dimension of the space we
 are exploring</li>
 </ul>
-<p>This function outputs a dX2 matrix representing first position and
+<p>This function outputs a row vector representing first position and
 then momentum.</p>
 <pre class="r"><code># Ancillary code for HMC ----------
   # modified from https://jonnylaw.rocks/posts/2019-07-31-hmc/
@@ -672,8 +674,8 @@ leapfrog_step &lt;- function(gradient, step_size, position, momentum, d) {
 }</code></pre>
 <p>This next function simply runs a set of l leapfrog integration steps.
 This completes one full sample from the HMC algorithm. This function
-also returns a matrix with k rows and 2 columns (position and
-momentum).</p>
+also returns a row vector appending the position and momentum vectors
+side by side.</p>
 <pre class="r"><code>leapfrogs &lt;- function(gradient, step_size, l, position, momentum, d) {
   for (i in 1:l) {
     pos_mom &lt;- leapfrog_step(gradient, step_size, position, momentum, d)
@@ -683,8 +685,8 @@ momentum).</p>
   pos_mom
 }</code></pre>
 <p>This next function computes the log of the acceptance probability of
-the full jump. We use a standard normal distribution to provide the
-“nudges” to momentum that define each HMC iteration.</p>
+the full jump. We assume that momentum follows a standard normal
+distribution.</p>
 <pre class="r"><code>log_acceptance &lt;- function(propPosition,
                            propMomentum,
                            position,
@@ -695,7 +697,14 @@ the full jump. We use a standard normal distribution to provide the
 }</code></pre>
 <p>We’re getting there. This function does one full HMC step. We give it
 our log_posterior and gradient functions, along with our step size,
-number of leapfrog steps, and a starting position.</p>
+number of leapfrog steps, and a starting position. Each HMC step starts
+with a random ‘kick’ (random draw representing the momentum). It then
+proceeds to ‘skate’ through the target distribution via the leapfrog
+steps. Then a final metropolis step determines whether or not the jump
+is accepted. In a good HMC procedure, very few proposals should be
+rejected. Rejection of a proposal is called a ‘divergence’ and is
+sometimes an indicator/diagnostic that your target distribution has some
+serious issues.</p>
 <pre class="r"><code>hmc_step &lt;- function(log_posterior, gradient, step_size, l, position) {
   d &lt;- length(position)
   momentum &lt;- rnorm(d)    # initial momentum- a kick to get the sampler going
@@ -725,8 +734,8 @@ position information, which is our sample in parameter space.</p>
 
 bvn_hmc &lt;-hmc(log_posterior, gradient, .2, 10, c(0,0), 1000)  
 vis_mcmc2(bvn_hmc)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-17-1.png" width="672" />
-Of course, we would need to tune our step size and number of leapfrog
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-17-1.png" width="672" /></p>
+<p>Of course, we would need to tune our step size and number of leapfrog
 steps to get an optimized sampler. But hopefully this gives you the
 idea!!</p>
 </div>
@@ -1035,7 +1044,7 @@ file extension “.stan”.</p>
 the stan model (stan is a compiled language):</p>
 <pre class="r"><code>library(cmdstanr)
 mod1 &lt;- cmdstan_model(&quot;myx.stan&quot;) # Compile stan model</code></pre>
-<p>bundle the data into a single list object that contains all the
+<p>Bundle the data into a single list object that contains all the
 relevant data referenced in the stan code:</p>
 <pre class="r"><code># Encapsulate the data into a single &quot;list&quot; object ------------------
 
@@ -1093,9 +1102,9 @@ fit1 &lt;- mod1$sample(
 bayesplot::mcmc_trace(samples,&quot;shape&quot;)</code></pre>
 <p><img src="LECTURE7_files/figure-html/unnamed-chunk-41-1.png" width="672" /></p>
 <pre class="r"><code>bayesplot::mcmc_trace(samples,&quot;rate&quot;)</code></pre>
-<p><img src="LECTURE7_files/figure-html/unnamed-chunk-41-2.png" width="672" />
-A couple things you might notice right off the bat: the HMC chain looks
-much less autocorrelated than our custom M-H sampler. This will
+<p><img src="LECTURE7_files/figure-html/unnamed-chunk-41-2.png" width="672" /></p>
+<p>A couple things you might notice right off the bat: the HMC chain
+looks much less autocorrelated than our custom M-H sampler. This will
 generally be the case, since HMC is much more efficient than M-H in
 general. Also, we only ran 500 iterations, unlike the 100,000 iterations
 of the M-C algorithm.</p>

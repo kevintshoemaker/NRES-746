@@ -223,7 +223,7 @@ This looks pretty good! However, it is important to note that Gibbs samplers fre
 
 Hamiltonian Monte Carlo (HMC) is more mathematically complex than M-H or HMC. However, it has some very nice properties. Most importantly, the samples from HMC are much less correlated, so we need fewer samples to characterize the target distribution. HMC is also very good at sampling even in high dimensional problems that would be too slow or poorly mixed in a Gibbs sampler. 
 
-The term "Hamiltonian" comes from physics, where the Hamiltonian equations describe an object's movement in space as a function of the relationship between kinetic energy and potential energy. Imagine the negative log-posterior as a frictionless surface we want to explore. We can think of the MCMC sample as a ball rolling in that space. We give the ball a little push in some direction (this is governed by the momemtum function), giving it kinetic energy. The ball might roll downhill, converting some of the potential energy into kinetic energy. At some point is starts rolling up again until all the kinetic energy is converted back into potential energy. 
+The term "Hamiltonian" comes from physics, where the Hamiltonian equations describe an object's movement in space as a function of the relationship between kinetic energy and potential energy. Imagine the negative log-posterior as a frictionless surface we want to explore. We can think of the MCMC sample as a ball rolling in that space. We give the ball a little push in some direction (this is governed by the momemtum function), giving it kinetic energy. The ball might roll downhill, converting some of the potential energy into kinetic energy. At some point it starts rolling up again until all the kinetic energy is converted back into potential energy. 
 
 Basically, this algorithm forces the MCMC sampler to stay within higher-probability regions of parameter space (called the "typical set"), making for a sampler that is efficient even when sampling from high dimensions- HMC is a great weapon when battling against the curse of dimensionality. 
 
@@ -273,10 +273,10 @@ Then we write a function that implements a single "leapfrog" integration step. M
 * gradient -- see above
 * step_size -- A tuning parameter representing how far to move in parameter space between each evaluation of the target distribution.
 * position -- the current position in parameter space (where the gradient is to be evaluated)
-* momentum -- a vector (length k) representing the current momentum of the sampler in parameter space. This vector helps to "push" our sampler through space, fully exploring the space rather than simply floating up to the posterior mode. 
+* momentum -- a vector (length k) representing the current momentum of the sampler in parameter space. This vector helps to "push" our sampler through space (the magnitude and direction of the vector describes our movement velocity in parameter space). This 'push' helps us fully explore the space rather than simply floating up to the posterior mode. 
 * d is the number of parameters-- i.e., the dimension of the space we are exploring
 
-This function outputs a dX2 matrix representing first position and then momentum. 
+This function outputs a row vector representing first position and then momentum. 
 
 ```{r}
 # Ancillary code for HMC ----------
@@ -291,7 +291,7 @@ leapfrog_step <- function(gradient, step_size, position, momentum, d) {
 
 ```
 
-This next function simply runs a set of l leapfrog integration steps. This completes one full sample from the HMC algorithm. This function also returns a matrix with k rows and 2 columns (position and momentum). 
+This next function simply runs a set of l leapfrog integration steps. This completes one full sample from the HMC algorithm. This function also returns a row vector appending the position and momentum vectors side by side. 
 
 ```{r}
 
@@ -306,7 +306,7 @@ leapfrogs <- function(gradient, step_size, l, position, momentum, d) {
 
 ```
 
-This next function computes the log of the acceptance probability of the full jump. We use a standard normal distribution to provide the "nudges" to momentum that define each HMC iteration. 
+This next function computes the log of the acceptance probability of the full jump. We assume that momentum follows a standard normal distribution. 
 
 ```{r}
 log_acceptance <- function(propPosition,
@@ -319,7 +319,7 @@ log_acceptance <- function(propPosition,
 }
 ```
 
-We're getting there. This function does one full HMC step. We give it our log_posterior and gradient functions, along with our step size, number of leapfrog steps, and a starting position.
+We're getting there. This function does one full HMC step. We give it our log_posterior and gradient functions, along with our step size, number of leapfrog steps, and a starting position. Each HMC step starts with a random 'kick' (random draw representing the momentum). It then proceeds to 'skate' through the target distribution via the leapfrog steps. Then a final metropolis step determines whether or not the jump is accepted. In a good HMC procedure, very few proposals should be rejected. Rejection of a proposal is called a 'divergence' and is sometimes an indicator/diagnostic that your target distribution has some serious issues. 
 
 ```{r}
 hmc_step <- function(log_posterior, gradient, step_size, l, position) {
@@ -360,6 +360,7 @@ Let's try it out!
 bvn_hmc <-hmc(log_posterior, gradient, .2, 10, c(0,0), 1000)  
 vis_mcmc2(bvn_hmc)
 ```
+
 Of course, we would need to tune our step size and number of leapfrog steps to get an optimized sampler. But hopefully this gives you the idea!!
 
 
@@ -485,6 +486,7 @@ params
 make_guess(params)     # set a new "guess" near to the original guess
 
 ```
+
 We also need a starting point:
 
 ```{r}
@@ -507,6 +509,7 @@ newguess
 eval_jump(startingvals,newguess)   # difference in posterior ratio
 
 ```
+
 Now let's visualize the Metropolis-Hastings routine:
 
 ```{r}
@@ -724,7 +727,7 @@ mod1 <- cmdstan_model("myx.stan") # Compile stan model
 ```
 
 
-bundle the data into a single list object that contains all the relevant data referenced in the stan code:
+Bundle the data into a single list object that contains all the relevant data referenced in the stan code:
 
 ```{r}
 
@@ -759,6 +762,7 @@ bayesplot::mcmc_trace(samples,"shape")
 bayesplot::mcmc_trace(samples,"rate")
 
 ```
+
 A couple things you might notice right off the bat: the HMC chain looks much less autocorrelated than our custom M-H sampler. This will generally be the case, since HMC is much more efficient than M-H in general. Also, we only ran 500 iterations, unlike the 100,000 iterations of the M-C algorithm.  
 
 ```{r}
