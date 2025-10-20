@@ -42,5 +42,3 @@ bayesplot::mcmc_dens(samples,"b1") + geom_vline(xintercept=b1,lwd=2)
 bayesplot::mcmc_dens(samples,"sigma") + geom_vline(xintercept=sig,lwd=2)
 
 
-
-
