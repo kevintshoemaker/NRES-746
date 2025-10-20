@@ -467,7 +467,7 @@ complex alternative. This is known as the principle of parsimony.</p>
 selection. Perhaps it’s time to move on from Myxomatosis anyway…</p>
 <p>Let’s load up the data first</p>
 <pre class="r"><code># Load the balsam fir dataset
-
+library(ggplot2)
 library(emdbook)
 data(FirDBHFec)
 fir &lt;- na.omit(FirDBHFec[,c(&quot;TOTCONES&quot;,&quot;DBH&quot;,&quot;WAVE_NON&quot;)])
@@ -489,20 +489,16 @@ sampled from areas in which these fir trees experience a phenomenon
 called wave regeneration, in which tree age follows a chronosequence as
 you move downwind (due to larger trees at the wave front dying due to
 frost damage, allowing for recruitment of new trees). Other trees were
-sampled from “normal” fir forests in which there is no wave
-regeneration.</p>
+sampled from fir forests in which there is no wave regeneration.</p>
 <pre class="r"><code># tree fecundity by size, categorized into two site-level categories: &quot;wave&quot; and &quot;non-wave&quot; 
 
-ndx &lt;- fir$WAVE_NON==&quot;w&quot;   # logical vector indicating which observations were from &quot;wave&quot; sites
-plot(fir$TOTCONES[ndx] ~ fir$DBH[ndx],xlab=&quot;DBH&quot;,ylab=&quot;Tot Cones&quot;)
-points(fir$DBH[!ndx],fir$TOTCONES[!ndx],pch=4,col=&quot;red&quot;)
-legend(&quot;topleft&quot;,pch=c(1,4),col=c(&quot;black&quot;,&quot;red&quot;),legend=c(&quot;Wave&quot;,&quot;Non-wave&quot;),bty=&quot;n&quot;)</code></pre>
+ggplot(fir,aes(DBH,TOTCONES)) + geom_point(aes(colour = WAVE_NON)) + theme_classic()</code></pre>
 <p><img src="LECTURE8_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
 <p>Let’s assume (following Bolker) that fecundity increases as a
 power-law relationship with DBH:</p>
 <p><span class="math inline">\(\mu = a\cdot DBH^{b}\)</span></p>
-<p>Let’s also assume that the fecundity follows a negative binomial
-distribution:</p>
+<p>Let’s also assume that fecundity follows a negative binomial
+distribution with mean defined by the power law relationship above</p>
 <p><span class="math inline">\(Y = NegBin(\mu,k)\)</span></p>
 <p>We can model each of these parameters (<em>a</em>, <em>b</em>, and
 <em>k</em>) separately for trees from wave and non-wave populations.</p>
@@ -515,7 +511,6 @@ model”?</strong></p>
 <p>Here is a likelihood function for the <em>full model</em> – that is,
 the most complex model (6-dimensional likelihood surface):</p>
 <pre class="r"><code># build likelihood function for the full model: CONES ~ negBINOM( a(wave)*DBH^b(wave), dispersion(wave))
-
    
 NLL_full &lt;- function(params){
   wave.code &lt;- as.numeric(fir$WAVE_NON)      # convert to ones and twos
@@ -538,7 +533,10 @@ pars = c(a.n=1,a.w=1,b.n=1,b.w=1,k.n=1,k.w=1)
 opt_full &lt;- optim(pars,NLL_full,method=&quot;BFGS&quot;)
 
 MLE_full &lt;- opt_full$par
-MinNLL_full &lt;- opt_full$value</code></pre>
+MinNLL_full &lt;- opt_full$value
+MLE_full</code></pre>
+<pre><code>##       a.n       a.w       b.n       b.w       k.n       k.w 
+## 0.2886487 0.4093670 2.3536412 2.1473932 1.6542073 1.3247971</code></pre>
 </div>
 </div>
 <div id="reduced-models" class="section level2">
@@ -567,7 +565,10 @@ opt_constb &lt;- optim(fn=NLL_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method=&
 
 MLE_constb = opt_constb$par
 
-MinNLL_constb = opt_constb$value</code></pre>
+MinNLL_constb = opt_constb$value
+MLE_constb</code></pre>
+<pre><code>##       a.n       a.w         b       k.n       k.w 
+## 0.3477240 0.3217906 2.2699275 1.6530928 1.3230276</code></pre>
 <p>Let’s compute <em>-2 times the log likelihood</em> (<span
 class="math inline">\(-2*log(likelihood)\)</span>) of the two models at
 the MLE – That is, we compute <span
@@ -597,9 +598,9 @@ class="section level3">
 <h3>Likelihood-ratio test (frequentist solution)</h3>
 <p>We have encountered the LRT once before, in the context of generating
 confidence intervals from likelihood surfaces (in the neighborhood of
-the MLE). The same principle applies for model selection. The LRT tests
-whether the extra goodness-of-fit of the full model is worth the extra
-complexity of the additional parameters.</p>
+the MLE). The same principle applies for model selection. The LRT
+assesses whether the extra goodness-of-fit of the full model is worth
+the extra complexity of the additional parameters.</p>
 <p>As you recall, the likelihood ratio is defined (obviously) as the
 ratio of two likelihoods. The numerator represents the likelihood of a
 reduced model (fewer free parameters) that is nested within a full model
@@ -672,7 +673,11 @@ opt_nowave &lt;- optim(fn=NLL_nowave,par=params,method=&quot;L-BFGS-B&quot;)
 
 MLE_nowave = opt_nowave$par
 
-MinNLL_nowave = opt_nowave$value</code></pre>
+MinNLL_nowave = opt_nowave$value
+
+MLE_nowave</code></pre>
+<pre><code>##         a         b         k 
+## 0.3036727 2.3197228 1.5029500</code></pre>
 <p>Now we can perform a LRT to see which model is better!</p>
 <pre class="r"><code># Perform LRT -- this time with three fewer free parameters in the reduced model
 
@@ -727,33 +732,31 @@ model and we can’t perform a LRT.</p>
 <p>Information-theoretic metrics for model comparison, like Akaike’s
 Information Criterion (AIC), provide a way to get around the issues with
 LRT. These metrics allow us to make tables for comparing multiple models
-simultaneously. However, these metrics <em>have no strict frequentist
-interpretation</em>.</p>
-<p>Metrics like AIC represent (theoretically) the distance between some
-particular model and the “perfect” or “true” model (which fits the data
-perfectly). Information-theoretic metrics are composed of a
-negative-log-likelihood component (e.g., <span
-class="math inline">\(-2\ell\)</span>, in which <span
-class="math inline">\(\ell\)</span> is the log likelihood of the model
-and lower values mean better fit) and a <em>parsimony penalty term</em>
-(for which lower values mean more parsimony). For AIC, the penalty term
-is twice the number of parameters (<span
-class="math inline">\(2*k\)</span>). The models with the lowest values
-of the information criterion are considered the best model (marrying
-good fit and parsimony)</p>
+simultaneously.</p>
+<p>Metrics like AIC represent (theoretically) the divergence between
+some particular model and the “true” data generating model.
+Information-theoretic metrics are composed of a negative-log-likelihood
+component (e.g., <span class="math inline">\(-2\ell\)</span>, in which
+<span class="math inline">\(\ell\)</span> is the log likelihood of the
+model and lower values mean better fit) and a <em>parsimony penalty
+term</em> (for which lower values mean more parsimony). For AIC, the
+penalty term is twice the number of parameters (<span
+class="math inline">\(2k\)</span>). The models with the lowest values of
+the information criterion are considered the best model (marrying good
+fit and parsimony)</p>
 <div id="akaikes-information-criterion-aic" class="section level4">
 <h4>Akaike’s Information Criterion (AIC)</h4>
 <p>NOTE: AIC is still widely used (and misused) so it is important to
 understand!</p>
 <p>AIC is computed using the following equation:</p>
 <p><span class="math display">\[AIC = -2 \ell_{max} + 2k\]</span></p>
-<p>AIC is the most commonly used information criterion.</p>
 <p><span class="math inline">\(\ell_{max}\)</span> is the maximum of the
 log-likelihood surface</p>
 <p>k is the number of free parameters in the model</p>
 <p>As with all information-theoretic metrics, we look for the model
 associated with the minimum value (lowest value corresponds with best
-model fit). This is the “best model”.</p>
+model fit). This is the “best model”, at least among the set of models
+tested.</p>
 <p>For small sample sizes, Burnham and Anderson (2002) recommend that a
 finite-size correction should be used:</p>
 <p><span class="math inline">\(AIC_c = AIC +
@@ -773,7 +776,7 @@ to select the simpler model (since the penalty term is generally
 greater).</p>
 <p>Although the Schwarz criterion has a Bayesian justification (as does
 AIC), it is computed from a point estimate (using the log-likelihood at
-the MLE) and so it doesn’t pass any real test for being Bayesian – true
+the MLE) and so it doesn’t pass any real test for being Bayesian –
 Bayesian analyses don’t treat parameters as points, but as full
 probability distributions.</p>
 </div>
@@ -812,7 +815,10 @@ MLE_constak= opt_constak$par
 
 MinNLL_constak = opt_constak$value
 
-ms_constak &lt;- 2*MinNLL_constak</code></pre>
+ms_constak &lt;- 2*MinNLL_constak
+MLE_constak</code></pre>
+<pre><code>##         a       b.n       b.w         k 
+## 0.3448975 2.2745907 2.2327297 1.5057655</code></pre>
 <p>Finally, let’s fit a model with no “wave” effect, but where we assume
 the error is Poisson distributed…</p>
 <pre class="r"><code>### Now, let&#39;s build and fit one more final model- this time with no wave effect and a Poisson error distribution
@@ -834,7 +840,11 @@ MLE_pois= opt_pois$par
 
 MinNLL_pois= opt_pois$value
 
-ms_pois &lt;- 2*MinNLL_pois</code></pre>
+ms_pois &lt;- 2*MinNLL_pois
+
+MLE_pois</code></pre>
+<pre><code>##         a         b 
+## 0.2613297 2.3883860</code></pre>
 <p><strong>Note</strong> we could not compare the Poisson model to the
 Negative Binomial model using LRT- one is not nested within the
 other!</p>
@@ -877,9 +887,11 @@ parsimony at work)</p>
 <div id="bayesian-model-selection" class="section level2">
 <h2>Bayesian Model Selection</h2>
 <p>Can we do model selection in a Bayesian framework? The answer is yes!
-One metric that is used by Bayesians for model selection is the
+One natural metric that is used by Bayesians for model selection is the
 <em>Bayes Factor</em> (below). The Bayes factor is defined as the ratio
-of <em>marginal likelihoods</em> of two models.</p>
+of <em>marginal likelihoods</em> of two models. That is- we should
+prefer the model that is more likely to produce the data across all
+possible parameter values.</p>
 <p>In addition, there are some I-T metrics for Bayesian analyses that
 make model selection pretty much as easy as building an AIC table!</p>
 <div id="bayes-factor" class="section level3">
@@ -909,12 +921,11 @@ factor</strong> and is an elegant method for comparing models in a
 Bayesian context.</p>
 <p><span class="math display">\[\overline{\mathcal{L}}_1 /
 \overline{\mathcal{L}}_2\]</span></p>
-<p>This is interpreted as <em>the odds in favor of model 1 versus model
-2</em></p>
-<p>This simple formula elegantly penalizes over-parameterization.
-Simpler models will generally have higher marginal likelihoods than more
-complex models after all of free parameter space is taken into
-account.</p>
+<p>This is interpreted as the odds in favor of model 1 versus model
+2.</p>
+<p>This simple formula elegantly penalizes overparameterization. Simpler
+models will generally have higher marginal likelihoods than more complex
+models after all of free parameter space is taken into account.</p>
 <p>Can you see why the Bayes Factor is different than the likelihood
 ratios we were working with earlier?</p>
 <p>We have already seen why this might be. More complex models will
@@ -1160,8 +1171,8 @@ methods, including LOO-CV and LOOIC. LOOIC is often indistinguishable
 from WAIC. One advantage of these methods is that they provide
 additional model fit diagnostics based on a technique known as
 Pareto-smoothed importance sampling (PSIS).</p>
-<p>First, let’s write a ‘stan’ model for the fir data</p>
-<pre class="stan"><code>
+<p>First, let’s write a ‘stan’ model for the fir data:</p>
+<pre><code>
 data {
   int&lt;lower = 1&gt; N;
   array [N] int&lt;lower=0&gt; obs_cones;
@@ -1195,6 +1206,8 @@ generated quantities {   // need log_lik of each data point for model selection
     }
   }
 }
+
+
 </code></pre>
 <p>Then we need to package the data for stan</p>
 <pre class="r"><code># Package the data for stan
@@ -1210,26 +1223,9 @@ stan_data &lt;- list(
 <pre class="r"><code># Run the model in stan
 
 library(cmdstanr)    # load packages
-library(bayesplot)</code></pre>
-<pre><code>## This is bayesplot version 1.14.0</code></pre>
-<pre><code>## - Online documentation and vignettes at mc-stan.org/bayesplot</code></pre>
-<pre><code>## - bayesplot theme set to bayesplot::theme_default()</code></pre>
-<pre><code>##    * Does _not_ affect other ggplot2 plots</code></pre>
-<pre><code>##    * See ?bayesplot_theme_set for details on theme setting</code></pre>
-<pre class="r"><code>library(posterior)</code></pre>
-<pre><code>## This is posterior version 1.6.1</code></pre>
-<pre><code>## 
-## Attaching package: &#39;posterior&#39;</code></pre>
-<pre><code>## The following object is masked from &#39;package:bayesplot&#39;:
-## 
-##     rhat</code></pre>
-<pre><code>## The following objects are masked from &#39;package:stats&#39;:
-## 
-##     mad, sd, var</code></pre>
-<pre><code>## The following objects are masked from &#39;package:base&#39;:
-## 
-##     %in%, match</code></pre>
-<pre class="r"><code>options(mc.cores = 4) 
+library(bayesplot)
+library(posterior)
+options(mc.cores = 4) 
 
 # compile the model using:
 firmodel_full &lt;- cmdstan_model(&quot;firmodel_full.stan&quot;) # Compile stan model
@@ -1243,22 +1239,22 @@ fit_full &lt;- suppressMessages( firmodel_full$sample(
 )  )</code></pre>
 <pre><code>## Running MCMC with 4 parallel chains...
 ## 
-## Chain 3 finished in 1.6 seconds.
-## Chain 1 finished in 2.0 seconds.
-## Chain 2 finished in 1.9 seconds.
-## Chain 4 finished in 1.8 seconds.
+## Chain 3 finished in 1.3 seconds.
+## Chain 1 finished in 1.7 seconds.
+## Chain 2 finished in 1.6 seconds.
+## Chain 4 finished in 1.6 seconds.
 ## 
 ## All 4 chains finished successfully.
-## Mean chain execution time: 1.8 seconds.
-## Total execution time: 2.1 seconds.</code></pre>
+## Mean chain execution time: 1.6 seconds.
+## Total execution time: 1.9 seconds.</code></pre>
 <pre class="r"><code># fit_full$summary()
 samples &lt;- fit_full$draws(format=&quot;draws_df&quot;)
 bayesplot::mcmc_trace(samples,&quot;a[1]&quot;)</code></pre>
-<p><img src="LECTURE8_files/figure-html/unnamed-chunk-39-1.png" width="672" /></p>
+<p><img src="LECTURE8_files/figure-html/unnamed-chunk-38-1.png" width="672" /></p>
 <pre class="r"><code>bayesplot::mcmc_trace(samples,&quot;b[2]&quot;)</code></pre>
-<p><img src="LECTURE8_files/figure-html/unnamed-chunk-39-2.png" width="672" /></p>
+<p><img src="LECTURE8_files/figure-html/unnamed-chunk-38-2.png" width="672" /></p>
 <pre class="r"><code>bayesplot::mcmc_trace(samples,&quot;beta[1]&quot;)</code></pre>
-<p><img src="LECTURE8_files/figure-html/unnamed-chunk-39-3.png" width="672" /></p>
+<p><img src="LECTURE8_files/figure-html/unnamed-chunk-38-3.png" width="672" /></p>
 <p>First of all, is there any evidence that the mean reproduction from
 wave sites is different than that of the non-wave sites?</p>
 <pre class="r"><code>meanrep_wave = exp(samples$`loga[2]` + samples$`b[2]`*mean(stan_data$DBH))
@@ -1267,7 +1263,7 @@ meanrep_nonwave = exp(samples$`loga[1]` + samples$`b[1]`*mean(stan_data$DBH))
 hist(meanrep_nonwave,ylab=&quot;Prob Density&quot;,xlab=&quot;number of cones&quot;,freq = F,xlim=c(25,60),ylim=c(0,0.15),main=&quot;&quot;)
 hist(meanrep_wave,density=20,col=&quot;darkgreen&quot;,add=T,freq=F)
 legend(&quot;topleft&quot;,col=c(&quot;darkgreen&quot;,&quot;white&quot;),density=c(20,0),legend=c(&quot;wave&quot;,&quot;nonwave&quot;),bty=&quot;n&quot;)</code></pre>
-<p><img src="LECTURE8_files/figure-html/unnamed-chunk-40-1.png" width="672" /></p>
+<p><img src="LECTURE8_files/figure-html/unnamed-chunk-39-1.png" width="672" /></p>
 <p>We can use the ‘loo’ package to compute WAIC for this model</p>
 <pre class="r"><code># Extract the WAIC for the full model!
 
@@ -1304,7 +1300,7 @@ loo_full</code></pre>
 ## See help(&#39;pareto-k-diagnostic&#39;) for details.</code></pre>
 <p>Notice that the LOOIC and WAIC values are nearly identical.</p>
 <p>Now let’s build the reduced model and compare LOOIC values!</p>
-<pre class="stan"><code>
+<pre><code>
 data {
   int&lt;lower = 1&gt; N;
   array [N] int&lt;lower=0&gt; obs_cones;
@@ -1351,18 +1347,18 @@ fit_reduced &lt;- suppressMessages( firmodel_reduced$sample(
 )  )</code></pre>
 <pre><code>## Running MCMC with 4 parallel chains...
 ## 
-## Chain 2 finished in 0.6 seconds.
-## Chain 1 finished in 0.8 seconds.
-## Chain 3 finished in 0.8 seconds.
+## Chain 2 finished in 0.7 seconds.
+## Chain 1 finished in 0.9 seconds.
+## Chain 3 finished in 0.9 seconds.
 ## Chain 4 finished in 0.9 seconds.
 ## 
 ## All 4 chains finished successfully.
-## Mean chain execution time: 0.8 seconds.
+## Mean chain execution time: 0.9 seconds.
 ## Total execution time: 1.2 seconds.</code></pre>
 <pre class="r"><code># fit_full$summary()
 samples_red &lt;- fit_reduced$draws(format=&quot;draws_df&quot;)
 bayesplot::mcmc_trace(samples_red,&quot;a&quot;)</code></pre>
-<p><img src="LECTURE8_files/figure-html/unnamed-chunk-45-1.png" width="672" /></p>
+<p><img src="LECTURE8_files/figure-html/unnamed-chunk-43-1.png" width="672" /></p>
 <pre class="r"><code># bayesplot::mcmc_trace(samples_red,&quot;b&quot;)
 # bayesplot::mcmc_trace(samples_red,&quot;beta&quot;)</code></pre>
 <p>What is the LOOIC for this model?</p>
@@ -1526,7 +1522,7 @@ for(d in 1:N){
   points(stan_data$DBH,dat,pch=20,col=&quot;gray&quot;,cex=0.4)
 }
 points(fir$DBH,fir$TOTCONES,cex=2)</code></pre>
-<p><img src="LECTURE8_files/figure-html/unnamed-chunk-47-1.png" width="672" /></p>
+<p><img src="LECTURE8_files/figure-html/unnamed-chunk-45-1.png" width="672" /></p>
 <p>Let’s run a Bayesian p-value check for the reduced model:</p>
 <pre class="r"><code># Posterior Predictive Checks!
 
@@ -1543,7 +1539,7 @@ for(r in 1:nreps){
 
 plot(SSE_sim~SSE_obs,xlab=&quot;SSE, real data&quot;,ylab=&quot;SSE, simulated data&quot;,main=&quot;Posterior Predictive Check&quot;)
 abline(0,1,col=&quot;red&quot;)</code></pre>
-<p><img src="LECTURE8_files/figure-html/unnamed-chunk-48-1.png" width="672" /></p>
+<p><img src="LECTURE8_files/figure-html/unnamed-chunk-46-1.png" width="672" /></p>
 <pre class="r"><code>p.value=mean(SSE_sim&gt;SSE_sim)
 p.value </code></pre>
 <pre><code>## [1] 0</code></pre>
@@ -1575,8 +1571,33 @@ class="section level4">
 <p>Really never in my opinion- model averaging can be useful for
 prediction but not useful (even misleading) if you are trying to
 estimate effect sizes!</p>
-<p><a href="LECTURE9.html">–go to next lecture–</a></p>
 </div>
+</div>
+<div id="regularization" class="section level3">
+<h3>Regularization</h3>
+<p>In machine learning and statistics, many methods have a tendency to
+over-learn the data- that is, to “learn” random noise and interpret it
+as a true signal. Regularization allows us to penalize complexity in our
+models, which makes our models skeptical of increased complexity.
+Essentially regularization raises the bar for determining whether or not
+to make a model more complex. The complexity penalties in AIC and BIC
+are examples of regularization in this sense.</p>
+<p>In many classical and machine learning methods, we simply add a term
+to our likelihood function that penalizes complexity, which forces our
+optimizers to choose simpler models unless the data strongly support
+adding more complexity.</p>
+<p>In Bayesian models, we can bake this skepticism right into our
+priors. For example, we can make all our priors on regression
+coefficients centered on zero, and with most prior weight in the
+neighborhood of zero. In the absence of strong information in the data,
+our model will assume that the coefficient is around zero.</p>
+<p>It is often difficult to estimate the penalty parameters, so one
+common technique is to fit the model with a range of penalty terms and
+use cross validation to determine the appropriate penalty term to
+use.</p>
+<p>If we have time, and there is interest, we can try a worked example
+of this technique in class or lab.</p>
+<p><a href="LECTURE9.html">–go to next lecture–</a></p>
 </div>
 </div>
 

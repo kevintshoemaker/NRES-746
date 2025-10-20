@@ -6,7 +6,7 @@
 
 
 # Load the balsam fir dataset
-
+library(ggplot2)
 library(emdbook)
 data(FirDBHFec)
 fir <- na.omit(FirDBHFec[,c("TOTCONES","DBH","WAVE_NON")])
@@ -19,14 +19,10 @@ plot(fir$TOTCONES ~ fir$DBH)   # fecundity as a function of tree size (diameter 
 
 # tree fecundity by size, categorized into two site-level categories: "wave" and "non-wave" 
 
-ndx <- fir$WAVE_NON=="w"   # logical vector indicating which observations were from "wave" sites
-plot(fir$TOTCONES[ndx] ~ fir$DBH[ndx],xlab="DBH",ylab="Tot Cones")
-points(fir$DBH[!ndx],fir$TOTCONES[!ndx],pch=4,col="red")
-legend("topleft",pch=c(1,4),col=c("black","red"),legend=c("Wave","Non-wave"),bty="n")
+ggplot(fir,aes(DBH,TOTCONES)) + geom_point(aes(colour = WAVE_NON)) + theme_classic()
 
 
 # build likelihood function for the full model: CONES ~ negBINOM( a(wave)*DBH^b(wave), dispersion(wave))
-
    
 NLL_full <- function(params){
   wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos
@@ -49,6 +45,7 @@ opt_full <- optim(pars,NLL_full,method="BFGS")
 
 MLE_full <- opt_full$par
 MinNLL_full <- opt_full$value
+MLE_full
 
 
 # build likelihood function for a reduced model: CONES ~ negBINOM( a(wave)*DBH^b, dispersion(wave))
@@ -74,6 +71,7 @@ opt_constb <- optim(fn=NLL_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="L-B
 MLE_constb = opt_constb$par
 
 MinNLL_constb = opt_constb$value
+MLE_constb
 
 
 # compute -2*loglik for each model at the MLE
@@ -127,6 +125,8 @@ MLE_nowave = opt_nowave$par
 
 MinNLL_nowave = opt_nowave$value
 
+MLE_nowave
+
 
 # Perform LRT -- this time with three fewer free parameters in the reduced model
 
@@ -179,7 +179,7 @@ MLE_constak= opt_constak$par
 MinNLL_constak = opt_constak$value
 
 ms_constak <- 2*MinNLL_constak
-
+MLE_constak
 
 ### Now, let's build and fit one more final model- this time with no wave effect and a Poisson error distribution
 
@@ -201,6 +201,8 @@ MLE_pois= opt_pois$par
 MinNLL_pois= opt_pois$value
 
 ms_pois <- 2*MinNLL_pois
+
+MLE_pois
 
 
 # Compare all five models using AIC!
@@ -451,6 +453,7 @@ samples <- fit_full$draws(format="draws_df")
 bayesplot::mcmc_trace(samples,"a[1]")
 bayesplot::mcmc_trace(samples,"b[2]")
 bayesplot::mcmc_trace(samples,"beta[1]")
+
 
 meanrep_wave = exp(samples$`loga[2]` + samples$`b[2]`*mean(stan_data$DBH))
 meanrep_nonwave = exp(samples$`loga[1]` + samples$`b[1]`*mean(stan_data$DBH))

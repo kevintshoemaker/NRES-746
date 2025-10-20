@@ -20,8 +20,7 @@ options(mc.cores = 4)
 
 #  NRES 746, Lecture 8                     
 #   University of Nevada, Reno                       
-#   Model selection and multi-model inference    -------------------      
-
+#   Model selection and multimodel inference    -------------------      
 
 ```
 
@@ -45,7 +44,7 @@ Let's load up the data first
 ```{r}
 
 # Load the balsam fir dataset
-
+library(ggplot2)
 library(emdbook)
 data(FirDBHFec)
 fir <- na.omit(FirDBHFec[,c("TOTCONES","DBH","WAVE_NON")])
@@ -62,16 +61,13 @@ plot(fir$TOTCONES ~ fir$DBH)   # fecundity as a function of tree size (diameter 
 
 ```
 
-One additional point of complexity in this data set- some trees were sampled from areas in which these fir trees experience a phenomenon called wave regeneration, in which tree age follows a chronosequence as you move downwind (due to larger trees at the wave front dying due to frost damage, allowing for recruitment of new trees). Other trees were sampled from "normal" fir forests in which there is no wave regeneration. 
+One additional point of complexity in this data set- some trees were sampled from areas in which these fir trees experience a phenomenon called wave regeneration, in which tree age follows a chronosequence as you move downwind (due to larger trees at the wave front dying due to frost damage, allowing for recruitment of new trees). Other trees were sampled from fir forests in which there is no wave regeneration. 
 
 ```{r}
 
 # tree fecundity by size, categorized into two site-level categories: "wave" and "non-wave" 
 
-ndx <- fir$WAVE_NON=="w"   # logical vector indicating which observations were from "wave" sites
-plot(fir$TOTCONES[ndx] ~ fir$DBH[ndx],xlab="DBH",ylab="Tot Cones")
-points(fir$DBH[!ndx],fir$TOTCONES[!ndx],pch=4,col="red")
-legend("topleft",pch=c(1,4),col=c("black","red"),legend=c("Wave","Non-wave"),bty="n")
+ggplot(fir,aes(DBH,TOTCONES)) + geom_point(aes(colour = WAVE_NON)) + theme_classic()
 
 ```
 
@@ -79,7 +75,7 @@ Let's assume (following Bolker) that fecundity increases as a power-law relation
 
 $\mu = a\cdot DBH^{b}$
 
-Let's also assume that the fecundity follows a negative binomial distribution:
+Let's also assume that fecundity follows a negative binomial distribution with mean defined by the power law relationship above
 
 $Y = NegBin(\mu,k)$
 
@@ -96,7 +92,6 @@ Here is a likelihood function for the *full model* -- that is, the most complex 
 ```{r}
 
 # build likelihood function for the full model: CONES ~ negBINOM( a(wave)*DBH^b(wave), dispersion(wave))
-
    
 NLL_full <- function(params){
   wave.code <- as.numeric(fir$WAVE_NON)      # convert to ones and twos
@@ -124,6 +119,7 @@ opt_full <- optim(pars,NLL_full,method="BFGS")
 
 MLE_full <- opt_full$par
 MinNLL_full <- opt_full$value
+MLE_full
 
 ```
 
@@ -162,6 +158,7 @@ opt_constb <- optim(fn=NLL_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="L-B
 MLE_constb = opt_constb$par
 
 MinNLL_constb = opt_constb$value
+MLE_constb
 
 ```
 
@@ -187,7 +184,7 @@ What if we wanted to test which model was better supported by the evidence? One 
 
 ### Likelihood-ratio test (frequentist solution)
 
-We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces (in the neighborhood of the MLE). The same principle applies for model selection.  The LRT tests whether the extra goodness-of-fit of the full model is worth the extra complexity of the additional parameters.
+We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces (in the neighborhood of the MLE). The same principle applies for model selection. The LRT assesses whether the extra goodness-of-fit of the full model is worth the extra complexity of the additional parameters.
 
 As you recall, the likelihood ratio is defined (obviously) as the ratio of two likelihoods. The numerator represents the likelihood of a reduced model (fewer free parameters) that is nested within a full model -- which in turn serves as the denominator:
 
@@ -270,8 +267,9 @@ MLE_nowave = opt_nowave$par
 
 MinNLL_nowave = opt_nowave$value
 
-```
+MLE_nowave
 
+```
 
 Now we can perform a LRT to see which model is better!
 
@@ -304,7 +302,6 @@ abline(v=Deviance,col="red",lwd=4)
 
 ```
 
-
 Again, the difference in deviance does not justify the additional parameters. This difference in deviance between the full and restricted model could easily be produced easily by random sampling variation. 
 
 Remember *this is a frequentist test*. The null hypothesis is that there is no difference between the restricted model and the more complex model. So we are imagining multiple alternative universes where we are collecting thousands of datasets under the null hypothesis (simpler model is correct-- that is, the extra parameters are junk) and determining a maximum likelihood estimate for the full model (with meaningless free params) and a reduced model where we *fix* the value of one or more of our junk free parameters at the **true** parameter value of zero. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different MLE for the full model and the reduced model. The deviance (-2*log likelihood ratio) between the restricted model and the full model (under the null hypothesis) should be chi-squared distributed with df = number of dimensions that were "fixed"!
@@ -315,9 +312,9 @@ In addition, not all models we wish to compare will necessarily be nested. For e
 
 ### Information-theoretic metrics
 
-Information-theoretic metrics for model comparison, like Akaike's Information Criterion (AIC), provide a way to get around the issues with LRT. These metrics allow us to make tables for comparing multiple models simultaneously. However, these metrics *have no strict frequentist interpretation*. 
+Information-theoretic metrics for model comparison, like Akaike's Information Criterion (AIC), provide a way to get around the issues with LRT. These metrics allow us to make tables for comparing multiple models simultaneously.  
  
-Metrics like AIC represent (theoretically) the distance between some particular model and the "perfect" or "true" model (which fits the data perfectly). Information-theoretic metrics are composed of a negative-log-likelihood component (e.g., $-2\ell$, in which $\ell$ is the log likelihood of the model and lower values mean better fit) and a *parsimony penalty term* (for which lower values mean more parsimony). For AIC, the penalty term is twice the number of parameters ($2*k$). The models with the lowest values of the information criterion are considered the best model (marrying good fit and parsimony) 
+Metrics like AIC represent (theoretically) the divergence between some particular model and the "true" data generating model. Information-theoretic metrics are composed of a negative-log-likelihood component (e.g., $-2\ell$, in which $\ell$ is the log likelihood of the model and lower values mean better fit) and a *parsimony penalty term* (for which lower values mean more parsimony). For AIC, the penalty term is twice the number of parameters ($2k$). The models with the lowest values of the information criterion are considered the best model (marrying good fit and parsimony) 
 
 #### Akaike's Information Criterion (AIC) 
 
@@ -327,13 +324,11 @@ AIC is computed using the following equation:
 
 $$AIC = -2 \ell_{max} + 2k$$
 
-AIC is the most commonly used information criterion. 
-
 $\ell_{max}$ is the maximum of the log-likelihood surface
 
 k is the number of free parameters in the model
 
-As with all information-theoretic metrics, we look for the model associated with the minimum value (lowest value corresponds with best model fit). This is the "best model".
+As with all information-theoretic metrics, we look for the model associated with the minimum value (lowest value corresponds with best model fit). This is the "best model", at least among the set of models tested.
 
 For small sample sizes, Burnham and Anderson (2002) recommend that a finite-size correction should be used:
 
@@ -349,7 +344,7 @@ $BIC = -2\ell_{max} + (log(n))\cdot k$
 
 In general, BIC is more conservative than AIC- that is, more likely to select the simpler model (since the penalty term is generally greater).
 
-Although the Schwarz criterion has a Bayesian justification (as does AIC), it is computed from a point estimate (using the log-likelihood at the MLE) and so it doesn't pass any real test for being Bayesian -- true Bayesian analyses don't treat parameters as points, but as full probability distributions. 
+Although the Schwarz criterion has a Bayesian justification (as does AIC), it is computed from a point estimate (using the log-likelihood at the MLE) and so it doesn't pass any real test for being Bayesian -- Bayesian analyses don't treat parameters as points, but as full probability distributions. 
 
 #### AIC in action
 
@@ -394,7 +389,7 @@ MLE_constak= opt_constak$par
 MinNLL_constak = opt_constak$value
 
 ms_constak <- 2*MinNLL_constak
-
+MLE_constak
 ```
 
 
@@ -422,6 +417,8 @@ MLE_pois= opt_pois$par
 MinNLL_pois= opt_pois$value
 
 ms_pois <- 2*MinNLL_pois
+
+MLE_pois
 
 ```
 
@@ -462,7 +459,7 @@ This AIC table shows us that the simplest model is best! Despite the fact that t
 ## Bayesian Model Selection
 
 Can we do model selection in a Bayesian framework? The answer is yes! 
-One metric that is used by Bayesians for model selection is the *Bayes Factor* (below). The Bayes factor is defined as the ratio of *marginal likelihoods* of two models. 
+One natural metric that is used by Bayesians for model selection is the *Bayes Factor* (below). The Bayes factor is defined as the ratio of *marginal likelihoods* of two models. That is- we should prefer the model that is more likely to produce the data across all possible parameter values.
 
 In addition, there are some I-T metrics for Bayesian analyses that make model selection pretty much as easy as building an AIC table!
 
@@ -486,9 +483,9 @@ The ratio of marginal likelihoods is known as the **Bayes factor** and is an ele
 
 $$\overline{\mathcal{L}}_1 / \overline{\mathcal{L}}_2$$
 
-This is interpreted as *the odds in favor of model 1 versus model 2*
+This is interpreted as the odds in favor of model 1 versus model 2.
 
-This simple formula elegantly penalizes over-parameterization. Simpler models will generally have higher marginal likelihoods than more complex models after all of free parameter space is taken into account. 
+This simple formula elegantly penalizes overparameterization. Simpler models will generally have higher marginal likelihoods than more complex models after all of free parameter space is taken into account. 
 
 Can you see why the Bayes Factor is different than the likelihood ratios we were working with earlier?
 
@@ -774,9 +771,9 @@ The WAIC metric, while not computed by default in JAGS, is applicable more widel
 
 Finally, the WAIC metric has largely been superseded by the 'loo' methods, including LOO-CV and LOOIC. LOOIC is often indistinguishable from WAIC. One advantage of these methods is that they provide additional model fit diagnostics based on a technique known as Pareto-smoothed importance sampling (PSIS). 
 
-First, let's write a 'stan' model for the fir data
+First, let's write a 'stan' model for the fir data:
 
-```{stan output.var="firmodel_full"}
+```
 
 data {
   int<lower = 1> N;
@@ -864,8 +861,8 @@ samples <- fit_full$draws(format="draws_df")
 bayesplot::mcmc_trace(samples,"a[1]")
 bayesplot::mcmc_trace(samples,"b[2]")
 bayesplot::mcmc_trace(samples,"beta[1]")
-```
 
+```
 
 First of all, is there any evidence that the mean reproduction from wave sites is different than that of the non-wave sites?
 
@@ -914,7 +911,7 @@ Notice that the LOOIC and WAIC values are nearly identical.
 Now let's build the reduced model and compare LOOIC values!
 
 
-```{stan output.var="firmodel_reduced"}
+```
 
 data {
   int<lower = 1> N;
@@ -1178,9 +1175,26 @@ One way to do model averaging relies on AIC weights. Basically we take the set o
 Really never in my opinion- model averaging can be useful for prediction but not useful (even misleading) if you are trying to estimate effect sizes!
 
 
+### Regularization
+
+In machine learning and statistics, many methods have a tendency to over-learn the data- that is, to "learn" random noise and interpret it as a true signal. Regularization allows us to penalize complexity in our models, which makes our models skeptical of increased complexity. Essentially regularization raises the bar for determining whether or not to make a model more complex. The complexity penalties in AIC and BIC are examples of regularization in this sense. 
+
+In many classical and machine learning methods, we simply add a term to our likelihood function that penalizes complexity, which forces our optimizers to choose simpler models unless the data strongly support adding more complexity. 
+
+In Bayesian models, we can bake this skepticism right into our priors. For example, we can make all our priors on regression coefficients centered on zero, and with most prior weight in the neighborhood of zero. In the absence of strong information in the data, our model will assume that the coefficient is around zero. 
+
+It is often difficult to estimate the penalty parameters, so one common technique is to fit the model with a range of penalty terms and use cross validation to determine the appropriate penalty term to use. 
+
+If we have time, and there is interest, we can try a worked example of this technique in class or lab.  
+
 
 [--go to next lecture--](LECTURE9.html) 
 
+```{r echo=FALSE, eval=FALSE}
+
+# {stan output.var="firmodel_reduced",eval=FALSE}
+
+```
 
 
 
