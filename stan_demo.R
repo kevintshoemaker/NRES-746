@@ -1,9 +1,14 @@
 
 # In class stan demo examples for NRES 746
 
+rm(list=ls())
+
+rstan=FALSE
+
 # load packages --------
 
 library(cmdstanr)
+library(rstan)
 library(bayesplot)
 library(posterior)
 library(ggplot2)
@@ -13,22 +18,28 @@ options(mc.cores=4)
 
 # set global simulation parameters -----------
 
-N=200                            # sample size
+N=100                            # sample size
 sig = 0.5                        # residual standard dev 
 alpha0 = -1                      # global mean intercept
 b1 = 1.1                         # global mean slope term for effect of covariate x1
-G = 15                           # 
-tau = 0.25                       # hyperparam for random intercept
+G = 20                           # 
+tau = 0.3                       # hyperparam for random intercept
 
 # generate data -------------
 
-x1 = runif(N)                     # generate x1 covariate
-gg = sample(1:G,N,replace = T)    # group index for each observation
-alpha = rnorm(G,alpha0,tau)       # generate random intercepts for each group
+x1 = runif(N)                         # generate x1 covariate
+gg = sample(1:G,N,replace = T)        # group index for each observation
+alpha = rnorm(G,alpha0,tau)           # generate random intercepts for each group
 y = rnorm(N, alpha[gg]+b1*x1, sig)    # generate scalar response y 
-plot(y~x1)                        # plot to make sure it looks right!
+plot(y~x1)                            # plot to make sure it looks right!
 
-ggplot(data.frame(y=y,x=x1,G=as.factor(gg)),aes(x,y,colour = G)) + geom_point() + theme_classic()
+df = data.frame(   # package data into data frame for later
+  y = y,
+  x1 = x1,
+  G = factor(gg,levels=1:G)
+)
+
+ggplot(df,aes(x1,y,colour = G)) + geom_point() + theme_classic()
 
 
 # package data for stan ---------
@@ -41,23 +52,38 @@ stan_data <- list(
   y=y
 )
 
-# compile stan model -------
-stanmod = cmdstan_model("stan_demo1.stan") # Compile stan model
+# compile and fit stan model -------
 
-fit <- stanmod$sample(
-  data = stan_data,
-  chains = 4,
-  iter_warmup = 500,
-  iter_sampling = 500
-) 
+if(!rstan){
+  stanmod = cmdstan_model("stan_demo1.stan") # Compile stan model (cmdstanr)
+  fit <- stanmod$sample(
+    data = stan_data,
+    chains = 4,
+    iter_warmup = 500,
+    iter_sampling = 500
+  ) 
+}else{
+  stanmod <- stan_model("stan_demo1.stan")
+  fit <- sampling(stanmod, data = stan_data, chains=4, iter=1000)
+}
+
 
 # summary of posterior samples --------
 
-fit$summary()
+if(!rstan){
+  fit$summary()
+}else{
+  a=summary(fit)
+  a$summary
+}
 
 # package samples for further analysis ---------
 
-samples <- fit$draws(format="draws_df")
+if(!rstan){
+  samples <- fit$draws(format="draws_df")
+}else{
+  samples <- as_draws_df(fit)   # convert to 'draws' object for visualization with bayesplot
+}
 
 # visualize posterior --------
 
@@ -78,13 +104,47 @@ bayesplot::mcmc_pairs(samples,"alpha0","tau")
 bayesplot::mcmc_pairs(samples,pars=c("alpha0","alpha[2]") )
 
 
+# visualize random effect and shrinkage -----------
+
+# true group-level intercept
+alpha
+
+# estimated group-level intercept
+
+names(samples)
+alpha_mc = sapply(1:G, function(t) samples[[sprintf("alpha[%s]",t)]] )
+
+library(tidyr)
+alpha_mc2 = pivot_longer(as.data.frame(alpha_mc),everything(), names_to = "G", values_to = "alpha")
+alpha_mc2$G = gsub("V","",alpha_mc2$G)
+alpha_mc2$G = factor(alpha_mc2$G,levels=c(1:G))
+# View(alpha_mc2)
+
+library(dplyr)
+alpha_mc3 = alpha_mc2 |> 
+  group_by(G) |> 
+  summarise(alpha=mean(alpha))
+
+sampsize = data.frame(G=1:G,N=as.numeric(table(df$G)),y=min(alpha_mc2$alpha) )
+
+mod1=lm(y~0+x1+G,df)   # estimate of intercept with no shrinkage
+
+df2 = data.frame(G=1:G,alpha=coef(mod1)[-1]) 
+
+## visualize shrinkage... 
+ggplot(alpha_mc2,aes(G,alpha)) + geom_violin(fill=gray(0.7),colour=NA) +
+  geom_point(data=alpha_mc3,aes(G,alpha),pch="X",col="darkblue",size=3) +
+  geom_point(data=df2,aes(G,alpha),size=3) +
+  geom_point(data=data.frame(G=(1:G),alpha=alpha),aes(G,alpha),size=3,pch="-",alpha=.5,) +
+  geom_hline(yintercept = mean(samples$alpha0),col="darkgreen",lwd=2) +
+  geom_text(data=sampsize,aes(x=G,y=y,label=N)) +
+  ylim(min(alpha_mc2$alpha)-0.1,max(alpha_mc2$alpha)+0.1) +
+  theme_classic()
+
+
+
 # posterior predictive check --------
 
-df = data.frame(
-  y = y,
-  x1 = x1,
-  G = gg
-)
 
 # set range of x1
 x1_seq=seq(0,1,length=10)
@@ -124,13 +184,12 @@ do_pred2 = function(){
 }
 post_pred2 = as.data.frame(t(replicate(n_samp,do_pred2())))
 
-plot(post_pred2$RMSE_sim~post_pred2$RMSE_obs, main="posterior predictive check")
+plot(post_pred2$RMSE_sim~post_pred2$RMSE_obs, main="posterior predictive check",
+         ylab="RMSE, simulated", xlab="RMSE, observed")
 abline(0,1,col="red",lwd=2)
 
-
-
-
-
+p_val = with(post_pred2, mean(RMSE_sim > RMSE_obs)  )
+p_val
 
 
 

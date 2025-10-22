@@ -22,6 +22,10 @@ parameters {
   vector[G] alpha;          // group level intercept terms
 }
 
+transformed parameters {
+       // empty for now
+}
+
 model {
          // hyperpriors
   tau ~ exponential(1);
@@ -34,5 +38,9 @@ model {
  
   vector [N] mu = alpha[gg] + b1*x1;    // linear predictor
   y ~ normal(mu, sigma);                // data likelihood
+}
+
+generated quantities {
+      // empty for now
 }
 
