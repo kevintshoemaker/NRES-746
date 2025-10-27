@@ -8,6 +8,7 @@ rstan=FALSE
 # load packages --------
 
 library(cmdstanr)
+library(rstudioapi)
 library(rstan)
 library(bayesplot)
 library(posterior)
@@ -23,14 +24,19 @@ sig = 0.5                        # residual standard dev
 alpha0 = -1                      # global mean intercept
 b1 = 1.1                         # global mean slope term for effect of covariate x1
 G = 20                           # 
-tau = 0.3                       # hyperparam for random intercept
+tau = c(0.3,0.4)                 # hyperparam for random intercept
+rho = 0.5                        # hyperparam for correlation among slope and intercept
 
 # generate data -------------
 
+library(mvtnorm)
+
 x1 = runif(N)                         # generate x1 covariate
 gg = sample(1:G,N,replace = T)        # group index for each observation
-alpha = rnorm(G,alpha0,tau)           # generate random intercepts for each group
-y = rnorm(N, alpha[gg]+b1*x1, sig)    # generate scalar response y 
+vcv = diag(tau)
+vcv[1,2] = rho; vcv[2,1] = rho
+alpha = rmvnorm(G,c(alpha0,b1), )           # generate random slopes and intercepts for each group
+y = rnorm(N, alpha[gg,1]+alpha[gg,2]*x1, sig)    # generate scalar response y 
 plot(y~x1)                            # plot to make sure it looks right!
 
 df = data.frame(   # package data into data frame for later
@@ -42,20 +48,35 @@ df = data.frame(   # package data into data frame for later
 ggplot(df,aes(x1,y,colour = G)) + geom_point() + theme_classic()
 
 
+# do prior predictive checks --------
+
+library(ggdist)
+K=2
+eta =4
+
+     # explore lkj correlation prior
+{
+  temp = rlkjcorr_marginal(n=sum(2:K),K=K,eta=eta)
+  mat = diag(rep(1,K))
+  ctr = 0
+  for(r in 1:(K-1)){ mat[r,(r+1):K] = temp[(ctr+1):(ctr+(K-r))] ; ctr= (ctr+(K-r)) }
+  mat
+}
+
 # package data for stan ---------
 
 stan_data <- list(
   N = N,
   G = G,
   gg = gg,
-  x1=x1,
+  x=x1,
   y=y
 )
 
 # compile and fit stan model -------
 
 if(!rstan){
-  stanmod = cmdstan_model("stan_demo1.stan") # Compile stan model (cmdstanr)
+  stanmod = cmdstan_model("stan_demo2.stan") # Compile stan model (cmdstanr)
   fit <- stanmod$sample(
     data = stan_data,
     chains = 4,
@@ -63,10 +84,9 @@ if(!rstan){
     iter_sampling = 500
   ) 
 }else{
-  stanmod <- stan_model("stan_demo1.stan")
+  stanmod <- stan_model("stan_demo2.stan")
   fit <- sampling(stanmod, data = stan_data, chains=4, iter=1000)
 }
-
 
 # summary of posterior samples --------
 
@@ -92,14 +112,12 @@ bayesplot::mcmc_trace(samples,"alpha[2]")
 
 bayesplot::mcmc_dens(samples,"alpha0") + geom_vline(xintercept=alpha0,lwd=2)
 
-bayesplot::mcmc_dens(samples,"b1") + geom_vline(xintercept=b1,lwd=2)
+bayesplot::mcmc_dens(samples,"beta0") + geom_vline(xintercept=b1,lwd=2)
 
 bayesplot::mcmc_dens(samples,"sigma") + geom_vline(xintercept=sig,lwd=2)
 
-bayesplot::mcmc_dens(samples,"tau") + geom_vline(xintercept=tau,lwd=2)
-
-
-bayesplot::mcmc_pairs(samples,"alpha0","tau")
+bayesplot::mcmc_dens(samples,"tau[1]") + geom_vline(xintercept=tau[1],lwd=2)
+bayesplot::mcmc_dens(samples,"tau[2]") + geom_vline(xintercept=tau[2],lwd=2)
 
 bayesplot::mcmc_pairs(samples,pars=c("alpha0","alpha[2]") )
 
@@ -190,6 +208,18 @@ abline(0,1,col="red",lwd=2)
 
 p_val = with(post_pred2, mean(RMSE_sim > RMSE_obs)  )
 p_val
+
+
+
+## try running model in lme4
+
+
+
+mod
+
+
+
+
 
 
 
