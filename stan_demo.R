@@ -19,7 +19,7 @@ options(mc.cores=4)
 
 # set global simulation parameters -----------
 
-N=100                            # sample size
+N=200                            # sample size
 sig = 0.5                        # residual standard dev 
 alpha0 = -1                      # global mean intercept
 b1 = 1.1                         # global mean slope term for effect of covariate x1
@@ -210,20 +210,37 @@ p_val = with(post_pred2, mean(RMSE_sim > RMSE_obs)  )
 p_val
 
 
+## try running model in lme4   ------------
 
-## try running model in lme4
+library(lme4)
+
+names(df)
+df$G = drop(as.factor(df$G))
+mod = lmer(y ~ x1 + (1+x1|G), data=df )
+
+summary(mod)
+
+ranef(mod)
+alpha
+
+# try glmmTMB -----
+
+library(glmmTMB)
+mod = glmmTMB(y ~ x1 + (1+x1|G), data=df )
+
+summary(mod)
+
+ranef(mod)
+alpha
+
+# try brms ---------
+
+library(brms)
+
+mod = brm(y ~ x1 + (1+x1|G), data=df)
 
 
-
-mod
-
-
-
-
-
-
-
-
+brms::stancode(mod)
 
 
 
