@@ -33,8 +33,8 @@ library(mvtnorm)
 
 x1 = runif(N)                         # generate x1 covariate
 gg = sample(1:G,N,replace = T)        # group index for each observation
-vcv = diag(tau)
-vcv[1,2] = rho; vcv[2,1] = rho
+vcv = diag(tau^2)
+vcv[1,2] = rho*prod(tau); vcv[2,1] = rho*prod(tau)
 alpha = rmvnorm(G,c(alpha0,b1), )           # generate random slopes and intercepts for each group
 y = rnorm(N, alpha[gg,1]+alpha[gg,2]*x1, sig)    # generate scalar response y 
 plot(y~x1)                            # plot to make sure it looks right!
@@ -51,7 +51,7 @@ ggplot(df,aes(x1,y,colour = G)) + geom_point() + theme_classic()
 # do prior predictive checks --------
 
 library(ggdist)
-K=2
+K=4
 eta =4
 
      # explore lkj correlation prior
@@ -108,6 +108,7 @@ if(!rstan){
 # visualize posterior --------
 
 bayesplot::mcmc_trace(samples,"alpha0")
+bayesplot::mcmc_trace(samples,"beta0")
 bayesplot::mcmc_trace(samples,"alpha[2]")
 
 bayesplot::mcmc_dens(samples,"alpha0") + geom_vline(xintercept=alpha0,lwd=2)
@@ -131,6 +132,7 @@ alpha
 
 names(samples)
 alpha_mc = sapply(1:G, function(t) samples[[sprintf("alpha[%s]",t)]] )
+# alpha_mc = sapply(1:G, function(t) samples[[sprintf("beta[%s]",t)]] )
 
 library(tidyr)
 alpha_mc2 = pivot_longer(as.data.frame(alpha_mc),everything(), names_to = "G", values_to = "alpha")
@@ -159,10 +161,7 @@ ggplot(alpha_mc2,aes(G,alpha)) + geom_violin(fill=gray(0.7),colour=NA) +
   ylim(min(alpha_mc2$alpha)-0.1,max(alpha_mc2$alpha)+0.1) +
   theme_classic()
 
-
-
 # posterior predictive check --------
-
 
 # set range of x1
 x1_seq=seq(0,1,length=10)
@@ -215,7 +214,7 @@ p_val
 library(lme4)
 
 names(df)
-df$G = drop(as.factor(df$G))
+
 mod = lmer(y ~ x1 + (1+x1|G), data=df )
 
 summary(mod)
