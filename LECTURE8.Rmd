@@ -485,17 +485,17 @@ $$\overline{\mathcal{L}}_1 / \overline{\mathcal{L}}_2$$
 
 This is interpreted as the odds in favor of model 1 versus model 2.
 
-This simple formula elegantly penalizes over-parameterization. Simpler models will generally have higher marginal likelihoods than more complex models after all of free parameter space is taken into account. This is because higher dimensional spaces have more "bad" areas of parameter space and less "good" areas. So while the maximum of the likelihood surface will always be higher in a more complex model, the average of the likelihood surface can be lower for the more complex model. 
+This simple formula penalizes complexity for free. Simpler models will generally have higher marginal likelihoods than more complex models after all of parameter space is taken into account. This is because higher dimensional spaces have more "bad" areas of parameter space and less "good" areas. So while the maximum of the likelihood surface will always be higher in a more complex model, the average of the likelihood surface can be lower for the more complex model (which has additional dimension(s) to average across). 
 
-Bayes Factor's 'feel' much like likelihood ratios, but they really are fundamentally different.
+Bayes Factors 'feel' like likelihood ratios, but they really are fundamentally different. That is, except in the case where there is no parameter uncertainty, like the medical testing example from earlier in the course (in which case the likelihood ratio and the bayes factor are identical).
 
-In practice, computing marginal likelihoods can be tricky, involving multi-dimensional integration! Recall that we use MCMC partially to avoid computing the denominator in the Bayes Rule formula. Bayes factors are computed entirely from the denominators of Bayesian parameter estimation problems! 
+In practice, computing marginal likelihoods can be tricky because, well, multi-dimensional integration! Recall that we use MCMC partially to avoid computing the denominator in the Bayes Rule formula. Bayes factors, in contrast, are computed entirely from the denominators of Bayesian parameter estimation problems! 
 
-Furthermore, the prior specification can have a huge impact on Bayes factors, which can be unsettling at best!
+Furthermore, the prior specification can have a huge impact on Bayes factors, which can be unsettling at best and highly misleading at worst!
 
 #### Bayes Factor Example
 
-A simple binomial distribution example can illustrate Bayes factors quite nicely.
+A simple binomial example can illustrate Bayes factors quite nicely.
 
 Imagine we conduct a tadpole experiment where we are interested in estimating the mortality rate *p* due to a pesticide, on the basis of the number of dead tadpoles observed out of 10 in a treated tank. We are interested in comparing a simple model where *p* is fixed at 0.5 (a 'point null' model) with a more complex model where *p* is a *free parameter* estimated from data. That is, we are testing the hypothesis that *p* is different from 50%. 
 
@@ -515,7 +515,7 @@ barplot(probs1,ylab="probability")
 
 ## A:
 
-dbinom(2,10,0.5)
+dbinom(2,10,0.5)  # note: there is no parameter uncertainty here, so nothing to integrate or sum across
 
 
 ```
@@ -593,7 +593,7 @@ barplot(probs2,ylab="probability",ylim=c(0,1))
 
 ```
 
-Now let's overlay the marginal likelihoods for the simpler model:
+Now let's overlay the marginal likelihoods for the simpler model (which really isn't 'marginalized' across anything since there are zero free parameters):
 
 ```{r}
 
@@ -663,7 +663,7 @@ BayesFactor
 
 ```
 
-This time, *The simpler model wins*!!! That would never happen if we compared maximum likelihood estimates- the likelihood of the (fitted) more highly-parameterized model will always be (equal or) lower (i.e., the likelihood of three successes at p=0.3 is higher than the likelihood of three successes at p=0.5)! That's why we have to penalize or *regularize* more highly-parameterized models to put them on a level playing field with the simpler models.
+This time, *The simpler model wins*!!! That would never happen if we compared maximum likelihood estimates- the likelihood of the (fitted) more complex model will always be (equal or) lower (i.e., the likelihood of three successes at p=0.3 is higher than the likelihood of three successes at p=0.5)! That's why we have to penalize or *regularize* more complex models to put them on a level playing field with the simpler models.
 
 We can visualize this! First of all, what is the maximum likelihood estimate for p under the model with 3 mortality observations?
 
@@ -759,15 +759,32 @@ All these methods give the same basic answer- that the simple model is better, e
 
 ### Bayesian Information Theoretic Criteria
 
-Deviance Information Criterion (DIC) is computed by default in JAGS and WinBUGS. It is analogous to other I-T metrics like AIC (and therefore easy to interpret and use)!
+The first widely used, fully Bayesian I-T criterion was called Deviance Information Criterion, or DIC (which was the butt of many statistician jokes back in the day).
 
-DIC has been largely superseded by other I-T criterion for MCMC-fitted Bayesian models: these are WAIC and LOOIC. We will compute these using stan.
+Deviance Information Criterion is computed by default in JAGS and WinBUGS. It is analogous to other I-T metrics like AIC (and therefore easy to interpret and use)!
 
-The WAIC (also known as the Wattanabe-Akaike information criterion, or the 'widely applicable information criterion') metric is also interpretable just like AIC, BIC and DIC and allows us to compare models fitted in a Bayesian framework via MCMC. 
+However, DIC has been largely superseded by other I-T criterion for MCMC-fitted Bayesian models: these are WAIC and LOOIC. We will compute these using stan.
 
-The WAIC metric, while not computed by default in JAGS, is applicable more widely than DIC.
+The WAIC criterion (also known as the Wattanabe-Akaike information criterion, or the 'widely applicable information criterion') metric is also interpretable just like AIC, BIC and DIC and allows us to compare models fitted in a Bayesian framework via MCMC:
 
-Finally, the WAIC metric has largely been superseded by the 'loo' methods, including LOO-CV and LOOIC. LOOIC is often indistinguishable from WAIC. One advantage of these methods is that they provide additional model fit diagnostics based on a technique known as Pareto-smoothed importance sampling (PSIS). 
+$$WAIC = -2(lppd - P_{WAIC})$$,
+
+$$lppd = \sum_i log \int_\theta P(y_i|\theta)P(\theta | y)d\theta$$,
+
+where the integral is approximated by averaging across the posterior distribution of the likelihood of each data point. Therefore we need to monitor or compute the likelihood of each data point in our MCMC model fitting algorithm.  
+
+$$P_{WAIC} = \sum_i Var[log(P(y_i|\theta_{post})]$$  
+
+P_WAIC is a penalty term, and is often referred to as the effective number of parameters. Less complex models are more constrained (less flexible) and that will correspond with less variability in the likelihood of each data point across MCMC samples. More complex models are more flexible/variable and therefore will have a greater penalty. 
+
+Finally, the WAIC metric has largely been superseded by the 'loo' methods, including LOO-CV and LOOIC. LOOIC is often indistinguishable from WAIC:
+
+$$LOOIC = -2\sum_i log \int_\theta P(y_i|\theta)P(\theta_{-y_i})d\theta$$
+Notice that in its pure form you need to re-compute the model N times, each time leaving out one data point. This is impractical. So, in practice, we use a technique called Pareto-smoothed importance sampling (PSIS). In PSIS, we use creative weighted averaging to approximate the cross validation. More surprising (less likely) observations are assigned more weight than less surprising observations. 
+
+One advantage of these methods is that they provide additional model fit diagnostics based on (PSIS), like the Pareto K statistic. If the pareto-k statistic is less than 0.7, the PSIS method should provide a good approximation of the LOO score. If pareto-k is greater than 0.7, then the PSIS approximation may be unreliable due to highly influential observations in your dataset. 
+
+When used to compute the approximate leave-one-out cross validation metric, this technique is known as PSIS-LOO. 
 
 First, let's write a 'stan' model for the fir data:
 
@@ -892,6 +909,7 @@ waic_full = loo::waic(lls)
 waic_full$estimates["waic",]
 
 ```
+
 Notice that unlike AIC, we not only get a point estimate for WAIC but we also get a standard error, indicating how sure we are!
 
 An even easier (and probably better) method is to use the LOOIC metric with pareto smoothed importance sampling (PSIS). This is because this method provides additional useful diagnostics. Generally WAIC and LOO-CV/LOOIC will give similar results. 
