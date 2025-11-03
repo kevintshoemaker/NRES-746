@@ -240,7 +240,7 @@ barplot(probs1,ylab="probability")
 
 ## A:
 
-dbinom(2,10,0.5)
+dbinom(2,10,0.5)  # note: there is no parameter uncertainty here, so nothing to integrate or sum across
 
 
 
