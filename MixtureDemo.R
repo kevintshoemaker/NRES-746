@@ -2,13 +2,17 @@
 #install.packages("mlmRev")
 #install.packages("loo")
 #install.packages("bayesplot")
-#install.packages("mlmRev")
+#install.packages("glmmTMB")
+#install.packages("rstan")
+
 
 #load in data/packages----
+library(rstan) #tell people to add this and glmmTMB
 library(cmdstanr)
 library(loo)
 library(bayesplot)
 library(mlmRev)
+library(glmmTMB)
 
 #look at owl data
 data(Owls)
@@ -67,11 +71,10 @@ fit_zim <- zim_model$sample(
 )
 
 #summarize what we just did
-fit_zim$summary
+fit_zim$summary()
 
 # Compare fits
-library(loo)
-loo_hurdle <- loo(fit_model$draws("log_lik", format="matrix"))
+loo_hurdle <- loo(fit_hurdle$draws("log_lik", format="matrix"))
 loo_zim <- loo(fit_zim$draws("log_lik", format="matrix"))
 loo_compare(loo_hurdle, loo_zim)
 
