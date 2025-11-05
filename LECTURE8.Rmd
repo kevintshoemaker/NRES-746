@@ -6,7 +6,7 @@ output:
   html_document: 
     theme: cerulean
     toc: yes
-    toc_float: yes
+    toc_float: no
 ---
 
 ```{r setup, include=FALSE}
@@ -790,6 +790,7 @@ First, let's write a 'stan' model for the fir data:
 
 ```
 
+
 data {
   int<lower = 1> N;
   array [N] int<lower=0> obs_cones;
@@ -807,7 +808,7 @@ transformed parameters {
 }
 
 model  {
-  vector[N] mean_cones = exp(loga[wave_ndx] + b[wave_ndx] .* DBH);   // power function: a*DBH^b
+  vector[N] mean_cones = a[wave_ndx] .* DBH .^ b[wave_ndx];   // power function: a*DBH^b
   vector[N] alpha = mean_cones .* beta[wave_ndx];
   obs_cones ~ neg_binomial(alpha,beta[wave_ndx]);
 }
@@ -815,16 +816,14 @@ model  {
 generated quantities {   // need log_lik of each data point for model selection
   vector[N] log_lik; // N is the number of data points
   {
-    real m2, a2, b2;
+    real m2, a2;
     for (n in 1:N) {
-       m2 = exp(loga[wave_ndx[n]] + b[wave_ndx[n]] * DBH[n]);   // power function: a*DBH^b
+       m2 = a[wave_ndx[n]] * DBH[n]^b[wave_ndx[n]];   // power function: a*DBH^b
        a2 = m2 * beta[wave_ndx[n]];
        log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta[wave_ndx[n]]);
     }
   }
 }
-
-
 
 ```
 
@@ -862,7 +861,7 @@ firmodel_full <- cmdstan_model("firmodel_full.stan") # Compile stan model
 fit_full <- suppressMessages( firmodel_full$sample(
   data = stan_data,
   chains = 4,
-  iter_warmup = 200,
+  iter_warmup = 500,
   iter_sampling = 500,
   refresh = 0
 )  )
@@ -884,8 +883,8 @@ First of all, is there any evidence that the mean reproduction from wave sites i
 
 ```{r}
 
-meanrep_wave = exp(samples$`loga[2]` + samples$`b[2]`*mean(stan_data$DBH))
-meanrep_nonwave = exp(samples$`loga[1]` + samples$`b[1]`*mean(stan_data$DBH))
+meanrep_wave = exp(samples$`loga[2]`) * mean(stan_data$DBH) ^ samples$`b[2]`
+meanrep_nonwave = exp(samples$`loga[1]`) * mean(stan_data$DBH) ^ samples$`b[1]`
 
 hist(meanrep_nonwave,ylab="Prob Density",xlab="number of cones",freq = F,xlim=c(25,60),ylim=c(0,0.15),main="")
 hist(meanrep_wave,density=20,col="darkgreen",add=T,freq=F)
@@ -923,7 +922,6 @@ loo_full
 
 Notice that the LOOIC and WAIC values are nearly identical. 
 
-
 Now let's build the reduced model and compare LOOIC values!
 
 
@@ -945,7 +943,7 @@ transformed parameters {
 }
 
 model  {
-  vector[N] mean_cones = exp(loga + b .* DBH);   // power function: a*DBH^b
+  vector[N] mean_cones = a .* DBH .^ b;   // power function: a*DBH^b
   vector[N] alpha = mean_cones .* beta;
   obs_cones ~ neg_binomial(alpha,beta);
 }
@@ -953,9 +951,9 @@ model  {
 generated quantities {   // need log_lik of each data point for model selection
   vector[N] log_lik; // N is the number of data points
   {
-    real m2, a2, b2;
+    real m2, a2;
     for (n in 1:N) {
-       m2 = exp(loga + b * DBH[n]);   // power function: a*DBH^b
+       m2 = a * DBH[n]^b;   // power function: a*DBH^b
        a2 = m2 * beta;
        log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta);
     }
@@ -974,7 +972,7 @@ firmodel_reduced <- cmdstan_model("firmodel_reduced.stan") # Compile stan model
 fit_reduced <- suppressMessages( firmodel_reduced$sample(
   data = stan_data,
   chains = 4,
-  iter_warmup = 200,
+  iter_warmup = 500,
   iter_sampling = 500,
   refresh = 0
 )  )
@@ -1173,7 +1171,7 @@ p.value
 ```
 
 
-Interesting- the model seems to not fit very well! You can't even see the 1-to-1 line here. It's possible I made a coding error somewhere, so if I were doing this analysis for real, I would triple check everything. If this result holds I might try to find a better model specification!
+Interesting- the model seems to not fit very well! It's possible I made a coding error somewhere, so if I were doing this analysis for real, I would triple check everything. If this result holds I might try to find a better model specification!
 
 Okay, one more topic before we end:
 
@@ -1181,14 +1179,13 @@ Okay, one more topic before we end:
 
 The fact that model selection is such a big deal in ecology and environmental science indicates that we are rarely certain about which model is the best model. Even after constructing an AIC table we may be very unsure about which model is the "true" model. 
 
-The AIC weights tell us in essence how much we "believe" in each model. This is a very Bayesian interpretation, but model averaging really is best thought of in a Bayesian context. 
+The AIC weights tell us in essence how much we "believe" in each model. This is a very Bayesian interpretation, and in general model averaging really is best thought of in a Bayesian context. 
 
 One way to do model averaging relies on AIC weights. Basically we take the set of predictions from each model independently and weight them by the Akaike weight. There is a literature on this and R packages for helping (see package ['AICcmodavg'](https://cran.r-project.org/web/packages/AICcmodavg/AICcmodavg.pdf))
 
-#### When should you use model-averaged parameter estimates
+#### When should you use model-averaged parameter estimates?
 
-Really never in my opinion- model averaging can be useful for prediction but not useful (even misleading) if you are trying to estimate effect sizes!
-
+Really never in my opinion- model averaging can be useful for prediction but not useful (even misleading) if you are trying to estimate effect sizes! The reason for this is that due to multicollinearity, the meaning of parameters can change depending on which other parameters are in the model. For more info see this paper by Brian Cade: https://esajournals.onlinelibrary.wiley.com/doi/full/10.1890/14-1639.1. 
 
 ### Regularization
 
@@ -1200,7 +1197,11 @@ In Bayesian models, we can bake this skepticism right into our priors. For examp
 
 It is often difficult to estimate the penalty parameters, so one common technique is to fit the model with a range of penalty terms and use cross validation to determine the appropriate penalty term to use. 
 
-If we have time, and there is interest, we can try a worked example of this technique in class or lab.  
+If we have time, and there is interest, we can try a worked example of this technique in class or lab later this semester.
+
+### Causal Inference
+
+It is important to note that all the model selection techniques we've talked about so far are based on the principle of parsimony- which in turn is based on the idea of not over-fitting our model to the data -- which in turn is based on the idea that for a model to be 'useful' it should be able to make good predictions for new observations that are not in the training set. This prediction-centered way of evaluating model performance makes sense when our goal is to build a predictive model. But it doesn't really make sense when the goal is to test causal hypotheses - that is, when we want to ask questions about "why" and "how" our outcome is the way it is. When we are trying to test causal hypotheses, we might sidestep everything in this lecture entirely! Instead we should draw a DAG and think hard about which variables we need to include in the model (the 'adjustment set') that properly controls for confounders and gives us the best possible estimate of the causal effect of A on B.   
 
 
 [--go to next lecture--](LECTURE9.html) 
