@@ -6,7 +6,7 @@ output:
   html_document: 
     theme: cerulean
     toc: yes
-    toc_float: yes
+    toc_float: no
 ---
 
 ```{r setup, include=FALSE}
@@ -29,11 +29,11 @@ options(mc.cores = 4)
 
 **Model selection** or **model comparison** is a very common problem in science- that is, we often have multiple competing hypotheses about how our data were generated and we want to see which model is best supported by the available evidence. 
 
-If we can describe our data generating process explicitly as a set of deterministic and stochastic components (i.e., likelihood functions), then we can use likelihood-based methods (e.g., LRT, AIC, BIC, Bayesian model selection) to infer which data generating model(s) could most plausibly have generated our observed data. 
+If we can describe our data generating process explicitly as a set of deterministic and stochastic components (i.e., likelihood functions), then we can use likelihood-based methods (e.g., LRT, AIC, BIC, WAIC, LOOIC, etc.) to infer which data generating model(s) could most plausibly have generated our observed data. 
 
 ## Principle of Parsimony ("Occam's razor")
 
-We will discuss several alternative approaches to model selection in ecology. However, all approaches follow the same basic principle- that -- all things equal, we should prefer the simpler model over any more complex alternative. This is known as the principle of parsimony.
+We will discuss several alternative approaches to model selection in ecology. However, all approaches follow the same basic principle- that -- all things equal, we should prefer the simpler model over any more complex alternative. This is known as the 'principle of parsimony', or 'Occam's razor'.
 
 ## Example data: Balsam fir data from NY
 
@@ -53,7 +53,7 @@ head(fir)
 
 ```
 
-We can examine the fecundity (total cones) as a function of tree size (DBH):
+The goal of the original study was to test hypotheses about life history evolution, but we will just use it to examine how fecundity (total cones) varies as a function of tree size (DBH):
 
 ```{r}
 
@@ -61,7 +61,7 @@ plot(fir$TOTCONES ~ fir$DBH)   # fecundity as a function of tree size (diameter 
 
 ```
 
-One additional point of complexity in this data set- some trees were sampled from areas in which these fir trees experience a phenomenon called wave regeneration, in which tree age follows a chronosequence as you move downwind (due to larger trees at the wave front dying due to frost damage, allowing for recruitment of new trees). Other trees were sampled from fir forests in which there is no wave regeneration. 
+One additional point of complexity in this data set- some trees were sampled from areas undergoing a phenomenon called wave regeneration, in which tree age follows a chronosequence as you move downwind (due to larger trees at the wave front dying due to frost damage, allowing for recruitment of new trees). Other trees were sampled from fir forests in which there was no discernible wave regeneration pattern. 
 
 ```{r}
 
@@ -73,19 +73,19 @@ ggplot(fir,aes(DBH,TOTCONES)) + geom_point(aes(colour = WAVE_NON)) + theme_class
 
 Let's assume (following Bolker) that fecundity increases as a power-law relationship with DBH:
 
-$\mu = a\cdot DBH^{b}$
+$$\mu = a\cdot DBH^{b}$$
 
 Let's also assume that fecundity follows a negative binomial distribution with mean defined by the power law relationship above
 
-$Y = NegBin(\mu,k)$
+$$Y = NegBin(\mu,k)$$
 
 We can model each of these parameters (*a*, *b*, and *k*) separately for trees from wave and non-wave populations.
 
 We can also run simpler models in which some or all of these parameters are modeled as the same for both populations.
 
-Then we can ask the question: **which model is the "best model"?**
+Then we can try to address the question: **which model is the "best model"?**
 
-### FULL MODEL
+## FULL MODEL
 
 Here is a likelihood function for the *full model* -- that is, the most complex model (6-dimensional likelihood surface):
 
@@ -108,7 +108,7 @@ NLL_full(params)
 
 ```
 
-We can fit the full model using "optim" (using a derivative based optimization routine), just like we have done before:
+We can fit the full model using "optim" (using a gradient based optimization routine), just like we have done before:
 
 ```{r warning=FALSE}
 
@@ -149,11 +149,11 @@ NLL_constb(params)
 
 And we can fit the full model using "optim":
 
-```{r}
+```{r warning=FALSE}
 
 ### Find the MLE
 
-opt_constb <- optim(fn=NLL_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="L-BFGS-B")
+opt_constb <- optim(fn=NLL_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="BFGS")
 
 MLE_constb = opt_constb$par
 
@@ -176,19 +176,19 @@ ms_constb
 
 ```
 
-Note here that the log-likelihood of the full model is lower ("better": that is, the data are more likely to be produced under this model) than the the reduced model. _This should always be the case_- if not, something is wrong. That is, the plausibility of producing the observed data under a model fitted to those data should *always* increase when more free parameters are added!
+Note here that the log-likelihood of the full model is lower ("better": that is, the data are more likely to be produced under this model) than the the reduced model. _This should always be the case_- if not, something is wrong. That is, the plausibility of producing the observed data under a model fitted to those data should *always* increase when more parameters are added! 
 
-This is where the principle of parsimony comes into play! 
+This is where the principle of parsimony comes into play! Somehow we need a method that penalizes the complexity of the model, so that we can at least sometimes let the simpler model 'win' if it is indeed better supported by the evidence!
 
-What if we wanted to test which model was better supported by the evidence? One way is to use our old friend, the Likelihood Ratio Test (LRT)!
+One way is to use our old friend, the Likelihood Ratio Test (LRT)!
 
 ### Likelihood-ratio test (frequentist solution)
 
-We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces (in the neighborhood of the MLE). The same principle applies for model selection. The LRT assesses whether the extra goodness-of-fit of the full model is worth the extra complexity of the additional parameters.
+We have encountered the LRT once before, in the context of generating confidence intervals from likelihood surfaces (in the neighborhood of the MLE). The same principle applies for model selection. The LRT assesses whether the extra goodness-of-fit of the full model is worth the complexity of the additional parameters.
 
 As you recall, the likelihood ratio is defined (obviously) as the ratio of two likelihoods. The numerator represents the likelihood of a reduced model (fewer free parameters) that is nested within a full model -- which in turn serves as the denominator:
 
-$\frac{Likelihood_{reduced}}{Likelihood_{full}}$
+$$\frac{Likelihood_{reduced}}{Likelihood_{full}}$$
 
 The raw likelihood ratio under the null hypothesis does not have a known distribution. BUT, if we first convert the likelihood ratio to **-2X the difference in log likelihoods**, we have a statistic that approximately follows a Chi-squared distribution.
 
@@ -201,23 +201,23 @@ $$-2ln(Likelihood_{reduced}) - -2ln(Likelihood_{full})$$
 Which can also be written as:
 
 $$2[ln(Likelihood_{full} - ln(Likelihood_{reduced})]$$
-that is: 2 times the absolute difference in log likelihood between the full and reduced models. [note that the order of the likelihoods is often reversed because we tend to deal with negative log likelhoods instead of log likelihoods]
+that is: 2 times the absolute difference in log likelihood between the full and reduced models. [note that the order of the likelihoods is often reversed because we tend to deal with negative log likelihoods instead of log likelihoods]
 
-When expressed this way, this likelihood ratio statistic (asymptotically) should be approximately Chi-squared distributed with df equal to the number of fixed dimensions (difference in free parameters between the full and reduced model).
+When expressed this way, this likelihood ratio statistic (assuming the simpler model is the true model) is asymptotically Chi-squared distributed with df equal to the number of fixed dimensions (difference in free parameters between the full and reduced model). This way, we only reject the simpler model if there is sufficient evidence- that is, when the deviance is much larger than expected under the null model. 
  
-The LRT can be used for *two-way model comparison* as long as one model is nested within the other (full model vs. reduced model). If the models are not nested then the LRT doesn't really make sense.
+The LRT can be used for *two-way model comparison* as long as one model is nested within the other (full model vs. reduced model). If the models are not nested then the LRT doesn't really make sense or have theoretical support.
 
 ```{r}
 
 # Likelihood-Ratio test -----------------------
 
 Deviance <- ms_constb - ms_full 
-Deviance
+Deviance    # very small deviance
 
 Chisq.crit <- qchisq(0.95,1)
 Chisq.crit
 
-Deviance>=Chisq.crit   # perform the LRT
+Deviance >= Chisq.crit   # perform the LRT- don't reject the simpler model
 
 1-pchisq(Deviance,1)   # p-value
 
@@ -304,7 +304,7 @@ abline(v=Deviance,col="red",lwd=4)
 
 Again, the difference in deviance does not justify the additional parameters. This difference in deviance between the full and restricted model could easily be produced easily by random sampling variation. 
 
-Remember *this is a frequentist test*. The null hypothesis is that there is no difference between the restricted model and the more complex model. So we are imagining multiple alternative universes where we are collecting thousands of datasets under the null hypothesis (simpler model is correct-- that is, the extra parameters are junk) and determining a maximum likelihood estimate for the full model (with meaningless free params) and a reduced model where we *fix* the value of one or more of our junk free parameters at the **true** parameter value of zero. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different MLE for the full model and the reduced model. The deviance (-2*log likelihood ratio) between the restricted model and the full model (under the null hypothesis) should be chi-squared distributed with df = number of dimensions that were "fixed"!
+Remember *this is a frequentist test*. The null hypothesis is that there is no difference between the restricted model and the more complex model. So we are imagining multiple alternative universes where we are collecting thousands of datasets under the null hypothesis (simpler model is correct-- that is, the extra parameters are junk) and determining a maximum likelihood estimate for the full model (with meaningless free params) and a reduced model where we *fix* the value of one or more of our junk free parameters at the **true** parameter value of zero. Even though the data generating process is the same each time, each dataset we collect will yield a slightly different MLE for the full model and the reduced model. The deviance (-2*log likelihood ratio) between the restricted model and the full model (under the null hypothesis) is asymptotically Chi-squared distributed with df = number of dimensions that were "fixed"!
 
 As you can imagine, there are a lot of pairwise comparisons that could be generated, even in this simple example. For instance, there are 15 pairwise comparisons that could be produced from even this simple example. What about more complex models? Clearly this can get a bit unwieldy!
 
@@ -312,21 +312,21 @@ In addition, not all models we wish to compare will necessarily be nested. For e
 
 ### Information-theoretic metrics
 
-Information-theoretic metrics for model comparison, like Akaike's Information Criterion (AIC), provide a way to get around the issues with LRT. These metrics allow us to make tables for comparing multiple models simultaneously.  
+Information-theoretic metrics for model comparison, like the well known Akaike's Information Criterion (AIC), provide a way to get around the issues with LRT. These metrics allow us to make tables for comparing multiple models simultaneously.  
  
-Metrics like AIC represent (theoretically) the divergence between some particular model and the "true" data generating model. Information-theoretic metrics are composed of a negative-log-likelihood component (e.g., $-2\ell$, in which $\ell$ is the log likelihood of the model and lower values mean better fit) and a *parsimony penalty term* (for which lower values mean more parsimony). For AIC, the penalty term is twice the number of parameters ($2k$). The models with the lowest values of the information criterion are considered the best model (marrying good fit and parsimony) 
+Metrics like AIC represent (theoretically) the relative divergence between your fitted model and the "true" data generating model, even if the 'true' model is unknown. Information-theoretic metrics are composed of a negative-log-likelihood component (e.g., $-2\ell$, in which $\ell$ is the log likelihood of the fitted model and lower values mean better fit) and a *parsimony penalty term* (for which lower values mean more parsimony). For AIC, the penalty term is twice the number of parameters ($2k$). The models with the lowest values of the information criterion are considered the best model (marrying good fit and parsimony) 
 
 #### Akaike's Information Criterion (AIC) 
 
 NOTE: AIC is still widely used (and misused) so it is important to understand!
 
-AIC is computed using the following equation:  
+AIC is computed using the following very simple equation:  
 
 $$AIC = -2 \ell_{max} + 2k$$
 
-$\ell_{max}$ is the maximum of the log-likelihood surface
+$\ell_{max}$ is the maximum of the log-likelihood surface.
 
-k is the number of free parameters in the model
+$k$ is the number of free parameters in the model
 
 As with all information-theoretic metrics, we look for the model associated with the minimum value (lowest value corresponds with best model fit). This is the "best model", at least among the set of models tested.
 
@@ -459,7 +459,7 @@ This AIC table shows us that the simplest model is best! Despite the fact that t
 ## Bayesian Model Selection
 
 Can we do model selection in a Bayesian framework? The answer is yes! 
-One natural metric that is used by Bayesians for model selection is the *Bayes Factor* (below). The Bayes factor is defined as the ratio of *marginal likelihoods* of two models. That is- we should prefer the model that is more likely to produce the data across all possible parameter values.
+One elegant metric that is used by Bayesians for model selection is the *Bayes Factor* (below). The Bayes factor is defined as the ratio of *marginal likelihoods* of two models. That is- we should prefer the model that is more likely to produce the data, all else being equal.
 
 In addition, there are some I-T metrics for Bayesian analyses that make model selection pretty much as easy as building an AIC table!
 
@@ -469,11 +469,11 @@ Recall that our I-T metrics, as well as likelihood ratio tests, used the value o
 
 Bayesians compute a posterior distribution that takes into account the entire likelihood surface (and the prior distribution)-- that is, we now are working with an entire posterior distribution rather than just a single point. 
 
-The *marginal likelihood* represents the likelihood averaged across parameter space (where the prior serves to weight this average to emphasize the higher probability parts of the parameter space. 
+The *marginal likelihood* represents the likelihood averaged across parameter space (where the prior serves to weight this average to emphasize the parts of the parameter space with higher a priori degrees of belief. 
 
-$$\overline{\mathcal{L}} = \int \mathcal{L}(x)\cdot Prior(x) dx$$
+$$\overline{\mathcal{L}} = \int P(data|\theta) P(\theta) d \theta$$
 
-The marginal likelihood represents the *average quality of fit of a given model to the data*. 
+The marginal likelihood represents the *average fit of a given model structure to the data*. 
 
 This should look familiar! It is the denominator of the Bayes rule formula -- also known as the probability of the data, or the **model evidence**.
 
@@ -485,23 +485,21 @@ $$\overline{\mathcal{L}}_1 / \overline{\mathcal{L}}_2$$
 
 This is interpreted as the odds in favor of model 1 versus model 2.
 
-This simple formula elegantly penalizes overparameterization. Simpler models will generally have higher marginal likelihoods than more complex models after all of free parameter space is taken into account. 
+This simple formula penalizes complexity for free. Simpler models will generally have higher marginal likelihoods than more complex models after all of parameter space is taken into account. This is because higher dimensional spaces have more "bad" areas of parameter space and less "good" areas. So while the maximum of the likelihood surface will always be higher in a more complex model, the average of the likelihood surface can be lower for the more complex model (which has additional dimension(s) to average across). 
 
-Can you see why the Bayes Factor is different than the likelihood ratios we were working with earlier?
+Bayes Factors 'feel' like likelihood ratios, but they really are fundamentally different. That is, except in the case where there is no parameter uncertainty, like the medical testing example from earlier in the course (in which case the likelihood ratio and the bayes factor are identical).
 
-We have already seen why this might be. More complex models will always have a higher likelihood at and around the MLE, but generally will have much lower likelihoods across other parts of parameter space. 
+In practice, computing marginal likelihoods can be tricky because, well, multi-dimensional integration! Recall that we use MCMC partially to avoid computing the denominator in the Bayes Rule formula. Bayes factors, in contrast, are computed entirely from the denominators of Bayesian parameter estimation problems! 
 
-In practice, computing marginal likelihoods can be tricky, involving multi-dimensional integration! Recall that we use MCMC partially to avoid computing the denominator in the Bayes Rule formula. Bayes factors are computed entirely from the denominators of Bayesian parameter estimation problems! 
-
-Furthermore, the prior specification can have a huge impact on Bayes factors, which can be unsettling at best!
+Furthermore, the prior specification can have a huge impact on Bayes factors, which can be unsettling at best and highly misleading at worst!
 
 #### Bayes Factor Example
 
-A simple binomial distribution example can illustrate Bayes factors quite nicely.
+A simple binomial example can illustrate Bayes factors quite nicely.
 
 Imagine we conduct a tadpole experiment where we are interested in estimating the mortality rate *p* due to a pesticide, on the basis of the number of dead tadpoles observed out of 10 in a treated tank. We are interested in comparing a simple model where *p* is fixed at 0.5 (a 'point null' model) with a more complex model where *p* is a *free parameter* estimated from data. That is, we are testing the hypothesis that *p* is different from 50%. 
 
-First let's look at the simple model. 
+First let's take a look at the simple model. 
 
 ```{r}
 
@@ -517,7 +515,7 @@ barplot(probs1,ylab="probability")
 
 ## A:
 
-dbinom(2,10,0.5)
+dbinom(2,10,0.5)  # note: there is no parameter uncertainty here, so nothing to integrate or sum across
 
 
 ```
@@ -539,7 +537,7 @@ What is the marginal likelihood of observing 2 mortalities under this model?
 
 In other words, what is the average probability of observing 2 mortalities, averaged across all possible values of *p*??? 
 
-Intuitively, because all values of *p* are equally likely, all possible observations (0 mortalities, 2 mortalities, N mortalities) should all be equally likely! That is, neither the likelihood function nor the prior distribution favors any particular observation (0 to 10) over any other.   
+Intuitively, because all values of *p* are equally likely, all possible observations (0 mortalities, 2 mortalities, N mortalities) should be equally likely! That is, neither the likelihood function nor the prior distribution favors any particular observation (0 to 10) over any other.   
 
 We can do this mathematically...
 
@@ -595,7 +593,7 @@ barplot(probs2,ylab="probability",ylim=c(0,1))
 
 ```
 
-Now let's overlay the marginal likelihoods for the simpler model:
+Now let's overlay the marginal likelihoods for the simpler model (which really isn't 'marginalized' across anything since there are zero free parameters):
 
 ```{r}
 
@@ -665,7 +663,7 @@ BayesFactor
 
 ```
 
-This time, *The simpler model wins*!!! That would never happen if we compared maximum likelihood estimates- the likelihood of the (fitted) more highly-parameterized model will always be (equal or) lower (i.e., the likelihood of three successes at p=0.3 is higher than the likelihood of three successes at p=0.5)! That's why we have to penalize or *regularize* more highly-parameterized models.
+This time, *The simpler model wins*!!! That would never happen if we compared maximum likelihood estimates- the likelihood of the (fitted) more complex model will always be (equal or) lower (i.e., the likelihood of three successes at p=0.3 is higher than the likelihood of three successes at p=0.5)! That's why we have to penalize or *regularize* more complex models to put them on a level playing field with the simpler models.
 
 We can visualize this! First of all, what is the maximum likelihood estimate for p under the model with 3 mortality observations?
 
@@ -689,9 +687,9 @@ abline(v=4.3,col="green",lwd=4 )
 
 ```
 
-So clearly the likelihood ratio favors the more complex model (fitted parameter "p") vs the simple, 0-parameter model!
+So clearly the raw likelihood ratio favors the more complex model (fitted parameter "p") vs the simple, 0-parameter model!
 
-What does the likelihood-ratio test say?
+What does the likelihood-ratio test have to say though?
 
 ```{r}
 
@@ -761,19 +759,37 @@ All these methods give the same basic answer- that the simple model is better, e
 
 ### Bayesian Information Theoretic Criteria
 
-Deviance Information Criterion (DIC) is computed by default in JAGS and WinBUGS. It is analogous to other I-T metrics like AIC (and therefore easy to interpret and use)!
+The first widely used, fully Bayesian I-T criterion was called Deviance Information Criterion, or DIC (which was the butt of many statistician jokes back in the day).
 
-DIC has been largely superseded by other I-T criterion for MCMC-fitted Bayesian models: these are WAIC and LOOIC. We will compute these using stan.
+Deviance Information Criterion is computed by default in JAGS and WinBUGS. It is analogous to other I-T metrics like AIC (and therefore easy to interpret and use)!
 
-The WAIC (also known as the Wattanabe-Akaike information criterion, or the 'widely applicable information criterion') metric is also interpretable just like AIC, BIC and DIC and allows us to compare models fitted in a Bayesian framework via MCMC. 
+However, DIC has been largely superseded by other I-T criterion for MCMC-fitted Bayesian models: these are WAIC and LOOIC. We will compute these using stan.
 
-The WAIC metric, while not computed by default in JAGS, is applicable more widely than DIC.
+The WAIC criterion (also known as the Wattanabe-Akaike information criterion, or the 'widely applicable information criterion') metric is also interpretable just like AIC, BIC and DIC and allows us to compare models fitted in a Bayesian framework via MCMC:
 
-Finally, the WAIC metric has largely been superseded by the 'loo' methods, including LOO-CV and LOOIC. LOOIC is often indistinguishable from WAIC. One advantage of these methods is that they provide additional model fit diagnostics based on a technique known as Pareto-smoothed importance sampling (PSIS). 
+$$WAIC = -2(lppd - P_{WAIC})$$,
+
+$$lppd = \sum_i log \int_\theta P(y_i|\theta)P(\theta | y)d\theta$$,
+
+where the integral is approximated by averaging across the posterior distribution of the likelihood of each data point. Therefore we need to monitor or compute the likelihood of each data point in our MCMC model fitting algorithm.  
+
+$$P_{WAIC} = \sum_i Var[log(P(y_i|\theta_{post})]$$  
+
+P_WAIC is a penalty term, and is often referred to as the effective number of parameters. Less complex models are more constrained (less flexible) and that will correspond with less variability in the likelihood of each data point across MCMC samples. More complex models are more flexible/variable and therefore will have a greater penalty. 
+
+Finally, the WAIC metric has largely been superseded by the 'loo' methods, including LOO-CV and LOOIC. LOOIC is often indistinguishable from WAIC:
+
+$$LOOIC = -2\sum_i log \int_\theta P(y_i|\theta)P(\theta_{-y_i})d\theta$$
+Notice that in its pure form you need to re-compute the model N times, each time leaving out one data point. This is impractical. So, in practice, we use a technique called Pareto-smoothed importance sampling (PSIS). In PSIS, we use creative weighted averaging to approximate the cross validation. More surprising (less likely) observations are assigned more weight than less surprising observations. 
+
+One advantage of these methods is that they provide additional model fit diagnostics based on (PSIS), like the Pareto K statistic. If the pareto-k statistic is less than 0.7, the PSIS method should provide a good approximation of the LOO score. If pareto-k is greater than 0.7, then the PSIS approximation may be unreliable due to highly influential observations in your dataset. 
+
+When used to compute the approximate leave-one-out cross validation metric, this technique is known as PSIS-LOO. 
 
 First, let's write a 'stan' model for the fir data:
 
 ```
+
 
 data {
   int<lower = 1> N;
@@ -792,7 +808,7 @@ transformed parameters {
 }
 
 model  {
-  vector[N] mean_cones = exp(loga[wave_ndx] + b[wave_ndx] .* DBH);   // power function: a*DBH^b
+  vector[N] mean_cones = a[wave_ndx] .* DBH .^ b[wave_ndx];   // power function: a*DBH^b
   vector[N] alpha = mean_cones .* beta[wave_ndx];
   obs_cones ~ neg_binomial(alpha,beta[wave_ndx]);
 }
@@ -800,16 +816,14 @@ model  {
 generated quantities {   // need log_lik of each data point for model selection
   vector[N] log_lik; // N is the number of data points
   {
-    real m2, a2, b2;
+    real m2, a2;
     for (n in 1:N) {
-       m2 = exp(loga[wave_ndx[n]] + b[wave_ndx[n]] * DBH[n]);   // power function: a*DBH^b
+       m2 = a[wave_ndx[n]] * DBH[n]^b[wave_ndx[n]];   // power function: a*DBH^b
        a2 = m2 * beta[wave_ndx[n]];
        log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta[wave_ndx[n]]);
     }
   }
 }
-
-
 
 ```
 
@@ -847,7 +861,7 @@ firmodel_full <- cmdstan_model("firmodel_full.stan") # Compile stan model
 fit_full <- suppressMessages( firmodel_full$sample(
   data = stan_data,
   chains = 4,
-  iter_warmup = 200,
+  iter_warmup = 500,
   iter_sampling = 500,
   refresh = 0
 )  )
@@ -869,8 +883,8 @@ First of all, is there any evidence that the mean reproduction from wave sites i
 
 ```{r}
 
-meanrep_wave = exp(samples$`loga[2]` + samples$`b[2]`*mean(stan_data$DBH))
-meanrep_nonwave = exp(samples$`loga[1]` + samples$`b[1]`*mean(stan_data$DBH))
+meanrep_wave = exp(samples$`loga[2]`) * mean(stan_data$DBH) ^ samples$`b[2]`
+meanrep_nonwave = exp(samples$`loga[1]`) * mean(stan_data$DBH) ^ samples$`b[1]`
 
 hist(meanrep_nonwave,ylab="Prob Density",xlab="number of cones",freq = F,xlim=c(25,60),ylim=c(0,0.15),main="")
 hist(meanrep_wave,density=20,col="darkgreen",add=T,freq=F)
@@ -894,6 +908,7 @@ waic_full = loo::waic(lls)
 waic_full$estimates["waic",]
 
 ```
+
 Notice that unlike AIC, we not only get a point estimate for WAIC but we also get a standard error, indicating how sure we are!
 
 An even easier (and probably better) method is to use the LOOIC metric with pareto smoothed importance sampling (PSIS). This is because this method provides additional useful diagnostics. Generally WAIC and LOO-CV/LOOIC will give similar results. 
@@ -906,7 +921,6 @@ loo_full
 ```
 
 Notice that the LOOIC and WAIC values are nearly identical. 
-
 
 Now let's build the reduced model and compare LOOIC values!
 
@@ -929,7 +943,7 @@ transformed parameters {
 }
 
 model  {
-  vector[N] mean_cones = exp(loga + b .* DBH);   // power function: a*DBH^b
+  vector[N] mean_cones = a .* DBH .^ b;   // power function: a*DBH^b
   vector[N] alpha = mean_cones .* beta;
   obs_cones ~ neg_binomial(alpha,beta);
 }
@@ -937,9 +951,9 @@ model  {
 generated quantities {   // need log_lik of each data point for model selection
   vector[N] log_lik; // N is the number of data points
   {
-    real m2, a2, b2;
+    real m2, a2;
     for (n in 1:N) {
-       m2 = exp(loga + b * DBH[n]);   // power function: a*DBH^b
+       m2 = a * DBH[n]^b;   // power function: a*DBH^b
        a2 = m2 * beta;
        log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta);
     }
@@ -958,7 +972,7 @@ firmodel_reduced <- cmdstan_model("firmodel_reduced.stan") # Compile stan model
 fit_reduced <- suppressMessages( firmodel_reduced$sample(
   data = stan_data,
   chains = 4,
-  iter_warmup = 200,
+  iter_warmup = 500,
   iter_sampling = 500,
   refresh = 0
 )  )
@@ -1090,7 +1104,6 @@ model  {
     
 ```
 
-
 #### Evaluate model fit
 
 Now we can look at model fit! We will use the same method we used in lab- the posterior predictive check... 
@@ -1152,13 +1165,13 @@ for(r in 1:nreps){
 
 plot(SSE_sim~SSE_obs,xlab="SSE, real data",ylab="SSE, simulated data",main="Posterior Predictive Check")
 abline(0,1,col="red")
-p.value=mean(SSE_sim>SSE_sim)
+p.value=mean(SSE_sim>SSE_obs)
 p.value 
 
 ```
 
 
-Interesting- the model seems to not fit very well! You can't even see the 1-to-1 line here. It's possible I made a coding error somewhere, so if I were doing this analysis for real, I would triple check everything. If this result holds I might try to find a better model specification!
+Interesting- the model seems to not fit very well! It's possible I made a coding error somewhere, so if I were doing this analysis for real, I would triple check everything. If this result holds I might try to find a better model specification!
 
 Okay, one more topic before we end:
 
@@ -1166,14 +1179,13 @@ Okay, one more topic before we end:
 
 The fact that model selection is such a big deal in ecology and environmental science indicates that we are rarely certain about which model is the best model. Even after constructing an AIC table we may be very unsure about which model is the "true" model. 
 
-The AIC weights tell us in essence how much we "believe" in each model. This is a very Bayesian interpretation, but model averaging really is best thought of in a Bayesian context. 
+The AIC weights tell us in essence how much we "believe" in each model. This is a very Bayesian interpretation, and in general model averaging really is best thought of in a Bayesian context. 
 
 One way to do model averaging relies on AIC weights. Basically we take the set of predictions from each model independently and weight them by the Akaike weight. There is a literature on this and R packages for helping (see package ['AICcmodavg'](https://cran.r-project.org/web/packages/AICcmodavg/AICcmodavg.pdf))
 
-#### When should you use model-averaged parameter estimates
+#### When should you use model-averaged parameter estimates?
 
-Really never in my opinion- model averaging can be useful for prediction but not useful (even misleading) if you are trying to estimate effect sizes!
-
+Really never in my opinion- model averaging can be useful for prediction but not useful (even misleading) if you are trying to estimate effect sizes! The reason for this is that due to multicollinearity, the meaning of parameters can change depending on which other parameters are in the model. For more info see this paper by Brian Cade: https://esajournals.onlinelibrary.wiley.com/doi/full/10.1890/14-1639.1. 
 
 ### Regularization
 
@@ -1185,7 +1197,11 @@ In Bayesian models, we can bake this skepticism right into our priors. For examp
 
 It is often difficult to estimate the penalty parameters, so one common technique is to fit the model with a range of penalty terms and use cross validation to determine the appropriate penalty term to use. 
 
-If we have time, and there is interest, we can try a worked example of this technique in class or lab.  
+If we have time, and there is interest, we can try a worked example of this technique in class or lab later this semester.
+
+### Causal Inference
+
+It is important to note that all the model selection techniques we've talked about so far are based on the principle of parsimony- which in turn is based on the idea of not over-fitting our model to the data -- which in turn is based on the idea that for a model to be 'useful' it should be able to make good predictions for new observations that are not in the training set. This prediction-centered way of evaluating model performance makes sense when our goal is to build a predictive model. But it doesn't really make sense when the goal is to test causal hypotheses - that is, when we want to ask questions about "why" and "how" our outcome is the way it is. When we are trying to test causal hypotheses, we might sidestep everything in this lecture entirely! Instead we should draw a DAG and think hard about which variables we need to include in the model (the 'adjustment set') that properly controls for confounders and gives us the best possible estimate of the causal effect of A on B.   
 
 
 [--go to next lecture--](LECTURE9.html) 

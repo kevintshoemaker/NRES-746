@@ -15,7 +15,7 @@ transformed parameters {
 }
 
 model  {
-  vector[N] mean_cones = exp(loga + b .* DBH);   // power function: a*DBH^b
+  vector[N] mean_cones = a .* DBH .^ b;   // power function: a*DBH^b
   vector[N] alpha = mean_cones .* beta;
   obs_cones ~ neg_binomial(alpha,beta);
 }
@@ -23,9 +23,9 @@ model  {
 generated quantities {   // need log_lik of each data point for model selection
   vector[N] log_lik; // N is the number of data points
   {
-    real m2, a2, b2;
+    real m2, a2;
     for (n in 1:N) {
-       m2 = exp(loga + b * DBH[n]);   // power function: a*DBH^b
+       m2 = a * DBH[n]^b;   // power function: a*DBH^b
        a2 = m2 * beta;
        log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta);
     }

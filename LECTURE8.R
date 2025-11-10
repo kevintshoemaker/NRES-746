@@ -1,8 +1,7 @@
 
 #  NRES 746, Lecture 8                     
 #   University of Nevada, Reno                       
-#   Model selection and multi-model inference    -------------------      
-
+#   Model selection and multimodel inference    -------------------      
 
 
 # Load the balsam fir dataset
@@ -66,7 +65,7 @@ NLL_constb(params)
 
 ### Find the MLE
 
-opt_constb <- optim(fn=NLL_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="L-BFGS-B")
+opt_constb <- optim(fn=NLL_constb,par=c(a.n=1,a.w=1,b=1,k.n=1,k.w=1),method="BFGS")
 
 MLE_constb = opt_constb$par
 
@@ -86,12 +85,12 @@ ms_constb
 # Likelihood-Ratio test -----------------------
 
 Deviance <- ms_constb - ms_full 
-Deviance
+Deviance    # very small deviance
 
 Chisq.crit <- qchisq(0.95,1)
 Chisq.crit
 
-Deviance>=Chisq.crit   # perform the LRT
+Deviance >= Chisq.crit   # perform the LRT- don't reject the simpler model
 
 1-pchisq(Deviance,1)   # p-value
 
@@ -241,7 +240,7 @@ barplot(probs1,ylab="probability")
 
 ## A:
 
-dbinom(2,10,0.5)
+dbinom(2,10,0.5)  # note: there is no parameter uncertainty here, so nothing to integrate or sum across
 
 
 
@@ -382,43 +381,6 @@ BIC_complex
 
 
 
-data {
-  int<lower = 1> N;
-  array [N] int<lower=0> obs_cones;
-  vector<lower=0> [N] DBH;
-  array [N] int<lower=1,upper=2> wave_ndx; 
-}
-
-parameters {
-  vector[2] loga, b, logbeta;
-}
-
-transformed parameters {
-  vector[2] a = exp(loga);
-  vector[2] beta = exp(logbeta);
-}
-
-model  {
-  vector[N] mean_cones = exp(loga[wave_ndx] + b[wave_ndx] .* DBH);   // power function: a*DBH^b
-  vector[N] alpha = mean_cones .* beta[wave_ndx];
-  obs_cones ~ neg_binomial(alpha,beta[wave_ndx]);
-}
-
-generated quantities {   // need log_lik of each data point for model selection
-  vector[N] log_lik; // N is the number of data points
-  {
-    real m2, a2, b2;
-    for (n in 1:N) {
-       m2 = exp(loga[wave_ndx[n]] + b[wave_ndx[n]] * DBH[n]);   // power function: a*DBH^b
-       a2 = m2 * beta[wave_ndx[n]];
-       log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta[wave_ndx[n]]);
-    }
-  }
-}
-
-
-
-
 # Package the data for stan
 
 stan_data <- list(
@@ -477,40 +439,6 @@ waic_full$estimates["waic",]
 
 loo_full <- fit_full$loo()
 loo_full
-
-
-data {
-  int<lower = 1> N;
-  array [N] int<lower=0> obs_cones;
-  vector<lower=0> [N] DBH;
-}
-
-parameters {
-  real loga, b, logbeta;
-}
-
-transformed parameters {
-  real a = exp(loga);
-  real beta = exp(logbeta);
-}
-
-model  {
-  vector[N] mean_cones = exp(loga + b .* DBH);   // power function: a*DBH^b
-  vector[N] alpha = mean_cones .* beta;
-  obs_cones ~ neg_binomial(alpha,beta);
-}
-
-generated quantities {   // need log_lik of each data point for model selection
-  vector[N] log_lik; // N is the number of data points
-  {
-    real m2, a2, b2;
-    for (n in 1:N) {
-       m2 = exp(loga + b * DBH[n]);   // power function: a*DBH^b
-       a2 = m2 * beta;
-       log_lik[n] = neg_binomial_lpmf(obs_cones[n] | a2, beta);
-    }
-  }
-}
 
 # compile the model using:
 firmodel_reduced <- cmdstan_model("firmodel_reduced.stan") # Compile stan model
