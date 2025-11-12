@@ -158,4 +158,4 @@ cbind(lambda=lams, t(tune_lambda))
 
 plot(log(lams),tune_lambda[1,],type="l")
 
-lams[which.max(tune_lambda[2,])]
+lams[which.max(tune_lambda[1,])]
