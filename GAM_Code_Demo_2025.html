@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Tyler Pelletier &amp; Rosa Kirk-Davidoff" />
+
+<meta name="date" content="2025-11-12" />
+
+<title>General Additive Models (GAMs) in the mgcv R Package</title>
+
+<script src="site_libs/header-attrs-2.29/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">NRES 746</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Schedule
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="schedule.html">Course Schedule</a>
+    </li>
+    <li>
+      <a href="Syllabus.pdf">Syllabus</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Lectures
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="INTRO.html">Introduction to NRES 746</a>
+    </li>
+    <li>
+      <a href="LECTURE1.html">Why simulate?</a>
+    </li>
+    <li>
+      <a href="LECTURE2.html">Working with probabilities</a>
+    </li>
+    <li>
+      <a href="LECTURE3.html">Data Generating Models</a>
+    </li>
+    <li>
+      <a href="LECTURE4.html">Likelihood</a>
+    </li>
+    <li>
+      <a href="LECTURE5.html">Optimization</a>
+    </li>
+    <li>
+      <a href="LECTURE6.html">Bayesian #1: concepts</a>
+    </li>
+    <li>
+      <a href="LECTURE7.html">Bayesian #2: mcmc</a>
+    </li>
+    <li>
+      <a href="LECTURE8.html">Model Selection</a>
+    </li>
+    <li>
+      <a href="LECTURE9.html">Performance Evaluation</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Lab exercises
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="LAB1.html">Lab 1: Algorithms in R</a>
+    </li>
+    <li>
+      <a href="LAB2.html">Lab 2: Data generation</a>
+    </li>
+    <li>
+      <a href="LAB3.html">Lab 3: Likelihood</a>
+    </li>
+    <li>
+      <a href="LAB4.html">Lab 4: Bayesian inference</a>
+    </li>
+    <li>
+      <a href="FINALPROJ.html">Final project overview</a>
+    </li>
+    <li>
+      <a href="GIT_tutorial.html">Demo: version control in Git</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Student led topics
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="GLMM_Code_Demo_2025.html">GLMMs in R</a>
+    </li>
+    <li>
+      <a href="centered and non-centeredyes.R">Non-centered GLMM in stan (R code)</a>
+    </li>
+    <li>
+      <a href="Mixed_Effects_Demo.html">Mixture Models</a>
+    </li>
+    <li>
+      <a href="MixtureDemo.R">Count models in stan (R code)</a>
+    </li>
+    <li>
+      <a href="GAM_Presentation_11_18.html">GAMs in R</a>
+    </li>
+    <li>
+      <a href="GaussianProcessLabDemo.html">GPs in R</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Data sets
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="TreeData.csv">Tree Data</a>
+    </li>
+    <li>
+      <a href="ReedfrogPred.csv">Reed Frog Predation Data</a>
+    </li>
+    <li>
+      <a href="ReedfrogFuncresp.csv">Reed Frog Func Resp</a>
+    </li>
+  </ul>
+</li>
+<li>
+  <a href="Links.html">Links</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">General Additive Models (GAMs) in the mgcv
+R Package</h1>
+<h4 class="author">Tyler Pelletier &amp; Rosa Kirk-Davidoff</h4>
+<h4 class="date">2025-11-12</h4>
+
+</div>
+
+
+<p><a href="GAM_Code_Demo_2025.R">click here</a> for the R script to
+follow along</p>
+<p><a href="ISIT.csv">click here</a> for the data for this demo</p>
+<div id="introduction-to-the-code-demo" class="section level2">
+<h2>Introduction to the Code Demo</h2>
+<p>This code demo comes from the <a
+href="https://r.qcbs.ca/workshop08/book-en/index.html">Quebec Centre for
+Biodiversity Science</a>. The data can be downloaded <a
+href="https://r.qcbs.ca/workshop08/pres-en/data/ISIT.csv">here</a>.</p>
+<pre class="r"><code>#install.packages(&quot;mgcv&quot;)
+
+library(ggplot2)</code></pre>
+<pre><code>## Warning: package &#39;ggplot2&#39; was built under R version 4.5.2</code></pre>
+<pre class="r"><code>library(mgcv)</code></pre>
+<p>Data comes from an ocean bioluminescence dataset. The dataset is
+comprised of bioluminescence levels (Sources) in relation to depth,
+seasons, and different stations.</p>
+<pre class="r"><code>isit &lt;- read.csv(&quot;ISIT.csv&quot;)
+#focusing on Season 2 to start
+isit2 &lt;- subset(isit, Season == 2)
+head(isit2)</code></pre>
+<pre><code>##     SampleDepth Sources Station Time Latitude Longitude    Xkm     Ykm Month
+## 127        1305   33.91       6    2  49.2672  -13.4825 37.488 -81.453     8
+## 128        1355   33.59       6    2  49.2672  -13.4825 37.488 -81.453     8
+## 129        1257   32.30       6    2  49.2672  -13.4825 37.488 -81.453     8
+## 130        1208   29.71       6    2  49.2672  -13.4825 37.488 -81.453     8
+## 131        1750   20.02       6    2  49.2672  -13.4825 37.488 -81.453     8
+## 132         718   19.49       6    2  49.2672  -13.4825 37.488 -81.453     8
+##     Year BottomDepth Season Discovery RelativeDepth
+## 127 2001        4020      2       255          2715
+## 128 2001        4020      2       255          2665
+## 129 2001        4020      2       255          2763
+## 130 2001        4020      2       255          2812
+## 131 2001        4020      2       255          2270
+## 132 2001        4020      2       255          3302</code></pre>
+<p>Before we even look at what this data looks like, let’s try to fit a
+model to it based on some understanding of how bioluminesce may work. I
+hypothesize that Bioluminescence (Sources) will change significantly
+with Depth (SampleDepth) since more organisms would use bioluminesce in
+deeper, darker water. We can try fitting a linear regression based on
+this idea to start off with. Notice that we can do this with the “gam()”
+function in “mgcv,” and it will work the same way as if we were using
+“lm()”.</p>
+<pre class="r"><code>linear_model &lt;- gam(Sources ~ SampleDepth, data = isit2)
+summary(linear_model)</code></pre>
+<pre><code>## 
+## Family: gaussian 
+## Link function: identity 
+## 
+## Formula:
+## Sources ~ SampleDepth
+## 
+## Parametric coefficients:
+##               Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept) 30.9021874  0.7963891   38.80   &lt;2e-16 ***
+## SampleDepth -0.0083450  0.0003283  -25.42   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## 
+## R-sq.(adj) =  0.588   Deviance explained = 58.9%
+## GCV =  60.19  Scale est. = 59.924    n = 453</code></pre>
+<p>We did it! We’ve created a model which has a high R-squared, and a
+significant p-value! Okay we can stop here, right?</p>
+<p>But wait, how does it look?</p>
+<pre class="r"><code>data_plot &lt;- ggplot(data = isit2, aes(y = Sources, x = SampleDepth)) +
+    geom_point() + geom_line(aes(y = fitted(linear_model)), colour = &quot;red&quot;,
+    linewidth = 1.2) + theme_bw()
+data_plot</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p><br />
+We are violating the assumptions of the linear model:<br />
+</p>
+<ul>
+<li>There is a strong non-linear relationship between Sources and
+SampleDepth.<br />
+</li>
+<li>The error is not normally distributed.<br />
+</li>
+<li>The variance of the error is not homoscedastic.<br />
+</li>
+<li>The errors are not independent of each other.</li>
+</ul>
+<p>So our data is “curvy” but our linear model is not.</p>
+</div>
+<div id="general-additive-models-gams" class="section level1">
+<h1>General Additive Models (GAMs)</h1>
+<div id="why-should-we-use-a-gam" class="section level2">
+<h2>Why should we use a GAM?</h2>
+<p>There are ways that you could expand this linear model to fit a more
+curvy dataset by using a polynomial regression. However, the fit of the
+model would be explicitly determined by the modeler’s decisions and
+could become difficult to work with.</p>
+<p>A big advantage of using an additive model like a GAM is that the
+fitting method usually uses maximum likelihood to automatically
+determine the optimal shape of the curved fit of non-linear responses
+for us.</p>
+</div>
+<div id="what-are-gams" class="section level2">
+<h2>What are GAMs?</h2>
+<p>GAMs are effectively a nonparametric form of regression where instead
+of the linear function, <span class="math display">\[
+Y_i \sim B_0 + \beta_1x_i + \epsilon_i
+\]</span> our function becomes,</p>
+<p><span class="math display">\[
+Y_i \sim f(x_i) + \epsilon_i
+\]</span> where y is locally predicted by a smooth function of the x
+variable. Instead of having a fixed coefficient for our explanatory
+variables, the smooth function is non-linear and local, allowing for the
+magnitude (coefficient) of our explanatory variable to vary over its
+range, depending on the relationship between the variable and the
+response.</p>
+</div>
+<div id="how-is-curviness-controlled-by-mgcv" class="section level2">
+<h2>How is “curviness” controlled by mgcv?</h2>
+<p><img src="illustration_of_smooth.png" /></p>
+<p>The “curviness” of our function is controlled using a penalized
+regression determined automatically in mgcv. The default method for this
+in mgcv is generalized cross-validation (GCV). The GCV method creates a
+“GCV score” which gets used for smoothness selection; the goal of which
+is to minimize prediction error. However, this method can suffer from
+“under-smoothing” and cause a fit that is too wiggly, or over-fit,
+especially with small sample sizes.</p>
+</div>
+<div id="reml" class="section level2">
+<h2>REML</h2>
+<p>We are using the Restricted Maximum Likelihood (REML) method instead
+in our model. REML has been shown to be much more robust to
+under-smoothing, providing less biased estimates of variance components.
+Other methods are detailed in ?gam.</p>
+<pre class="r"><code>?mgcv::gam</code></pre>
+<pre><code>## starting httpd help server ... done</code></pre>
+</div>
+<div id="the-smooth-term-and-splining" class="section level2">
+<h2>The smooth term and splining</h2>
+<p>Additionally, the “basis” bs() argument has a number of options for
+how the smooth function works which are detailed in the smooth.terms
+help page in mgcv. The default for this argument is ‘tp’ for a thin
+plate spline. The most commonly used options for this argument are ‘tp’,
+‘cr’ (cubic regression spline), and ‘ps’ (P-spline).</p>
+<p><img src="cubic_spline.png" /></p>
+<pre class="r"><code>?smooth.terms</code></pre>
+<div
+id="now-lets-get-back-to-our-analysis-of-the-bioluminescence-dataset."
+class="section level3">
+<h3>Now let’s get back to our analysis of the bioluminescence
+dataset.</h3>
+<p>Let’s fit it as a GAM to see how that affects the way our model fits.
+The formula is really simple!</p>
+<pre class="r"><code>gam_model &lt;- gam(Sources ~ s(SampleDepth), bs = &#39;tp&#39;, method = &quot;REML&quot;, data = isit2) #s() is the smooth term</code></pre>
+<p>Let’s look at it on the graph and compare it to our linear model that
+we created, too.</p>
+<pre class="r"><code>data_plot &lt;- data_plot + geom_line(aes(y = fitted(gam_model)),
+    colour = &quot;blue&quot;, linewidth = 1.2)
+data_plot</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>Our GAM model is now fitting the data much better than the linear
+model.</p>
+<p>You can also plot it within the mgcv package</p>
+<pre class="r"><code>plot(gam_model)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p>We can compare our linear model and our GAM with AIC and see that
+there’s a big difference.</p>
+<pre class="r"><code>linear_model &lt;- gam(Sources ~ SampleDepth, data = isit2)
+smooth_model &lt;- gam(Sources ~ s(SampleDepth), data = isit2)
+AIC(linear_model, smooth_model)</code></pre>
+<pre><code>##                    df      AIC
+## linear_model  3.00000 3143.720
+## smooth_model 10.90825 2801.451</code></pre>
+</div>
+</div>
+<div id="gams-with-multiple-predictor-terms" class="section level2">
+<h2>GAMs with multiple predictor terms</h2>
+<p>What if we want to use linear AND smoothed terms in our model?<br />
+Let’s look at our dataset again.</p>
+<pre class="r"><code>head(isit)</code></pre>
+<pre><code>##   SampleDepth Sources Station Time Latitude Longitude     Xkm    Ykm Month Year
+## 1         517   28.73       1    3  50.1508  -14.4792 -34.106 16.779     4 2001
+## 2         582   27.90       1    3  50.1508  -14.4792 -34.106 16.779     4 2001
+## 3         547   23.44       1    3  50.1508  -14.4792 -34.106 16.779     4 2001
+## 4         614   18.33       1    3  50.1508  -14.4792 -34.106 16.779     4 2001
+## 5        1068   12.38       1    3  50.1508  -14.4792 -34.106 16.779     4 2001
+## 6        1005   11.23       1    3  50.1508  -14.4792 -34.106 16.779     4 2001
+##   BottomDepth Season Discovery RelativeDepth
+## 1        3939      1       252          3422
+## 2        3939      1       252          3357
+## 3        3939      1       252          3392
+## 4        3939      1       252          3325
+## 5        3939      1       252          2871
+## 6        3939      1       252          2934</code></pre>
+<p>Instead of subsetting by Season, lets treat Season as a factorial
+covariate.</p>
+<pre class="r"><code>isit$Season &lt;- as.factor(isit$Season)
+levels(isit$Season)</code></pre>
+<pre><code>## [1] &quot;1&quot; &quot;2&quot;</code></pre>
+<p>Now lets add Season to our previous gam model as a categorical
+variable with two levels.</p>
+<pre class="r"><code>basic_model &lt;- gam(Sources ~ Season + s(SampleDepth), data = isit,
+    method = &quot;REML&quot;) # notice the s() for SampleDepth, but not for Season
+basic_summary &lt;- summary(basic_model)</code></pre>
+<p>Instead of showing the full summary, I’ll simplify things by showing
+the linear effects and smooth effects separately. Here is the linear
+effects table.</p>
+<pre class="r"><code>basic_summary$p.table</code></pre>
+<pre><code>##             Estimate Std. Error  t value     Pr(&gt;|t|)
+## (Intercept) 7.253273  0.3612666 20.07734 1.430234e-72
+## Season2     6.156130  0.4825491 12.75752 5.525673e-34</code></pre>
+<p>And here is the smooth effects table.</p>
+<pre class="r"><code>basic_summary$s.table</code></pre>
+<pre><code>##                     edf   Ref.df        F p-value
+## s(SampleDepth) 8.706426 8.975172 184.3583       0</code></pre>
+<p>The most important thing to look at in this table is the EDF or
+Effective Degrees of Freedom. This is essentially an indicator of how
+non-linear the relationship is between the smooth term and the dependent
+variable. Additionally, the p-value is an indicator of whether the
+parameter has a “true effect” on the model by testing the null
+hypothesis that the smooth term is equal to zero, or not contributing.
+However, the p-value is an estimate, and can be biased if you don’t use
+the “REML” method because it is directly affected by both the smoothing
+parameter (lambda) and the basis dimension (kappa).<br />
+- an EDF of ~1 means that the relationship is effectively linear.<br />
+- a larger EDF means that the relationship is more “curvy” or
+non-linear.<br />
+- a significant p-value means that the parameter is significantly
+contributing to the model.</p>
+</div>
+<div id="gam-with-multiple-linear-and-smoothed-terms"
+class="section level2">
+<h2>GAM with multiple linear and smoothed terms</h2>
+<p>We can add a second linear term</p>
+<pre class="r"><code>two_term_model &lt;- gam(Sources ~ Season + s(SampleDepth) + RelativeDepth,
+    data = isit, method = &quot;REML&quot;)
+two_term_summary &lt;- summary(two_term_model)</code></pre>
+<p>Notice that now we have added another term to the p.table by adding a
+linear covariate.</p>
+<pre class="r"><code>two_term_summary$p.table</code></pre>
+<pre><code>##                   Estimate   Std. Error   t value     Pr(&gt;|t|)
+## (Intercept)    9.808305503 0.6478741951 15.139213 1.446613e-45
+## Season2        6.041930627 0.4767977508 12.671894 1.380010e-33
+## RelativeDepth -0.001401908 0.0002968443 -4.722705 2.761048e-06</code></pre>
+<pre class="r"><code>two_term_summary$s.table</code></pre>
+<pre><code>##                     edf  Ref.df        F p-value
+## s(SampleDepth) 8.699146 8.97396 132.4801       0</code></pre>
+<pre class="r"><code>par(mfrow = c(2, 2))
+plot(two_term_model, all.terms = TRUE)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-19-1.png" width="672" /></p>
+</div>
+<div id="gam-with-multiple-smooth-terms" class="section level2">
+<h2>GAM with Multiple Smooth Terms</h2>
+<pre class="r"><code>two_smooth_model &lt;- gam(Sources ~ Season + s(SampleDepth) + s(RelativeDepth),
+    data = isit, method = &quot;REML&quot;)
+two_smooth_summary &lt;- summary(two_smooth_model)</code></pre>
+<pre class="r"><code>two_smooth_summary$p.table</code></pre>
+<pre><code>##             Estimate Std. Error  t value     Pr(&gt;|t|)
+## (Intercept) 7.937755  0.3452945 22.98836 1.888513e-89
+## Season2     4.963951  0.4782280 10.37988 1.029016e-23</code></pre>
+<p>Now we’ve added another term to the s table.</p>
+<pre class="r"><code>two_smooth_summary$s.table</code></pre>
+<pre><code>##                       edf   Ref.df         F p-value
+## s(SampleDepth)   8.752103 8.973459 150.37263       0
+## s(RelativeDepth) 8.044197 8.749580  19.97476       0</code></pre>
+<pre class="r"><code>par(mfrow = c(2, 2))
+plot(two_smooth_model, page = 1, all.terms = TRUE)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-23-1.png" width="672" /></p>
+<pre class="r"><code>AIC(basic_model, two_term_model, two_smooth_model)</code></pre>
+<pre><code>##                        df      AIC
+## basic_model      11.83374 5208.713
+## two_term_model   12.82932 5188.780
+## two_smooth_model 20.46960 5056.841</code></pre>
+</div>
+<div id="exercise" class="section level2">
+<h2>Exercise</h2>
+<p>Add one more smooth and one more linear predictor to the model.
+Interpret the results using the p.table and s.table.</p>
+</div>
+<div id="gam-with-interaction-terms" class="section level2">
+<h2>GAM with interaction terms</h2>
+<p>We can have interactions between two smooth variables or between a
+smoothed variable and a linear variable.</p>
+<div id="interaction-between-a-smoothed-variable-and-a-factor-variable"
+class="section level3">
+<h3>Interaction between a smoothed variable and a factor variable</h3>
+<p>First, we’ll create a model with an interaction between one smooth
+and one non-smooth factor variable to see if the effect of Sample Depth
+varies by season. We’ll use the syntax <code>s(x1, by= x2)</code>.</p>
+<pre class="r"><code>factor_interact &lt;- gam(Sources ~ Season + s(SampleDepth, by = Season), data = isit, method = &quot;REML&quot;)
+
+summary(factor_interact)$s.table</code></pre>
+<pre><code>##                             edf   Ref.df        F p-value
+## s(SampleDepth):Season1 6.765220 7.523671 123.3087       0
+## s(SampleDepth):Season2 8.792384 8.987669 201.2435       0</code></pre>
+<pre class="r"><code>par(mfrow = c(1, 2))
+plot(factor_interact)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-26-1.png" width="672" /></p>
+<p><br />
+First chart shows effect of sample depth in season 1, second chart shows
+effect of sample depth in season 2. There’s an increase in
+bioluminescence between 1000 and 2000 feet in season 2, but not in
+season 1.</p>
+<p>We can also visualize the interaction in 3D using
+<code>vis.gam()</code></p>
+<pre class="r"><code>vis.gam(factor_interact, theta = 120, n.grid = 50, lwd = 0.4)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-27-1.png" width="672" /></p>
+</div>
+<div id="interaction-between-two-smoothed-variables"
+class="section level3">
+<h3>Interaction between two smoothed variables</h3>
+<p>Now, we can include an interaction between two smoothed terms using
+the syntax <code>s(x1, x2)</code>.</p>
+<pre class="r"><code>smooth_interact &lt;- gam(Sources ~ Season + s(SampleDepth, RelativeDepth),
+    data = isit, method = &quot;REML&quot;)
+summary(smooth_interact)$s.table</code></pre>
+<pre><code>##                                   edf Ref.df        F p-value
+## s(SampleDepth,RelativeDepth) 27.12521  28.77 93.91722       0</code></pre>
+<p>It’s harder to visualize these interactions. When we plot it, we get
+a gradient between the two continuous smooth functions.</p>
+<pre class="r"><code>plot(smooth_interact, page = 1, scheme = 2)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-29-1.png" width="672" /></p>
+<p>This is easier to see in 3D:</p>
+<pre class="r"><code>vis.gam(smooth_interact, view = c(&quot;SampleDepth&quot;, &quot;RelativeDepth&quot;),
+    theta = 50, n.grid = 50, lwd = 0.4)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-30-1.png" width="672" /></p>
+<p>We can see that bioluminescenese increases more sharply with sample
+depth at higher relative depths than at lower ones.</p>
+<p>Once again, we can compare our models with AIC.</p>
+<pre class="r"><code>AIC(two_smooth_model, factor_interact, smooth_interact)</code></pre>
+<pre><code>##                        df      AIC
+## two_smooth_model 20.46960 5056.841
+## factor_interact  19.09278 4925.120
+## smooth_interact  30.33625 4943.890</code></pre>
+</div>
+</div>
+<div id="model-validation" class="section level2">
+<h2>Model Validation</h2>
+<p>Even though GAMs are able to fit non-linear relationships, we still
+need to check other assumptions of linear models, like normality of
+residuals and homoscedasticity.</p>
+<p>Let’s look at our smooth interaction model again.</p>
+<pre class="r"><code>smooth_interact &lt;- gam(Sources ~ Season + s(SampleDepth, RelativeDepth),
+    data = isit, method = &quot;REML&quot;)
+
+summary(smooth_interact)$s.table</code></pre>
+<pre><code>##                                   edf Ref.df        F p-value
+## s(SampleDepth,RelativeDepth) 27.12521  28.77 93.91722       0</code></pre>
+<p>As a reminder, EDF is the effective degrees of freedom in the model,
+a measure of the amount of wiggliness. The maximum degrees of freedom is
+set using the <em>k</em> term, which we can manually adjust. A larger
+<em>k</em> allows for more wiggliness.</p>
+<p>Here are three versions of our basic SampleDepth model with three
+different values for <em>k</em>.</p>
+<pre class="r"><code>par(mfrow=c(1, 3))
+plot(gam(Sources ~ s(SampleDepth, k=4), bs = &#39;tp&#39;, method = &quot;REML&quot;, data = isit2))
+title(main=&quot;k=4&quot;)
+plot(gam(Sources ~ s(SampleDepth, k=6), bs = &#39;tp&#39;, method = &quot;REML&quot;, data = isit2))
+title(main=&quot;k=6&quot;)
+plot(gam(Sources ~ s(SampleDepth, k=10), bs = &#39;tp&#39;, method = &quot;REML&quot;, data = isit2))
+title(main=&quot;k=10&quot;)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-33-1.png" width="672" /></p>
+</div>
+<div id="k-check" class="section level2">
+<h2>K Check</h2>
+<p><code>mgcv</code> has a built in function for testing if the model
+was using the correct <em>k</em> value.</p>
+<pre class="r"><code>k.check(smooth_interact)</code></pre>
+<pre><code>##                              k&#39;      edf   k-index p-value
+## s(SampleDepth,RelativeDepth) 29 27.12521 0.9448883  0.0625</code></pre>
+<p>This table includes four columns: <em>k</em>, the EDF, the k-index,
+and the p-value. The k-index is a ratio of residual error that should be
+greater than 1. The p value is for the test, not the model term, and we
+want it to be high. We also want the k to be a good amount higher than
+the EDF so that we are not overly restricting the model. Here, the EDF
+is very close to <em>k</em>, the k-index is less than 1, and the p value
+is under 0.05. All of these measures indicate that the <em>k</em> is too
+low in the model.</p>
+<p>The usual practice to respond to an improper <em>k</em> is to double
+it and refit the model.</p>
+<p>We can refit the model with a <em>k</em> of 60 and then do the
+<code>k.check</code> again.</p>
+<pre class="r"><code>smooth_interact_k60 &lt;- gam(Sources ~ Season + s(SampleDepth,
+    RelativeDepth, k = 60), data = isit, method = &quot;REML&quot;)
+k.check(smooth_interact_k60)</code></pre>
+<pre><code>##                              k&#39;      edf  k-index p-value
+## s(SampleDepth,RelativeDepth) 59 46.03868 1.048626  0.8675</code></pre>
+<p>Now the EDF is much smaller than <em>k</em>, which means we aren’t
+overly constraining its wiggliness. We also now have a k-index greater
+than 1 and a high p-value.</p>
+</div>
+<div id="normal-residuals-check" class="section level2">
+<h2>Normal Residuals Check</h2>
+<p>The next test we should perform on our model is whether it actually
+follows a normal distribution. (Kevin probably would have done this at
+the beginning, but this is the order from the code demo we found.)</p>
+<p>We can use <code>gam.check()</code> to plot our residuals.</p>
+<pre class="r"><code>par(mfrow = c(2, 2))
+gam.check(smooth_interact_k60)</code></pre>
+<p><img src="GAM_Code_Demo_2025_files/figure-html/unnamed-chunk-36-1.png" width="672" /></p>
+<pre><code>## 
+## Method: REML   Optimizer: outer newton
+## full convergence after 4 iterations.
+## Gradient range [-0.0005267781,0.0001620713]
+## (score 2487.848 &amp; scale 27.40287).
+## Hessian positive definite, eigenvalue range [15.84516,393.7878].
+## Model rank =  61 / 61 
+## 
+## Basis dimension (k) checking results. Low p-value (k-index&lt;1) may
+## indicate that k is too low, especially if edf is close to k&#39;.
+## 
+##                              k&#39; edf k-index p-value
+## s(SampleDepth,RelativeDepth) 59  46    1.05    0.88</code></pre>
+<p><code>gam.check()</code> also gives us the k test output and tells us
+how to interpret it!</p>
+<p>We can see from our residuals plots that the variance is
+heteroscedastic and that we have some strong outliers. We can address
+this by incorporating non-normal distributions into our model.</p>
+<p>We so far have been creating Gaussian additive models, which are the
+simplest form. But we can generalize them for other distributions, just
+like with GLMs.</p>
+<p>We need a probability function which allows the variance to increase
+with the mean. So gaussian distribution is probably no longer what we
+are looking for. We can search the help documentation for other
+distribution families utilizing the following line of code:</p>
+<pre class="r"><code>&#39;?&#39;(family.mgcv)</code></pre>
+</div>
+</div>
+<div id="challenge" class="section level1">
+<h1>Challenge:</h1>
+<p>Using the help documentation that we’ve provided above, and the code
+below, we want you to recreate our smooth model with a Tweedie
+distribution that allows variance to increase with the mean. Notice the
+default family is specified by <em>family=gaussian()</em>. We want you
+to change this part of the model to the Tweedie family and use the
+<em>link =</em> argument within the Tweedie family to test different
+“links” for this family and find one that you like for fitting our data.
+Separately, change the k to 100. Interpret the summary table, then do a
+k-check and a gam.check on the new model and interpret the results. Are
+we now meeting the assumptions set by our model?</p>
+<pre class="r"><code>smooth_interact_k100 &lt;- gam(Sources ~ Season + s(SampleDepth, RelativeDepth, k = 60), family=gaussian(), data = isit, method = &quot;REML&quot;)
+summary(smooth_interact_k100)</code></pre>
+<pre><code>## 
+## Family: gaussian 
+## Link function: identity 
+## 
+## Formula:
+## Sources ~ Season + s(SampleDepth, RelativeDepth, k = 60)
+## 
+## Parametric coefficients:
+##             Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)   8.1295     0.4178   19.46  &lt; 2e-16 ***
+## Season2       4.6300     0.6512    7.11 2.74e-12 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##                                edf Ref.df    F p-value    
+## s(SampleDepth,RelativeDepth) 46.04  54.21 55.2  &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## R-sq.(adj) =  0.801   Deviance explained = 81.3%
+## -REML = 2487.8  Scale est. = 27.403    n = 789</code></pre>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
