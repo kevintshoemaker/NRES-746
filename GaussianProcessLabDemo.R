@@ -102,6 +102,7 @@ GP_data$MH_scaled <- as.numeric(scale(GP_data$MH.income))
 corDF <- data.frame(UE_rate = GP_data$UE.rate, MH_income = GP_data$MH.income, Year = GP_data$year)
 cor(corDF)
 
+library(brms)
 
 #### Set priors for model ####
 # See what brms would give
@@ -127,7 +128,10 @@ GP_model <- brm(
   cores = 4,
   iter = 2000
 )
+
 # Bayesian GLM model
+
+
 BRMS_glm <- brm(
   births_scaled ~ year_scaled + MH_scaled,
   data = GP_data,
