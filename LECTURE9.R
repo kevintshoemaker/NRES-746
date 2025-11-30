@@ -472,6 +472,8 @@ cat("The RMSE for the model using all data for training is: ", real_RMSE, "\n")
 head(CV_df)
 
 
+library(ROCR)
+
 par(mfrow=c(2,1))
 pred <- prediction(CV_df$CVprediction,CV_df$realdata)     # for holdout samples in cross-validation
 perf <- performance(pred,"tpr","fpr")
