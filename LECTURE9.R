@@ -324,6 +324,7 @@ titanic <- titanic_train
 
 
 titanic2 <- na.omit(titanic)
+titanic2$Pclass = factor(titanic2$Pclass,ordered=T)
 model1 <- glm(Survived ~ Sex + scale(Age) + scale(SibSp) + scale(Parch) + scale(Fare), data=titanic2, family="binomial")    #logistic regression
 summary(model1)
 
@@ -344,8 +345,8 @@ LikFunc <- function(params){
     params['sibsp']*scale(titanic2$SibSp) +
     params['parch']*scale(titanic2$Parch) +
     params['fare']*scale(titanic2$Fare)
-  logitlinear <-  1/(1+exp(-(linear)))
-  -sum(dbinom(titanic2$Survived,size=1,prob = logitlinear,log=T))
+  meanprob <-  1/(1+exp(-(linear)))
+  -sum(dbinom(titanic2$Survived,size=1,prob = meanprob,log=T))
 }
 
 LikFunc(params)
@@ -415,7 +416,7 @@ lines(seq(Age_range[1],Age_range[2]),probSurv)
 
 ### 
 
-plot(titanic$Survived~titanic$SibSp,pch=16,xlab="# of Siblings/spouses",ylab="Survived!")
+plot(titanic$Survived~jitter(titanic$SibSp),pch=16,xlab="# of Siblings/spouses",ylab="Survived!")
 
 predict_df <- data.frame(
   Sex = "male",
