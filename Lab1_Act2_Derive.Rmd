@@ -1,0 +1,229 @@
+---
+title: "Lab 1, Act 2: Derive"
+subtitle: "Turning a candidate shape into a testable equation"
+author: "NRES 746 -- name: ____________________    group: ______"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+# Data ---------------------------------
+frogs <- read.csv("ReedfrogSizepred.csv")
+
+# Candidate Ricker curve ---------------------------------
+a <- 0.9; b <- 1/12
+ricker <- function(x, a, b) a * x * exp(-b * x)
+```
+
+<!-- ============================================================
+INSTRUCTOR NOTES (delete this block before printing for students)
+
+Pacing (70 min total for Act 2 -- this is the long Act; Acts 1 and 3 are
+shorter to keep the full lab within the 2h45m period, see Act 3's notes
+for the lab-wide time budget):
+ - 10 min individual: Part 1 (log/exponent warm-up)
+ - 20 min individual: Part 2 (derive Ricker properties)
+ - 10 min individual: Part 3 (integration teaser)
+ - 15 min group discussion
+ - 15 min revise + written reflection
+
+Students need a basic scientific calculator (or phone calculator) for this
+Act -- evaluating e^x by hand isn't reasonable, so "useful values" constants
+are provided next to spots that need them. Deliberately less scaffolded
+than Act 1: the derivative and critical-point steps (Part 2, Steps 3-4)
+give only the product/chain rule formulas and blank work space, not a
+substituted or partially-solved equation -- students with stronger
+calculus backgrounds should be able to push straight through, and
+students who get stuck are expected to lean on their group at the 15-min
+discussion rather than be walked to the answer individually. It's fine
+(expected, even) for people to arrive at group discussion with wrong or
+incomplete derivatives.
+
+The candidate values a = 0.9, b = 1/12 are chosen ILLUSTRATIVELY to (1)
+produce a hump peaking in the TBL 10-15 range as the group diagnosed in
+Act 1, (2) pass close to the TBL=12 data point (the visually "hottest"
+point in the dataset), and (3) give a clean critical point x* = 1/b = 12
+for the hand-derivation in Part 2. They are NOT a formal fit (that's
+Lab 2, via nls/MLE) -- the true MLE fit for this dataset has b closer to
+0.15 and a peak nearer TBL=7, decaying much faster than our candidate.
+That mismatch (our curve overshoots the TBL=21/25/37 tail) is worth
+flagging for students who notice it -- it's a preview of Act 3 (Defend),
+where they'll interrogate whether the fit is actually good.
+
+Dataset: same running dataset as Act 1 (Vonesh & Bolker 2005 / Bolker
+Fig. 3.1, via emdbook::ReedfrogSizepred).
+============================================================ -->
+
+## Picking up where we left off
+
+In Act 1, your group diagnosed the tadpole predation data as **hump-shaped** and named the Ricker function, $y = a\,x\,e^{-bx}$, as a plausible candidate. Today we make that candidate concrete: we'll pick specific numbers for $a$ and $b$, evaluate the function, and use calculus to find exactly where it peaks -- then check whether that matches what you eyeballed last time.
+
+Before we get there, a quick warm-up on the algebra tool we'll lean on all semester: logarithms and exponents.
+
+## Part 1: Log & exponent warm-up (individual, ~10 min)
+
+**Useful rules:**
+
+$$\log(xy) = \log x + \log y \qquad\qquad \log\!\left(\frac{x}{y}\right) = \log x - \log y \qquad\qquad \log(x^k) = k\log x$$
+
+$$e^{\ln x} = x \qquad\qquad \ln(e^x) = x \qquad\qquad \ln x \approx 2.303 \times \log_{10} x$$
+
+**1a. Apply the rules.** Simplify each:
+
+$\log_{10}(4) + \log_{10}(25) =$ ________
+
+$\log_{10}(1000) - \log_{10}(10) =$ ________
+
+$\log_{10}(2^{10}) =$ ________ &nbsp;&nbsp;(you'll need $\log_{10}(2) \approx 0.301$)
+
+**1b. Solve for x:**
+
+$2^x = 32 \;\Rightarrow\; x =$ ________ &nbsp;&nbsp;&nbsp;&nbsp; $3^x = 81 \;\Rightarrow\; x =$ ________ &nbsp;&nbsp;&nbsp;&nbsp; $10^x = 0.001 \;\Rightarrow\; x =$ ________
+
+$e^x = 20 \;\Rightarrow\; x =$ ________
+
+**1c. Linearizing an exponential decay.** This is the trick that will let us fit exponential-type models with plain linear regression later this semester. Take natural logs of both sides of $y = a e^{-bx}$ and simplify using the rules above. Show your work:
+
+____________________________________________________________
+____________________________________________________________
+
+$\ln y =$ ________________________
+
+What form is this, as a function of $x$? What do the slope and intercept correspond to, in terms of $a$ and $b$?
+
+____________________________________________________________
+
+Now check your answer against a small numeric example: $y = 10\,e^{-0.5x}$ (so $a=10$, $b=0.5$). Fill in the table below.
+
+*Useful values:* $e^{-1} \approx 0.368$, &nbsp; $e^{-2} \approx 0.135$, &nbsp; $e^{-3} \approx 0.050$, &nbsp; $\ln(10) \approx 2.303$
+
+| $x$ | $y = 10e^{-0.5x}$ | $\ln(y)$ |
+|:---:|:---:|:---:|
+| 0 |  |  |
+| 2 |  |  |
+| 4 |  |  |
+| 6 |  |  |
+
+Compute the change in $\ln(y)$ each time $x$ increases by 2: ________. Does it match what you predicted for the slope above? ________
+
+## Part 2: Derive properties of the Ricker function (individual, ~20 min)
+
+**Step 1: Today's candidate.** Let's put specific numbers on the Ricker shape from Act 1:
+
+$$y = a\,x\,e^{-bx}, \qquad a = 0.9, \qquad b = \frac{1}{12} \text{ mm}^{-1}$$
+
+(These are illustrative, chosen to roughly match the pattern you saw -- not a formal fit. We'll learn how to actually *fit* a curve to data soon!)
+
+```{r candidate-curve, fig.height=3.4, fig.width=5.5}
+set.seed(1)
+x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
+     xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
+     pch = 21, bg = "grey70", cex = 1.4)
+curve(ricker(x, a, b), from = 5, to = 40, lwd = 2, col = "steelblue", add = TRUE)
+grid()
+```
+
+**Step 2: Evaluate by hand.** Using $a=0.9$ and $b=1/12$, compute $y$ at three tadpole sizes. *Useful values:* $e^{-0.5}\approx 0.607$, $e^{-1}\approx 0.368$, $e^{-2}\approx 0.135$.
+
+$y(6) =$ ________ &nbsp;&nbsp;&nbsp;&nbsp; $y(12) =$ ________ &nbsp;&nbsp;&nbsp;&nbsp; $y(24) =$ ________
+
+Do these three values rise then fall, consistent with the hump shape? ________
+
+**Step 3: Take the derivative.** Find $dy/dx$ for $y = a\,x\,e^{-bx}$. This is a *product* of two pieces of $x$, so you'll need the product rule together with the chain rule for the exponential term.
+
+*Reminders:* $\dfrac{d}{dx}(uv) = u'v + uv'$ &nbsp;&nbsp;&nbsp;&nbsp; $\dfrac{d}{dx}\,e^{g(x)} = g'(x)\,e^{g(x)}$
+
+Show your work:
+
+____________________________________________________________
+____________________________________________________________
+____________________________________________________________
+
+$\dfrac{dy}{dx} =$ ________________________
+
+**Step 4: Find the critical point.** Set $dy/dx = 0$ and solve for the critical point $x^*$, using our candidate's $b = 1/12$. (Hint: think about which factor(s) in your derivative could actually equal zero.)
+
+Show your work:
+
+____________________________________________________________
+____________________________________________________________
+
+$x^* =$ ________ mm
+
+**Step 5: Interpret.** In a sentence, what does $x^*$ mean ecologically -- what is happening to a tadpole of exactly this size?
+
+____________________________________________________________
+____________________________________________________________
+
+Look back at the curve you sketched by hand in Act 1. Does the calculus-derived peak, $x^* =$ ____ mm, land close to where you drew your peak? If not, what might explain the difference?
+
+____________________________________________________________
+____________________________________________________________
+
+## Part 3: A first taste of integration (individual, ~10 min)
+
+Calculus has two main tools: derivatives (rates of change, which we just used to find a peak) and **integrals** (accumulation -- adding up a rate over some interval to get a total). We'll use this idea heavily once we get to probability and likelihood.
+
+**Worked example.** Suppose -- just for this simple example, forget the Ricker curve -- that dragonfly larvae capture tadpoles at a *constant* rate of $r = 2$ tadpoles/day for the entire $T=3$-day trial. The total number killed is rate $\times$ time:
+
+$$\text{Total killed} = r \times T = 2 \times 3 = 6 \text{ tadpoles}$$
+
+```{r constant-rate, fig.height=2.6, fig.width=4.5}
+plot(NA, xlim = c(0, 3), ylim = c(0, 3), xlab = "Time (days)",
+     ylab = "Capture rate (tadpoles/day)", xaxt = "n", yaxt = "n")
+axis(1, at = 0:3); axis(2, at = 0:3)
+polygon(c(0, 3, 3, 0), c(0, 0, 2, 2), col = "grey85", border = NA)
+segments(0, 2, 3, 2, lwd = 2)
+box()
+```
+
+Geometrically, that's just the **area of the shaded rectangle**: base (time) $\times$ height (rate). "Area under the rate curve = cumulative total" is exactly the idea behind integration -- we'll just need it for curves that aren't flat lines.
+
+**Your turn.** Now suppose the capture rate isn't constant -- it ramps up *linearly*, from 0 tadpoles/day at $t=0$ to 2 tadpoles/day at $t=3$ (dragonflies take some time to find the tadpoles). Sketch this rate on the blank axes below, shade the region representing the total killed, and compute the total using the area of a triangle.
+
+```{r linear-rate-blank, fig.height=2.6, fig.width=4.5}
+plot(NA, xlim = c(0, 3), ylim = c(0, 3), xlab = "Time (days)",
+     ylab = "Capture rate (tadpoles/day)", xaxt = "n", yaxt = "n")
+axis(1, at = 0:3); axis(2, at = 0:3)
+abline(v = 0:3, col = "grey85"); abline(h = 0:3, col = "grey85")
+box()
+```
+
+$\text{Total killed} = \dfrac{1}{2} \times \text{base} \times \text{height} =$ ________
+
+(This example is deliberately simple and separate from the Ricker curve -- it's just to plant the "area = total" idea. We'll connect integration to our tadpole model later in the semester.)
+
+---
+
+## Group discussion (15 min)
+
+Compare your work with your group:
+
+- Walk through your derivative, term by term. Did everyone get the same expression for $dy/dx$? Resolve any disagreements about the product rule or chain rule steps.
+- Did everyone arrive at the same critical point, $x^*$? If not, find where the calculations diverge.
+- Does the calculus-derived peak you each calculated match where you sketched the peak by hand in Act 1? As a group, discuss: is a mismatch a problem with the calculus, a problem with our illustrative $a,b$ choice, or just normal eyeballing imprecision?
+- Compare your Part 1 and Part 3 answers too, if time allows -- these are foundational tools we'll reuse constantly.
+
+## Revise and reflect (individual, ~15 min)
+
+Revise any of your answers above based on the group discussion. Then answer:
+
+1. Write your final expression for $dy/dx$ and the critical point $x^*$ in your own words. What does $x^*$ represent ecologically?
+
+____________________________________________________________
+____________________________________________________________
+
+2. Now that you have a specific predicted peak size, how confident are you that this is a real ecological effect and not just noise in a small dataset? What would you want to know to decide?
+
+____________________________________________________________
+____________________________________________________________
+
+3. Muddiest point: what's the one thing from this part of the lab you'd like to see explained again?
+
+____________________________________________________________
+____________________________________________________________
