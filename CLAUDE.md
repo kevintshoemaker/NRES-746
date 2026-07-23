@@ -4,7 +4,7 @@ Test command: Rscript -e "devtools::test()"
 
 This project develops course materials for NRES 746 (graduate-level custom
 statistical modeling for ecology/environmental science, UNR). Students have
-limited math backgrounds (Calc II is the ceiling; one intro stats course).
+limited math backgrounds (Calc II is usually the ceiling; one intro stats course).
 Materials include R Markdown lab handouts, R scripts, and analysis code.
 
 ## About me
@@ -12,8 +12,7 @@ Materials include R Markdown lab handouts, R scripts, and analysis code.
 - I primarily code in R. I have some experience with Python, Java, Delphi,
   and Fortran, but R is home base.
 - My background is in ecology and conservation biology. I'm picking up more
-  advanced math/stats theory as I go, so explanations that connect back to
-  ecological intuition are more useful to me than pure math-for-math's-sake.
+  advanced math/stats theory as I go.
 
 ## R style preferences
 
