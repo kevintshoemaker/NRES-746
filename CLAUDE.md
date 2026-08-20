@@ -54,8 +54,11 @@ material from Monday's session.
 These apply to lab handouts, lecture/WOD handouts, and other
 student-facing .Rmd documents:
 
-- **Dual output**: YAML should default to `word_document`, with
-  `pdf_document` present but commented out, so I can switch easily.
+- **Dual output**: Always include both `word_document` and `pdf_document`
+  in the YAML, with the inactive one commented out, so I can switch easily.
+  For WOD and lab documents, default to `pdf_document` (comment out
+  `word_document`). For other student-facing documents (e.g. lecture
+  handouts), default to `word_document` (comment out `pdf_document`).
 - **Portable formatting only.** Avoid LaTeX-only raw commands
   (`\newpage`, `\vspace{}`, `\underline{\hspace{}}`, etc.) since they
   silently vanish or render badly in Word output. Use underscore lines
