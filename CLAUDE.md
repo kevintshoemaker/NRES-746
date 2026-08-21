@@ -27,12 +27,35 @@ break in the middle -- so the Wednesday WOD and lecture plan may pick up
 mid-document rather than starting a fresh topic, and can reference/recap
 material from Monday's session.
 
+## Idea bank (Google Doc)
+
+I keep a running Google Doc with WOD ideas and notes about the class,
+updated frequently:
+https://docs.google.com/document/d/1ZF8rx3dUwppj6ZV4sJ4vJ53XgG-0V9BNKyDwp-7W4D4/edit
+
+When crafting WOD or lab handouts, check this doc for relevant ideas and
+incorporate them where they fit, rather than relying only on this file's
+static conventions.
+
 ## About me
 
 - I primarily code in R. I have some experience with Python, Java, Delphi,
   and Fortran, but R is home base.
 - My background is in ecology and conservation biology. I'm picking up more
   advanced math/stats theory as I go.
+
+## Writing style
+
+- **Avoid em-dashes and other tells of AI-generated writing.** Use a
+  comma, a period, or a plain hyphen with spaces (` -- `, as used
+  throughout this file) instead of an em-dash. Also avoid other common AI
+  writing tics: "it's not just X, it's Y" constructions, rule-of-three
+  rhetorical lists, throat-clearing openers ("It's worth noting that...",
+  "Furthermore,"), and excessive hedging ("arguably", "in many ways").
+  This applies to all student-facing prose (handouts, discussion prompts,
+  lecture text) -- I'm upfront with students that AI helped produce these
+  materials, but I'd rather the writing not constantly signal that on its
+  own, since it can make students take the exercises less seriously.
 
 ## R style preferences
 
@@ -49,6 +72,29 @@ material from Monday's session.
   Use subheadings sparingly, just enough to make a script easy to jump
   around in Rstudio (not one per code block).
 
+## Cleaning up a lecture .Rmd
+
+When I ask to "clean up" a `LECTUREn.Rmd` file, this means, specifically:
+
+1. **Name every code chunk** descriptively (e.g. `salmon-ztest-canned`,
+   not bare `{r}`), so the chunk outline is useful for jumping around in
+   RStudio.
+2. **Suppress warnings and messages from the knitted output** (e.g.
+   `message = FALSE` in the global `knitr::opts_chunk$set()`, so
+   `library()` load messages and similar noise don't show up in the
+   HTML).
+3. **Modernize the R code**: `<-` for assignment (not `=`), `TRUE`/`FALSE`
+   (not `T`/`F`), `seq_len(n)`/`seq_along(x)` instead of `1:n` in for-loop
+   headers (the `1:n` idiom silently breaks when `n` is 0), vectorize
+   where it doesn't obscure a point the lecture is actively teaching
+   (e.g. a for-loop shown specifically to illustrate simulation/resampling
+   mechanics should generally stay a for-loop -- that's the pedagogical
+   point), and consistent, readable variable/function names (snake_case,
+   no dots like `p.val`, no names that shadow base R functions like `df`
+   or `confint`). Base R by default; `dplyr`/`tidyr` are fine for data
+   wrangling and `ggplot2` for plotting, but this is not a request to
+   convert base R code to tidyverse style.
+
 ## Course material conventions
 
 These apply to lab handouts, lecture/WOD handouts, and other
@@ -62,14 +108,18 @@ student-facing .Rmd documents:
 - **Portable formatting only.** Avoid LaTeX-only raw commands
   (`\newpage`, `\vspace{}`, `\underline{\hspace{}}`, etc.) since they
   silently vanish or render badly in Word output. Use underscore lines
-  (e.g. `____________________`) for fill-in blanks and writing space, and
+  (e.g. `____________________`) for short fill-in blanks, and
   rely on natural pagination instead of forced page breaks.
-- **Instructor-notes block**: include an HTML comment
-  (`<!-- ... -->`) near the top of each handout with pacing/timing notes
-  and dataset provenance, clearly marked for deletion before printing for
-  students. For labs, use this block to also flag the intended
-  productive-struggle points (where light scaffolding is deliberate, not
-  an oversight) so I don't accidentally "fix" them later.
+- **Lines vs. blank space.** Reserve ruled lines (underscore blanks, or
+  the `blank_lines()` helper -- see `Lab1_Act1.Rmd`'s setup
+  chunk) for **written answers**: prose, interpretation, short-essay
+  responses. For questions asking students to manipulate or derive an
+  equation (algebra, calculus, "show your work" on a formula), give
+  plain blank space instead -- no ruled lines. In PDF-only WOD/lab docs
+  this means a `blank_space()` chunk (draws nothing, just reserves
+  `fig.height`) rather than `blank_lines()`; lines read as "write words
+  here" and can make students feel like they should be composing
+  sentences rather than working through math.
 - **Pen-and-paper labs**: lab handouts are completed without laptops.
   Code chunks in these .Rmd files generate figures/tables for the printed
   handout (set `echo = FALSE`) -- students are not writing or running R
@@ -115,60 +165,63 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
 
 When asked to build a lecture plan or WOD, produce all three pieces
 together (WOD handout, lecture outline, discussion prompt) unless told
-otherwise, and note approximate timing for each in an instructor-notes
-block.
+otherwise, and note approximate timing for each.
 
-## Lab structure: Diagnose -> Derive -> Defend
+## Lab structure: three Acts
 
-Labs are built as **three handouts** (Act 1: Diagnose, Act 2: Derive, Act
-3: Defend), each following the same individual -> group -> individual
+Labs are built as **three handouts** (Act 1, Act 2, Act 3 -- not a
+formalized Diagnose/Derive/Defend framework; a subtitle can still use
+words like "derive" or "defend" descriptively if it fits that week's
+content), each following the same individual -> group -> individual
 cycle:
 
 - **~15 min individual work**
-- **~15 min group discussion**
-- **~15 min individual revise-and-reflect**
+- **~10-15 min group discussion and revision** (merged, not two separate
+  phases -- see below)
 
-Roughly 45 min per Act, three Acts per lab (fits the 2h45m period with
-room for transitions/wrap-up). This structure suits weeks building
+Roughly 25-30 min per Act, three Acts per lab (fits the 2h45m period with
+room for transitions/wrap-up and a longer Act 2). This structure suits weeks building
 *toward a single model*. (A separate "Model Court" format -- not
 individual/group/reflect but a structured debate between competing
 candidate models -- is used instead for weeks with genuine model-vs-model
-competition; don't force Diagnose->Derive->Defend onto those weeks.)
+competition; don't force this individual/group/revise structure onto
+those weeks.)
 
-Use `Lab1_Act1_Diagnose.Rmd` as the template for formatting all three
+Use `Lab1_Act1.Rmd` as the template for formatting all three
 Acts:
 
 - **YAML**: `title: "Lab N, Act X: <Name>"`, a one-line `subtitle` posing
   the week's driving question, `author: "NRES 746 -- name: ____________________    group: ______"`,
   `date: ""`, dual word/pdf output as above.
-- **Instructor-notes HTML comment** right after setup, covering: per-part
-  pacing that sums to ~45 min, dataset provenance/source citation, and any
-  deliberate scaffolding-reduction notes (what's *supposed* to feel
-  underdetermined and why, so groups have something real to reconcile at
-  discussion time).
 - **Opening "scenario" section**: 1-2 short paragraphs of ecological
   framing before any data or math appears, ending on the concrete question
   the Act will address. Data is presented as "real measurements," with a
   `kable()` table immediately following.
 - **Numbered, lettered sub-parts** (`## Part 1: ...`, `**1a.**`, `**1b.**`,
-  ...) each followed by underscore blank-lines sized to the expected
-  answer length (short numeric answers get one blank line; short-essay
-  answers get 2-4).
+  ...) each followed by a blank sized to the expected answer length
+  (short numeric answers get one inline blank; short-essay answers get
+  2-4 lines) -- and by *kind*, per the lines-vs-blank-space rule above:
+  written/interpretive answers get lines, equation manipulation or
+  "show your work" gets plain blank space.
 - **Figures**: generated via `echo=FALSE` chunks; blank axes/grids for
   hand-sketching (see the blank-histogram chunk) where the point is for
   the student to draw on the page, not to look at a finished plot.
   `set.seed()` before any jittering so the figure is reproducible.
-- **Group discussion section**: a short bulleted list of comparison
-  prompts tied directly back to the individual parts above (e.g., "did
-  everyone classify the pattern the same way in Part X? If not, what is
-  each person pointing to?") -- not generic discussion questions.
-- **Revise-and-reflect section**: always ends with (a) a content question
-  testing whether the group converged on the right idea, (b) a forward-
-  looking "what would you still need to know to do X" question that seeds
-  the next Act/lab, and (c) a **muddiest point** question. These closing
-  reflection questions are non-negotiable across all three Acts -- they're
-  how students self-diagnose what to study harder, so don't drop them for
-  space.
+- **Group discussion and revision section** (merged, not separate
+  "group discussion" + "revise and reflect" phases): keep this
+  deliberately open-ended rather than scaffolded. A one-line prompt to
+  compare answers with the group and revise as needed is usually enough
+  -- optionally naming which part(s) are worth focusing on (e.g. "compare
+  your derivative and critical point"), but not a bulleted question tied
+  to every individual part. Close with a generic instruction to record
+  changes, new insights, and any "muddiest points" or topics to review,
+  followed by one open block of blank lines (`blank_lines(6)` or similar)
+  for all of it. Don't pre-write specific reflection questions (a content
+  check, a forward-looking question, a muddiest-point question) -- let
+  differences between group members' answers be what drives the
+  discussion and reflection, rather than a fixed checklist. See
+  `Lab1_Act1.Rmd`'s "Group discussion and revision" section for
+  the target format.
 
 ## Calibrating difficulty and level
 
@@ -177,17 +230,29 @@ Acts:
   one intro stats course either. When in doubt, build the minimum formal
   machinery needed for that week's model and lean on ecological intuition
   to carry the rest.
+- **Minimal scaffolding, genuine first attempts.** Pitch questions so
+  they require students to stretch beyond routine application, not just
+  plug numbers into a given formula. Resist the urge to pre-break a
+  problem into hand-held sub-steps or hint at the right path before
+  students have tried one themselves -- it's fine, even desirable, for an
+  individual's first attempt to be wrong. Students learn more by working
+  out where their own reasoning broke, with help from peers and the
+  instructor, than by being walked to a correct answer from the start.
+  When in doubt, cut scaffolding rather than add it.
 - Aim for productive struggle, not comfort. Individual-work sections
   should leave some questions genuinely unresolved for an individual
   working alone -- that's what the group-discussion phase is for. If every
   question in an Act is answerable confidently solo, it's pitched too low.
 - Always build in a moment for students to compare/defend differing
   answers (peer evaluation) rather than just checking a single correct
-  answer -- Model Court weeks make this the whole point; Diagnose->Derive->
-  Defend weeks build it into the group-discussion phase of every Act.
-- Always close individual reflection with a self-diagnostic question
-  (muddiest point / what would you need to know next) so students have an
-  explicit, recorded chance to notice their own gaps.
+  answer -- Model Court weeks make this the whole point; regular
+  three-Act weeks build it into the group-discussion-and-revision phase
+  of every Act.
+- Give students an explicit, recorded chance to self-diagnose gaps
+  (muddiest points, what they'd still need to know) -- but as a generic
+  invitation within the open group-discussion-and-revision block, not as
+  a separate mandated question. See the "Lab structure: three Acts"
+  section above.
 
 ## Before considering a task done
 
