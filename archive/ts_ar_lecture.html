@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Jordan Zabrecky &amp; Sage Ellis" />
+
+<meta name="date" content="2023-12-05" />
+
+<title>Autoregressive Time Series</title>
+
+<script src="site_libs/header-attrs-2.24/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cerulean.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">NRES 746</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Schedule
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="schedule.html">Course Schedule</a>
+    </li>
+    <li>
+      <a href="Syllabus.pdf">Syllabus</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Lectures
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="INTRO.html">Introduction to NRES 746</a>
+    </li>
+    <li>
+      <a href="LECTURE1.html">Why focus on algorithms?</a>
+    </li>
+    <li>
+      <a href="LECTURE2.html">Working with probabilities</a>
+    </li>
+    <li>
+      <a href="LECTURE3.html">The Virtual Ecologist</a>
+    </li>
+    <li>
+      <a href="LECTURE4.html">Likelihood</a>
+    </li>
+    <li>
+      <a href="LECTURE5.html">Optimization</a>
+    </li>
+    <li>
+      <a href="LECTURE6.html">Bayesian #1: concepts</a>
+    </li>
+    <li>
+      <a href="LECTURE7.html">Bayesian #2: mcmc</a>
+    </li>
+    <li>
+      <a href="LECTURE8.html">Model Selection</a>
+    </li>
+    <li>
+      <a href="LECTURE9.html">Performance Evaluation</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Lab exercises
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="LAB_Instructions.html">Instructions for Labs</a>
+    </li>
+    <li>
+      <a href="LAB3demo.html">Lab 3: Likelihood (intro)</a>
+    </li>
+    <li>
+      <a href="LAB5.html">Lab 5: Model selection (optional)</a>
+    </li>
+    <li>
+      <a href="FigureDemo.html">Demo: Figures in R</a>
+    </li>
+    <li>
+      <a href="GIT_tutorial.html">Demo: version control in Git</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Student led topics
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="GLMM.html">GLMMs</a>
+    </li>
+    <li>
+      <a href="GLMM_Lab.html">GLMMs (lab)</a>
+    </li>
+    <li>
+      <a href="GAMs_Lab.html">GAMs (lab)</a>
+    </li>
+    <li>
+      <a href="Rastering.html">RSFs (raster demo)</a>
+    </li>
+    <li>
+      <a href="RSF_Lab.html">RSFs (lab)</a>
+    </li>
+    <li>
+      <a href="rf2023.html">Random Forest (demo)</a>
+    </li>
+    <li>
+      <a href="rfregression.html">Random Forest (lab)</a>
+    </li>
+    <li>
+      <a href="SpatialRegression.html">Spatial Regression (demo and lab)</a>
+    </li>
+    <li>
+      <a href="Ordination2023.html">Ordination</a>
+    </li>
+    <li>
+      <a href="OrdinationLab2023.html">Ordination (lab)</a>
+    </li>
+    <li>
+      <a href="ts_ar_lecture.html">Time series models</a>
+    </li>
+    <li>
+      <a href="AutoregressiveTimeSeries_Lab.html">Time series models (lab)</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Data sets
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="TreeData.csv">Tree Data</a>
+    </li>
+    <li>
+      <a href="ReedfrogPred.csv">Reed Frog Predation Data</a>
+    </li>
+    <li>
+      <a href="ReedfrogFuncresp.csv">Reed Frog Func Resp</a>
+    </li>
+  </ul>
+</li>
+<li>
+  <a href="Links.html">Links</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Autoregressive Time Series</h1>
+<h4 class="author">Jordan Zabrecky &amp; Sage Ellis</h4>
+<h4 class="date">2023-12-05</h4>
+
+</div>
+
+
+<div id="topics-for-today" class="section level2">
+<h2>Topics for today</h2>
+<p>Introductions to time series</p>
+<ul>
+<li>Time Series Objects</li>
+<li>Autocorrelation</li>
+<li>Correlograms</li>
+</ul>
+<p>Simple Time Series Models</p>
+<ul>
+<li>White noise</li>
+<li>Random walks</li>
+<li>Autoregressive Models</li>
+</ul>
+</div>
+<div id="code-for-today" class="section level2">
+<h2>Code for today</h2>
+<p>You can find the R code for these lecture notes and other related
+exercises <a href="ar_models_demo.R">here</a>.</p>
+<p><br></p>
+</div>
+<div id="introduction-to-time-series" class="section level1">
+<h1>Introduction to Time Series</h1>
+<div id="what-is-a-time-series" class="section level3">
+<h3>What is a time series?</h3>
+<ul>
+<li>A set of observations taken sequentially in time</li>
+<li>Mathematically this is just a vector!</li>
+</ul>
+<p><span class="math display">\[
+\{ x_1,x_2,x_3,\dots,x_n \}
+\]</span></p>
+</div>
+<div id="they-are-indexed-by-time-which-can-be" class="section level3">
+<h3>They are indexed by time which can be…</h3>
+<ul>
+<li><p>Equally spaced t = {1,2,3,4,5,6}</p></li>
+<li><p>Equally spaced w/ missing value t = {1,2,3,4,6}</p></li>
+<li><p>Unequally spaced t = {2,4,7,8,9} [Quite Common for
+Ecologists!]</p></li>
+</ul>
+<p>Our time interval can be anything — seconds, minutes, days, months,
+years, etc.</p>
+</div>
+<div
+id="r-has-a-sometimes-very-convenient-way-of-dealing-with-time-series-objects"
+class="section level2">
+<h2>R has a (sometimes) very convenient way of dealing with time series
+objects!</h2>
+<ul>
+<li><code>ts()</code> turns vectors into time series object</li>
+<li><code>ts.plot()</code> plots time series objects</li>
+</ul>
+<p>Let’s look at the arguments of <code>ts()</code>:</p>
+<pre class="r"><code>ts(data,
+   start, end,
+   frequency
+   )</code></pre>
+<ul>
+<li><code>data</code> = a vector of the response variable over time</li>
+<li><code>start</code> = the start of the time series</li>
+<li><code>end</code> = the end of the time series</li>
+<li><code>frequency</code> = the number of observations per unit time
+<ul>
+<li>For annual series, <code>frequency = 1</code></li>
+<li>For monthly series, <code>frequency = 12</code></li>
+</ul></li>
+</ul>
+</div>
+<div id="lets-look-at-some-examples-in-r" class="section level2">
+<h2>Let’s look at some examples in R</h2>
+<pre class="r"><code>#Load the Nile dataset
+data(Nile) 
+
+class(Nile) #ts object already!</code></pre>
+<pre><code>## [1] &quot;ts&quot;</code></pre>
+<pre class="r"><code>#It&#39;s easy to turn a ts object back into a regular dataframe
+Nile &lt;- data.frame(Y=as.matrix(Nile), date=time(Nile))
+
+#Look at the data
+head(Nile) </code></pre>
+<pre><code>##      Y date
+## 1 1120 1871
+## 2 1160 1872
+## 3  963 1873
+## 4 1210 1874
+## 5 1160 1875
+## 6 1160 1876</code></pre>
+<pre class="r"><code>#Looks like our response variable is yearly!
+
+#Now let&#39;s turn it back into a timeseires... for the example
+
+#Turn it into a timeseries
+Nile.ts &lt;- ts(data = Nile$Y, start = 1871, end = 1970, frequency = 1) #our data will be column &#39;Y&#39;, the discharge!And frequency is 1 since it is measured once a year! 
+
+ts.plot(Nile.ts) #ts.plot() plots time series objects</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/Nile_ts_example-1.png" width="672" /></p>
+<div
+id="what-would-happen-if-we-used-ts.plot-on-a-non-time-series-object"
+class="section level3">
+<h3>What would happen if we used <code>ts.plot()</code> on a non-time
+series object?</h3>
+<p>If you give R a variable as a vector, it will plot it as a time
+series. Though, note the year is no longer shown on the x-axis. So we
+would need to know what the time equivalent is for each increment of the
+x-axis.</p>
+<pre class="r"><code>#Plot our original dataframe that wasn&#39;t a timeseries object
+ts.plot(Nile$Y) #remember we plot our response variable, Y</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/non_ts_ex-1.png" width="672" /></p>
+</div>
+<div id="what-about-a-slightly-harder-date-time-series"
+class="section level3">
+<h3>What about a slightly harder date-time series?</h3>
+<pre class="r"><code>#Load the beavers dataset from R
+data(beavers) #We&#39;ll work with beaver1 :)
+
+#Look at the data
+head(beaver1)</code></pre>
+<pre><code>##   day time  temp activ
+## 1 346  840 36.33     0
+## 2 346  850 36.34     0
+## 3 346  900 36.35     0
+## 4 346  910 36.42     0
+## 5 346  920 36.55     0
+## 6 346  930 36.69     0</code></pre>
+<pre class="r"><code>summary(beaver1) </code></pre>
+<pre><code>##       day             time             temp           activ        
+##  Min.   :346.0   Min.   :   0.0   Min.   :36.33   Min.   :0.00000  
+##  1st Qu.:346.0   1st Qu.: 932.5   1st Qu.:36.76   1st Qu.:0.00000  
+##  Median :346.0   Median :1415.0   Median :36.87   Median :0.00000  
+##  Mean   :346.2   Mean   :1312.0   Mean   :36.86   Mean   :0.05263  
+##  3rd Qu.:346.0   3rd Qu.:1887.5   3rd Qu.:36.96   3rd Qu.:0.00000  
+##  Max.   :347.0   Max.   :2350.0   Max.   :37.53   Max.   :1.00000</code></pre>
+<pre class="r"><code>#Subset out only the first day
+beaver1 &lt;- beaver1[which(beaver1$day == 346),] #Take all the data on day 346
+
+#We&#39;ll be looking at beaver temperatures over time!
+
+#Turn it into a timeseries
+beaver1.ts &lt;- ts(data = beaver1$temp) #our data will be the temperature. 
+
+ts.plot(beaver1.ts) #ts.plot plots time series objects</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/beaver_ts_example-1.png" width="672" /></p>
+</div>
+<div id="whats-wrong-with-this" class="section level3">
+<h3>What’s wrong with this?</h3>
+<ul>
+<li>Doesn’t actually start at our starting time since we are only giving
+it a vector</li>
+<li>But does show us temperature over time!!</li>
+<li>What would you think the frequency would be if it is taken every 10
+minutes from 8:40am to 11:50p,??</li>
+</ul>
+<p>Sometimes with some good bookeeping it’s easier to just work with the
+vectors instead of time series objects :)</p>
+</div>
+</div>
+</div>
+<div id="correlation" class="section level1">
+<h1>Correlation</h1>
+<p>So we’ve talked a ton about covariance or, more commonly correlation,
+which is the standardized version of covariance. And when we talk about
+covariance and correlation, we have typically talked about how two
+separate variables (e.g. x and y) are correlated.</p>
+<p>Covariance:</p>
+<p><span class="math display">\[
+cov_{x,y} =  \frac{\Sigma(x_i - \bar{x})(y_i - \bar{y})}{N-1}
+\]</span> Correlation:</p>
+<p><span class="math display">\[
+cor_{x,y} =  \frac{cov_{x,y}}{\sigma_x\sigma_y}
+\]</span> Remember that correlation is bounded by -1 and 1 <span
+class="math display">\[
+-1 &lt; cor_{x,y} &lt; 1
+\]</span></p>
+<div id="autocorrelation" class="section level2">
+<h2>Autocorrelation</h2>
+<div id="so-what-is-autocorrelation" class="section level3">
+<h3>So what is autocorrelation??</h3>
+<p>Instead of the correlation between two variables <span
+class="math inline">\(x\)</span> and <span
+class="math inline">\(y\)</span>, autocorrelation is the correlation
+between a variable <span class="math inline">\(x\)</span> at state (for
+us, this will be time!) <span class="math inline">\(t\)</span>, <span
+class="math inline">\(x_t\)</span> compared to <em>itself</em> at a
+previous state, <span class="math inline">\(x_{t+k}\)</span>. Where
+<span class="math inline">\(k\)</span> is our lag, which is how far out
+in time we compare x to its previous self.</p>
+<p>Autocorrelation: <span class="math display">\[
+cor_{x_t,x_{t+k}}
+=  \frac{cov_{x_t,x_{t+k}}}{\sigma_{x_t}\sigma_{x_{t+k}}}
+\]</span> <span class="math display">\[
+-1 &lt; cor_{x_t,x_{t+k}} &lt; 1
+\]</span> <br></p>
+</div>
+</div>
+<div id="acf-plots" class="section level2">
+<h2>ACF plots</h2>
+<p>So when we want to visualize autocorrelation within our time series,
+we use an autocorrelation function (ACF). The ACF measures the
+correlation of a time series against a time-shifted version of itself.
+And if we use the acf function in R on our time series, it will show us
+a correlogram which is going to look something like this:</p>
+<div id="correlogram" class="section level3">
+<h3>Correlogram</h3>
+<p>Blank Outputs for the <code>ACF()</code> function</p>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p>What is the ACF when lag = 0?</p>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p>And finally we can add in 95% confidence intervals</p>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+</div>
+</div>
+<div id="linear-trend-acf" class="section level2">
+<h2>Linear Trend ACF</h2>
+<p>So for a simple linear relationship, this is what the ACF plot looks
+like. As the lag increases, the ACF gets lower. However, throughout the
+20 lags on the ACF plot, there is still significant autocorrelation.</p>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-4-1.png" width="672" />
+<br></p>
+</div>
+<div id="seasonal-acf" class="section level2">
+<h2>Seasonal ACF</h2>
+<p>With sinusoidal data (imagine seasonal or night/day time series
+data), our ACF plot is also sinusoidal. And here we get periods of
+negative autocorrelation.</p>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+</div>
+<div id="seasonal-linear-trend-acf" class="section level2">
+<h2>Seasonal &amp; Linear Trend ACF</h2>
+<p>If we combine the previous two plots, we see that again our ACF plot
+is also sinusoidal, but the intensity of the autocorrelation dampens
+with time as a result of the linear relationship.</p>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+</div>
+<div id="so-lets-look-at-some-examples-with-real-data-in-r"
+class="section level2">
+<h2>So let’s look at some examples with real data in R</h2>
+<p>We will use the <code>acf()</code> function in R</p>
+<p>Let’s return to the beavers!</p>
+<pre class="r"><code>ts.plot(beaver1$temp) #Plot the time series of beaver temperature again</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<pre class="r"><code>acf(beaver1$temp)</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-7-2.png" width="672" /></p>
+<p>So when we are looking at the ACF of beaver 1, at lag 7, the ACF is
+no longer significant. So at lag 7 (which is 70 minutes as each lag here
+is 10 minutes), the temperature is no longer autocorrelated to the
+original.</p>
+</div>
+<div id="pacf-plots" class="section level2">
+<h2>PACF Plots</h2>
+<p>Moving onto something a bit more complicated- the partial
+autocorrelation function (PACF).</p>
+<p>But before we go into what the partial autocorrelation function is,
+we’re going to go back to some foundational math. Don’t worry–it’s from
+elementary school.</p>
+<p>So if you remember the transitive property is where:</p>
+<p>If <span class="math inline">\(A = B\)</span> and <span
+class="math inline">\(B = C\)</span>, then we know <span
+class="math inline">\(A = C\)</span>.</p>
+<p>We can take this a step further to say:</p>
+<p>If <span class="math inline">\(x \propto y\)</span> and <span
+class="math inline">\(y \propto z\)</span>, then <span
+class="math inline">\(x \propto z\)</span></p>
+<p>And finally, in a case of time series we can start to think about
+partial autocorrelation:</p>
+<p>If <span class="math inline">\(x_t \propto x_{t+1}\)</span> and <span
+class="math inline">\(x_{t+1} \propto x_{t+2}\)</span>, then <span
+class="math inline">\(x_t \propto x_{t+2}\)</span></p>
+<p>The PACF measures correlation between <span
+class="math inline">\(x_t\)</span> and <span
+class="math inline">\(x_{t+k}\)</span> with the linear dependence of the
+in-between time steps removed.</p>
+</div>
+<div id="lets-look-at-some-examples-of-pacf-plots-with-real-data"
+class="section level2">
+<h2>Let’s look at some examples of PACF plots with real data</h2>
+<p>We can do this in R using the <code>pacf()</code> function</p>
+<p>Once again, the beavers</p>
+<p>BUT FIRST A WARNING</p>
+<p>Our <code>acf()</code> plots always start at where Lag = 0, so they
+will always have a ACF = 1.</p>
+<p>Our <code>pacf()</code> plots always start at Lag = 1, so keep this
+in mind!</p>
+<pre class="r"><code>pacf(beaver1$temp)</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>Remember our beaver had a lot of autocorrelation on our ACF plot. But
+when we plot the beaver’s temperature in a PACF plot, we see that
+without those interdependencies, the correlation between each 10 minute
+measurement, we only have autocorrelation one lag out.</p>
+<p>Let’s look at some more examples, this time we’ll look at
+phytoplankton in Lake Washington.</p>
+<pre class="r"><code>library(MARSS) #load up the MARSS package which is home to the phytoplankton data
+
+data(lakeWAplankton) #read in the data
+
+#Data Management
+phyto &lt;- lakeWAplanktonTrans #Give it a name to keep the original data structure in tact
+phyto &lt;- phyto[phyto[,&quot;Year&quot;] &gt; 1975,] #Subset to years greater than 1975 (missing data in early years)
+
+head(phyto) #Our data is in monthly increments now!</code></pre>
+<pre><code>##      Year Month       Temp         TP         pH Cryptomonas  Diatoms
+## [1,] 1976     1 -1.2012874 -0.3480231 -0.8661613          NA 1.022903
+## [2,] 1976     2 -1.2946653 -0.4863574 -0.8755319          NA 1.079538
+## [3,] 1976     3 -1.4346066 -0.4503207  0.3004814  -2.9775611 1.369706
+## [4,] 1976     4 -0.9069205 -0.7204020  0.5019498  -2.1642828 1.090324
+## [5,] 1976     5 -0.1485269 -0.8697410  0.7409007  -0.4445590 1.069123
+## [6,] 1976     6  0.4326375 -0.7237925  0.4521151  -0.1033656 1.140803
+##          Greens  Bluegreens   Unicells Other.algae Conochilus    Cyclops
+## [1,] -0.7603856 -0.53210594 -0.3422633  -0.2146689         NA -2.4643910
+## [2,] -0.8254301 -0.36387046 -0.2828574  -0.8125118         NA -2.3121852
+## [3,] -0.6360840 -0.61361753  0.4062675   0.3392094         NA -0.6387580
+## [4,] -0.9826418 -0.29920680  1.0966412  -0.2206539 -1.4602890  0.7801380
+## [5,]  0.2119807  0.31138292  1.1182281   0.7728129  0.7789737  0.9057741
+## [6,] -0.5333445  0.06062775  1.6331054   1.1410062  0.8952269  0.9143648
+##         Daphnia   Diaptomus  Epischura Leptodora   Neomysis
+## [1,]         NA -0.23419350 -1.1409875        NA         NA
+## [2,]         NA  0.02473202 -1.0061804        NA         NA
+## [3,]         NA  0.31211037 -0.4524077        NA         NA
+## [4,]         NA  0.81491340  0.9077387        NA         NA
+## [5,] -0.5053132  0.96123885 -0.1282724 -1.689403 -0.6323314
+## [6,]  1.1173976  0.69062657 -0.3759544  0.678363 -0.5632884
+##      Non.daphnid.cladocerans Non.colonial.rotifers
+## [1,]              -0.1620544           -0.78021417
+## [2,]              -0.2927264           -0.91056044
+## [3,]              -0.3258690           -0.39481088
+## [4,]              -0.2395769           -0.05744791
+## [5,]               0.6902311            1.92571632
+## [6,]               2.0522416            2.21589525</code></pre>
+<pre class="r"><code>#Turn into time series object
+phyto.ts &lt;- ts(phyto, start = c(1976,1), freq = 12)
+
+#Plot the time series again
+par(mai=c(1,1,0,0), omi=c(0.1,0.1,0.1,0.1)) #changes margins
+plot.ts(phyto.ts[,&quot;Cryptomonas&quot;], ylab=expression(log(italic(Cryptomonus))), las = 1)</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/phyto_apcf-1.png" width="672" /></p>
+<pre class="r"><code>#Plot the ACF
+acf(phyto.ts[,&quot;Cryptomonas&quot;], na.action = na.pass, las = 1)</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/phyto_apcf-2.png" width="672" /></p>
+<p>One thing to point out–since we are looking at monthly time series
+our x-axis has changed to be decimals. So now a Lag = 1 is one year out,
+where a Lag = 0.5 is 6 months out. It is weird, but that is how these
+functions work.</p>
+<pre class="r"><code>#Plot the PCF
+pacf(phyto.ts[,&quot;Cryptomonas&quot;], na.action = na.pass, las = 1)</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+</div>
+</div>
+<div id="simple-time-series-models" class="section level1">
+<h1>Simple Time Series Models</h1>
+<p>Now that we understand time series and autocorrelation we can get
+into some simple time series models.</p>
+<div id="white-noise-models" class="section level2">
+<h2>White Noise Models</h2>
+<p>White noise models are time series objects where there are no
+significant autocorrelations.</p>
+<p>White Noise models have to be:</p>
+<ol style="list-style-type: decimal">
+<li>Independent (no sig lags in ACF plots)</li>
+<li>Identically distributed with a mean of zero</li>
+</ol>
+<p>We often see Gaussian white noise models whereby <span
+class="math inline">\(w_t \sim N(0, \sigma^2)\)</span></p>
+<p>Let’s take a look at a simulated time series from a White Noise model
+and it’s associated ACF plot.</p>
+<div class="figure">
+<img src="ts_ar_lecture_files/figure-html/ex_gaussian_wn-1.png" alt="$w_t \sim \text{N}(0,1)$" width="672" />
+<p class="caption">
+<span class="math inline">\(w_t \sim \text{N}(0,1)\)</span>
+</p>
+</div>
+</div>
+<div id="random-walk-models" class="section level2">
+<h2>Random Walk Models</h2>
+<p>A time series <span class="math inline">\(x_t\)</span> is a random
+walk if:</p>
+<ol style="list-style-type: decimal">
+<li><span class="math inline">\(x_t = x_{t-1} + w_t\)</span></li>
+<li><span class="math inline">\(w_t\)</span> is white noise</li>
+</ol>
+<p>So in a random walk the value of <span
+class="math inline">\(x\)</span> today, is the value of <span
+class="math inline">\(x\)</span> from <em>yesterday</em> plus some white
+noise.</p>
+<div class="figure">
+<img src="ts_ar_lecture_files/figure-html/ex_rw-1.png" alt="$x_t = x_{t-1} + w_t; w_t \sim \text{N}(0,1)$" width="672" />
+<p class="caption">
+<span class="math inline">\(x_t = x_{t-1} + w_t; w_t \sim
+\text{N}(0,1)\)</span>
+</p>
+</div>
+</div>
+<div id="autoregressive-models" class="section level2">
+<h2>Autoregressive Models</h2>
+<p>The <span class="math inline">\(x_{t-1}\)</span> component is what
+makes our random walk an autoregressive (AR) model. Autoregression
+simply means it is a regression of our response variable against itself
+at a previous state.</p>
+<p>Autoregressive time series models are widely used in ecology to treat
+a current state of nature as a function of its past selves.</p>
+<div id="arp-models" class="section level3">
+<h3>AR(p) Models</h3>
+<p>An autoregressive model of order p, or AR(p) is defined as:</p>
+<p><span class="math inline">\(x_t = x_{t-1} + x_{t-2} + … + x_{t-p} +
+w_t\)</span> (or error)</p>
+<p>So our random walk in the previous example is an AR(1) model as it
+only relies on the response variable at one previous time step.</p>
+<p><span class="math inline">\(x_t = x_{t-1} + w_t\)</span></p>
+<p>We can make it an AR(2) model if we include an additional term going
+two time steps back.</p>
+<p><span class="math inline">\(x_t = x_{t-1} + x_{t-2} +
+w_t\)</span></p>
+<p>So on and so forth!</p>
+</div>
+</div>
+<div id="building-autoregressive-models" class="section level2">
+<h2>Building Autoregressive Models</h2>
+<p>Let’s walk through an example building an autoregressive model with
+real data and also start thinking about how we would add on
+covariates.</p>
+<p>We’ll work with the phytoplankton data in Lake Washington again.</p>
+<pre class="r"><code>#Replot the time series
+plot.ts(phyto.ts[,&quot;Cryptomonas&quot;], ylab=expression(log(italic(Cryptomonus))), las = 1)</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+<p>Let’s start by looking at the ACF and PACF plots again</p>
+<pre class="r"><code>par(mfrow = c(1,2))
+#Plot the ACF
+acf(phyto[,&quot;Cryptomonas&quot;], na.action = na.pass, las = 1)
+
+#Plot the PACF
+pacf(phyto[,&quot;Cryptomonas&quot;], na.action = na.pass, las = 1)</code></pre>
+<p><img src="ts_ar_lecture_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p>A lot to mull on here! But one thing is clear is that at least one
+month back there is correlation so let’s start with an AR(1) model.</p>
+<p>Let’s test some covariates while we’re at it as well.</p>
+<pre class="r"><code>colnames(phyto)</code></pre>
+<pre><code>##  [1] &quot;Year&quot;                    &quot;Month&quot;                  
+##  [3] &quot;Temp&quot;                    &quot;TP&quot;                     
+##  [5] &quot;pH&quot;                      &quot;Cryptomonas&quot;            
+##  [7] &quot;Diatoms&quot;                 &quot;Greens&quot;                 
+##  [9] &quot;Bluegreens&quot;              &quot;Unicells&quot;               
+## [11] &quot;Other.algae&quot;             &quot;Conochilus&quot;             
+## [13] &quot;Cyclops&quot;                 &quot;Daphnia&quot;                
+## [15] &quot;Diaptomus&quot;               &quot;Epischura&quot;              
+## [17] &quot;Leptodora&quot;               &quot;Neomysis&quot;               
+## [19] &quot;Non.daphnid.cladocerans&quot; &quot;Non.colonial.rotifers&quot;</code></pre>
+<p>What might be influencing phytoplanktons? Let’s try using temperature
+and TP (total phosphorus) (phytoplankton like phosphorus).</p>
+<p>We can start building our more complex models by just thinking about
+basic regressions!</p>
+<p>The covariates can also be included at previous states, but we think
+that the current months temperature and TP will be more influential than
+the previous months.</p>
+<p><span class="math display">\[ phyto_t = \beta_0 + \beta_1*phyto_{t-1}
++ \beta_1*Temp_t + \beta_2*TP_t + \epsilon\]</span></p>
+<p>And now let’s transform this into actual code. We’ll use a
+frequentist approach for now.</p>
+<p>Our first step is we have to index our previous states properly</p>
+<pre class="r"><code>class(phyto) #not a ts object and that is ok!! </code></pre>
+<pre><code>## [1] &quot;matrix&quot; &quot;array&quot;</code></pre>
+<pre class="r"><code>#Let&#39;s data manage to make things more readable
+
+#Pick out the columns we&#39;re interested in and turn it into a dataframe so we can call them nicely
+phyto.df &lt;- as.data.frame(phyto[,c(&quot;Year&quot;, &quot;Month&quot;, &quot;Temp&quot;, &quot;TP&quot;, &quot;Cryptomonas&quot;)])
+
+
+#Sometimes working with previous times requires clever indexing here let&#39;s test out how we can do that 
+
+
+#proof of concept that indexing is ok on our full dataset
+test &lt;- cbind(phyto.df $Cryptomonas[-1], phyto.df $Cryptomonas[-nrow(phyto)]) #offsets the data so t and t-1 line up
+colnames(test) &lt;- c(&quot;t&quot;, &quot;t minus 1&quot;)
+
+head(test)</code></pre>
+<pre><code>##               t  t minus 1
+## [1,]         NA         NA
+## [2,] -2.9775611         NA
+## [3,] -2.1642828 -2.9775611
+## [4,] -0.4445590 -2.1642828
+## [5,] -0.1033656 -0.4445590
+## [6,] -0.8557211 -0.1033656</code></pre>
+<pre class="r"><code>#Now lets test some models!!
+
+#No covariates model
+ar1 &lt;- lm(phyto.df $Cryptomonas[-1]~phyto.df $Cryptomonas[-nrow(phyto.df )])
+summary(ar1)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = phyto.df$Cryptomonas[-1] ~ phyto.df$Cryptomonas[-nrow(phyto.df)])
+## 
+## Residuals:
+##      Min       1Q   Median       3Q      Max 
+## -2.57931 -0.31574  0.00876  0.32357  1.84020 
+## 
+## Coefficients:
+##                                       Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)                            0.18417    0.04571   4.029 7.69e-05 ***
+## phyto.df$Cryptomonas[-nrow(phyto.df)]  0.40358    0.05800   6.958 3.80e-11 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 0.6385 on 223 degrees of freedom
+##   (2 observations deleted due to missingness)
+## Multiple R-squared:  0.1784, Adjusted R-squared:  0.1747 
+## F-statistic: 48.41 on 1 and 223 DF,  p-value: 3.796e-11</code></pre>
+<pre class="r"><code>#Covariates model
+ar1.co &lt;- lm(phyto.df $Cryptomonas[-1]~phyto.df $Cryptomonas[-nrow(phyto.df )]+phyto.df $Temp[-1]+phyto.df $TP[-1])
+summary(ar1.co)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = phyto.df$Cryptomonas[-1] ~ phyto.df$Cryptomonas[-nrow(phyto.df)] + 
+##     phyto.df$Temp[-1] + phyto.df$TP[-1])
+## 
+## Residuals:
+##      Min       1Q   Median       3Q      Max 
+## -2.57276 -0.32404  0.02855  0.32083  1.70980 
+## 
+## Coefficients:
+##                                       Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)                            0.27925    0.10795   2.587   0.0103 *  
+## phyto.df$Cryptomonas[-nrow(phyto.df)]  0.40726    0.05794   7.029 2.56e-11 ***
+## phyto.df$Temp[-1]                     -0.03246    0.05579  -0.582   0.5613    
+## phyto.df$TP[-1]                        0.19824    0.21156   0.937   0.3498    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 0.6366 on 221 degrees of freedom
+##   (2 observations deleted due to missingness)
+## Multiple R-squared:  0.1905, Adjusted R-squared:  0.1795 
+## F-statistic: 17.34 on 3 and 221 DF,  p-value: 3.816e-10</code></pre>
+<p>Hmm well it looks like temperature and phosphorus both don’t do much…
+what if we try phosphorus the previous month??</p>
+<p><span class="math display">\[ phyto_t = \beta_0 + \beta_1*phyto_{t-1}
++ \beta_1*Temp_t + \beta_2*TP_{t-1} + \epsilon\]</span></p>
+<pre class="r"><code>#Covariates model with phosphorus at t-1
+ar1.co.prevp &lt;- lm(phyto.df$Cryptomonas[-1]~phyto.df$Cryptomonas[-nrow(phyto)]+phyto.df$Temp[-1]+phyto.df$TP[-nrow(phyto.df )])
+summary(ar1.co.prevp)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = phyto.df$Cryptomonas[-1] ~ phyto.df$Cryptomonas[-nrow(phyto)] + 
+##     phyto.df$Temp[-1] + phyto.df$TP[-nrow(phyto.df)])
+## 
+## Residuals:
+##      Min       1Q   Median       3Q      Max 
+## -2.67938 -0.32459  0.00896  0.32110  1.68448 
+## 
+## Coefficients:
+##                                    Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)                         0.41477    0.11274   3.679 0.000294 ***
+## phyto.df$Cryptomonas[-nrow(phyto)]  0.38627    0.05831   6.625 2.61e-10 ***
+## phyto.df$Temp[-1]                   0.01887    0.05723   0.330 0.741900    
+## phyto.df$TP[-nrow(phyto.df)]        0.47958    0.21798   2.200 0.028839 *  
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 0.631 on 221 degrees of freedom
+##   (2 observations deleted due to missingness)
+## Multiple R-squared:  0.2047, Adjusted R-squared:  0.1939 
+## F-statistic: 18.96 on 3 and 221 DF,  p-value: 5.586e-11</code></pre>
+<p>We’re starting to see different things but our R-squared is pretty
+low, so we’d want to keep workshopping but you’ve successfully ran an AR
+model!!</p>
+<p>What if we potentially add seasonality??</p>
+<p><span class="math display">\[ phyto_t = \beta_0 + \beta_1*phyto_{t-1}
++  \beta_2*phyto_{t-5} + \epsilon\]</span></p>
+<pre class="r"><code>#Find the matches of cryptomonas at t and t-1
+test1 &lt;- cbind(phyto.df[-1,], phyto.df[-nrow(phyto), c(&quot;Cryptomonas&quot;)]) 
+
+colnames(test1) &lt;- c(colnames(test1)[1:5], &quot;t min 1&quot;)
+
+#Find the matches of cryptomonas at t and t-5
+test2 &lt;- cbind(phyto.df[-(1:5),],
+               phyto.df[-((nrow(phyto)-4):nrow(phyto)), c(&quot;Cryptomonas&quot;)]
+               )
+colnames(test2) &lt;- c(colnames(test2)[1:5], &quot;t min 5&quot;)
+
+#Merge together
+complete &lt;- merge(test1, test2)
+
+complete &lt;- complete[order(complete$Year, complete$Month),] #Reorder our columns
+
+head(complete) #Make sure it&#39;s correct</code></pre>
+<pre><code>##   Year Month      Temp         TP Cryptomonas    t min 1    t min 5
+## 4 1976     6 0.4326375 -0.7237925  -0.1033656 -0.4445590         NA
+## 5 1976     7 1.0279650 -0.8227560  -0.8557211 -0.1033656         NA
+## 6 1976     8 1.3758838 -0.7305692  -0.6934779 -0.8557211 -2.9775611
+## 7 1976     9 1.1803694 -0.9452238  -0.7821795 -0.6934779 -2.1642828
+## 1 1976    10 0.9461218 -0.9689422   0.1254095 -0.7821795 -0.4445590
+## 2 1976    11 0.2305633 -0.9134002   0.4321054  0.1254095 -0.1033656</code></pre>
+<pre class="r"><code>#Run the regression
+ar1.co.season &lt;- lm(complete$Cryptomonas~complete$`t min 1`+ complete$`t min 5`)
+summary(ar1.co.season)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = complete$Cryptomonas ~ complete$`t min 1` + complete$`t min 5`)
+## 
+## Residuals:
+##      Min       1Q   Median       3Q      Max 
+## -2.62785 -0.32789  0.04721  0.33687  1.81677 
+## 
+## Coefficients:
+##                    Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)         0.16206    0.04913   3.299  0.00113 ** 
+## complete$`t min 1`  0.36154    0.06160   5.869 1.62e-08 ***
+## complete$`t min 5`  0.15294    0.05724   2.672  0.00811 ** 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 0.6265 on 218 degrees of freedom
+##   (2 observations deleted due to missingness)
+## Multiple R-squared:  0.1644, Adjusted R-squared:  0.1568 
+## F-statistic: 21.45 on 2 and 218 DF,  p-value: 3.135e-09</code></pre>
+<p>This is a rudimentary start, there’s more steps you would want to
+take if you think you have seasonal data. For example if you have
+seasonal data and your ACF plots are cyclical you can start using
+nonlinear models to incorporate the sinusoidal aspects. Time series
+decomposition is a way to look into noisy time series to try and see if
+you have seasonal data, or you can move into some more advanced AR
+models like ARIMA models.</p>
+</div>
+</div>
+<div id="more-advanced-time-series-models" class="section level1">
+<h1>More Advanced Time Series Models</h1>
+<p>So far we’ve talked about the building blocks of AR models, but there
+are a lot more ways to build on these models that you might have heard
+about. We’re not going to cover these today but wanted to highlight they
+exist and point you to some help pages if you want to learn more.</p>
+<div id="moving-average-models" class="section level3">
+<h3>Moving Average Models:</h3>
+<p>Instead of using the past values of the response variable in the
+regression it uses the past errors in the regression. Often used in
+forecasting! See more <a
+href="https://otexts.com/fpp2/MA.html">here</a>.</p>
+</div>
+<div id="arima-models" class="section level3">
+<h3>ARIMA Models:</h3>
+<p>ARIMA stands for Autoregressive Integrated Moving Average model. If
+you find your time series are non-stationary these models have a
+differencing step to account for it and seasonality. Read more about
+them <a
+href="https://otexts.com/fpp2/non-seasonal-arima.html">here</a>.</p>
+</div>
+<div id="state-space-models" class="section level3">
+<h3>State-Space Models:</h3>
+<p>State-space models (SSM) assume there is a ‘hidden’, or latent,
+unobservable state of what we are interested in that we make predictions
+based on a series of observations. This is often used in a hierarchical
+Bayesian framework and is a great way to deal with missing data. Let’s
+say you have a population of trees you’re monitoring from 2018-2023, but
+because of COVID19 you had to skip monitoring in 2020 and 2021. We
+assume the unobserved state is the true population each year, which
+comes from some sort of process that relates to the sampled data from
+the years we were able to monitor. Then we can create estimates for the
+true population for each year including 2020 and 2021, but this
+framework allows us to incorporate more uncertainty than if you simply
+try to interpolate over the missing years. Some more resources can be
+found in the lectures <a
+href="https://atsa-es.github.io/atsa/lectures.html">here</a> and <a
+href="https://kevin-kotze.gitlab.io/tsm/ts-5-note/">here</a>.</p>
+</div>
+</div>
+<div id="applications" class="section level1">
+<h1>Applications</h1>
+<p>AR models are widely used in ecology. They are also used frequently
+beyond ecology - for example, modelling stock risk in financial sectors.
+AR models are the bread and butter of forecasting. Increasingly as
+ecologists we are asked to make predictions about the future for
+management, whether it’s with fire cycles, population dynamics of
+sensitive species, growth of harmful algal blooms, or whatever else you
+can think of, AR models are typically the basis in order to make
+accurate predictions of the future.</p>
+</div>
+<div id="resources-used" class="section level1">
+<h1>Resources Used</h1>
+<p>A lot of this lecture was based on the “Applied Time Series Analysis
+in Fisheries and Environmental Science” course at the University of
+Washington. You can find their webpage <a
+href="https://atsa-es.github.io/atsa/index.html">here</a>. They have
+videos and PDF’s of their lectures!</p>
+<p>This <a href="https://otexts.com/fpp2/arima.html">online textbook</a>
+will also be one of the first things that pops up when googling time
+series and AR information.</p>
+<p>And if you’re interested in learning more about forecasting, Bob
+Shriver teaches “Ecological Forecasting” each spring semester - NRES
+776.</p>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

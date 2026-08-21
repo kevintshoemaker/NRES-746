@@ -1,0 +1,570 @@
+---
+title: "Autoregressive Time Series"
+author: "Jordan Zabrecky & Sage Ellis"
+date: "2023-12-05"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+set.seed(123)
+```
+
+## Topics for today
+
+Introductions to time series
+
+* Time Series Objects 
+* Autocorrelation
+* Correlograms
+
+Simple Time Series Models
+
+* White noise
+* Random walks
+* Autoregressive Models
+
+
+## Code for today
+
+You can find the R code for these lecture notes and other related exercises [here](ar_models_demo.R). 
+
+<br>
+
+# Introduction to Time Series
+
+### What is a time series?
+
+* A set of observations taken sequentially in time
+* Mathematically this is just a vector! 
+
+$$
+\{ x_1,x_2,x_3,\dots,x_n \} 
+$$
+
+### They are indexed by time which can be...
+
+* Equally spaced t = {1,2,3,4,5,6}
+
+* Equally spaced w/ missing value t = {1,2,3,4,6}
+
+* Unequally spaced t = {2,4,7,8,9} [Quite Common for Ecologists!]
+
+
+Our time interval can be anything — seconds, minutes, days, months, years, etc.
+
+
+
+## R has a (sometimes) very convenient way of dealing with time series objects!
+
+* `ts()` turns vectors into time series object
+* `ts.plot()` plots time series objects 
+
+Let's look at the arguments of `ts()`:
+
+```{r ts_arguments, eval = F, echo = TRUE}
+ts(data,
+   start, end,
+   frequency
+   )
+```
+
+* `data` = a vector of the response variable over time
+* `start` = the start of the time series
+* `end` = the end of the time series
+* `frequency` = the number of observations per unit time
+    * For annual series, `frequency = 1`
+    * For monthly series, `frequency = 12`
+
+## Let's look at some examples in R
+
+```{r Nile_ts_example, eval = TRUE, echo = TRUE}
+#Load the Nile dataset
+data(Nile) 
+
+class(Nile) #ts object already!
+
+#It's easy to turn a ts object back into a regular dataframe
+Nile <- data.frame(Y=as.matrix(Nile), date=time(Nile))
+
+#Look at the data
+head(Nile) 
+
+#Looks like our response variable is yearly!
+
+#Now let's turn it back into a timeseires... for the example
+
+#Turn it into a timeseries
+Nile.ts <- ts(data = Nile$Y, start = 1871, end = 1970, frequency = 1) #our data will be column 'Y', the discharge!And frequency is 1 since it is measured once a year! 
+
+ts.plot(Nile.ts) #ts.plot() plots time series objects
+
+```
+
+### What would happen if we used `ts.plot()` on a non-time series object?
+
+If you give R a variable as a vector, it will plot it as a time series. Though, note the year is no longer shown on the x-axis. So we would need to know what the time equivalent is for each increment of the x-axis. 
+```{r non_ts_ex, eval = TRUE, echo = TRUE}
+#Plot our original dataframe that wasn't a timeseries object
+ts.plot(Nile$Y) #remember we plot our response variable, Y
+```
+
+### What about a slightly harder date-time series?
+
+```{r beaver_ts_example, eval = TRUE, echo = TRUE}
+#Load the beavers dataset from R
+data(beavers) #We'll work with beaver1 :)
+
+#Look at the data
+head(beaver1)
+
+summary(beaver1) 
+
+#Subset out only the first day
+beaver1 <- beaver1[which(beaver1$day == 346),] #Take all the data on day 346
+
+#We'll be looking at beaver temperatures over time!
+
+#Turn it into a timeseries
+beaver1.ts <- ts(data = beaver1$temp) #our data will be the temperature. 
+
+ts.plot(beaver1.ts) #ts.plot plots time series objects
+
+```
+
+### What's wrong with this? 
+
+* Doesn't actually start at our starting time since we are only giving it a vector
+* But does show us temperature over time!!
+* What would you think the frequency would be if it is taken every 10 minutes from 8:40am to 11:50p,??
+
+Sometimes with some good bookeeping it's easier to just work with the vectors instead of time series objects :)
+
+# Correlation 
+
+So we’ve talked a ton about covariance or, more commonly correlation, which is the standardized version of covariance. And when we talk about covariance and correlation, we have typically talked about how two separate variables (e.g. x and y) are correlated.
+
+Covariance:
+
+$$
+cov_{x,y} =  \frac{\Sigma(x_i - \bar{x})(y_i - \bar{y})}{N-1}
+$$
+Correlation: 
+
+$$
+cor_{x,y} =  \frac{cov_{x,y}}{\sigma_x\sigma_y}
+$$
+Remember that correlation is bounded by -1 and 1
+$$
+-1 < cor_{x,y} < 1
+$$
+
+## Autocorrelation
+
+### So what is autocorrelation??
+
+Instead of the correlation between two variables $x$ and $y$, autocorrelation is the correlation between a variable $x$ at state (for us, this will be time!) $t$, $x_t$ compared to *itself* at a previous state, $x_{t+k}$. Where $k$ is our lag, which is how far out in time we compare x to its previous self. 
+
+Autocorrelation: 
+$$
+cor_{x_t,x_{t+k}} =  \frac{cov_{x_t,x_{t+k}}}{\sigma_{x_t}\sigma_{x_{t+k}}} 
+$$
+$$
+-1 < cor_{x_t,x_{t+k}} < 1
+$$
+<br>
+
+## ACF plots
+
+So when we want to visualize autocorrelation within our time series, we use an autocorrelation function (ACF). The ACF measures the correlation of a time series against a time-shifted version of itself. And if we use the acf function in R on our time series, it will show us a correlogram which is going to look something like this:
+
+### Correlogram
+Blank Outputs for the `ACF()` function
+
+```{r}
+par(mai=c(1,1,0,0), omi=c(0.1,0.1,0.1,0.1))
+plot(NA, NA, type="n", xlim=c(0,15), ylim=c(-1,1),
+     xlab="", xaxt="n", ylab="", las = 1)
+abline(h=0)
+axis(side=1, at=seq(15), labels=FALSE)
+axis(side=1, at=seq(0,15,5))
+mtext(expression(paste("Lag ", (italic(k)))), side=1, line=3, cex=1.2)
+mtext(expression(paste("ACF ", (italic(r[k])))), side=2, line=3, cex=1.2)
+```
+
+What is the ACF when lag = 0?
+
+```{r}
+par(mai=c(1,1,0,0), omi=c(0.1,0.1,0.1,0.1))
+plot(NA, NA, type="n", xlim=c(0,15), ylim=c(-1,1),
+     xlab="", xaxt="n", ylab="", las = 1)
+abline(h=0)
+axis(side=1, at=seq(15), labels=FALSE)
+axis(side=1, at=seq(0,15,5))
+mtext(expression(paste("Lag ", (italic(k)))), side=1, line=3, cex=1.2)
+mtext(expression(paste("ACF ", (italic(r[k])))), side=2, line=3, cex=1.2)
+
+lines(c(0,0), c(0,1), lwd=2, col="darkred")
+text(x=1, y =1, expression(italic(r)[0] == 1), col="darkred")
+```
+
+And finally we can add in 95% confidence intervals
+
+```{r}
+par(mai=c(1,1,0,0), omi=c(0.1,0.1,0.1,0.1))
+plot(NA, NA, type="n", xlim=c(0,15), ylim=c(-1,1),
+     xlab="", xaxt="n", ylab="", las = 1)
+abline(h=0)
+axis(side=1, at=seq(15), labels=FALSE)
+axis(side=1, at=seq(0,15,5))
+mtext(expression(paste("Lag ", (italic(k)))), side=1, line=3, cex=1.2)
+mtext(expression(paste("ACF ", (italic(r[k])))), side=2, line=3, cex=1.2)
+
+lines(c(0,0), c(0,1), lwd=2, col="darkred")
+text(x=1, y =1, expression(italic(r)[0] == 1), col="darkred")
+
+# add 95% CI's
+nn <- 30
+alpha <- 0.05
+ts.SD <- qnorm(1-alpha/2, 0, 1)/sqrt(nn)
+abline(h=-ts.SD, lty="dashed", col="blue")
+abline(h=ts.SD, lty="dashed", col="blue")
+```
+
+## Linear Trend ACF 
+
+So for a simple linear relationship, this is what the ACF plot looks like. As the lag increases, the ACF gets lower. However, throughout the 20 lags on the ACF plot, there is still significant autocorrelation.
+
+
+```{r}
+## length of ts
+nn <- 100
+
+## trend only
+par(mfrow=c(1,2), mai=c(1,1,0,0), omi=c(0.1,0.1,0.6,0.1))
+tt <- seq(nn)
+plot.ts(tt, ylab=expression(italic(x[t])))
+acf(tt)
+mtext("Linear trend {1,2,3,...,100}", outer=TRUE, line=1, cex=1.5)
+```
+<br>
+
+## Seasonal ACF 
+
+With sinusoidal data (imagine seasonal or night/day time series data), our ACF plot is also sinusoidal. And here we get periods of negative autocorrelation.
+
+```{r}
+par(mfrow=c(1,2), mai=c(1,1,0,0), omi=c(0.1,0.1,0.6,0.1))
+## compute the 2 predictor variables
+tt <- sin(2*pi*seq(nn)/12)
+plot.ts(tt, ylab=expression(italic(x[t])))
+acf(tt)
+mtext("Discrete (monthly) sine wave", outer=TRUE, line=1, cex=1.5)
+```
+
+## Seasonal & Linear Trend ACF
+
+If we combine the previous two plots, we see that again our ACF plot is also sinusoidal, but the intensity of the autocorrelation dampens with time as a result of the linear relationship.
+
+
+```{r}
+par(mfrow=c(1,2), mai=c(1,1,0,0), omi=c(0.1,0.1,0.6,0.1))
+## compute the 2 predictor variables
+tt <- sin(2*pi*seq(nn)/12) - seq(nn)/50
+plot.ts(tt, ylab=expression(italic(x[t])))
+acf(tt, lag.max=30)
+mtext("Linear trend + seasonal effect", outer=TRUE, line=1, cex=1.5)
+```
+
+
+## So let's look at some examples with real data in R
+
+We will use the `acf()` function in R
+
+Let's return to the beavers!
+
+```{r, eval = T, echo = T}
+ts.plot(beaver1$temp) #Plot the time series of beaver temperature again
+
+acf(beaver1$temp)
+```
+
+So when we are looking at the ACF of beaver 1, at lag 7, the ACF is no longer significant. So at lag 7 (which is 70 minutes as each lag here is 10 minutes), the temperature is no longer autocorrelated to the original.
+
+## PACF Plots
+
+Moving onto something a bit more complicated- the partial autocorrelation function (PACF). 
+
+But before we go into what the partial autocorrelation function is, we're going to go back to some foundational math. Don’t worry–it’s from elementary school.
+
+So if you remember the transitive property is where:
+
+If $A = B$ and $B = C$, then we know $A = C$. 
+
+We can take this a step further to say:
+
+If $x \propto y$ and $y \propto z$, then $x \propto z$
+
+And finally, in a case of time series we can start to think about partial autocorrelation:
+
+If $x_t \propto x_{t+1}$ and $x_{t+1} \propto x_{t+2}$, then $x_t \propto x_{t+2}$
+
+The PACF measures correlation between $x_t$ and $x_{t+k}$ with the linear dependence of the in-between time steps removed.
+
+
+## Let's look at some examples of PACF plots with real data
+
+We can do this in R using the `pacf()` function
+
+Once again, the beavers
+
+BUT FIRST A WARNING
+
+Our `acf()` plots always start at where Lag = 0, so they will always have a ACF = 1.
+
+Our `pacf()` plots always start at Lag = 1, so keep this in mind! 
+
+```{r ,echo = T, eval = T}
+pacf(beaver1$temp)
+```
+
+Remember our beaver had a lot of autocorrelation on our ACF plot. But when we plot the beaver’s temperature in a PACF plot, we see that without those interdependencies, the correlation between each 10 minute measurement, we only have autocorrelation one lag out.
+
+
+Let's look at some more examples, this time we'll look at phytoplankton in Lake Washington.
+
+```{r, phyto_apcf, eval = T, echo = T}
+library(MARSS) #load up the MARSS package which is home to the phytoplankton data
+
+data(lakeWAplankton) #read in the data
+
+#Data Management
+phyto <- lakeWAplanktonTrans #Give it a name to keep the original data structure in tact
+phyto <- phyto[phyto[,"Year"] > 1975,] #Subset to years greater than 1975 (missing data in early years)
+
+head(phyto) #Our data is in monthly increments now!
+
+#Turn into time series object
+phyto.ts <- ts(phyto, start = c(1976,1), freq = 12)
+
+#Plot the time series again
+par(mai=c(1,1,0,0), omi=c(0.1,0.1,0.1,0.1)) #changes margins
+plot.ts(phyto.ts[,"Cryptomonas"], ylab=expression(log(italic(Cryptomonus))), las = 1)
+
+#Plot the ACF
+acf(phyto.ts[,"Cryptomonas"], na.action = na.pass, las = 1)
+```
+
+
+One thing to point out--since we are looking at monthly time series our x-axis has changed to be decimals. So now a Lag = 1 is one year out, where a Lag = 0.5 is 6 months out. It is weird, but that is how these functions work.
+
+```{r, echo = T, eval = T}
+#Plot the PCF
+pacf(phyto.ts[,"Cryptomonas"], na.action = na.pass, las = 1)
+```
+
+
+
+# Simple Time Series Models
+
+Now that we understand time series and autocorrelation we can get into some simple time series models.
+
+## White Noise Models
+
+White noise models are time series objects where there are no significant autocorrelations.
+
+White Noise models have to be:
+
+1. Independent (no sig lags in ACF plots)
+2. Identically distributed with a mean of zero
+
+We often see Gaussian white noise models whereby $w_t \sim N(0, \sigma^2)$
+
+Let's take a look at a simulated time series from a White Noise model and it's associated ACF plot.
+
+```{r ex_gaussian_wn, fig.cap="$w_t \\sim \\text{N}(0,1)$"}
+par(mfrow = c(1,2), mai = c(1.5,0.9,0.1,0.1), omi = c(0,0,0,0))
+tt <- rnorm(100)
+plot.ts(tt, ylab = expression(italic(w[t])))
+acf(tt)
+```
+
+## Random Walk Models
+
+A time series $x_t$ is a random walk if:
+
+1. $x_t = x_{t-1} + w_t$
+2. $w_t$ is white noise
+
+So in a random walk the value of $x$ today, is the value of $x$ from *yesterday* plus some white noise.
+
+```{r ex_rw, fig.cap="$x_t = x_{t-1} + w_t; w_t \\sim \\text{N}(0,1)$"}
+par(mfrow = c(1,2), mai = c(1.5,0.9,0.1,0.1), omi = c(0,0,0,0))
+tt <- cumsum(rnorm(100))
+plot.ts(tt, ylab = expression(italic(x[t])))
+acf(tt)
+```
+
+## Autoregressive Models
+
+The $x_{t-1}$ component is what makes our random walk an autoregressive (AR) model. Autoregression simply means it is a regression of our response variable against itself at a previous state. 
+
+Autoregressive time series models are widely used in ecology to treat a current state of nature as a function of its past selves. 
+
+### AR(p) Models
+
+An autoregressive model of order p, or AR(p) is defined as:
+
+$x_t = x_{t-1} + x_{t-2} + … + x_{t-p} + w_t$ (or error)
+
+So our random walk in the previous example is an AR(1) model as it only relies on the response variable at one previous time step.
+
+$x_t = x_{t-1} + w_t$
+
+We can make it an AR(2) model if we include an additional term going two time steps back.
+
+$x_t = x_{t-1} + x_{t-2} + w_t$ 
+
+So on and so forth! 
+
+## Building Autoregressive Models
+
+Let's walk through an example building an autoregressive model with real data and also start thinking about how we would add on covariates.
+
+We'll work with the phytoplankton data in Lake Washington again.
+
+```{r, echo = T, eval = T}
+#Replot the time series
+plot.ts(phyto.ts[,"Cryptomonas"], ylab=expression(log(italic(Cryptomonus))), las = 1)
+```
+
+Let's start by looking at the ACF and PACF plots again
+
+```{r, echo = T, eval = T}
+par(mfrow = c(1,2))
+#Plot the ACF
+acf(phyto[,"Cryptomonas"], na.action = na.pass, las = 1)
+
+#Plot the PACF
+pacf(phyto[,"Cryptomonas"], na.action = na.pass, las = 1)
+```
+
+A lot to mull on here! But one thing is clear is that at least one month back there is correlation so let's start with an AR(1) model. 
+
+Let's test some covariates while we're at it as well.
+
+```{r, echo = T, eval = T}
+colnames(phyto)
+```
+What might be influencing phytoplanktons? Let's try using temperature and TP (total phosphorus) (phytoplankton like phosphorus). 
+
+
+We can start building our more complex models by just thinking about basic regressions!
+
+The covariates can also be included at previous states, but we think that the current months temperature and TP will be more influential than the previous months.
+
+$$ phyto_t = \beta_0 + \beta_1*phyto_{t-1} + \beta_1*Temp_t + \beta_2*TP_t + \epsilon$$
+
+And now let's transform this into actual code. We'll use a frequentist approach for now.
+
+Our first step is we have to index our previous states properly
+
+```{r, echo = T, eval = T}
+class(phyto) #not a ts object and that is ok!! 
+
+#Let's data manage to make things more readable
+
+#Pick out the columns we're interested in and turn it into a dataframe so we can call them nicely
+phyto.df <- as.data.frame(phyto[,c("Year", "Month", "Temp", "TP", "Cryptomonas")])
+
+
+#Sometimes working with previous times requires clever indexing here let's test out how we can do that 
+
+
+#proof of concept that indexing is ok on our full dataset
+test <- cbind(phyto.df $Cryptomonas[-1], phyto.df $Cryptomonas[-nrow(phyto)]) #offsets the data so t and t-1 line up
+colnames(test) <- c("t", "t minus 1")
+
+head(test)
+
+#Now lets test some models!!
+
+#No covariates model
+ar1 <- lm(phyto.df $Cryptomonas[-1]~phyto.df $Cryptomonas[-nrow(phyto.df )])
+summary(ar1)
+
+#Covariates model
+ar1.co <- lm(phyto.df $Cryptomonas[-1]~phyto.df $Cryptomonas[-nrow(phyto.df )]+phyto.df $Temp[-1]+phyto.df $TP[-1])
+summary(ar1.co)
+
+```
+
+Hmm well it looks like temperature and phosphorus both don't do much... what if we try phosphorus the previous month??
+
+$$ phyto_t = \beta_0 + \beta_1*phyto_{t-1} + \beta_1*Temp_t + \beta_2*TP_{t-1} + \epsilon$$
+
+```{r, echo = T, eval = T}
+#Covariates model with phosphorus at t-1
+ar1.co.prevp <- lm(phyto.df$Cryptomonas[-1]~phyto.df$Cryptomonas[-nrow(phyto)]+phyto.df$Temp[-1]+phyto.df$TP[-nrow(phyto.df )])
+summary(ar1.co.prevp)
+```
+
+We're starting to see different things but our R-squared is pretty low, so we'd want to keep workshopping but you've successfully ran an AR model!!
+
+What if we potentially add seasonality??
+
+$$ phyto_t = \beta_0 + \beta_1*phyto_{t-1} +  \beta_2*phyto_{t-5} + \epsilon$$
+
+```{r, echo = T, eval = T}
+#Find the matches of cryptomonas at t and t-1
+test1 <- cbind(phyto.df[-1,], phyto.df[-nrow(phyto), c("Cryptomonas")]) 
+
+colnames(test1) <- c(colnames(test1)[1:5], "t min 1")
+
+#Find the matches of cryptomonas at t and t-5
+test2 <- cbind(phyto.df[-(1:5),],
+               phyto.df[-((nrow(phyto)-4):nrow(phyto)), c("Cryptomonas")]
+               )
+colnames(test2) <- c(colnames(test2)[1:5], "t min 5")
+
+#Merge together
+complete <- merge(test1, test2)
+
+complete <- complete[order(complete$Year, complete$Month),] #Reorder our columns
+
+head(complete) #Make sure it's correct
+
+#Run the regression
+ar1.co.season <- lm(complete$Cryptomonas~complete$`t min 1`+ complete$`t min 5`)
+summary(ar1.co.season)
+```
+This is a rudimentary start, there's more steps you would want to take if you think you have seasonal data. For example if you have seasonal data and your ACF plots are cyclical you can start using nonlinear models to incorporate the sinusoidal aspects. Time series decomposition is a way to look into noisy time series to try and see if you have seasonal data, or you can move into some more advanced AR models like ARIMA models. 
+
+# More Advanced Time Series Models
+
+So far we've talked about the building blocks of AR models, but there are a lot more ways to build on these models that you might have heard about. We're not going to cover these today but wanted to highlight they exist and point you to some help pages if you want to learn more.
+
+### Moving Average Models: 
+
+Instead of using the past values of the response variable in the regression it uses the past errors in the regression. Often used in forecasting! See more [here](https://otexts.com/fpp2/MA.html).
+
+### ARIMA Models: 
+
+ARIMA stands for Autoregressive Integrated Moving Average model. If you find your time series are non-stationary these models have a differencing step to account for it and seasonality. Read more about them [here](https://otexts.com/fpp2/non-seasonal-arima.html).
+
+### State-Space Models:
+
+State-space models (SSM) assume there is a 'hidden', or latent, unobservable state of what we are interested in that we make predictions based on a series of observations. This is often used in a hierarchical Bayesian framework and is a great way to deal with missing data. Let's say you have a population of trees you're monitoring from 2018-2023, but because of COVID19 you had to skip monitoring in 2020 and 2021. We assume the unobserved state is the true population each year, which comes from some sort of process that relates to the sampled data from the years we were able to monitor. Then we can create estimates for the true population for each year including 2020 and 2021, but this framework allows us to incorporate more uncertainty than if you simply try to interpolate over the missing years. Some more resources can be found in the lectures [here](https://atsa-es.github.io/atsa/lectures.html) and [here](https://kevin-kotze.gitlab.io/tsm/ts-5-note/).
+
+# Applications
+
+AR models are widely used in ecology. They are also used frequently beyond ecology - for example, modelling stock risk in financial sectors. AR models are the bread and butter of forecasting. Increasingly as ecologists we are asked to make predictions about the future for management, whether it's with fire cycles, population dynamics of sensitive species, growth of harmful algal blooms, or whatever else you can think of, AR models are typically the basis in order to make accurate predictions of the future. 
+
+# Resources Used
+A lot of this lecture was based on the "Applied Time Series Analysis in Fisheries and Environmental Science" course at the University of Washington. You can find their webpage [here](https://atsa-es.github.io/atsa/index.html). They have videos and PDF's of their lectures! 
+
+This [online textbook](https://otexts.com/fpp2/arima.html) will also be one of the first things that pops up when googling time series and AR information. 
+
+And if you're interested in learning more about forecasting, Bob Shriver teaches "Ecological Forecasting" each spring semester - NRES 776.
+

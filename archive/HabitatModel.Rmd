@@ -1,0 +1,366 @@
+---
+title: "Using Random Forest in Ecology"
+author: "Marcus Blum, Jerrod Merrel, and Jason Gundlach"
+date: "December 9, 2018"
+output: html_document
+---
+                                     # CREATING A HABITAT MAP USING RANDOM FOREST
+                        
+                                             # Load Packages
+```{r}
+
+#Load Packages
+require("raster")
+require("rgdal")
+require("sp")
+require("maptools")
+require("randomForest")
+require("caret")
+require("e1071")
+```
+
+                                            # INPUT FILES
+```{R}
+# Import the raster and vector files
+
+setwd("D://HabitatModelExample//") 
+
+# Import the GeoTiff as a "brick" (an R multiband raster file):
+lm_highrez_brick <- brick("Mosaic.tif")
+#Rename the band names based on their spectra:
+names(lm_highrez_brick) <- c("R","G","B","NIR")
+
+# Import the training shapefile:
+lm_highrez_training_points <- 
+  readOGR(dsn=".",layer="LM_Training")
+
+
+# Repeat the process for the testing dataset:
+lm_highrez_testing_points <- 
+  readOGR(dsn=".",layer="LM_Test")
+
+# Check out the files
+lm_highrez_brick
+lm_highrez_training_points
+lm_highrez_testing_points
+
+# Look at the attibute table of the training data:
+#as.data.frame(lm_highrez_testing_points)
+
+
+# Plot Data:
+plotRGB(lm_highrez_brick)
+plot(lm_highrez_training_points,add=TRUE,col="yellow")
+plot(lm_highrez_testing_points,add=TRUE,col="orange")
+
+```
+
+
+                                           # PREPARE LOCATIONS FOR RF
+                                                         
+                                                         
+```{R}      
+# Extract the multispectral data from under 
+#	each of the training and testing datasets, and merge it the
+#	extracted spectra with the point data.
+
+lm_highrez_training_points_spectral <- extract(lm_highrez_brick,
+                                                  lm_highrez_training_points,df=TRUE)
+lm_highrez_training_points_w_spectra <- 
+  spCbind(lm_highrez_training_points,
+          lm_highrez_training_points_spectral)
+
+# Look at the new attribute table:
+#as.data.frame(lm_highrez_training_points_w_spectra)
+
+# Now we have 4 new attributes.... NIR, Red, Green, and Blue
+
+# Do the same thing with the testing data:
+lm_highrez_testing_points_spectral <- extract(lm_highrez_brick,
+                                                 lm_highrez_testing_points,df=TRUE)
+lm_highrez_testing_points_w_spectra <- 
+  spCbind(lm_highrez_testing_points,
+          lm_highrez_testing_points_spectral)
+
+
+```
+                                         
+                                        # RUN RANDOM FOREST AND EVALUATE MODEL
+                                         
+```{R}
+     
+# Create a randomForest model:
+
+
+lm_randomForest <- randomForest(ROI_NAME ~ NIR + R + G + B,
+                                   data=lm_highrez_training_points_w_spectra,
+                                   importance=TRUE) 
+# set  importance=TRUE to check for variable importance
+# This will tell you how important each variable is to classification.
+lm_randomForest
+importance(lm_randomForest)
+varImpPlot(lm_randomForest)
+
+# Before we make a map, we want to run an accuracy assessment
+#	by applying it to an independent dataset:
+
+lm_randomForest_test <- 
+  predict(lm_randomForest,
+          lm_highrez_testing_points_w_spectra)
+
+# Look at the output:
+#lm_randomForest_test
+
+# Now calculate the confusionMatrix and accuracy statistics:
+lm_randomForest_confusionMatrix <- 
+  confusionMatrix(
+    data=lm_randomForest_test,
+    reference=lm_highrez_testing_points_w_spectra$ROI_NAME)
+
+lm_randomForest_confusionMatrix
+lm_randomForest_confusionMatrix$table
+# Notice the accuracy "Accuracy" (overall accuracy) and kappa.
+
+```  
+
+                                           # CREATE HABITAT MAP!!!
+                                              
+```{R}
+# Now it's time to create the raster:
+lm_habitat_raster <- predict(lm_highrez_brick,
+                             lm_randomForest)
+plot(lm_habitat_raster)
+
+# Let's export this to look at it in QGIS:
+writeRaster(lm_habitat_raster,filename="myclassification.tif",format="GTiff")
+```
+
+
+
+                          # USING RANDOM FOREST FOR RESOURCE SELECTION FUNCTIONS
+                                             
+                                            LET'S BEGIN!!!      
+```{R}
+## Read in dataset
+
+df <- read.csv("ClassExample_Fall2.csv")
+
+head(df)
+
+
+#Define catagorical variables as factors
+
+df$used=factor(df$used)
+df$veg_class=factor(df$veg_class)
+
+############### NAME VARIABLES ############
+
+predictorNames <- c(  "Cosine Aspect", 
+                      "Sin Aspect",
+                      "Elevation",
+                      "Slope",
+                      "Vegetation Class"
+)
+
+pred.names=c(  "cos_aspect",
+               "sin_aspect",
+               "elevation",
+               "slope",
+               "veg_class"
+               
+)
+
+
+#Check Names
+cbind(pred.names,predictorNames)
+
+
+#### Define response variable
+
+response="used"   
+
+#### Define formula (response ~ predictors)
+
+formula1 <- as.formula(paste(response,"~",paste(pred.names,collapse="+")))
+
+#### Read in Kevin's kickass script from github
+
+source("RF_Extensions.R")   # change to your script locations
+
+
+```
+
+
+                                            # CONDITIONAL INFERENCE TREE
+                                              
+```{R}
+
+###CART Analysis#### Visualize what one tree in the "forest" looks like
+fall_stopover <- ctree(formula=formula1, data=df, controls = ctree_control(mincriterion = 0.99,maxdepth = 4))
+
+plot(fall_stopover)
+
+summary(fall_stopover)
+
+#changing the "maxdepth" changes how in depth you want to go in the breakdown of your data
+#Here we will change to 3 and then to 5 
+
+fall_stopover3 <- ctree(formula=formula1, data=df, controls = ctree_control(mincriterion = 0.99,maxdepth = 3))
+plot(fall_stopover3) #A little cleaner than 4
+
+fall_stopover5 <- ctree(formula=formula1, data=df, controls = ctree_control(mincriterion = 0.99,maxdepth = 5))
+plot(fall_stopover5) #Gets pretty messy!
+
+
+
+```
+
+                                            #  RUN YOUR RANDOM FOREST
+                                            Obtain Variable Importance
+                                            
+```{R}
+
+cforestControl <- cforest_unbiased(ntree=500,mtry=3)   ##mtry=how many covariates sampled each time want it at half or just under half the # of covariates we have (5)
+cforestControl@fraction <- 0.20 #The amount of data each tree is built with. Too much data and you can overfit.  This requires lots of testing to find the right percentage
+
+rf_model1 <- cforest(formula1, controls=cforestControl, data=df)
+
+# Get the predictor importance values
+model1_importance<-varimp((rf_model1), conditional= FALSE)
+
+graphics.off()
+lengthndx <- length(model1_importance)
+
+par(mai=c(1.4,3.4,0.6,0.9))
+col <- rainbow(lengthndx, start = 3/6, end = 4/6)      
+barplot(height=model1_importance[order(model1_importance,decreasing = FALSE)],
+        horiz=T,las=1,main="Order of Importance of Predictor Variables",
+        xlab="Index of overall importance",col=col,           
+        names.arg=predictorNames[match(names(model1_importance),pred.names)][order(model1_importance,decreasing = FALSE)])
+
+
+```
+
+                                          #  CREATE UNIVARIATE PLOTS FOR VARIABLES
+                                              
+```{R}
+
+##### Make univariate plots of the relationships- plot all relationships at once
+
+RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=df,   
+                   predictors=pred.names, labels=predictorNames, allpredictors=pred.names,plot.layout=c(3,3))
+
+
+##### Make univariate plots of the relationships- plot one relationship at a time
+
+RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=df, 
+                   predictors=pred.names[1], labels=predictorNames[1], allpredictors=pred.names,plot.layout=c(1,1))
+
+RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=df, 
+                   predictors=pred.names[2], labels=predictorNames[2], allpredictors=pred.names,plot.layout=c(1,1))
+
+RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=df, 
+                   predictors=pred.names[3], labels=predictorNames[3], allpredictors=pred.names,plot.layout=c(1,1))
+
+RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=df, 
+                   predictors=pred.names[4], labels=predictorNames[4], allpredictors=pred.names,plot.layout=c(1,1))
+
+RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=df, 
+                   predictors=pred.names[5], labels=predictorNames[5], allpredictors=pred.names,plot.layout=c(1,1))
+
+# Return the data for plotting
+PlotData <- RF_UnivariatePlots(object=rf_model1, varimp=model1_importance, data=df,  
+                               predictors=pred.names, labels=predictorNames, allpredictors=pred.names, plot.layout=c(1,1),plot=F)
+
+```
+
+
+                                          # FIND INTERACTIONS IN MODEL
+                                               
+```{R}
+
+# NOTE: this one can take a long time   ...
+rf_findint <- RF_FindInteractions(object=rf_model1,data=df,predictors=pred.names)
+
+# Display and plot out interactions...
+rf_findint$interactions1
+
+rf_findint$rank.list1
+
+### Plot interaction strength
+graphics.off()
+lengthndx <- min(9,nrow(rf_findint$rank.list1))
+par(mai=c(0.95,3.1,0.6,0.4))
+
+barplot(height=(rf_findint$rank.list1[c(1:min(9,nrow(rf_findint$rank.list1))),5][c(lengthndx:1)]),
+        horiz=T,las=1,main=paste(response, sep=""),
+        xlab="Index of interaction strength",col=brewer.pal(lengthndx,"Blues"),           
+        names.arg=paste("",predictorNames[match(rf_findint$rank.list1[,2][c(lengthndx:1)],pred.names)],"\n",predictorNames[match(rf_findint$rank.list1[,4][c(lengthndx:1)],pred.names)],sep="") )
+
+graphics.off()
+
+
+rf_findint$rank.list1
+
+
+
+fam="binomial"
+graphics.off()
+
+#### Visualize the interactions
+
+RF_InteractionPlots(x=2,y=1,object=rf_model1,data=df,predictors=pred.names,family=fam)
+inter2 <- recordPlot()
+
+dev.off()
+graphics.off()
+
+```
+
+
+                                           # CROSS VALIDATION
+
+
+unique(df$altid)
+
+n.folds <- 5
+df$altid
+uniquedeer <- as.character(unique(df$altid))
+folds_df <- data.frame(
+  deer = uniquedeer,
+  fold = c(rep(1:n.folds,each=5),1)
+)
+
+foldVector <- folds_df$fold[match(as.character(df$altid),folds_df$deer)]
+
+counter = 1
+CVprediction <- numeric(nrow(df))
+CVobserved <- numeric(nrow(df))
+realprediction <- numeric(nrow(df))
+realdata <- numeric(nrow(df))
+
+predictCols <- which(names(df)%in%pred.names)
+
+data.controls = cforest_unbiased(ntree=50)
+counter=1
+response="used"    #"resp_factor"
+
+#test <- numeric(nrow(df))
+
+i=1
+for(i in 1:n.folds){
+  model <- cforest(formula1, data = df[which(foldVector!=i),], controls=cforestControl) 
+  predict_CV  <- predict(model,newdata=df[which(foldVector==i),],type="prob") 
+  predict_real  <-  predict(rf_model1,newdata=df[which(foldVector==i),],type="prob")
+  REAL <- df$used[which(foldVector==i)]
+  j=1
+  for(j in 1:length(which(foldVector==i))){
+    CVprediction[counter] <- as.numeric(predict_CV[[j]][,2])
+    CVobserved[counter] <-  as.numeric(REAL[j])      
+    realprediction[counter] <- as.numeric(predict_real[[j]][,2])   
+    realdata[counter] <- as.numeric(REAL[j])         
+    counter = counter + 1  
+  }
+}
+
+```

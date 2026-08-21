@@ -1,0 +1,130 @@
+---
+title: "Resource Selection Using GLMER"
+author: "Nathan Jackson & Levi Heffelfinger"
+date: "November 28, 2016"
+output: 
+  html_document: 
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+#Generalized Linear Mixed Effects Regression
+
+###Before you begin
+
+-Install the lme4 package
+
+-Download the dataset for this exercise and save it to your working directory: final_winter_modeldata2.csv
+ 
+###Read the dataset into R
+  
+```{r echo=TRUE}
+winter_deer_data1=read.csv('final_winter_modeldata2.csv')  # read data file into R
+```
+
+These data were obtained by extracting values for each GPS collar location from GIS layers for the area these deer were occupying.  Random points were created and had values extracted to classify what was "available" to the deer.  The data has a "used" column that is coded 1 or 0 for used or unused respectively. Deer ID is "altid".   
+
+
+###Convert catagorical variables to factors
+
+Catgorical variables must be converted to factors to be recognized properly in R for this exercise
+
+```{r echo=TRUE}
+winter_deer_data1$altid=factor(winter_deer_data1$altid) #convert catagorical variable to a vector of factor variables
+winter_deer_data1$veg_class=factor(winter_deer_data1$veg_class) #convert catagorical variable to a vector of factor variables
+```
+
+ 
+###Standardize all continuous variables
+
+To avoid convergence issues related to scaling, it is important to standardize continuous variables
+
+```{r echo=TRUE}
+stand_dist_to_water=(winter_deer_data1$dist_to_water-mean(winter_deer_data1$dist_to_water))/sd(winter_deer_data1$dist_to_water) #standardize continuous variable
+stand_cos_aspect=(winter_deer_data1$cos_aspect-mean(winter_deer_data1$cos_aspect))/sd(winter_deer_data1$cos_aspect) #standardize continuous variable
+stand_sin_aspect=(winter_deer_data1$sin_aspect-mean(winter_deer_data1$sin_aspect))/sd(winter_deer_data1$sin_aspect) #standardize continuous variable
+stand_elevation=(winter_deer_data1$elevation-mean(winter_deer_data1$elevation))/sd(winter_deer_data1$elevation) #standardize continuous variable
+stand_slope=(winter_deer_data1$slope-mean(winter_deer_data1$slope))/sd(winter_deer_data1$slope) #standardize continuous variable
+``` 
+
+####Load the lme4 package
+
+```{r echo=TRUE}
+library(lme4) #load lme4 package
+```
+
+##Build a general mixed-effect additive model with random intercept
+
+Here we build a basic generalized linear mixed-effects model. We use the glmer function and reference the used column from our data to compare used vs available points. This is an additive model that accounts for random effects allowing for random slope by individual. Note: "altid" is the identification number for each deer. The values associated with each GPS location have the deer ID value.  This is treated as the "group" for mixed-effects in this example.
+
+
+```{r echo=TRUE}
+# generalized linear mixed effect additive model with random intercept for individual
+winter_pequop_model=glmer(used~stand_dist_to_water+stand_cos_aspect
+                          +stand_elevation+stand_slope+veg_class+
+                          (1|altid),family="binomial",data=winter_deer_data1,
+                          nAGQ = 1, na.action="na.fail")
+summary(winter_pequop_model)
+```
+
+The summary will give the coefficients for each parameter evaluated in the model.  Positive coefficients mean selection for that variable with the exception of "distance to" variables" which are opposite.  The summary also provides an AIC value to be used for comparison to models that will be built in the below excercises. Keep an eye on the standard error and significance values as you build models for anything that looks out of the ordinary.
+
+
+
+***Note: in the following exercises it is important to understand that convergence issues may occur as models become too complex or if there is large variation in your group effect. Think about the relationships that may exist between covariates and omit those that may be less important after evaluating significance from several models. 
+
+##Exercise 1
+
+###Building more complex models
+
+Explore building more complex models. Generalized linear mixed effect models are flexible allowing the user to specify random slope, random intercept and other random effects. Be wary in blindly building models without biological reasoning. Below is a list of coding options for random effects code modifications:
+
+(1|group) = random group intercept 
+
+(x|group) = random slope of x within group with correlated intercept 
+
+(0+x|group) = random slope of x within group: no variation in intercept 
+
+(1|group) + (0+x|group) = uncorrelated random intercept and random slope within group 
+
+(1|site/block) = intercept varying among sites and among blocks within sites (nested random effects) 
+
+site+(1|site:block) = fixed effect of sites plus random variation in intercept among blocks within sites 
+
+(x|site/block) = slope and intercept varying among sites and among blocks within sites 
+
+(x*site+(x|site:block)) = fixed effect variation of slope and intercept varying among sites and random variation of slope and                               intercept among blocks within sites 
+
+(1|group1)+(1|group2) = intercept varying among crossed random effects (e.g. site, year)
+
+####Example of a model allowing coefficient for elevation to vary among each altid (deer)
+
+```{r echo=TRUE}
+winter_pequop_model2=glmer(used~stand_dist_to_water+stand_cos_aspect
+                          +(stand_elevation|altid)+stand_slope+veg_class,
+                          family="binomial",data=winter_deer_data1,
+                          nAGQ = 1, na.action="na.fail")
+summary(winter_pequop_model2) 
+```
+
+
+##Exercise 2
+
+###Explore interactions between covariates
+
+Interactions within the models are specified using the * symbol. Think about biological interactions that may occur between the variables that have been measured.
+
+
+##Exercise 3
+
+###Explore quadratic relationships
+
+Try exploring quadratic relationships for covariates. Covariates may not always have a linear relationship with resource selection. 
+
+***Note: a quadratic relationship can be indicated by I(covariate^2)
+

@@ -1,0 +1,164 @@
+---
+title: "Lab 2, Act 2"
+subtitle: "Could a different function fit the tadpole data better?"
+author: "NRES 746 -- name: ____________________    group: ______"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# Data ---------------------------------
+frogs <- read.csv("../data/ReedfrogSizepred.csv")
+
+# Act 1's grid-search-optimized Ricker ---------------------------------
+a_rk <- 1; b_rk <- 0.15
+ricker <- function(x, a, b) a * x * exp(-b * x)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+```
+
+## Picking up where we left off
+
+In Act 1 you built a grid search and found the parameters that minimize SSR for the 2-parameter Ricker function: $a=1$, $b=0.15$, SSR $=6.74$ -- better than any single hand guess. But look closely at the curve below: it never really rises to meet the peak at 12 mm. With only five aggregated data points, three of them at or near zero, minimizing raw SSR pulls the curve toward those low points rather than chasing the one high one -- a real limitation of both the Ricker shape and of SSR as a fitting criterion (one we'll revisit once we get to likelihood). That's a good reason to ask whether Ricker is even the right family to begin with.
+
+```{r recap-curve, fig.height=3.2, fig.width=5.5}
+set.seed(1)
+x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
+     xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
+     pch = 21, bg = "grey70", cex = 1.4)
+curve(ricker(x, a_rk, b_rk), from = 5, to = 40, lwd = 2, col = "steelblue", add = TRUE)
+grid()
+legend("topright", legend = "Act 1 best-fit Ricker (SSR = 6.74)", col = "steelblue", lwd = 2, bty = "n")
+```
+
+But finding the best Ricker doesn't tell us whether Ricker is even the right *family* of function to begin with. Today we'll meet two more candidates from the bestiary and compare them against Ricker's best possible fit -- not against a guess.
+
+**Before you do anything else: close your laptop and put it away.** Part 1 and the group check-in that follows are pen-and-paper only -- no exceptions. You'll get clear instructions later in this handout for when it's time to open R.
+
+## Part 1: Two new candidates (individual, ~15 min)
+
+**Candidate 1: a flexible Ricker.** Generalize the Ricker function by adding a shape exponent $c$, and reparameterize so the peak location $p$ is a parameter you can set directly (just like you might want to specify "the peak is at 12 mm" instead of "b = 0.15"):
+
+$$y = a\,x^{c}\,e^{-cx/p}$$
+
+**1a.** Check that this really is a generalization. If you set $c=1$, what does this formula reduce to, and how does $p$ relate to Ricker's parameter $b$?
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+**1b.** Find $dy/dx$ for the flexible Ricker (product rule together with the chain rule for the exponential term -- same tools as Lab 1's Ricker derivative), and show that the critical point occurs at $x=p$, confirming $p$ really is the peak location.
+
+*Reminders:* $\dfrac{d}{dx}(uv) = u'v + uv'$ &nbsp;&nbsp;&nbsp;&nbsp; $\dfrac{d}{dx}\,e^{g(x)} = g'(x)\,e^{g(x)}$ &nbsp;&nbsp;&nbsp;&nbsp; $\dfrac{d}{dx}\,x^c = c\,x^{c-1}$
+
+Show your work:
+
+```{r fig.height=0.3*9}
+blank_space()
+```
+
+**Candidate 2: Holling type IV.** This one comes from the *rational-function* branch of the bestiary rather than the exponential branch -- originally used for predator functional responses, but we're borrowing it here purely for its shape:
+
+$$y = \frac{a\,x^2}{b + cx + x^2}, \qquad c < 0$$
+
+Its peak occurs at $x^* = -2b/c$.
+
+*A heads-up if you go looking this up on your own:* some other sources define "Holling type IV" with a plain $x$ in the numerator instead of $x^2$. That version behaves differently at large $x$ -- it declines all the way to zero instead of leveling off at $a$. We're using Bolker's version here, matching your assigned reading.
+
+**1c.** For $b=115.09$, $c=-21.49$, compute the peak location $x^*$:
+
+$x^* =$ ________________________
+
+Now use the same "throw out the lower-order terms" trick from Monday's lecture to figure out what this function does as $x\to\infty$ (hint: compare the highest powers of $x$ in the numerator and denominator). Is the answer the same as what happens to the Ricker family as $x\to\infty$?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+**1d. Write the R functions.** Define both candidates as R functions below, following the same pattern as the `ricker` function (`x` first, then parameters). You're writing this by hand on paper, so it doesn't need to run yet -- just get the structure and syntax right.
+
+```
+flex_ricker <- function(x, a, p, c){
+  ___________________________________________
+}
+
+holling4 <- function(x, a, b, c){
+  ___________________________________________
+}
+```
+
+## Group check-in: finalize your functions (group, ~10 min)
+
+Compare your answers to 1a-1d with your group, and agree on a single, correct version of both functions -- this is the version you'll actually type in once laptops are open, so it needs to be right before you move on.
+
+As a group, also make a prediction: of the three candidates now on the table (Act 1's best-fit Ricker, flexible Ricker, Holling type IV), which do you expect to fit the tadpole data best, and why? You'll check this prediction shortly.
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+---
+
+**Laptops open now.** Open R and type up your group's finalized functions. You already worked out the structure and syntax by hand -- this is just getting it running, so AI tools, `?help`, and a web search are all fair game for resolving any hiccups.
+
+---
+
+## Part 2: Implement and compare (laptops, ~15-20 min)
+
+**2a.** Type up `flex_ricker` and `holling4` in R from what your group wrote in 1d. These parameter values are the actual SSR-minimizing fits for each family -- found the same way you found Act 1's Ricker optimum, just with an extra parameter or two: $a=3.68\times10^{-19}$, $p=12.52$, $c=28.72$ for the flexible Ricker, and $a=0.0329$, $b=115.09$, $c=-21.49$ for Holling type IV. Plot all three candidates (Act 1's best-fit Ricker, flexible Ricker, Holling IV) overlaid on the tadpole data with `curve(..., add = TRUE)`, the same way you plotted the recap curve above. (If one of these looks a little wild once it's plotted, that's not a bug in your code!)
+
+**2b.** Compute the sum of squared residuals (SSR) for all three candidates at the five tank sizes (9, 12, 21, 25, 37 mm) -- your laptop's already open, so use R, a calculator app, Excel, whatever's fastest, rather than doing it by hand like Lab 1 Act 3. Record your results:
+
+| Candidate | SSR |
+|:---|:---:|
+| Ricker ($a=1$, $b=0.15$, Act 1's best fit) | ________ |
+| Flexible Ricker | ________ |
+| Holling type IV | ________ |
+
+**2c.** Which candidate looks best by eye, and which has the lowest SSR? Did this match your group's prediction?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+**2d.** All three curves above are truly optimized this time -- nobody guessed any of these parameter values; each is the true SSR-minimizing fit for its family. And yet the lowest-SSR curve is probably not the one you'd point to as the best *model*. What's going on? (Hint: think about how many data points you have -- five, aggregated tank means -- versus how many free parameters each family gets to work with.) Does the lowest SSR always mean the best model? What would you want to check before trusting a model that fits its own training data almost perfectly?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+For Act 3, we're going back to the plain Ricker -- not because it won this comparison outright, but because a 2-parameter model is easier to reason about (and to bootstrap) than one flexible enough to bend itself into whatever shape the data demands. We'll ask a different question: how much should we actually trust the specific $(a,b)$ Act 1 found?
+
+---
+
+## Group discussion and revision (~5 min)
+
+Compare your answers with your group -- especially your SSR values and your reasoning in 2d. Feel free to revise any of your answers above based on the discussion (it's fine to cross out and rewrite -- I like to see your thinking evolve).
+
+Please take a minute to record any changes you made and any new insights gained during the group discussion. You can also use this space to reflect on any areas of confusion ("muddiest points") or topics you want to review or dust off going forward.
+
+```{r fig.height=0.3*6}
+blank_lines(6)
+```

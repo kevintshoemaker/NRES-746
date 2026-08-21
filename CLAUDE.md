@@ -37,6 +37,26 @@ When crafting WOD or lab handouts, check this doc for relevant ideas and
 incorporate them where they fit, rather than relying only on this file's
 static conventions.
 
+## Working with the Bolker PDF
+
+`bolker_book/emdbook.pdf` has front matter that isn't counted in the
+book's own page numbers: the PDF's internal page index runs **8 pages
+ahead** of the printed page number (e.g. printed page 124 is PDF page
+132). When pulling a page range with the `pages` parameter, account for
+this offset or you'll land on the wrong content -- check the printed
+page number in the corner of the returned image before trusting it.
+
+When pulling a bestiary formula from Bolker for course materials,
+double-check it against the wider literature if it looks ecologically
+surprising. Bolker's own parameterizations occasionally diverge from
+the more common version used elsewhere under the same name (e.g. his
+Holling type IV uses $x^2$ in the numerator, while the more widely-cited
+Andrews/Monod-Haldane version most other sources call "Holling type IV"
+uses a plain $x$ and behaves differently as $x \to \infty$). Bolker's
+version isn't wrong -- it's what's actually in the assigned reading --
+but it's worth flagging the discrepancy to students rather than
+presenting it as the only definition in circulation.
+
 ## About me
 
 - I primarily code in R. I have some experience with Python, Java, Delphi,
@@ -51,7 +71,10 @@ static conventions.
   throughout this file) instead of an em-dash. Also avoid other common AI
   writing tics: "it's not just X, it's Y" constructions, rule-of-three
   rhetorical lists, throat-clearing openers ("It's worth noting that...",
-  "Furthermore,"), and excessive hedging ("arguably", "in many ways").
+  "Furthermore,"), excessive hedging ("arguably", "in many ways"), and
+  overused intensifiers like "exactly" and "genuinely" -- cut them or
+  replace with a plainer word unless they're doing real work in the
+  sentence.
   This applies to all student-facing prose (handouts, discussion prompts,
   lecture text) -- I'm upfront with students that AI helped produce these
   materials, but I'd rather the writing not constantly signal that on its
@@ -120,13 +143,43 @@ student-facing .Rmd documents:
   `fig.height`) rather than `blank_lines()`; lines read as "write words
   here" and can make students feel like they should be composing
   sentences rather than working through math.
-- **Pen-and-paper labs**: lab handouts are completed without laptops.
-  Code chunks in these .Rmd files generate figures/tables for the printed
-  handout (set `echo = FALSE`) -- students are not writing or running R
-  during lab, so don't add chunks meant for them to execute. WOD handouts
-  follow the same rule when the WOD is a math problem; WODs that are
-  explicitly programming/pseudocoding exercises should present pseudocode
-  or fill-in-the-blank R skeletons rather than runnable chunks.
+- **Pen-and-paper by default; laptops open only once ideas are
+  finalized.** For weeks that are primarily math/derivation, lab
+  handouts are completed entirely without laptops: code chunks
+  generate figures/tables for the printed handout (`echo = FALSE`),
+  and students aren't writing or running R during lab. For weeks with
+  real coding content (writing functions, running an algorithm,
+  fitting a model), use a **closed -> closed -> open -> closed**
+  rhythm within each Act instead of banning laptops outright:
+  individual work and the group check-in that follows happen on paper,
+  with any algorithm finalized before anyone opens a laptop; only then
+  does the handout say **"Laptops open now"** (a bolded banner), after
+  which AI tools, `?help`, and web search are explicitly fair game,
+  since the thinking is done and what's left is translating it into
+  working code. The Act's closing group-discussion-and-revision
+  section goes back to paper. See `Lab2_Act1.Rmd`, `Lab2_Act2.Rmd`, and
+  `Lab2_Act3.Rmd` for the target format.
+- **"Pseudocode" means plain English, not R syntax.** A pseudocode
+  task (written on paper, before laptops open) means step-by-step
+  prose describing the algorithm ("for each candidate value of a: ...
+  then store ... then find the smallest"), never an R-syntax skeleton
+  with blanks -- that reads as code, not algorithmic thinking, and
+  short-circuits the skill being practiced. If the task is instead
+  translating an already-known formula into R syntax by hand (no real
+  algorithm design involved), call it "write the R function/code," not
+  "pseudocode."
+- **Optional AI-assisted vs. self-coded split**, for the laptop-open
+  portion of a coding-heavy Act: let each group (not individuals within
+  a group) choose one of two paths -- (A) write an AI prompt and record
+  the prompt (never the AI's code) plus results and a reflection on
+  whether it matched their own plan, or (B) write the R themselves, no
+  AI, and reflect on what was hardest. This keeps AI use available
+  without making it mandatory, and keeps the graded artifact the
+  student's own reasoning, not AI-authored code.
+- WOD handouts follow the pen-and-paper rule when the WOD is a math
+  problem; WODs that are explicitly programming/pseudocoding exercises
+  should present pseudocode (plain English, per above) or fill-in-
+  the-blank R skeletons rather than runnable chunks.
 
 ## Lecture period structure
 
@@ -176,11 +229,17 @@ content), each following the same individual -> group -> individual
 cycle:
 
 - **~15 min individual work**
-- **~10-15 min group discussion and revision** (merged, not two separate
-  phases -- see below)
+- **~5 min group discussion and revision** (merged, not two separate
+  phases -- see below; this is the closing section, distinct from any
+  earlier laptop-open "group check-in" a coding-heavy Act might also have)
 
-Roughly 25-30 min per Act, three Acts per lab (fits the 2h45m period with
-room for transitions/wrap-up and a longer Act 2). This structure suits weeks building
+Roughly 20 min per Act for the simple individual -> group-revision
+pattern, three Acts per lab (fits the 2h45m period with room for
+transitions/wrap-up and a longer Act 2). Acts with a laptop-open coding
+phase run longer than this, sometimes 40+ minutes, since they also
+include a group check-in before laptops open plus the coding phase
+itself -- budget accordingly rather than compressing any of it to fit.
+This structure suits weeks building
 *toward a single model*. (A separate "Model Court" format -- not
 individual/group/reflect but a structured debate between competing
 candidate models -- is used instead for weeks with genuine model-vs-model
@@ -268,5 +327,14 @@ Acts:
   hand -- I'd rather adjust the example than hand students messy
   arithmetic.
 - For labs, confirm all three Acts stay on one running dataset/narrative
-  thread and that the closing reflection questions in Act 3 genuinely tie
-  back to the opening scenario in Act 1.
+  thread and that the closing reflection questions in Act 3 tie back to
+  the opening scenario in Act 1.
+- Verify statistical or mathematical claims that go into student
+  materials numerically before writing them down, not just visually --
+  don't assert two SSR conventions give the same fit, or that a model
+  comparison is "fair," without actually running it and checking.
+- If a PDF you already sent the user won't re-knit ("I can't write on
+  file ... .pdf"), it's almost always a file lock from their viewer
+  having it open, not a content error. Render a scratch copy elsewhere
+  to confirm the content is fine, ask them to close the viewer, then
+  re-knit to the real path -- don't assume the Rmd itself is broken.

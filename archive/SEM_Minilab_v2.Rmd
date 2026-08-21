@@ -1,0 +1,240 @@
+---
+title: "Structural Equation Modeling Minilab"
+author: "Margarete Walden and Karly Feher"
+date: "December 1, 2016"
+output: 
+  html_document: 
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+##<a name="top"/>SEM Minilab: Path Analysis </a>
+
+First, let's review our Path Analysis Example from the SEM lecture.
+
+```{r, echo=FALSE, fig.height=3,strip.white=TRUE,}
+library(DiagrammeR)
+nodes4 <- create_nodes(nodes=c("a","b","c","d"),
+                      label=c('distance','abiotic  r@^{2}=0.21','hetero  r@^{2}=0.12','richness  r@^{2}=0.36'),
+                      shape="rectangle",
+                      color="black")
+
+edges4 <- create_edges(from=c("a","a","b","c", "b","c","d"),
+                      to=c("b","c","d","d","b","c","d"),
+                      label=c('0.46','0.35','0.41','0.34','0.889','0.938','0.800'),
+                      color=c("black","black","black","black","grey","grey","grey"))
+graph4 <- create_graph(nodes_df=nodes4,
+                      edges_df=edges4,graph_attrs = "rankdir=LR")
+render_graph(graph4)
+```
+
+In this example we were trying to understand patterns in species richness over five years following fire. Parameters were measured in 90 x 1000 $m^2$ plots. We focused on four measured variables: distance to ocean, abiotic index, spatial heterogeneity, and species richness.
+
+Now let's review the steps taken in this example.
+Download the data from Webcampus, "Files" >> "Student led topics" >> "SEM" >> "Keeley_rawdata.csv"
+```{r, echo=TRUE}
+keeley <-read.csv("./Keeley_rawdata.csv", header =TRUE)
+summary(keeley) #-- Look at data
+```
+
+
+Our first step is to perform linear regression for each piece of our hypothesized model. These "piecewise" linear regressions tell us some information about our model variables. We can determine whether individual variables are significant in each regression by looking at the p-values for the parameter estimates. Also, we can find the $r^2$ values for our endogenous variables from the "lm" function in R.
+
+```{r, results='hold'}
+abioticLM <- lm(abiotic~distance, data=keeley)    #-- Abiotic caused by distance
+heteroLM <- lm(hetero~distance, data=keeley)      #-- Heterogeneity caused by distance
+richnessLM <- lm(rich~abiotic+hetero,data=keeley) #-- Richness caused by abiotic and heterogeneity
+summary(abioticLM)$coefficients
+summary(heteroLM)$coefficients
+summary(richnessLM)$coefficients
+summary(abioticLM)$r.squared
+summary(heteroLM)$r.squared
+summary(richnessLM)$r.squared
+```
+
+Remember, an ANOVA is linear regression. An alternative to looking at the summaries for each "lm" object above is to use the "aov" function to determine whether our three hypothesized linear relationships are significant:
+
+```{r, results='hold'}
+summary(aov(abioticLM))
+summary(aov(heteroLM))
+summary(aov(richnessLM))
+```
+
+Notice that the p-values for significance are the same as above.
+
+Because all variables are significant in our piecewise linear regressions, we will retain all terms in our model.
+
+
+Our next step is to estimate the parameters in our model. Remember, our parameters are the path coefficients and error terms. We can use the $r^2$ values from our earlier piecewise linear regressions for our endogenous variables and error terms because we are retaining all of those variables in our model. Now we need to estimate the path coefficients.
+
+To standardize our path coefficients, divide the covariance by the standard deviations. There are two ways to do this in R: you can use the "cor" function to display the correlation matrix for all your variables, and then fill in the values. The other way is to use the "lm.beta" function in the package "QuantPsyc". This will return the standardized path coefficient(s) directly for individual piecewise linear regressions.
+
+```{r, results='hold',message=FALSE}
+cor_matrix <- cor(keeley[,c(1,3,5,8)])      #-- The [,] is matrix notation in which the (row,column) numbers can be specified. In this case, we're saying to use only the numbered columns of data to calculate the correlation matrix.
+cor_matrix
+
+library(QuantPsyc)
+lm.beta(abioticLM)   #-- Path from "distance" to "abiotic".
+lm.beta(heteroLM)    #-- Path from "distance" to "hetero".
+lm.beta(richnessLM)  #-- "abiotic" = path from "abiotic" to "richness"; "hetero" = path from "hetero" to richness.
+```
+
+Note that the "lm.beta" function and the "cor" function return the same values.
+
+We will now proceed to fill in our estimates for our model:
+
+```{r, echo=FALSE, fig.height=3,strip.white=TRUE,}
+nodes4 <- create_nodes(nodes=c("a","b","c","d"),
+                      label=c('distance','abiotic  r@^{2}=0.21','hetero  r@^{2}=0.12','richness  r@^{2}=0.36'),
+                      shape="rectangle",
+                      color="black")
+
+edges4 <- create_edges(from=c("a","a","b","c", "b","c","d"),
+                      to=c("b","c","d","d","b","c","d"),
+                      label=c('0.46','0.35','0.41','0.34','0.889','0.938','0.800'),
+                      color=c("black","black","black","black","grey","grey","grey"))
+graph4 <- create_graph(nodes_df=nodes4,
+                      edges_df=edges4,graph_attrs = "rankdir=LR")
+render_graph(graph4)
+```
+
+Next we test for mediation. In a mediation relationship, there is a direct effect between an independent variable and a dependent variable. There are also indirect effects between an independent variable and a mediator variable, and between a mediator variable and a dependent variable.
+
+The degree to which the direct effect changes as a result of including the mediating variable is referred to as the mediational effect. Testing for mediation involves running a series of regression analyses for all of the causal pathways and some method of estimating a change in direct effect.
+
+In our example, we have two mediations: the effect of "distance" on "richness" is mediated by two mediator variables: "abiotic" and "hetero". We need to investigate whether these mediations are fully explaining the effect of "distance" on "richness." One way to determine this is to look at the residuals from the linear regression of "richness" by "abiotic" and "hetero." The residuals will be the remaining variance in "richness" not explained by "abiotic" and "hetero."  We would expect no structure in the residuals if "abiotic" and "hetero" are fully explaining all effects. However, if we saw a relationship between the residuals and "distance", we would suspect that there is some effect of "distance" on "richness" that is not being sufficiently explained, or mediated, by "abiotic" and "hetero." Let's do this in R:
+
+```{r, results='hold'}
+#-- First we'll extract the residuals from the linear regression of richness by abiotic and hetero.
+resid_rich <- resid(richnessLM)
+#-- Next, we'll perform a linear regression of these residuals by distance. If this relationship is significant, it would indicate we are missing a path in our model because abiotic and hetero are incomplete mediators.
+residLM <- lm(resid_rich~distance,data=keeley)
+summary(residLM)$coefficients   #-- The relationship is signficant (we could also test this using the "aov" function)
+#-- To help visualize this, we'll plot the residuals against distance and show the fitted linear regression.
+plot(resid_rich~distance,data=keeley)
+abline(residLM,col="blue",lwd=2)
+```
+
+As distance increases, the values of the residuals increase. Because this relationship is signficant, we conclude that we need to add a path in our model from "distance" to "richness".
+
+Now, we would need to perform a new regression: `lm(rich~abiotic+hetero+distance)` in order to estimate the new $r^2$ for "richness". For the purposes of this example, we are going to show what would happen if you went directly to testing goodness of fit without investigating mediation. (In the end, the final model chosen will be the same by either process.)
+
+###<a name="fit"/>D-separation and goodness of fit</a>
+
+Next, we evaluate goodness of fit. Our first check is to use d-separation to determine whether the observed data adequately account for the modeled probabilities. 
+
+Rewording from earlier, the d-separation criterion for any pair of variables involves:
+
+1. Controlling for common ancestors that could generate correlations between the pair.
+2. Controlling for causal connections through multi-link directed pathways via parents.
+3. Not controlling for common descendent variables.
+
+In the context of our model (ignoring the path from "distance" to "richness"), if we wanted to formulate a d-separation statement for the path from "distance" to "richness":
+
+1. There are no common ancestors.
+2. We include the parents of "richness" that are part of mediating pathways: "abiotic"" and "hetero".
+3. There are no common descendents.
+
+Thus, we conclude that the residuals for "distance" and "richness" are predicted to be uncorrelated.
+
+Because writing out the entire set of all possible d-statements would involve overlap and would increase the possibility of Type II error, we will identify what is called the "basis set", which is the minimum number of d=separation statements that is sufficient to predict the entire set of d-separation statements. In this case:
+
+$$
+\textrm{distance}\perp \textrm{richness} | (\textrm{abiotic, hetero})\\
+\textrm{biotic}\perp \textrm{hetero} | (\textrm{distance})
+$$
+Each of these d-separated statements predicts a (conditional) probabilistic independence:
+
+1. "Distance" is d-separated from "richness" when conditioned on "abiotic" and "hetero".
+2. "Biotic" is d-separated from "hetero" when conditioned on "distance".
+
+The composite probability for the basis set is Fisher's C test:
+$$
+C=-2*\sum_{i=1}^{k}Ln(p_{i})
+$$
+Where $p_{i}=$ p-values of all tests of conditional independence;
+_C_ has a chi-square distribution with 2k degrees of freedom;
+_k_ = number of elements of the basis set.
+
+We conclude that the predicted variables are conditionally independent if $p>05$. If $p<.05$, there are likely to be missing paths (in order to account for the lack of independence).
+
+We'll use some built-in functions in R to determine the fit test:
+```{r, message=FALSE}
+library(piecewiseSEM)
+#-- First, build a model object using the correct syntax:
+modList <- list(
+  lm(abiotic~distance, data=keeley),
+  lm(hetero~distance,data=keeley),
+  lm(rich~abiotic+hetero,data=keeley)
+)
+#-- Next, run the Fisher C test:
+sem.fisher.c(modList,data=keeley,.progressBar=FALSE)
+```
+
+Because the p-value < 0.05, we know that the model is missing a pathway. Let's suppose that pathway is a direct pathway from "distance to ocean" to "richness" (as we concluded from our evaluation of mediation). So, that means our new script will be:
+```{r, message=FALSE}
+#-- First, build a model object using the correct syntax:
+modList2 <- list(
+  lm(abiotic~distance, data=keeley),
+  lm(hetero~distance,data=keeley),
+  lm(rich~abiotic+hetero+distance,data=keeley) #-- note that we've added "distance" as a direct cause of "richness"
+)
+#-- Next, run the Fisher C test:
+sem.fisher.c(modList2,data=keeley,.progressBar=FALSE)
+```
+
+Now, our p-value is > 0.05. This means we can conclude our model is supported by our data. We can use the package semPlot to visualize our final model:
+
+```{r, fig.height=3, message=FALSE, warning=FALSE,results='hold',fig.keep='last', fig.env='figure',strip.white=TRUE,fig.align='center'}
+library(lavaan)
+library(semPlot)
+#--First create an object that stores the relationships between the variables:
+modList3 <- '
+  abiotic~distance
+  hetero~distance
+  rich~abiotic+hetero+distance
+'
+#--Next, we need to create a model object that "semPaths" can work with. In this case, we use the "sem" function in the library "lavaan" to create our SEM model object "fullfit1".
+fullfit1 <- sem(modList3, data=keeley)
+#--Then visualize the model:
+semPaths(fullfit1,rotate=1,layout="spring","std")
+```
+
+
+Note that the "sem" function in the package "lavaan" uses maximum likelihood estimation by default for estimating the model parameters. This compares the modeled covariance matrix to the observed covariance matrix. For path analysis, the ML estimates are likely to be very close to the piecewise estimates we generated earlier using Least Squares from our linear regressions.
+
+Using this model, we would make the following inferences:
+
+1. 46% of the variance of "richness" is accounted for by the path model, 54% is residual variance.
+2. The correlation between "distance" and "richness" is the sum of the products of the path coefficients along each path. Thus, $(0.27*0.46)+(0.38)+(0.26*0.35)=0.595$, meaning that 59.5% of the correlation between "distance" and "richness" is due to the direct and indirect effects of "distance" on "richness".
+
+
+###Question 1
+
+We would like to add another measured variable, Cover, to our model. 
+
+```{r, echo=FALSE, strip.white=TRUE,fig.align='center',fig.height=2}
+nodes3 <- create_nodes(nodes=c("a","b","c","d","e"),
+                      label=c('distance','abiotic','hetero','richness','cover'),
+                      shape="rectangle",
+                      color="black")
+
+edges3 <- create_edges(from=c("a","a","a","a","b","c","e"),
+                      to=c("b","c","d","e","d", "d", "d"),
+                      color=c("black","black","black","black"))
+graph3 <- create_graph(nodes_df=nodes3,
+                      edges_df=edges3,graph_attrs = "rankdir=LR")
+render_graph(graph3)
+```
+
+Fit and evalute the above model
+
+  1. Fill in the standard coefficients
+  2. Test for mediation
+  3. Evaluate goodness of fit (using d-seperation)
+  4. What inferences can we make about this model?
