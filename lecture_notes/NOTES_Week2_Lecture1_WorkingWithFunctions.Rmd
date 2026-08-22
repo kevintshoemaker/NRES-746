@@ -1,0 +1,348 @@
+---
+title: "Week 2, Lecture 1: Working with Functions"
+subtitle: "Instructor notes -- Part 1: prep reading, Part 2: podium cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 5, fig.height = 3.5)
+```
+
+This single file has two parts, both instructor-only (not a student
+handout). **Part 1** is read beforehand -- full worked examples and the
+reasoning behind the flow. **Part 2** (after the page break, large
+print) is the podium copy.
+
+Source material: Bolker Ch. 3, sections 3.2-3.4 ("Deterministic
+functions for ecological modeling") almost verbatim in places -- this
+lecture leans harder on the assigned reading than Week 1's did, because
+today's content is a hard prerequisite for a specific Lab 2 question
+(see below). Also mined: this morning's WOD
+(`wod/WOD_Week2_Lecture1_RSyntaxAndNotation.Rmd`), Lab 1 Act 2 (Ricker
+derivative), and Lab 2 Acts 1-2 (grid search, flexible Ricker, Holling
+IV).
+
+# Where this sits in the week, and a hard dependency
+
+- Monday (this lecture): properties of deterministic functions --
+  limits, derivatives, critical points -- as tools, not yet the
+  bestiary itself (that's Wednesday).
+- Monday AM (WOD, already done): bug-hunts in R function syntax
+  (argument order/matching) plus deriving and coding a seasonal sine
+  function -- both are direct rehearsals for today.
+- Tuesday (Lab 2): Act 1 is a grid-search optimizer for the Ricker
+  function (algorithms, not functions per se -- a callback to Week 1).
+  **Act 2 explicitly instructs students to use "the same 'throw out the
+  lower-order terms' trick from Monday's lecture"** to find the
+  limiting behavior of the Holling type IV function as $x\to\infty$.
+  That phrase is not a coincidence -- it's this lecture. If Section 2
+  below (limits) doesn't land clearly today, that Lab 2 question will
+  stall.
+- Wednesday: Bestiary of functions (Bolker 3.5) -- the specific named
+  catalog (power, exponential, hyperbolic, sigmoid...). Today builds the
+  toolkit; Wednesday populates it.
+
+# Big picture (bridge from Week 1)
+
+One-sentence bridge: last lecture was about *how* we get from a
+candidate model to an answer (algorithms vs. closed form); today is
+about *reading* a candidate function itself -- what it does at the
+extremes, where it peaks, what its parameters mean -- before you ever
+fit it to data.
+
+Recall from Lab 1 Act 1: students already have an informal shape
+vocabulary (monotonic increasing/decreasing, saturating, hump-shaped,
+roughly flat) from eyeballing the tadpole data. Today's tools let you
+*prove* a shape claim algebraically instead of just eyeballing a curve
+-- the same distinction as Bolker 3.2/3.3 vs. 3.4: numerically
+(plug in values, plot it, `curve()`) gives you a picture; analytically
+(algebra and calculus) tells you *why* the picture looks that way, and
+lets you reason about regions you didn't plot.
+
+# Limits: throw out the lower-order terms (the required section)
+
+This is Bolker's own phrasing (3.4.1), worth keeping close to verbatim
+since Lab 2 Act 2 quotes it back: *"The basic principle is to throw out
+lower-order terms. As $x$ grows, it will eventually grow much larger
+than the largest constant term in the equation. Terms with larger
+powers of $x$ will dwarf smaller powers, and exponentials will dwarf
+any power. If $x$ is very small then you apply the same logic in
+reverse; constants are bigger than (positive) powers of $x$, and
+negative powers... are bigger than any constants."*
+
+In short, a hierarchy of "who wins" as $x \to \infty$:
+$$\text{exponential} \;\gg\; x^{\text{large power}} \;\gg\; x^{\text{small power}} \;\gg\; \text{constant}$$
+and the *same* hierarchy reverses as $x \to 0$: constants beat positive
+powers of $x$, and negative powers of $x$ (i.e. $1/x$, $1/x^2$, ...)
+beat everything.
+
+**Worked example (Bolker's own -- Michaelis-Menten), do this on the
+board:** $f(x) = \dfrac{ax}{b+x}$
+
+- As $x \to \infty$: $x \gg b$, so $b + x \approx x$, so
+  $f(x) \approx ax/x = a$ -- the curve levels off at the constant $a$
+  (a horizontal asymptote).
+- As $x \to 0$: $b \gg x$, so $b + x \approx b$, so
+  $f(x) \approx ax/b$ -- a straight line through the origin with slope
+  $a/b$.
+
+```{r mm-plot, echo=FALSE, fig.height=3}
+a <- 10; b <- 5
+curve(a * x / (b + x), from = 0, to = 40, lwd = 2, col = "steelblue",
+      xlab = "x", ylab = "f(x)", ylim = c(0, 11.5))
+abline(h = a, lty = 2, col = "grey50")
+abline(v = b, lty = 3, col = "grey50")
+points(b, a/2, pch = 19)
+text(b, a/2, "  half-max at x = b", adj = c(0, 1.5))
+text(20, a, "asymptote = a", adj = c(0, -0.5), col = "grey30")
+```
+
+**Sticking point to flag:** students will want to "plug in infinity."
+Head that off explicitly -- this is qualitative dominance reasoning
+(which term is negligible), not literal substitution. Also flag that
+the *same* parameter can play opposite roles at the two ends: $b$ is
+negligible as $x\to\infty$ but dominant as $x \to 0$.
+
+**Fallback tool (mention, don't dwell):** for fraction limits where
+both numerator and denominator vanish or blow up together (an
+indeterminate $0/0$ or $\infty/\infty$ form, so the dominance trick
+doesn't immediately apply), L'Hopital's rule says
+$\lim \dfrac{a(x)}{b(x)} = \lim \dfrac{a'(x)}{b'(x)}$ -- take the
+derivative of the top and bottom separately, not the derivative of the
+whole fraction. One line, not a worked example today.
+
+**Do not solve Holling IV's limit here.** $y = ax^2/(b+cx+x^2)$ is
+literally Lab 2 Act 2's question 1c -- comparing the highest powers of
+$x$ in numerator ($x^2$) and denominator ($x^2$) is the same dominance
+trick, one level harder (both leading terms are degree 2, so the
+constant $a$ from the ratio of leading coefficients survives). Let
+students discover that tomorrow; today's example (Michaelis-Menten) is
+deliberately a different, simpler rational function so the technique
+transfers without the answer being pre-given.
+
+# Derivatives and critical points (recap + formalize)
+
+Students already computed one derivative and one critical point by hand
+in Lab 1 Act 2 -- this section names what they did, generalizes it, and
+contrasts it with a monotonic function that has no peak at all.
+
+**Recap, don't re-derive from scratch:** the Ricker function
+$y = a x e^{-bx}$ (Lab 1's running example: $a = 0.9$, $b = 1/12$).
+Product rule:
+$$\frac{dy}{dx} = a e^{-bx} + ax(-be^{-bx}) = a(1-bx)e^{-bx}$$
+Setting this to zero: since $ae^{-bx} \neq 0$, the only way the product
+is zero is $1 - bx = 0$, i.e. $x^* = 1/b$.
+
+```{r ricker-peak}
+a_r <- 0.9; b_r <- 1/12
+x_star <- 1 / b_r
+peak_height <- a_r * x_star * exp(-b_r * x_star)
+x_star
+peak_height
+```
+
+That's $x^* = `r x_star`$ mm and peak height $`r round(peak_height, 2)`$
+-- matching Lab 1 Act 3's table exactly (TBL = 12, Ricker predicted =
+3.97). This is the payoff of the "critical point" concept: it's not
+new math, it's a name for exactly the calculation they already did.
+
+**Formalize:** a critical point is any $x$ where $f'(x) = 0$ (or is
+undefined) -- a candidate for a peak, a trough, or (at a saddle point) a
+flat spot that isn't either. To classify which, plug the critical
+$x$-value back into $f$ itself (peak/trough height) and reason about
+the sign of $f'$ on either side (or use the second derivative).
+
+**Contrast with a monotonic function:** try the same exercise on
+Michaelis-Menten, $f(x) = ax/(b+x)$. Its derivative (quotient rule) is
+$f'(x) = ab/(b+x)^2$ -- always positive (a sum of squares in the
+denominator can't be negative), so the function is *monotonic
+increasing* everywhere and *never* has a critical point. That's exactly
+why it saturates toward an asymptote instead of peaking and coming back
+down -- contrast this shape against Ricker's hump directly, on the
+board, side by side.
+
+**Sticking point to flag:** "critical point" (where $f'(x)=0$) is easy
+to confuse with "root" (where $f(x)=0$). The Ricker function has both:
+it's zero at $x=0$ (a root) and peaks at $x=1/b$ (a critical point) --
+two different questions with two different answers from the same
+function.
+
+# R convention: `x` first, then parameters (with defaults)
+
+Directly from Bolker's R supplement (3.3.1, p. 104): *"When you write
+such an R function, you would typically make the input value ($x$) be
+the first argument, followed by all of the other parameters. It often
+saves time if you assign default values to the other parameters."*
+
+This is exactly why `ricker <- function(x, a, b)` is the convention
+used everywhere in the labs (and why WOD 1a's `function(a, b, x)` was
+buggy this morning -- it broke that convention on purpose). Point this
+out explicitly: the WOD wasn't testing an arbitrary rule, it was testing
+*this* rule, which is about to matter again.
+
+**Why it matters going forward, concretely:** `sapply(xvec, ricker)`
+only works cleanly if `x` is the first positional argument -- `sapply`
+always feeds the vector element into the first open slot. Also
+preview: Lab 2 Act 2 asks students to write `flex_ricker` and
+`holling4` "following the same pattern as the `ricker` function (`x`
+first, then parameters)" -- today is where that instruction gets its
+justification, not just its statement.
+
+**Scale parameters, briefly (Bolker 3.4.2):** when a parameter appears
+as $bx$ or $x/c$, its job is to stretch or shrink the curve along the
+$x$-axis without changing its shape -- Bolker calls this a
+*characteristic scale*. $b$ has units of inverse-$x$; $c = 1/b$ has the
+same units as $x$ and is often easier to interpret (e.g. "the peak is
+at $x=12$" instead of "$b = 1/12$"). This is exactly what Lab 2 Act 2's
+flexible Ricker does: it reparameterizes $b$ as $p$ (the peak location
+directly) precisely so the parameter is easier to interpret and to set.
+One sentence today is enough -- Act 2 does the work of actually
+reparameterizing.
+
+# Take-home message
+
+- Two ways to know a function: numerically (plot it, plug in numbers)
+  and analytically (limits, derivatives) -- today was almost entirely
+  the analytical toolkit.
+- Limits at the extremes: throw out lower-order terms. Same hierarchy,
+  reversed at the two ends (exponential $\gg$ big power $\gg$ small
+  power $\gg$ constant $\gg$ negative power, as $x\to\infty$; flip it
+  for $x\to0$).
+- Critical points ($f'(x)=0$) find peaks/troughs; monotonic functions
+  (no sign change in $f'$) never have any.
+- R convention (`x` first, params after, with defaults) isn't
+  arbitrary style -- it's what makes `sapply()` and vectorized code work
+  cleanly, and it's the same convention Lab 2 asks you to follow when
+  writing new bestiary members from scratch.
+
+# Roadmap tie-in
+
+- Wednesday: the bestiary itself (Bolker 3.5) -- linear, power,
+  exponential, hyperbolic/Michaelis-Menten, sigmoid families, each
+  characterized using exactly today's tools (limits, critical points,
+  scale parameters).
+- Tuesday's Lab 2 Act 2 needs today's limit technique directly (Holling
+  IV, question 1c) -- flagged above, worth a one-line reminder at the
+  end of lecture.
+- Later in the semester: "throw out lower-order terms" reasoning
+  resurfaces informally whenever we ask what a fitted model predicts far
+  outside the range of the data (extrapolation risk) -- worth a passing
+  mention now, not a digression.
+
+# Discussion seed (if time remains)
+
+Ask: *pick any function from your own field that saturates (levels off)
+as some predictor gets large. What's the mechanism that caps it -- what
+in the real world plays the role of "$a$" (the asymptote) in
+Michaelis-Menten?* Good prompt for surfacing intuition about *why*
+saturation happens biologically, not just how to compute it. (If it
+comes up: "$b$" is a different question -- not what caps the curve, but
+how fast it gets there.)
+
+\newpage
+\large
+
+# PART 2 -- PODIUM CHEAT SHEET
+
+\normalsize
+*Podium copy -- terse on purpose. Full derivations, rationale, and
+code: see Part 1 above.*
+\large
+
+## 0. Open (~2 min)
+
+- Last time: *how* we get an answer (algorithm vs. closed form)
+- Today: *reading* a function itself -- extremes, peaks, parameters
+- Recall Lab 1's shape vocabulary (monotonic / saturating / hump) --
+  today we prove those claims, not just eyeball them
+
+## 1. Two ways to know a function (~3 min)
+
+- **Numerically:** plug in values, `curve()`, plot it -- a picture
+- **Analytically:** limits + derivatives -- *why* the picture looks
+  that way
+- Today = almost entirely analytical
+
+\newpage
+
+## 2. Limits: throw out the lower-order terms (~12-15 min)
+
+**The rule** (Bolker's own words -- write it up):
+
+- as $x\to\infty$: exponential $\gg$ big power $\gg$ small power
+  $\gg$ constant
+- as $x\to0$: reverse it -- constant $\gg$ positive power $\gg$
+  nothing beats a negative power ($1/x$, $1/x^2$, ...)
+
+**Board example -- Michaelis-Menten:** $f(x) = \dfrac{ax}{b+x}$
+
+```{r mm-podium-fig, echo=FALSE, fig.width=3.3, fig.height=2.3}
+par(mar = c(3.5, 3, 1, 0.5))
+curve((a * x) / (b + x), from = 0, to = 40, lwd = 2, col = "steelblue",
+      xlab = "x", ylab = "f(x)")
+abline(h = a, lty = 2, col = "grey50")
+abline(v = b, lty = 3, col = "grey50")
+```
+
+- $x\to\infty$: $b+x\approx x \Rightarrow f(x)\approx ax/x=a$
+  (asymptote)
+- $x\to0$: $b+x\approx b \Rightarrow f(x)\approx ax/b$ (line, slope
+  $a/b$)
+- **Not** "plug in infinity" -- dominance reasoning, term by term
+- $b$ is negligible at one end, dominant at the other -- same
+  parameter, opposite roles
+- Fallback only, don't dwell: L'Hopital's rule for $0/0$ or
+  $\infty/\infty$ forms -- derivative of top over derivative of bottom
+- **Do not solve Holling IV today** -- that's Lab 2 Act 2, question 1c,
+  tomorrow. Michaelis-Menten teaches the same trick without giving away
+  the answer.
+
+\newpage
+
+## 3. Derivatives and critical points (~8-10 min)
+
+**Recap (already done in Lab 1 Act 2), don't re-derive:** Ricker
+$y=axe^{-bx}$, product rule $\to$
+$dy/dx = a(1-bx)e^{-bx}$
+
+- critical point: $1-bx=0 \Rightarrow x^*=1/b$
+- with $a=0.9,\ b=1/12$: $x^*=`r x_star`$, height
+  $=`r round(peak_height,2)`$ -- matches Lab 1 Act 3's table exactly
+- **critical point:** name for exactly what they already computed
+
+**Contrast -- Michaelis-Menten's derivative** (quotient rule):
+$f'(x)=ab/(b+x)^2$ -- always positive $\to$ monotonic, **no** critical
+point, saturates instead of peaking
+
+- **Sticking point:** critical point ($f'=0$) $\neq$ root ($f=0$) --
+  Ricker has both, at different $x$ (root at $x=0$, peak at $x=1/b$)
+
+## 4. R convention + scale parameters (~5 min)
+
+- Bolker's own rule: `x` first argument, params after, with defaults
+- *this is why* `function(a, b, x)` in this morning's WOD 1a was buggy
+- matters for `sapply()`: vector element fills the *first* open slot
+- **preview:** Lab 2 Act 2 asks you to write new bestiary functions
+  "following the same pattern (`x` first, then parameters)"
+- **scale parameter:** $bx$ or $x/c$ stretches/shrinks the $x$-axis;
+  Lab 2's flexible Ricker reparameterizes $b\to p$ (peak location
+  directly) for exactly this reason
+
+## 5. Roadmap (~2 min)
+
+- Wednesday: the bestiary itself (linear, power, exponential,
+  hyperbolic, sigmoid) -- same tools, now cataloging specific families
+- **Reminder before they leave:** Lab 2 Act 2 needs today's limit trick
+  for Holling IV
+
+## If time: discussion seed
+
+- *Pick a function from your own field that saturates. What plays the
+  role of "$a$" (the asymptote) -- what caps it, mechanistically?*

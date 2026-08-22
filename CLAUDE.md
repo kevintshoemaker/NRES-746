@@ -143,6 +143,15 @@ student-facing .Rmd documents:
   `fig.height`) rather than `blank_lines()`; lines read as "write words
   here" and can make students feel like they should be composing
   sentences rather than working through math.
+- **Be generous with math work space, and don't compress to save
+  pages.** When sizing a `blank_space()` chunk for a derivation or
+  calculation, err on the side of too much room rather than too little
+  -- a multi-step derivative (product rule, chain rule applied twice,
+  etc.) needs real room to write out intermediate steps, not just
+  space for a final answer. It's fine for a WOD or lab Act to run to
+  two or more pages if that's what proper work space requires; don't
+  shrink `blank_space()`/`blank_lines()` chunks just to fit everything
+  onto fewer pages.
 - **Pen-and-paper by default; laptops open only once ideas are
   finalized.** For weeks that are primarily math/derivation, lab
   handouts are completed entirely without laptops: code chunks
@@ -193,8 +202,9 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
    for a few minutes, then briefly compare with a neighbor. WODs should
    rotate across topic types (math derivation, probability puzzle, R/
    pseudocode, numerical-algorithm trace, notation drill) rather than
-   repeating the same flavor two days running -- see `WOD1_Diagnostic.Rmd`
-   for the target format: numbered parts with a short label and dashed
+   repeating the same flavor two days running -- see
+   `wod/WOD_Week1_Lecture1_Diagnostic.Rmd` for the target format: numbered
+   parts with a short label and dashed
    subheading rule, fill-in blanks, and (where used) a self-rating table
    at the end so students can flag what needs more study. Not every WOD
    needs a self-rating table -- reserve it for diagnostic/review WODs, not
@@ -219,6 +229,107 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
 When asked to build a lecture plan or WOD, produce all three pieces
 together (WOD handout, lecture outline, discussion prompt) unless told
 otherwise, and note approximate timing for each.
+
+WOD files (`wod/`) are named
+`WOD_Week<N>_Lecture<M>_<TopicInCamelCase>.Rmd` -- the `WOD_`/`NOTES_`
+prefix is what lets you tell a `wod/` file and a `lecture_notes/` file
+apart at a glance (both live in per-purpose folders, but filenames get
+copied/downloaded/shared out of that context, e.g. via the course
+website, so the prefix needs to travel with the file). `Lecture1`/
+`Lecture2` is the Monday/Wednesday slot within that week (per
+`CourseSchedule.csv`), not a sequential WOD count (the "Workout of the
+Day \#N" number inside the document itself is a separate, purely
+sequential label and doesn't need to match).
+
+## Lecture notes documents (lecture_notes/)
+
+These are instructor-only prep/podium materials for the "Lecture" beat
+above -- not student handouts, so the portable-formatting and
+dual-output rules elsewhere in this file don't apply to them (raw LaTeX
+like `\newpage` is fine). Each lecture period gets **one** `.Rmd` file,
+knit to PDF, containing two parts back to back:
+
+- **Part 1 (read beforehand, not used live):** full prose -- worked
+  examples with real, executed R code and rendered figures (not
+  student-style blanks), the rationale for why each example/order was
+  chosen, sticking points to flag, and explicit callbacks to that week's
+  WOD/Lab content. Normal font size. This is where the thinking lives.
+- **Part 2 (the podium copy, open/glanced at while actually teaching):**
+  starts after a `\newpage` \+ `\large` (raw LaTeX -- switch font size
+  mid-document rather than a second file). Very brief bullets, not
+  complete sentences. Include small reference figures/diagrams and the
+  essential equations only -- sketch prompts (e.g. "sketch on board:
+  ...") rather than full derivations. Put a `\newpage` before each major
+  numbered section so sections start cleanly on their own page and are
+  easy to flip to mid-lecture. Section headers carry an approximate time
+  budget (e.g. "~5 min") so the whole part sums to the ~30-35 min
+  lecture beat. Where Part 2 needs a figure already computed in Part 1
+  (e.g. a simulation histogram), re-plot from the existing R objects
+  instead of re-simulating -- one R session per document means the two
+  parts can never numerically disagree with each other.
+
+Base `fontsize: 12pt` in the YAML works well for both parts (Part 2's
+`\large` stacks on top of it). One file per lecture keeps the
+`lecture_notes/` directory from sprawling as the semester goes on --
+resist the urge to split back into two files even though earlier
+drafts of this convention did.
+
+Naming: `NOTES_Week<N>_Lecture<M>_<TopicInCamelCase>.Rmd`, e.g.
+`NOTES_Week1_Lecture2_AlgorithmsInStatistics.Rmd` -- the `NOTES_` prefix
+(mirroring `WOD_` in `wod/`) is what makes the file's kind identifiable
+from its filename alone, independent of which folder it's sitting in.
+`Lecture1`/`Lecture2` refer to the Monday/Wednesday slot within that
+week (per `CourseSchedule.csv`), not a sequential lecture count.
+
+**Mine old material rather than inventing examples fresh.** The
+pre-redesign root-level `LECTUREn.Rmd`/`LABn.Rmd` files (and their
+knitted `.html`) were previously walked through live in class; that's
+no longer the plan, but the worked examples in them were already
+tested in front of students and are fair game to reuse/adapt -- check
+them first for content matching the week's topic before writing a new
+example from scratch. Also check the Bolker chapter/section for that
+week and the idea bank Google Doc (linked earlier in this file), and
+read the matching week's WOD/Lab handouts already built in
+`wod/`/`labs/` so the lecture can explicitly call back to (or set up)
+what students already did that week, rather than repeating it or
+contradicting it.
+
+As with any `.Rmd`, actually knit the document to PDF and read
+through the rendered output (not just the source) before considering
+the lecture notes done -- check for awkward page breaks, clipped plot
+titles/margins, and computed values that came out anticlimactic (e.g. a
+brute-force p-value that rounds to exactly 0 with too few reps; bump
+`reps` rather than leave it).
+
+## Framing the modeling/scientific process: Popperian, not data-first or Bayesian-default
+
+Whenever course material presents "the scientific process" or the
+general modeling workflow (e.g. Bolker's Figure 1.5, section 1.6,
+printed p. 27 -- PDF page 35 in `bolker_book/emdbook.pdf`), default to a
+Popperian/hypothetico-deductive framing rather than a data-first or
+strictly Bayesian one:
+
+$$\text{THEORY/QUESTION} \to \text{CANDIDATE MODEL(S)} \to
+  \text{confront with DATA (fit)} \to \text{COMPARE} \to \text{repeat}$$
+
+"repeat" loops back to revising or rejecting the **theory**, not just
+re-tuning parameters. Bolker's own figure nominally puts "collect data"
+second (right after "ask ecological questions"), but his footnote on
+p. 26 says this is a concession to the book assuming a dataset already
+in hand, not a claim that data should precede the question -- so a
+theory-first reading is truer to his own stated ideal, not a deviation
+from it.
+
+"COMPARE" does double duty and should be unpacked as such rather than
+left vague: (1) *goodness of fit* -- does the model's prediction
+resemble the data at all, and (2) *comparison against rivals, including
+the null* -- does this candidate earn its keep over a simpler
+competitor. A model that survives both is **corroborated**, not
+proven; one that doesn't is **falsified** and should be revised or
+discarded. Prefer this survive/corroborate-vs-falsify vocabulary over
+"prove"/"confirm" language whenever the material touches hypothesis
+testing, model selection, or the frequentist/likelihood/Bayesian
+framework tour (Bolker 1.4) later in the semester.
 
 ## Lab structure: three Acts
 
@@ -338,3 +449,9 @@ Acts:
   having it open, not a content error. Render a scratch copy elsewhere
   to confirm the content is fine, ask them to close the viewer, then
   re-knit to the real path -- don't assume the Rmd itself is broken.
+- When renaming or moving a course file, grep the whole repo for the
+  old filename before considering the rename done -- `index.Rmd`'s
+  manual render script, this file's own file-path callouts, and
+  cross-references between Rmd docs (e.g. a lecture note pointing at a
+  WOD's filename) are easy to miss and go stale silently since nothing
+  errors until someone tries to render off the old path.
