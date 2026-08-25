@@ -304,6 +304,24 @@ from its filename alone, independent of which folder it's sitting in.
 `Lecture1`/`Lecture2` refer to the Monday/Wednesday slot within that
 week (per `CourseSchedule.csv`), not a sequential lecture count.
 
+**The same two-part format also covers a Lab session directly**, when a
+lab needs math/concepts that no lecture has taught yet (this happens in
+Week 1: Lab 1 needs log/exponent rules and a derivative before Week 2
+Lecture 1 formally covers any calculus). Name these
+`NOTES_Lab<N>_<TopicInCamelCase>.Rmd` (no `Week`/`Lecture` component,
+matching how `labs/Lab<N>_Act<M>.Rmd` is already numbered by week) --
+see `NOTES_Lab1_MathRefresher.Rmd`. Two things differ from the
+lecture-tied version: the "Part 2" framing is "podium/circulating cheat
+sheet" rather than a strict M/W lecture beat, since a lab period isn't
+one continuous lecture -- expect a short opening pass followed by
+spot-checks with individual groups, so Part 2 is worth closing with an
+Act-by-Act quick-reference list; and **every worked example must use
+numbers/functions different from the lab's own graded questions**, the
+same rule that already applies to reusing a technique across a
+lecture/lab pair (see the Michaelis-Menten/Holling IV precedent above)
+-- reusing the lab's actual numbers in a refresher handed out before
+students attempt them defeats the point of the individual-work section.
+
 **Mine old material rather than inventing examples fresh.** The
 pre-redesign root-level `LECTUREn.Rmd`/`LABn.Rmd` files (and their
 knitted `.html`) were previously walked through live in class; that's
