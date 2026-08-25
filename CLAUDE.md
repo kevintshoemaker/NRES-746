@@ -152,6 +152,29 @@ student-facing .Rmd documents:
   two or more pages if that's what proper work space requires; don't
   shrink `blank_space()`/`blank_lines()` chunks just to fit everything
   onto fewer pages.
+- **Fill-in tables need a `blank_table()` chunk, not a plain Markdown
+  table.** A pandoc pipe table (or grid table) renders each row at
+  single-line height in both PDF and Word, with no portable way to add
+  row padding -- raw LaTeX (`\vspace`, taller `p{}` columns via
+  kableExtra) breaks Word output, and `<br>`/`&nbsp;` padding inside
+  pipe- or grid-table cells is silently dropped by pandoc's table
+  readers (tested directly: neither adds any visible height). This
+  makes any table where students write numbers or short answers into
+  cells too cramped to use once printed. Use the `blank_table()` helper
+  (see `labs/Lab1_Act2.Rmd`, `labs/Lab1_Act3.Rmd`, `labs/Lab2_Act2.Rmd`,
+  or `labs/Lab2_Act3.Rmd` for the pattern) instead: it draws the table
+  with base R graphics, same as `blank_lines()`/`blank_space()`, so row
+  height is directly controllable via `row_height` and renders
+  identically in both output formats. Pass plain-text values for
+  already-filled cells and `""` for blanks the student fills in; use
+  `expression(...)` (plotmath) for single-symbol math in headers (e.g.
+  `expression(a)`) rather than full LaTeX formulas -- plotmath doesn't
+  reliably reproduce LaTeX notation (a unary minus in a superscript
+  rendered wrong in testing), so keep any needed formula in the prose
+  above the table instead of trying to reproduce it in a header. This
+  doesn't apply to tables that only *display* data (e.g. `kable()` for
+  the raw dataset) -- only to tables where a cell is meant to be
+  hand-filled.
 - **Pen-and-paper by default; laptops open only once ideas are
   finalized.** For weeks that are primarily math/derivation, lab
   handouts are completed entirely without laptops: code chunks

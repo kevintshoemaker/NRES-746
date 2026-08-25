@@ -36,13 +36,51 @@ blank_space <- function() {
   par(mar = c(0, 0, 0, 0))
   plot.new()
 }
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
 ```
 
 ## Picking up where we left off
 
-In Act 1, your group likely diagnosed the tadpole predation data as **hump-shaped** and named the Ricker function, $y = a\,x\,e^{-bx}$, as a plausible candidate. Today we make that candidate concrete: we'll pick specific numbers for $a$ and $b$, evaluate the function, and use calculus to find exactly where it peaks -- then check whether that matches what you eyeballed last time.
+In Act 1, your group probably diagnosed the tadpole predation data as **hump-shaped** and named the Ricker function, $y = a\,x\,e^{-bx}$, as a plausible candidate. Today we make that candidate concrete: we'll pick specific numbers for $a$ and $b$, evaluate the function, and use calculus to find exactly where it peaks -- then check whether that matches what you eyeballed last time.
 
-Before we get there, a quick warm-up on the algebra tool we'll lean on all semester: logarithms and exponents.
+Before we get there, a quick warm-up on logarithms and exponents. Logarithms and exponents will be our friends all semester, since they are central not only to the deterministic functions we work with, but also working with probabilities and likelihoods.
 
 ## Part 1: Log & exponent warm-up (individual, ~10-15 min)
 
@@ -84,12 +122,17 @@ Now check your answer against a small numeric example: $y = 10\,e^{-0.5x}$ (so $
 
 *Useful values:* $e^{-1} \approx 0.368$, &nbsp; $e^{-2} \approx 0.135$, &nbsp; $e^{-3} \approx 0.050$, &nbsp; $\ln(10) \approx 2.303$
 
-| $x$ | $y = 10e^{-0.5x}$ | $\ln(y)$ |
-|:---:|:---:|:---:|
-| 0 |  |  |
-| 2 |  |  |
-| 4 |  |  |
-| 6 |  |  |
+```{r fill-log-table, fig.height=0.35+4*0.5, fig.width=4}
+blank_table(
+  headers = list(expression(x), expression(y), expression(ln(y))),
+  body = list(
+    list("0", "", ""),
+    list("2", "", ""),
+    list("4", "", ""),
+    list("6", "", "")
+  )
+)
+```
 
 Compute the change in $\ln(y)$ each time $x$ increases by 2: ________. Does it match what you predicted for the slope above? ________
 
@@ -99,7 +142,7 @@ Compute the change in $\ln(y)$ each time $x$ increases by 2: ________. Does it m
 
 $$y = a\,x\,e^{-bx}, \qquad a = 0.9, \qquad b = \frac{1}{12} \text{ mm}^{-1}$$
 
-(These are illustrative, chosen to [very!] roughly match the pattern you saw -- not a formal fit. We'll learn how to actually fit a curve to data soon!)
+(These are illustrative, chosen to [very!] roughly match the pattern you saw. This is not a formal fit - we'll learn how to actually fit a curve to data soon!)
 
 ```{r candidate-curve, fig.height=3.4, fig.width=5.5}
 set.seed(1)
@@ -113,9 +156,25 @@ grid()
 
 **Step 2: Evaluate by hand.** Using $a=0.9$ and $b=1/12$, compute $y$ at three tadpole sizes. *Useful values:* $e^{-0.5}\approx 0.607$, $e^{-1}\approx 0.368$, $e^{-2}\approx 0.135$.
 
-$y(6) =$ ________ &nbsp;&nbsp;&nbsp;&nbsp; $y(12) =$ ________ &nbsp;&nbsp;&nbsp;&nbsp; $y(24) =$ ________
+$y(6) =$ ________
 
-Do these three values rise then fall, consistent with the hump shape? ________
+```{r fig.height=0.3*2}
+blank_space()
+```
+
+$y(12) =$ ________
+
+```{r fig.height=0.3*2}
+blank_space()
+```
+
+$y(24) =$ ________
+
+```{r fig.height=0.3*2}
+blank_space()
+```
+
+Does this curve appear to approximate the hump shaped relationship observed in the data? ________
 
 **Step 3: Take the derivative.** Find $dy/dx$ for $y = a\,x\,e^{-bx}$. This is a *product* of two pieces of $x$, so you'll need the product rule together with the chain rule for the exponential term.
 
@@ -123,13 +182,19 @@ Do these three values rise then fall, consistent with the hump shape? ________
 
 Show your work:
 
-```{r fig.height=0.3*3}
+```{r fig.height=0.3*4}
 blank_space()
 ```
 
 $\dfrac{dy}{dx} =$ ________________________
 
-What is the derivative of f(x) at x=0? What does this tell you about the meaning of the parameter "a" in the Ricker equation?
+Compute the derivative at $x=0$:
+
+```{r fig.height=0.3*2}
+blank_space()
+```
+
+$\left.\dfrac{dy}{dx}\right|_{x=0} =$ ________ &nbsp;&nbsp; What does this tell you about the meaning of the parameter $a$ in the Ricker equation?
 
 ```{r}
 blank_lines()
@@ -165,7 +230,7 @@ blank_lines()
 
 ## Part 3: A first taste of integration (individual, ~8-12 min)
 
-Calculus has two main tools: derivatives (rates of change, which we just used to find a peak) and **integrals** (accumulation -- adding up a rate over some interval to get a total). We'll use this idea much more when we work with continuous probability distributions.
+Calculus has two main tools: derivatives (rates of change, which we just used to find a peak) and **integrals** (accumulation -- adding up a rate over some interval to get a total. Basically just the analog of summation for continuous functions). We'll use this idea much more when we work with continuous probability distributions.
 
 **Worked example.** Suppose -- just for this simple example, forget the Ricker curve -- that dragonfly larvae capture tadpoles at a *constant* rate of $r = 2$ tadpoles/day for the entire $T=3$-day trial. The total number killed is rate $\times$ time:
 
@@ -202,7 +267,7 @@ Compare your work with your group -- especially your derivative and critical poi
 
 Please take a minute to record any changes you made and any new insights gained during the group discussion. You can also use this space to reflect on any areas of confusion ("muddiest points") or topics you want to review or dust off going forward.
 
-One additional discussion point: do you think you could find better-fitting parameters for the Ricker function than the ones we guessed above? 
+One additional discussion point: do you think you could find better-fitting parameters for the Ricker function than the ones we guessed above? How would you find the best parameter values??
 
 ```{r fig.height=0.3*8}
 blank_lines(8)
