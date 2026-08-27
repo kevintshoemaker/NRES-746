@@ -1,0 +1,184 @@
+---
+title: "Lab 3, Act 1"
+subtitle: "Trusting a positive detection"
+author: "NRES 746 -- name: ____________________    group: ______"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+```
+
+## The scenario
+
+A regional wildlife agency is monitoring a rare forest carnivore using
+motion-triggered camera traps. Most trigger events aren't the target
+species at all (deer, rabbits, blowing branches, and hikers set off
+the cameras more often than the target animal.
+To keep field biologists from having to review every single image by
+eye, the agency uses an automated image classifier that flags each
+trigger event as either "target species detected" or not.
+
+The classifier isn't perfect. For this exercise, suppose:
+
+```{r params-table}
+params <- data.frame(
+  Quantity = c("Prevalence: fraction of all trigger events that are actually the target species",
+               "Sensitivity: P(flagged | actually the species)",
+               "False positive rate: P(flagged | not the species)"),
+  Value = c("1 in 10,000 (0.0001)", "0.98", "0.01")
+)
+knitr::kable(params, col.names = c("Quantity", "Value"))
+```
+
+That sounds like a pretty good classifier, since it catches 98% of true
+detections and only mistakenly flags a 'background' image not containing the species 
+1% of the time. **If the classifier flags an image, how worried should the field team be
+that it's a false alarm?**
+
+## Part 1: Compute it with Bayes' rule (individual, ~15 min)
+
+Let $S$ = "trigger event is actually the target species" and $F$ =
+"classifier flags the image." You want $P(S \mid F)$.
+
+**1a.** Compute the two joint probabilities you'll need: $P(F \cap S)$
+and $P(F \cap \lnot S)$.
+
+```{r fig.height=0.3*5}
+blank_space()
+```
+
+**1b.** Use the law of total probability to combine your two joint
+probabilities from 1a into the unconditional probability of a flag,
+$P(F)$.
+
+```{r fig.height=0.3*3}
+blank_space()
+```
+
+**1c.** Now apply Bayes' rule to compute $P(S \mid F)$ -- the
+probability that a flagged image is a true detection.
+
+```{r fig.height=0.3*4}
+blank_space()
+```
+
+**1d.** Is this number close to what you expected given the
+sensitivity and false-positive rate reported above? In a sentence or
+two, what would you tell the field team about how to handle a single
+flagged image?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+## Part 2: The same answer, a different way (individual, ~5-8 min)
+
+Bayes' rule can feel abstract. Natural frequencies -- working with
+whole counts of events instead of probabilities -- often make the same
+calculation feel more concrete. Suppose the cameras log 100,000 trigger
+events over a season. Fill in the table below using the prevalence,
+sensitivity, and false-positive rate given above (round to the nearest
+whole number where needed).
+
+```{r fill-freq-table, fig.height=0.35+3*0.5, fig.width=5.5}
+blank_table(
+  headers = list("", "Flagged", "Not flagged", "Total"),
+  body = list(
+    list("Actually the species", "", "", "10"),
+    list("Not the species", "", "", "99,990"),
+    list("Total", "", "", "100,000")
+  ),
+  col_widths = c(1.6, 1, 1.1, 0.9),
+  cex = 0.85
+)
+```
+
+**2a.** From your completed table, read off $P(S \mid F)$ directly (true
+detections among flagged images, divided by all flagged images). Does
+it match your answer to 1c?
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+## Group discussion and revision (~5 min)
+
+Compare your answers and your natural-frequency table with your group.
+One thing worth discussing: prevalence is doing almost all the work in
+this result, more than sensitivity or false-positive rate -- does that
+match your intuition, and can you point to exactly where in the
+calculation that shows up?
+
+Feel free to revise any of your answers above based on the discussion
+(it's fine to cross out and rewrite -- I like to see your thinking
+evolve).
+
+Please take a minute to record any changes you made and any new
+insights gained during the group discussion. You can also use this
+space to reflect on any areas of confusion ("muddiest points") or
+topics you want to review or dust off going forward.
+
+```{r fig.height=0.3*6}
+blank_lines(6)
+```

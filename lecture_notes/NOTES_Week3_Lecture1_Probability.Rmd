@@ -1,0 +1,295 @@
+---
+title: "Week 3, Lecture 1: Probability"
+subtitle: "Instructor notes -- Part 1: prep reading, Part 2: podium cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 5, fig.height = 3.5)
+```
+
+This single file has two parts, both instructor-only (not a student
+handout). **Part 1** is read beforehand -- full worked examples and the
+reasoning behind the flow. **Part 2** (after the page break, large
+print) is the podium copy.
+
+Source material: Bolker 4.1-4.3 (intro through Bayes' Rule, p. 139-152),
+leaning on the false-positive medical testing example (4.3.1, p. 148)
+and the liana infestation example (4.3.2, p. 149). Also mined:
+`LECTURE2.Rmd` (the legacy, pre-redesign version of this exact lecture
+-- its two-attribute urn example is well-tested and reused directly
+below) and the idea bank's PPV problem.
+
+# Where this sits in the week
+
+- Today: probability foundations -- sample space, events, axioms,
+  joint/marginal/conditional probability, independence, Bayes' rule.
+- Tomorrow (Lab 3): Act 1 applies today's Bayes' rule machinery to a
+  camera-trap classifier PPV problem (different numbers, same
+  technique); Acts 2-3 get hands-on with `dbinom()`/`dpois()`/`dnorm()`
+  *before* Wednesday's lecture formally introduces them.
+- Wednesday: the bestiary of distributions -- picks up where today
+  leaves off, now that students have both the theory (today) and
+  hands-on exposure (lab) in hand.
+
+# Rationale for the flow
+
+Bolker's own chapter opens with sample space/event/probability-measure
+formalism before getting to anything useful. Keep that section short --
+Calc-II students need the vocabulary but not a measure-theory detour.
+Spend the real time on **one worked example that carries joint,
+marginal, conditional probability, and independence all in one place**
+(the urn), then a **second worked example that carries Bayes' rule**
+(the medical test). Two examples, not five -- depth over breadth, since
+tomorrow's lab is where students actually practice this.
+
+# Part A: Foundations (~8 min)
+
+Open with an ecological framing, not bare notation: a site is either
+occupied by a species or not, before you go survey it -- that's already
+a random variable in the making.
+
+- **Sample space** $\Omega$: the set of all possible outcomes of a
+  trial. For two fair coin flips, $\Omega = \{HH, HT, TH, TT\}$.
+- **Event**: a subset of $\Omega$ that we assign a probability to (e.g.
+  "at least one head" $=\{HT, HH, TH\}$).
+- **Random variable**: a mapping from $\Omega$ onto the real number
+  line (e.g. $X=0$ for tails, $X=1$ for heads -- the assignment is
+  arbitrary, but it lets us do arithmetic with outcomes).
+- **Kolmogorov's axioms** (all of probability theory follows from just
+  these three):
+  1. $P(E) \geq 0$ for any event $E$ -- probabilities are never negative.
+  2. $P(\Omega) = 1$ -- something in the sample space always happens.
+  3. For disjoint events, $P(\bigcup_i E_i) = \sum_i P(E_i)$ -- you can
+     add up probabilities of non-overlapping pieces.
+
+**Sticking point to flag right away:** students often want to treat
+"probability" as a property of an event in isolation. Axiom 3 is the
+one that does all the real work later (law of total probability, Bayes'
+rule) -- flag that this is the one to remember.
+
+# Part B: Joint, marginal, conditional probability (the urn) (~10 min)
+
+Reuse the two-attribute urn from the legacy lecture -- it's compact and
+carries four concepts in one example. An urn contains objects that vary
+in both color and shape:
+
+```{r urn-setup}
+Urn <- matrix(NA, 2, 2, dimnames = list(Color = c("red", "blue"), Shape = c("sphere", "cube")))
+Urn["red", "sphere"]  <- 39
+Urn["blue", "sphere"] <- 76
+Urn["red", "cube"]    <- 101
+Urn["blue", "cube"]   <- 25
+Urn
+
+Prob <- Urn / sum(Urn)
+Prob
+```
+
+**Marginal probability** -- sum out the attribute you don't care about:
+
+```{r urn-marginal}
+Prob_color <- rowSums(Urn) / sum(Urn)
+Prob_shape <- colSums(Urn) / sum(Urn)
+Prob_color
+Prob_shape
+```
+
+**Joint probability, done wrong first (on purpose):** ask "what's
+$P(\text{blue} \cap \text{cube})$?" and let someone suggest
+$P(\text{blue}) \times P(\text{cube})$:
+
+```{r urn-joint-wrong}
+Prob_color["blue"] * Prob_shape["cube"]     # ~0.219 -- WRONG
+Prob["blue", "cube"]                        # ~0.104 -- actual value
+```
+
+They don't match. That's the whole point: multiplying marginals only
+gives the joint probability **if the two attributes are independent**,
+and color and shape aren't independent in this urn (cubes are
+disproportionately red). This motivates conditional probability as the
+*correct* general tool:
+
+$$P(\text{blue} \mid \text{cube}) = \frac{P(\text{blue} \cap \text{cube})}{P(\text{cube})}$$
+
+```{r urn-conditional}
+Prob["blue", "cube"] / Prob_shape["cube"]
+```
+
+Rearranging gives the general joint-probability formula (true whether
+or not the events are independent):
+$$P(A \cap B) = P(A \mid B) \, P(B)$$
+
+**Independence, properly defined:** $A$ and $B$ are independent exactly
+when $P(A \mid B) = P(A)$ -- conditioning on $B$ doesn't change your
+belief about $A$. Only in that special case does the joint probability
+collapse to the product of marginals. This is the fact underlying
+nearly every independence assumption made for the rest of the semester
+(iid data, independent trials in a binomial, etc.).
+
+# Part C: Bayes' rule (~12-14 min)
+
+Derive it as "a recipe for turning around a conditional probability."
+Starting from the joint-probability formula from Part B, applied both
+ways:
+$$P(A \cap B) = P(A\mid B)P(B) = P(B \mid A) P(A)$$
+$$\Rightarrow \quad P(A \mid B) = \frac{P(B\mid A)\,P(A)}{P(B)}$$
+
+Relabel with $H$ (hypothesis) and $D$ (data) -- the framing we'll live
+in for the rest of the semester:
+$$P(H \mid D) = \frac{P(D \mid H)\,P(H)}{P(D)}$$
+
+$P(D\mid H)$ is the **likelihood** (the single most important quantity
+in this course, frequentist or Bayesian). $P(H)$ is the **prior**.
+$P(D)$ is the unconditional/marginal probability of the data -- usually
+the hard part, computed via the law of total probability (axiom 3
+again) over a set of exhaustive, mutually exclusive hypotheses.
+
+**Worked example -- false positives in medical testing** (Bolker
+4.3.1, using his exact numbers so students can follow along in the
+reading):
+
+```{r ppv-example}
+P_I <- 1e-6          # P(infected) -- unconditional prevalence
+P_pos_given_I <- 1    # sensitivity: never a false negative
+P_pos_given_U <- 1e-2 # false positive rate
+
+P_U <- 1 - P_I
+P_pos <- P_pos_given_I * P_I + P_pos_given_U * P_U
+P_pos                                    # ~= 1e-2 -- the 1e-6 term is negligible
+
+PPV <- (P_pos_given_I * P_I) / P_pos
+PPV                                      # ~= 1e-4
+```
+
+Walk through *why* $P(+)\approx 10^{-2}$: the true-positive contribution
+($10^{-6}$) is four orders of magnitude smaller than the false-positive
+contribution ($\approx 10^{-2}$), so it can be dropped. That
+approximation move -- neglecting a term four orders of magnitude
+smaller than another -- is worth naming explicitly; it's the same
+"throw out the lower-order term" instinct from Week 2's limits, now
+applied to arithmetic instead of algebra.
+
+**Sticking point to flag -- the single most common error here:**
+confusing $P(H\mid D)$ with $P(D \mid H)$. The test has excellent
+sensitivity ($P(+\mid I)=1$) but that number answers a completely
+different question than the one anyone actually cares about
+($P(I\mid+)$). This confusion has a name -- the **base rate fallacy** --
+and it recurs constantly outside the classroom (DNA evidence in
+forensics is Bolker's other example, p. 149).
+
+**If time -- second example, multi-hypothesis Bayes' rule (liana
+infestation, Bolker 4.3.2, p. 149):** same idea generalized from 2
+hypotheses to $N$: $P(H_i \mid D) = \dfrac{P(D\mid H_i)P(H_i)}{\sum_j P(D\mid H_j)P(H_j)}$.
+Just flash the setup (4 liana infestation classes, a new tree's number
+of infested neighbors as the data) -- don't work it in full; tomorrow's
+Lab 3 Act 1 does a full worked version of this idea with a camera-trap
+classifier instead of lianas.
+
+# Take-home message
+
+- Axioms 1-3 are the whole foundation; axiom 3 (summing disjoint
+  pieces) is what powers the law of total probability and Bayes' rule.
+- Joint probability is $P(A\mid B)P(B)$ in general; it only simplifies
+  to $P(A)P(B)$ when $A$ and $B$ are independent -- don't assume
+  independence, check it.
+- Bayes' rule turns $P(D\mid H)$ (what you can compute) into
+  $P(H\mid D)$ (what you actually want) -- and a "good-sounding" test
+  can still have a surprisingly low $P(H\mid D)$ when $P(H)$ is small.
+
+# Roadmap tie-in
+
+- Tomorrow (Lab 3, Act 1): same Bayes' rule machinery, camera-trap
+  classifier PPV, different numbers.
+- Wednesday: today's foundations become the platform for the bestiary
+  of named distributions -- discrete and continuous "shapes" for
+  describing variability.
+
+# Discussion seed (if time remains)
+
+Ask: *if a camera-trap classifier flags an image as your target
+species, and you know the species is rare at this site, should you
+trust a single flag? What would change your answer -- a second,
+independent flag? A different kind of evidence entirely?* Good prompt
+for previewing tomorrow's lab and for surfacing that "how much evidence
+is enough" is itself a probability question.
+
+\newpage
+\large
+
+# PART 2 -- PODIUM CHEAT SHEET
+
+\normalsize
+*Podium copy -- terse on purpose. Full derivations, rationale, and
+code: see Part 1 above.*
+\large
+
+## 0. Open (~2 min)
+
+- Today: probability foundations. Tomorrow's lab and Wednesday's
+  lecture both build directly on this.
+
+## 1. Foundations (~8 min)
+
+- Sample space $\Omega$, event (subset of $\Omega$), random variable
+  (mapping onto $\mathbb{R}$)
+- **Kolmogorov's axioms:**
+  1. $P(E)\geq0$
+  2. $P(\Omega)=1$
+  3. disjoint events: $P(\bigcup E_i)=\sum P(E_i)$ -- **this one does
+     all the work later**
+
+## 2. Urn example: joint/marginal/conditional/independence (~10 min)
+
+```{r podium-urn, echo=FALSE}
+Urn <- matrix(c(39, 76, 101, 25), 2, 2,
+              dimnames = list(Color = c("red","blue"), Shape = c("sphere","cube")))
+Prob <- Urn / sum(Urn)
+```
+
+- Marginal: sum out the attribute you don't want (`rowSums`/`colSums`)
+- **Wrong-then-right joint probability:**
+  $P(\text{blue})P(\text{cube}) \approx 0.219$ vs. actual $P(\text{blue},\text{cube})\approx0.104$
+  -- multiplying marginals only works under independence!
+- Conditional: $P(A\mid B) = P(A\cap B)/P(B)$
+- General joint formula: $P(A\cap B)=P(A\mid B)P(B)$
+- **Independence** (proper def.): $P(A\mid B)=P(A)$
+
+## 3. Bayes' rule (~12-14 min)
+
+- From $P(A\cap B)$ both ways: $P(H\mid D) = \dfrac{P(D\mid H)P(H)}{P(D)}$
+- $P(D\mid H)$ = **likelihood**, $P(H)$ = **prior**, $P(D)$ = law of
+  total probability over exhaustive hypotheses
+
+**Medical test (Bolker 4.3.1):** $P(I)=10^{-6}$, sensitivity $=1$,
+false positive rate $=10^{-2}$
+
+```{r podium-ppv, echo=FALSE}
+P_I <- 1e-6; P_pos_given_I <- 1; P_pos_given_U <- 1e-2
+P_pos <- P_pos_given_I*P_I + P_pos_given_U*(1-P_I)
+PPV <- (P_pos_given_I*P_I)/P_pos
+```
+
+- $P(+) \approx 10^{-2}$ (the $10^{-6}$ term is negligible -- same
+  "drop the small term" move as Week 2's limits)
+- $\text{PPV} = P(I\mid+) \approx 10^{-4}$ -- a "good" test, still a
+  surprisingly unreliable positive result
+- **Sticking point:** $P(I\mid+) \neq P(+\mid I)$ -- the **base rate
+  fallacy**
+
+**If time:** liana infestation (Bolker 4.3.2) -- same idea, $N$
+hypotheses instead of 2. Flash the setup only; full version tomorrow.
+
+## 4. Roadmap + discussion (~3 min)
+
+- Tomorrow: Lab 3 Act 1, same machinery, camera-trap classifier
+- Wednesday: bestiary of distributions
+- *Discussion:* would a second, independent flag change your trust in
+  a positive detection? What kind of evidence would?

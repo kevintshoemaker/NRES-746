@@ -1,0 +1,256 @@
+---
+title: "Week 3, Lecture 2: Bestiary of Distributions"
+subtitle: "Instructor notes -- Part 1: prep reading, Part 2: podium cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 5, fig.height = 3.5)
+```
+
+This single file has two parts, both instructor-only (not a student
+handout). **Part 1** is read beforehand -- full worked examples and the
+reasoning behind the flow. **Part 2** (after the page break, large
+print) is the podium copy.
+
+Source material: Bolker 4.4-4.6 (p. 155-188): analyzing probability
+distributions (moments), the bestiary of distributions, and extending
+simple distributions. Also mined: `LECTURE2.Rmd` (legacy version of
+this lecture pair -- its Poisson/binomial/beta R demos are reused
+below with fresh parameter values), and Monday's lecture notes.
+
+# Where this sits in the week
+
+- Monday: probability foundations, Bayes' rule.
+- Tuesday (Lab 3): Act 1 practiced Bayes' rule; Acts 2-3 got hands-on
+  with `dbinom()`/`dpois()`/`dnorm()`/`pnorm()`/`qnorm()` on a
+  camera-trap monitoring scenario, *before* today's lecture formally
+  names and organizes these distributions.
+- **Today:** name what the lab already touched, add moments and two
+  distributions the lab didn't cover (a skewed continuous one, and a
+  quick look at what happens when simple distributions don't fit), and
+  give students a framework for choosing a distribution from the shape
+  of their own data.
+
+# Rationale for the flow
+
+Bolker's own advice for section 4.5: skim it as a map, not a
+memorization list. Students already have `dbinom()` and `dpois()` in
+their hands from yesterday's lab -- today isn't a first introduction,
+it's organizing what they already did and adding vocabulary (moments,
+support, the data-generating-process framing) plus 1-2 new shapes.
+Keep the survey shallow and wide, with one deeper worked example
+(moments) and one genuinely new distribution (a bounded continuous one
+-- beta -- since nothing in the lab needed it).
+
+# Part A: Moments (~8-10 min)
+
+**Moments** describe the shape of a distribution. The $n$th moment is
+$E[X^n]$; the $n$th *central* moment replaces $X$ with $X-\mu$.
+
+- 0th central moment: always 1 (axiom 2, restated)
+- 1st central moment: always 0 (that's what makes $\mu$ the mean)
+- 2nd central moment: the **variance**
+- 3rd, standardized: **skewness**; 4th, standardized: **kurtosis**
+
+**Worked derivation** (Calc-II algebra only, no new calculus): show
+that $\text{Var}(X) = E[X^2] - \mu^2$, a formula students will use
+constantly but rarely see derived.
+
+$$\text{Var}(X) = E[(X-\mu)^2] = E[X^2 - 2\mu X + \mu^2] = E[X^2] - 2\mu E[X] + \mu^2$$
+
+Since $E[X]=\mu$:
+$$= E[X^2] - 2\mu^2 + \mu^2 = E[X^2] - \mu^2$$
+
+Worth pointing out explicitly: this is just expanding a square and
+using linearity of expectation -- nothing here is harder than what
+Week 1's algorithms lecture already assumed they could do.
+
+**Parameters vs. moments:** parameters are the numbers that go into a
+distribution's formula (e.g. $\lambda$ for Poisson); moments are
+properties you can compute *from* the distribution once you know its
+parameters. Sometimes they're the same thing (Poisson's $\lambda$ is
+simultaneously its mean *and* its variance) and sometimes they're not
+(the normal's $\sigma^2$ is its variance directly, but the gamma's
+variance is a function of two separate parameters).
+
+# Part B: Discrete distributions -- counts (~8 min)
+
+Fresh example, not yesterday's camera-trap detections: seed counts per
+quadrat. Suppose the average number of a given plant's seeds found per
+$1\text{m}^2$ quadrat is $\lambda = 4$.
+
+```{r poisson-example}
+lambda <- 4
+xvals <- 0:14
+probs <- dpois(xvals, lambda)
+barplot(probs, names.arg = xvals, ylab = "Probability",
+        xlab = "Seeds per quadrat", main = "Poisson(4)")
+sum(probs)     # doesn't quite hit 1 -- tail beyond x=14 is still out there
+```
+
+**Binomial recap (already met in Lab 3 Act 2):** counts of successes
+out of a fixed number of independent trials, each with the same
+success probability $p$. **Poisson recap (also met in lab):** counts of
+independent events in a fixed window of time or space, with rate
+$\lambda$ -- the limiting case of the binomial as $N\to\infty$,
+$p\to0$, with $Np=\lambda$ held fixed (this is exactly what Act 2's
+$N=100$, $p=0.024$ comparison demonstrated numerically).
+
+**Sticking point to flag:** Poisson's single parameter $\lambda$ is
+*simultaneously* the mean and the variance (mean = variance is called
+**equidispersion**). Real count data is very often *more* variable than
+this (**overdispersion**) -- worth a one-sentence preview that the
+negative binomial exists specifically to relax this constraint (not
+covered today).
+
+# Part C: Continuous distributions -- measurements (~8-10 min)
+
+**Normal recap (met in Lab 3 Act 3):** symmetric, unbounded, fully
+determined by its first two moments ($\mu$, $\sigma^2$) -- central to
+the whole course because of the central limit theorem.
+
+**New today -- the beta distribution**, for data that's a *proportion*
+or *probability* itself (bounded between 0 and 1). Example: fraction of
+a quadrat's area covered by an invasive species.
+
+```{r beta-example}
+a <- 2; b <- 5   # shape parameters
+curve(dbeta(x, a, b), from = 0, to = 1, lwd = 2,
+      xlab = "Proportion cover", ylab = "Density", main = "Beta(2, 5)")
+integrate(dbeta, lower = 0, upper = 1, shape1 = a, shape2 = b)   # check: integrates to 1
+```
+
+Point out: beta's two shape parameters ($\alpha$, $\beta$) don't map
+onto mean/variance as directly as the normal's do, but the mean works
+out to $\alpha/(\alpha+\beta)$ -- worth showing since it's exactly the
+"fraction of total" intuition the shape parameters suggest. This is
+also the natural distribution for *a probability itself* -- worth a
+one-sentence flag forward to the Bayesian inference weeks, where a
+prior on a probability parameter is very often a beta.
+
+**Sticking point to flag (recap from Lab 3 Act 3, worth restating with
+a new example):** the height of `dbeta()`'s curve is a *density*, not a
+probability -- it can exceed 1 (try `dbeta(0.2, 2, 5)`), and only an
+*area* under the curve is a probability.
+
+# Part D: Choosing a distribution (~6-8 min)
+
+The organizing question, straight from Bolker: **what process generated
+this data?**, not "what shape does the histogram look like?" A table
+worth putting on the board:
+
+| Data looks like...                          | Consider...          |
+|:---------------------------------------------|:----------------------|
+| successes out of a fixed number of trials    | binomial               |
+| counts of independent events, no fixed upper bound | Poisson (or negative binomial, if overdispersed) |
+| a bounded proportion or probability          | beta                   |
+| a continuous, roughly symmetric measurement  | normal                 |
+| a continuous, right-skewed, positive measurement | gamma or lognormal (not covered in depth today) |
+
+The two "not covered in depth today" mentions (negative binomial,
+gamma/lognormal) are deliberate -- flag them as *named* so students
+recognize them later in the semester, without deriving them now.
+
+# Take-home message
+
+- Moments describe shape; $\text{Var}(X)=E[X^2]-\mu^2$ is worth
+  remembering, not just looking up.
+- Distributions are chosen by the *mechanism* that generated the data,
+  not by eyeballing a histogram shape.
+- Density $\neq$ probability (only area under a density curve is a
+  probability); Poisson's mean = variance is a real, checkable
+  assumption, not just a mathematical curiosity.
+
+# Roadmap tie-in
+
+- The shapes surveyed today (Weeks 1-2's deterministic functions) will
+  soon get noise wrapped around them -- Week 5 (synthetic data
+  simulation) combines a deterministic mean function with one of
+  today's distributions to build a full stochastic model.
+- Overdispersion (Poisson's broken equidispersion assumption) comes
+  back explicitly in Week 12 (modeling variance).
+
+# Discussion seed (if time remains)
+
+Ask: *looking back at yesterday's lab -- which distribution from
+today's tour best describes the camera-trap detection counts (Act 2)?
+The body mass measurements (Act 3)? Can you imagine a way reality might
+violate the distribution you picked (e.g., detections clustering in
+time rather than being independent)?*
+
+\newpage
+\large
+
+# PART 2 -- PODIUM CHEAT SHEET
+
+\normalsize
+*Podium copy -- terse on purpose. Full derivations, rationale, and
+code: see Part 1 above.*
+\large
+
+## 0. Open (~2 min)
+
+- Yesterday's lab already used `dbinom()`, `dpois()`, `dnorm()` -- today
+  organizes and names what you touched, adds moments + one new shape
+
+## 1. Moments (~8-10 min)
+
+- 0th central moment = 1, 1st = 0, 2nd = **variance**, 3rd = skewness,
+  4th = kurtosis
+- **Derive on board:** $\text{Var}(X)=E[X^2]-2\mu E[X]+\mu^2 = E[X^2]-\mu^2$
+  (just expand the square + linearity of $E[\cdot]$)
+- parameters (go into the formula) vs. moments (computed from it) --
+  Poisson's $\lambda$ is *both* at once
+
+## 2. Discrete: counts (~8 min)
+
+```{r podium-pois, echo=FALSE, fig.width=3.3, fig.height=2.3}
+par(mar = c(3.5, 3, 1, 0.5))
+barplot(dpois(0:14, 4), names.arg = 0:14, cex.names = 0.6,
+        ylab = "Prob.", xlab = "Seeds/quadrat")
+```
+
+- **Binomial** (Lab 3 Act 2): fixed $N$ trials, constant $p$
+- **Poisson** (Lab 3 Act 2): rate $\lambda$, limit of binomial as
+  $N\to\infty,p\to0,Np=\lambda$
+- **Sticking point:** Poisson mean = variance (**equidispersion**) --
+  real counts are often **overdispersed** (negative binomial handles
+  this, not today)
+
+## 3. Continuous: measurements (~8-10 min)
+
+```{r podium-beta, echo=FALSE, fig.width=3.3, fig.height=2.3}
+par(mar = c(3.5, 3, 1, 0.5))
+curve(dbeta(x, 2, 5), from = 0, to = 1, lwd = 2, xlab = "Proportion", ylab = "Density")
+```
+
+- **Normal** (Lab 3 Act 3): symmetric, unbounded, $\mu,\sigma^2$ fully
+  determine it (CLT)
+- **New -- Beta**: bounded $[0,1]$, for proportions/probabilities;
+  mean $=\alpha/(\alpha+\beta)$; natural prior for a probability
+  parameter (preview: Bayesian weeks)
+- **Sticking point (again):** density $\neq$ probability -- can exceed
+  1, only *area* is a probability
+
+## 4. Choosing a distribution (~6-8 min)
+
+- Fixed trials, successes $\to$ **binomial**
+- Counts, no fixed upper bound $\to$ **Poisson** (or neg. binomial if
+  overdispersed)
+- Bounded proportion $\to$ **beta**
+- Symmetric continuous $\to$ **normal**
+- Skewed positive continuous $\to$ gamma/lognormal (named only)
+- **Match the mechanism, not the histogram shape**
+
+## Discussion (if time)
+
+- *Which distribution fits yesterday's detection counts (Act 2)? Body
+  mass (Act 3)? How might reality violate that choice?*
