@@ -402,8 +402,31 @@ Use `Lab1_Act1.Rmd` as the template for formatting all three
 Acts:
 
 - **YAML**: `title: "Lab N, Act X: <Name>"`, a one-line `subtitle` posing
-  the week's driving question, `author: "NRES 746 -- name: ____________________    group: ______"`,
-  `date: ""`, dual word/pdf output as above.
+  the week's driving question, `author: "NRES 746 -- name: _______________   group: _____________________"`,
+  `date: ""`, dual word/pdf output as above. The "group" blank needs to
+  be noticeably wider than the "name" blank -- despite the label, it's
+  where students write the names of their groupmates (typically one or
+  two people), not a group number, so it needs room for actual names.
+- **A lab's last Act may need to double as an individual take-home.**
+  Three Acts often won't fit in the 2h45m period; when that happens,
+  the last Act typically goes home to be finished individually before
+  the following week. The handout doesn't need to say so explicitly --
+  just make sure it *works* that way without changes, since in-class
+  time sometimes does allow finishing it as a group after all. That
+  means: no group-work language (skip "Group check-in"/"Group
+  discussion" sections entirely, or reframe them as individual
+  checkpoints -- e.g. "Checkpoint: finalize your plan" instead of
+  "Group check-in," "Reflection" instead of "Group discussion and
+  revision" -- and drop any instruction to compare answers with a
+  group or neighbor), and no closed-laptop/open-laptop banners (a
+  policy that can't be enforced outside class) -- replace those with a
+  plain, non-enforced encouragement to reason through the problem on
+  paper before opening a laptop or reaching for AI, rather than a hard
+  rule (e.g. "Try this on paper first, before you open a laptop or
+  start typing code" rather than "Close your laptop"). Earlier Acts in
+  the same lab keep the full group-work format as normal -- this
+  applies only to the Act that might end up completed alone at home.
+  See `Lab2_Act3.Rmd` for the target format.
 - **Opening "scenario" section**: 1-2 short paragraphs of ecological
   framing before any data or math appears, ending on the concrete question
   the Act will address. Data is presented as "real measurements," with a

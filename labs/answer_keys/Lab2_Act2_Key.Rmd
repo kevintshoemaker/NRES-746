@@ -1,0 +1,125 @@
+---
+title: "Lab 2, Act 2 -- Answer Key"
+subtitle: "Could a different function fit the tadpole data better?"
+author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 6, fig.height = 4.5)
+
+frogs <- read.csv("../../data/ReedfrogSizepred.csv")
+mn <- aggregate(Kill ~ TBL, data = frogs, FUN = mean)
+xs <- mn$TBL; obs <- mn$Kill
+
+ricker <- function(x, a, b) a * x * exp(-b * x)
+```
+
+## Part 1: Two new candidates
+
+**1a.** Setting $c=1$ in $y = a\,x^{c}\,e^{-cx/p}$ gives $y = a\,x\,e^{-x/p}$. Comparing this to
+the plain Ricker, $y = a\,x\,e^{-bx}$, the exponent terms match when $b = 1/p$ (equivalently
+$p = 1/b$) -- so the flexible Ricker is a real generalization: setting $c=1$ recovers the
+original Ricker, with $p$ playing the role of "peak location" wherever $1/b$ used to.
+
+**1b.** Differentiating $y = a\,x^{c}\,e^{-cx/p}$ with the product rule (treating $u = x^c$,
+$v = e^{-cx/p}$) and the chain rule for $v$:
+
+$$\frac{dy}{dx} = a\left[c\,x^{c-1}e^{-cx/p} + x^c e^{-cx/p}\left(-\frac{c}{p}\right)\right]
+ = a\,c\,x^{c-1}e^{-cx/p}\left(1 - \frac{x}{p}\right)$$
+
+This is zero when $x=0$ (a trivial/edge case) or when $1 - x/p = 0$, i.e. $x = p$. So the
+critical point is at $x=p$, confirming $p$ is the peak location by construction.
+
+**Candidate 2 setup (Holling type IV).** $x^* = -2b/c$ for $b=115.09$, $c=-21.49$:
+
+```{r holling-peak}
+b_h <- 115.09; c_h <- -21.49
+x_star <- -2 * b_h / c_h
+x_star
+```
+
+**1c, second part.** As $x\to\infty$: the numerator's leading term is $ax^2$ and the
+denominator's leading term is also $x^2$, so $y \to ax^2/x^2 = a$ -- a finite, positive
+asymptote, *not* zero. This is different from the Ricker family, which decays all the way to
+zero as $x\to\infty$. (This is the point of the "heads-up" box in the handout: Bolker's
+parameterization of Holling type IV keeps a nonzero floor, unlike the more commonly cited
+Andrews/Monod-Haldane version.)
+
+**1d.** Correct R functions:
+
+```{r candidate-functions}
+flex_ricker <- function(x, a, p, c) a * x^c * exp(-c * x / p)
+holling4 <- function(x, a, b, c) a * x^2 / (b + c * x + x^2)
+```
+
+**Group prediction.** Open-ended -- there's no "correct" prediction here, since the point of 2d
+is that intuition (more parameters = better) is a trap. A thoughtful answer might reasonably
+guess Holling IV or flexible Ricker will look better since they have an extra parameter; the
+payoff comes from testing that prediction against what "better" actually means (lowest SSR vs.
+best-looking curve vs. most trustworthy model), not from getting it "right" in advance.
+
+## Part 2: Implement and compare
+
+```{r plot-three, fig.height=3.8}
+a_rk <- 1; b_rk <- 0.15
+a_fr <- 3.68e-19; p_fr <- 12.52; c_fr <- 28.72
+a_h4 <- 0.0329; b_h4 <- 115.09; c_h4 <- -21.49
+
+set.seed(1)
+x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
+     xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
+     pch = 21, bg = "grey70", cex = 1.4)
+curve(ricker(x, a_rk, b_rk), from = 5, to = 40, lwd = 2, col = "steelblue", add = TRUE)
+curve(flex_ricker(x, a_fr, p_fr, c_fr), from = 5, to = 40, lwd = 2, col = "darkorange",
+      add = TRUE, n = 500)
+curve(holling4(x, a_h4, b_h4, c_h4), from = 5, to = 40, lwd = 2, col = "forestgreen",
+      add = TRUE, n = 500)
+legend("topright", legend = c("Ricker", "Flexible Ricker", "Holling IV"),
+       col = c("steelblue", "darkorange", "forestgreen"), lwd = 2, bty = "n")
+```
+
+Holling IV's curve is the "dramatic spike" referenced later in Act 3 -- it's easy to miss on a
+default y-axis, so it's worth zooming in near $x=9$-$13$ if a student's plot looks flat.
+
+**2b. SSR table (5 tank-size means):**
+
+```{r ssr-table}
+ssr <- function(pred) sum((obs - pred)^2)
+c(
+  Ricker          = ssr(ricker(xs, a_rk, b_rk)),
+  FlexibleRicker  = ssr(flex_ricker(xs, a_fr, p_fr, c_fr)),
+  HollingIV       = ssr(holling4(xs, a_h4, b_h4, c_h4))
+)
+```
+
+| Candidate | SSR |
+|:---|:---:|
+| Ricker ($a=1$, $b=0.15$) | 6.74 |
+| Flexible Ricker | 0.11 |
+| Holling type IV | 0.08 |
+
+**2c.** By eye, the flexible Ricker (orange) looks the most reasonable -- a smooth hump that
+tracks the general shape of the data. Holling IV (green) has the *lowest* SSR of the three, but
+its curve is a narrow, biologically implausible spike. So "looks best" and "lowest SSR" point to
+*different* candidates here -- worth calling out explicitly if a student's answer conflates the
+two.
+
+**2d.** The core idea students should land on: with only 5 data points and 3 free parameters,
+a curve family has very little left to constrain it (essentially 2 residual degrees of freedom),
+so it can nearly interpolate the data regardless of whether the resulting shape is a sensible
+model of the underlying process. Lowest SSR is not the same as "best model" -- a model that fits
+its own training data almost perfectly, especially one with many parameters relative to the data,
+should raise suspicion rather than confidence. What you'd want to check: how the fit holds up on
+data it wasn't fit to (out-of-sample performance), or how stable the fitted parameters are under
+resampling -- which is what Act 3 does next.
+
+**Group discussion.** No fixed answer -- have students reconcile differing SSR values (should
+match closely if everyone used the given parameter values and the 5-point convention) and discuss
+their reasoning in 2d.

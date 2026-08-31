@@ -1,0 +1,154 @@
+---
+title: "Lab 2, Act 3 -- Answer Key"
+subtitle: "How much should you trust the 'best' fit?"
+author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 6, fig.height = 4.5)
+
+frogs <- read.csv("../../data/ReedfrogSizepred.csv")
+ricker <- function(x, a, b) a * x * exp(-b * x)
+flex_ricker <- function(x, a, p, c) a * x^c * exp(-c * x / p)
+```
+
+## Part 1: Plan the bootstrap
+
+**1a.** Similar resolution (50-60 values per parameter) for 3 parameters:
+
+```{r grid-size-3d}
+60^3
+```
+
+Roughly 200,000 combinations -- three orders of magnitude more than Act 1's 2D grid, and each
+one requires evaluating the SSR at 15 points. Still technically possible but slow and wasteful;
+this is the motivation for `optim()`. (Some students may estimate using 50 instead of 60 --
+either order of magnitude, ~125,000-200,000, is an acceptable answer.)
+
+**1b.** A correct plain-English bootstrap algorithm should include:
+
+1. Set the number of bootstrap replicates (e.g. 200+).
+2. For each replicate: draw a sample of 15 observations, *with replacement*, from the full set
+   of 15 raw tank observations (pooled, not stratified by tank size).
+3. Refit both models (`fit_ricker()` and `fit_flex_ricker()`) to that resampled data, using the
+   resampled $x$ and $y$ vectors as input.
+4. Store the fitted parameters from both models for that replicate.
+5. After all replicates are done, look at the distribution (e.g. median, IQR, histogram) of the
+   stored parameter values for each model.
+
+Common gaps: forgetting "with replacement" (without it, every resample is identical to the
+original data and there's nothing to learn), or resampling the 5 tank-size groups instead of
+the 15 raw observations.
+
+**1c.** No fixed correct prediction -- this is meant to be tested, not answered from theory.
+A reasonable prediction is that the simpler, 2-parameter Ricker will be more stable (fewer
+parameters, less room to swing), and that's *partly* right -- but the actual result (below) is
+more nuanced than "simple model = stable, complex model = unstable."
+
+## Part 2: Run the bootstrap
+
+```{r fit-functions}
+fit_ricker <- function(x, y) {
+  ssr <- function(par) sum((y - par[1]*x*exp(-par[2]*x))^2)
+  optim(c(1, 0.15), ssr)$par
+}
+
+fit_flex_ricker <- function(x, y) {
+  ssr <- function(par) {
+    a <- par[1]; p <- par[2]; c <- par[3]
+    if (p <= 0 || c <= 0 || a <= 0) return(1e10)
+    pred <- a * x^c * exp(-c * x / p)
+    if (any(!is.finite(pred))) return(1e10)
+    sum((y - pred)^2)
+  }
+  starts <- list(c(1e-6, 12, 8), c(0.01, 12, 3), c(1, 15, 2))
+  best <- NULL
+  for (s in starts) {
+    fit <- optim(s, ssr, control = list(maxit = 2000))
+    if (is.null(best) || fit$value < best$value) best <- fit
+  }
+  best$par
+}
+```
+
+```{r bootstrap, cache=TRUE}
+set.seed(123)
+nboot <- 300
+n <- nrow(frogs)
+ricker_boot <- matrix(NA, nboot, 2)
+flex_boot <- matrix(NA, nboot, 3)
+
+for (i in seq_len(nboot)) {
+  idx <- sample(seq_len(n), size = n, replace = TRUE)
+  bx <- frogs$TBL[idx]; by <- frogs$Kill[idx]
+  ricker_boot[i, ] <- fit_ricker(bx, by)
+  flex_boot[i, ] <- fit_flex_ricker(bx, by)
+}
+
+ricker_peak <- 1 / ricker_boot[, 2]
+flex_peak <- flex_boot[, 2]
+flex_shape <- flex_boot[, 3]
+```
+
+**2b. Summary table** (exact numbers will vary slightly by random seed and replicate count --
+this is one run of 300 replicates, seed 123; students' numbers should be in the same ballpark):
+
+```{r summary-table}
+summarize <- function(v) c(median = median(v), quantile(v, c(0.25, 0.75)))
+rbind(
+  `Ricker peak (1/b)`          = summarize(ricker_peak),
+  `Flexible Ricker peak (p)`   = summarize(flex_peak),
+  `Flexible Ricker shape (c)`  = summarize(flex_shape)
+)
+```
+
+| Parameter | Median | IQR |
+|:---|:---:|:---:|
+| Ricker peak ($1/b$) | $\approx6.4$ | roughly 5.6 to 7.3 |
+| Flexible Ricker peak ($p$) | $\approx13.0$ | roughly 12.6 to 13.4 |
+| Flexible Ricker shape ($c$) | $\approx20$-21 | roughly 18.5 to 22 |
+
+Worth noting for grading: `fit_flex_ricker()`'s $a$ values span an enormous range across
+replicates (from around $10^{-22}$ to double digits) -- if a student reports median/IQR for $a$
+too, expect it to look bizarre. That's expected and part of the lesson, not an error.
+
+**2c. Histograms:**
+
+```{r histograms, fig.height=3.5}
+par(mfrow = c(1, 2))
+hist(ricker_peak, breaks = 20, main = "Ricker peak (1/b)", xlab = "mm",
+     xlim = c(0, 15), col = "steelblue")
+abline(v = 12, col = "red", lwd = 2, lty = 2)
+hist(flex_peak, breaks = 20, main = "Flexible Ricker peak (p)", xlab = "mm",
+     xlim = c(0, 15), col = "darkorange")
+abline(v = 12, col = "red", lwd = 2, lty = 2)
+```
+
+**Did the plain Ricker's bootstrapped peak locations cluster near 12 mm?** No -- the Ricker
+histogram is fairly narrow (a stable estimate) but centered around 6-7 mm, nowhere near the
+data's actual peak at 12 mm. It's precise and consistently wrong. The flexible Ricker's peak
+location, by contrast, clusters tightly right around 12-13 mm -- correctly located *and*
+reasonably stable, at least for this one parameter.
+
+**2d.** This is the payoff question, and the honest answer resists a simple "model X wins."
+Two things are both true and worth drawing out explicitly:
+
+- The plain Ricker is **precise but biased**: its bootstrap distribution is fairly tight, but
+  it's tight around the wrong answer. You could trust its consistency, but not its accuracy.
+- The flexible Ricker's *peak location* ($p$) is both roughly accurate and reasonably stable --
+  but its *shape* parameters ($a$ and $c$, which control how narrow/tall the peak is) are wildly
+  unstable across resamples. So it's more trustworthy for "where is the peak" than for "what does
+  the curve look like away from the peak," or for extrapolating to sizes outside the observed
+  range.
+
+So: neither model is simply "the better one" -- it depends on what the model needs to be used
+for. This is a natural place to introduce (or preview) the bias-variance tradeoff by name if it
+hasn't come up yet in lecture.
+
+**Reflection.** No fixed answer -- use this to catch muddiest points before Wednesday's lecture.
