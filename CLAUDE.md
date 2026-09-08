@@ -179,9 +179,15 @@ student-facing .Rmd documents:
   finalized.** For weeks that are primarily math/derivation, lab
   handouts are completed entirely without laptops: code chunks
   generate figures/tables for the printed handout (`echo = FALSE`),
-  and students aren't writing or running R during lab. For weeks with
-  real coding content (writing functions, running an algorithm,
-  fitting a model), use a **closed -> closed -> open -> closed**
+  and students aren't writing or running R during lab. **Sampling or
+  evaluating a named distribution with a built-in function
+  (`rbinom()`, `dpois()`, `pnorm()`, `qnorm()`, etc.) is not, by
+  itself, reason enough to open laptops** -- that still counts as a
+  pen-and-paper week; pre-rendered comparison figures and a printed
+  z-table stand in for running those functions live (see
+  `Lab3_Act2.Rmd`/`Lab3_Act3.Rmd`). Reserve laptop-open time for weeks
+  with genuine algorithm-development or model-fitting content. For
+  those weeks, use a **closed -> closed -> open -> closed**
   rhythm within each Act instead of banning laptops outright:
   individual work and the group check-in that follows happen on paper,
   with any algorithm finalized before anyone opens a laptop; only then
@@ -260,9 +266,13 @@ apart at a glance (both live in per-purpose folders, but filenames get
 copied/downloaded/shared out of that context, e.g. via the course
 website, so the prefix needs to travel with the file). `Lecture1`/
 `Lecture2` is the Monday/Wednesday slot within that week (per
-`CourseSchedule.csv`), not a sequential WOD count (the "Workout of the
-Day \#N" number inside the document itself is a separate, purely
-sequential label and doesn't need to match).
+`CourseSchedule.csv`), not a sequential count. The document's own
+header should match this directly: `**NRES 746 -- Week <N>, Lecture
+<M>: <Title>**` -- not a separate sequential "Workout of the Day \#N"
+label (an earlier convention, now retired). If a week's schedule shifts
+(a cancelled Monday, a topic moved to a different week), rename the
+file *and* update this header together so they can't drift apart --
+see the Week 3/4 Labor Day reshuffle for a worked example.
 
 ## Lecture notes documents (lecture_notes/)
 
@@ -407,6 +417,15 @@ Acts:
   be noticeably wider than the "name" blank -- despite the label, it's
   where students write the names of their groupmates (typically one or
   two people), not a group number, so it needs room for actual names.
+  **Known discrepancy:** Lab 1 and Lab 2's Acts still have this
+  backwards (a long `name` blank, a short `group` blank) -- this rule
+  was already written down when those were built, but got missed
+  anyway, so don't copy that part of an existing Act file verbatim
+  without checking the actual relative widths against this rule first.
+  `Lab3_Act1.Rmd` (and the rest of Lab 3) has the corrected version;
+  copy the author line from there instead. No need to go back and fix
+  Lab 1/2 solely for this, but do fix it if you're touching those files
+  for another reason anyway.
 - **A lab's last Act may need to double as an individual take-home.**
   Three Acts often won't fit in the 2h45m period; when that happens,
   the last Act typically goes home to be finished individually before
@@ -457,6 +476,31 @@ Acts:
   `Lab1_Act1.Rmd`'s "Group discussion and revision" section for
   the target format.
 
+**Answer keys** live in `labs/answer_keys/`, one file per Act, named
+`Lab<N>_Act<M>_Key.Rmd` (e.g. `Lab3_Act2_Key.Rmd`), knit to PDF. These
+are a distinct thing from a `NOTES_Lab<N>_...Rmd` file: `NOTES_Lab`
+docs are pre-lab instructor prep (rationale, a suggested opening
+script, "watch for" pitfalls, an Act-by-Act quick-reference for
+circulating during lab), written *before* the lab runs; an
+`answer_keys/` file is a plain correctness reference written *after*
+a lab's Acts are finalized, for grading or for a TA who wasn't in the
+room for the design discussion. Build one once a lab's Acts are
+stable, not while they're still being drafted.
+
+Format: `author: "NRES 746 -- Instructor Answer Key (not for student
+distribution)"`, dual pdf/word output (pdf default, matching other lab
+docs), and a short opening paragraph noting that fixed-answer
+questions are answered directly while open-ended/discussion questions
+get a sample answer or discussion points rather than an exact-match
+rubric. Mirror the student handout's own section headers and lettered
+sub-parts exactly (so a grader can find "2c" in the key as fast as in
+the handout), verify every numeric claim with real executed R code
+rather than restating it from memory, and fold "common mistakes to
+watch for" directly into the relevant question rather than a separate
+section. See `labs/answer_keys/Lab2_Act1_Key.Rmd` (the original
+precedent) or `labs/answer_keys/Lab3_Act1_Key.Rmd` for the target
+format.
+
 ## Calibrating difficulty and level
 
 - This is a graduate course: don't round content down to what an intro
@@ -497,6 +541,14 @@ Acts:
   (e.g., a candidate curve overlaid on real data), actually render and
   look at it before finalizing parameter choices -- don't guess numbers
   that "should" look right.
+- Watch for `expression()` (plotmath) axis labels containing `<=`/`>=`:
+  the ≤/≥ glyph can silently render as a stray quote/prime mark once
+  knit through the full pandoc/pdflatex pipeline, even though the exact
+  same `expression()` displays correctly from a standalone `pdf()`
+  device -- this won't error, so it only shows up if you actually look
+  at the rendered figure. Prefer a plain-text axis label (put the
+  inequality in the surrounding prose instead, as proper LaTeX math,
+  which renders fine) rather than embedding `<=`/`>=` in plotmath.
 - Flag any computed values that come out ugly (long decimals, awkward
   fractions) in places where students will do the same calculation by
   hand -- I'd rather adjust the example than hand students messy
