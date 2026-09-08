@@ -21,103 +21,161 @@ reasoning behind each Act. **Part 2** (after the page break, large
 print) is the copy to have open while circulating during lab.
 
 **Schedule note:** Labor Day cancels this week's Monday meeting, so
-unlike a normal week, this lab now runs with **no prior lecture at
-all** -- Wednesday's probability/Bayes' rule lecture comes *after* this
-lab, not before, and the bestiary of distributions has moved to next
-Monday (Week 4). That puts this lab in a similar position to
-`NOTES_Lab1_MathRefresher.Rmd` (content ahead of any formal
-instruction), except here it's a new concept (Bayes' rule) rather than
-rusty-but-familiar calculus, so groups may need more up-front framing
-than usual -- consider a short (5 min) live walkthrough of conditional
-probability notation before releasing Act 1, since the Act itself
-doesn't re-derive Bayes' rule from scratch. This doc exists mainly as a
-quick-reference answer key for spot-checking groups, kept brief.
+this lab runs with no prior lecture on Bayes' rule -- Wednesday's
+lecture comes after, and the bestiary of distributions has moved to
+next Monday (Week 4). **Design note:** Act 1 is deliberately
+discovery-based rather than "apply the formula you were just taught" --
+students derive the PPV calculation themselves from plain counting
+before ever seeing it written as $P(H\mid D)$. **No laptops this lab**
+-- all three Acts are pen-and-paper (a calculator is enough); Acts 2
+and 3 use pre-rendered figures and a printed z-table instead of
+`dbinom()`/`dpois()`/`pnorm()`/`qnorm()`, since sampling/evaluating a
+named distribution isn't, by itself, enough reason to open a laptop --
+that's reserved for weeks with real algorithm-development content.
 
-# Act 1: camera-trap classifier PPV
+## Suggested opening (~5 min, before releasing Act 1)
 
-Same false-positive/PPV technique as the medical-testing example
-Wednesday's lecture will formalize (Bolker 4.3.1), different numbers
+Keep this short -- a full treatment of conditional probability and
+Bayes' rule is Wednesday's job, not today's. Two rules are enough to
+unlock Act 1:
+
+- **Addition:** probabilities of mutually exclusive (disjoint) outcomes
+  add up (e.g., "flagged" splits into "flagged AND really the species"
+  plus "flagged AND not the species" -- no overlap, so these two pieces
+  sum to the total flagged).
+- **Multiplication / applying a rate:** a probability or rate applied
+  to a count of events gives you the expected count in that subgroup
+  (e.g., if 10 events are truly the species and the classifier catches
+  98% of them, expect about $10\times0.98\approx10$ flagged).
+
+That's it -- don't derive Bayes' rule or use conditional-probability
+notation ($P(A\mid B)$) in this opening; Act 1 gets there on its own,
+and Wednesday's lecture gives it a name.
+
+# Act 1: camera-trap classifier PPV (discovery-based)
+
+**Part 1 (counting).** Same numbers as before
 ($P(\text{species})=0.0001$, sensitivity $=0.98$, false positive rate
-$=0.01$) -- since the lecture hasn't happened yet, Act 1 is students'
-first encounter with this idea, not a repeat.
+$=0.01$), $N=100{,}000$.
 
-```{r act1-key}
-p_S <- 1e-4; sens <- 0.98; fpr <- 0.01
-p_notS <- 1 - p_S
-p_F_and_S    <- sens * p_S
-p_F_and_notS <- fpr * p_notS
-p_F  <- p_F_and_S + p_F_and_notS
-PPV  <- p_F_and_S / p_F
-c(P_F_and_S = p_F_and_S, P_F_and_notS = p_F_and_notS, P_F = p_F, PPV = PPV)
+```{r act1-freq-key}
+N <- 1e5; p_S <- 1e-4; sens <- 0.98; fpr <- 0.01
+species     <- N * p_S
+not_species <- N * (1 - p_S)
+flag_S      <- species * sens
+flag_notS   <- not_species * fpr
+data.frame(row = c("Actually the species", "Not the species"),
+           flagged = round(c(flag_S, flag_notS)),
+           not_flagged = round(c(species - flag_S, not_species - flag_notS)),
+           total = c(species, not_species))
 ```
 
-**Answer key:** $P(F\cap S)=0.000098$, $P(F\cap\lnot S)=0.009999$,
-$P(F)\approx0.0101$, $\text{PPV}\approx0.0097$ ($\approx1\%$). The
-"negligible term" approximation ($P(F)\approx0.01$, dropping the
-$S$-contribution) gives essentially the same answer -- a group that
-uses the shortcut isn't wrong.
+**Answer key (1a-1b):** Flagged/true-species $\approx10$; flagged/not-species
+$\approx1{,}000$; total flagged $\approx1{,}010$. PPV (1b) $=10/1010\approx0.0099\approx1\%$
+-- pure counting, no formula.
 
-**Natural-frequency table (N = 100,000), rounded:**
+**Answer key (1c):** open-ended, but the number should read as
+"surprisingly low given how good the classifier sounded" -- a single
+flag isn't enough to trust; the field team should look for corroborating
+evidence (a second detection, a track, scat) before acting on one image.
 
-| | Flagged | Not flagged | Total |
-|:--|--:|--:|--:|
-| Actually the species | $\approx10$ | $\approx0$ | 10 |
-| Not the species | $\approx1{,}000$ | $\approx98{,}990$ | 99,990 |
-| Total | $\approx1{,}010$ | $\approx98{,}990$ | 100,000 |
+**Part 2 (formalize).** Guided derivation:
 
-$\text{PPV} = 10/1010 \approx 0.0099$ -- matches Part 1.
+```{r act1-symbolic-key}
+# numerator: N * p_S * sens ; denominator: N*p_S*sens + N*(1-p_S)*fpr
+# N cancels, leaving:
+ppv_formula <- (p_S * sens) / (p_S * sens + (1 - p_S) * fpr)
+ppv_formula
+```
 
-**Watch for:** groups who compute $P(S\mid F)$ by dividing by $P(S)$
-instead of $P(F)$ (the classic $P(A\mid B)$ vs. $P(B\mid A)$ mix-up --
-this is exactly the base rate fallacy Wednesday's lecture will name
-explicitly). If a group's PPV comes out $>0.5$, that's almost always
-the tell.
+**Answer key (2a-2c):** numerator $=N\times\text{prevalence}\times\text{sensitivity}$;
+denominator $=N\times\text{prevalence}\times\text{sensitivity} + N\times(1-\text{prevalence})\times\text{false positive rate}$.
+$N$ cancels, leaving
+$$\text{PPV} = \frac{\text{prevalence}\times\text{sensitivity}}{\text{prevalence}\times\text{sensitivity} + (1-\text{prevalence})\times\text{false positive rate}} \approx 0.0097$$
+This is Bayes' rule / PPV, arrived at without ever naming it -- don't
+name it for them either; that reveal is Wednesday's job. If a group
+gets stuck on 2a, the hint is: "what did you multiply by 100,000 to get
+each cell of your table in Part 1? Do that again, but write $N$ instead
+of 100,000."
+
+**Part 3 (transfer -- Site B).** Prevalence $=0.01$, same sensitivity
+and false positive rate.
+
+```{r act1-siteB-key}
+p_S_B <- 0.01
+ppv_B <- (p_S_B * sens) / (p_S_B * sens + (1 - p_S_B) * fpr)
+ppv_B
+```
+
+**Answer key (3a):** PPV $\approx0.497\approx50\%$ -- a dramatic jump
+from Site A's $\approx1\%$, same classifier. **(3b):** the intended
+takeaway is that prevalence dominates PPV every bit as much as the
+classifier's own accuracy -- a "good" classifier is only as useful as
+the base rate of what it's looking for allows.
+
+**Watch for:** groups who compute the fraction backwards ($P(S)$
+instead of $P(F)$ in the denominator of 1b). A PPV $>0.5$ at Site A is
+almost always the tell. In Part 2, watch for groups who try to cancel
+something other than $N$, or who get stuck because they're trying to
+recall "the formula" instead of generalizing their own Part 1 numbers.
 
 # Act 2: binomial detections, and when Poisson is a good stand-in
 
-$N=8$, $p=0.3$, $k=3$.
+$N=8$, $p=0.3$, $k=3$; all figures below are pre-rendered in the
+handout (no code for students to run).
 
 ```{r act2-key}
 N <- 8; p <- 0.3; k <- 3
-choose(N, k) * p^k * (1 - p)^(N - k)
 dbinom(k, N, p)
+which.max(dbinom(0:8, 8, 0.3)) - 1   # mode, 0-indexed
 ```
 
-**Answer key:** $P(X=3) = 0.2541$. Full distribution mode is at $k=2$
-(check with `which.max(dbinom(0:8,8,0.3))`).
+**Answer key:** $P(X=3)=0.2541$; mode $=2$.
 
-**Poisson comparison, part A** ($N=8,p=0.3$ vs. $\lambda=2.4$):
-binomial variance $Np(1-p)=1.68$; Poisson variance $\lambda=2.4$ --
-mismatched, and the two barplots should look visibly different (Poisson
-has a fatter right tail).
+**Poisson comparison, part A** ($N=8,p=0.3$ vs. $\lambda=2.4$): binomial
+variance $Np(1-p)=1.68$; Poisson variance $\lambda=2.4$ -- mismatched,
+and the pre-rendered barplots look visibly different (Poisson has a
+fatter right tail).
 
 **Poisson comparison, part B** ($N=100,p=0.024$ vs. $\lambda=2.4$):
-binomial variance $=100(0.024)(0.976)=2.3424$ -- close to $2.4$, and
-the two barplots should look nearly identical. Rule of thumb (2f):
-*Poisson is a good stand-in for binomial when $N$ is large and $p$ is
-small* (so $(1-p)\approx1$ and $Np(1-p)\approx Np=\lambda$).
+binomial variance $=100(0.024)(0.976)=2.3424$ -- close to $2.4$, and the
+barplots should look nearly identical. Rule of thumb (2d): *Poisson is
+a good stand-in for binomial when $N$ is large and $p$ is small* (so
+$(1-p)\approx1$ and $Np(1-p)\approx Np=\lambda$).
 
 **Watch for:** groups who conclude Poisson is "just always fine" from
-part B alone without noticing part A disagreed -- push them back to the
-variance mismatch in part A as the reason it isn't universal.
+Scenario B alone without noticing Scenario A disagreed -- push them
+back to the variance mismatch in Scenario A as the reason it isn't
+universal.
 
-# Act 3: continuous body mass ($\mu=4.5$, $\sigma=0.6$)
+# Act 3: continuous body mass ($\mu=4.5$, $\sigma=0.6$), via z-table
 
 ```{r act3-key}
 mu <- 4.5; sigma <- 0.6
-1 - pnorm(5.5, mu, sigma)
-qnorm(0.9, mu, sigma)
+z <- (5.5 - mu) / sigma
+z
+1 - pnorm(round(z, 2))          # table-precision version of 1 - Phi(z)
+1 - pnorm(5.5, mu, sigma)       # exact, for comparison
+mu + 1.28 * sigma               # table-lookup version of the 90th percentile
+qnorm(0.9, mu, sigma)           # exact, for comparison
 ```
 
-**Answer key:** $P(\text{mass}>5.5) \approx 0.048$ ($\approx5\%$); the
-heaviest-10% cutoff is $\approx5.27$ kg.
+**Answer key:** $z=(5.5-4.5)/0.6=1.67$ (table row 1.6, column .07);
+$\Phi(1.67)\approx0.9525$, so $P(\text{mass}>5.5)\approx0.0475$
+($\approx5\%$; the exact value via `pnorm` is $0.0478$ -- table
+rounding accounts for the small difference). For 3c, the table's
+closest entry to $0.90$ is $\Phi(1.28)=0.8997$, giving a cutoff of
+$4.5+1.28(0.6)\approx5.27$ kg (exact value via `qnorm` is $5.27$ kg --
+matches).
 
 **Watch for:** 1b/1c (density vs. probability) is the conceptual crux
-of this Act -- a group that answers "$P(\text{mass}=4.5)$ is very small
+of Part 1 -- a group that answers "$P(\text{mass}=4.5)$ is very small
 but not zero" hasn't fully separated density from probability yet.
 Point them back at the shaded-area picture from 1a: a single point has
 zero *width*, hence zero area, hence zero probability, regardless of
-how tall the curve is there.
+how tall the curve is there. In Part 3, watch for groups who forget to
+convert the z-score back to a body mass in 3c (the table gives $z$, not
+$x$).
 
 \newpage
 \large
@@ -129,25 +187,41 @@ how tall the curve is there.
 above.*
 \large
 
-## Act 1 -- classifier PPV
+## Opening (~5 min)
 
-- $P(F\cap S)=0.000098$, $P(F\cap\lnot S)=0.009999$, $P(F)\approx0.0101$
-- $\text{PPV}\approx0.0097$ ($\approx1\%$)
-- Freq. table check (N=100k): $10/1010\approx1\%$ -- matches
-- **Watch for:** PPV $>0.5$ usually means $P(A|B)$/$P(B|A)$ flipped
+- Two rules only: **addition** (disjoint outcomes sum) and
+  **multiplication/rate-application** (rate $\times$ count = expected
+  count in a subgroup)
+- Don't derive Bayes' rule or use $P(A\mid B)$ notation -- Act 1 gets
+  there on its own; Wednesday names it
+
+## Act 1 -- classifier PPV (discovery)
+
+- Part 1 (count, $N=100$k): flagged/true $\approx10$, flagged/false
+  $\approx1{,}000$, total flagged $\approx1{,}010$ $\to$ PPV
+  $\approx1\%$
+- Part 2 hint if stuck: "what did you multiply by 100,000 in Part 1?
+  Do that again with $N$ instead"
+- Part 2 answer: PPV $=\dfrac{\text{prev}\times\text{sens}}{\text{prev}\times\text{sens}+(1-\text{prev})\times\text{fpr}}\approx0.0097$
+- Part 3 (Site B, prevalence $=0.01$): PPV $\approx50\%$ -- prevalence
+  dominates
+- **Watch for:** PPV $>0.5$ at Site A usually means $P(S)$/$P(F)$
+  flipped
 
 ## Act 2 -- binomial vs. Poisson
 
-- $N=8,p=0.3,k=3$: hand calc and `dbinom(3,8,0.3)` both $=0.2541$
-- Mode of full distribution: $k=2$
+- $N=8,p=0.3,k=3$: hand calc $=0.2541$; mode $=2$
 - Var mismatch ($N=8,p=0.3$): binom $1.68$ vs. Pois $2.4$ -- **don't
   match**
 - Var match ($N=100,p=0.024$): binom $2.3424$ vs. Pois $2.4$ -- **do
   match**
 - Rule of thumb: Poisson $\approx$ binomial when $N$ large, $p$ small
 
-## Act 3 -- continuous mass
+## Act 3 -- continuous mass, via z-table
 
-- $P(\text{mass}>5.5)\approx0.048$; top-10% cutoff $\approx5.27$ kg
-- **Watch for:** "small but nonzero" answers to $P(X=4.5)$ -- push back
-  to the shaded-area picture (zero width $\to$ zero probability)
+- $z=(5.5-4.5)/0.6=1.67 \to \Phi(1.67)\approx0.9525 \to P(\text{mass}>5.5)\approx0.048$
+- Table's closest entry to 0.90 is $z\approx1.28 \to$ cutoff
+  $\approx4.5+1.28(0.6)=5.27$ kg
+- **Watch for:** "small but nonzero" answers to $P(X=4.5)$ (push back
+  to zero width $\to$ zero area); forgetting to convert $z$ back to $x$
+  in 3c
