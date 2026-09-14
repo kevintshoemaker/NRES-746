@@ -274,6 +274,18 @@ label (an earlier convention, now retired). If a week's schedule shifts
 file *and* update this header together so they can't drift apart --
 see the Week 3/4 Labor Day reshuffle for a worked example.
 
+WOD answer keys follow the same pattern as lab answer keys (see
+`labs/answer_keys/` under "Lab structure: three Acts" below): one file
+per WOD in `wod/answer_keys/`, named `WOD_Week<N>_Lecture<M>_
+<TopicInCamelCase>_Key.Rmd` (the full topic slug carried over from the
+source file, not shortened), same instructor-answer-key author line,
+same fixed-answer-vs-open-ended-discussion framing. A WOD key is worth
+building any time a WOD ends on an unresolved teaser (e.g. the birthday
+problem in `WOD_Week3_Lecture2_ProbabilityPuzzle.Rmd`) -- walk through
+the full math for whenever the reveal happens in class, not just a
+one-line final answer. See
+`wod/answer_keys/WOD_Week3_Lecture2_ProbabilityPuzzle_Key.Rmd`.
+
 ## Lecture notes documents (lecture_notes/)
 
 These are instructor-only prep/podium materials for the "Lecture" beat

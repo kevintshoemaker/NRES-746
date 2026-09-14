@@ -1,0 +1,308 @@
+---
+title: "Week 4, Lecture 1: Combinatorics, Distributions, and Expectation"
+subtitle: "Instructor notes -- Part 1: prep reading, Part 2: podium cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 5, fig.height = 3.5)
+```
+
+This single file has two parts, both instructor-only (not a student
+handout). **Part 1** is read beforehand -- full worked examples and the
+reasoning behind the flow. **Part 2** (after the page break, large
+print) is the podium copy.
+
+Source material: Bolker 4.4 (analyzing probability distributions,
+p. 155-159). Combinatorics/binomial-coefficient derivation is
+supplementary (not in Bolker's own text, which just states the
+formula) -- built from the WOD's lottery problem and the idea bank's
+Casella & Berger reference. Also mined: the Week 3 Lecture 2 notes
+(density-vs-probability framing, Var(X)=E[X^2]-mu^2 derivation) and the
+`WOD_Week3_Lecture2_ProbabilityPuzzle_Key.Rmd` birthday-problem
+derivation.
+
+# Where this sits in the week
+
+**Today's WOD reuses last week's probability puzzle** (Week 3, Lecture
+2 -- students didn't get to it live, since Wednesday's lecture ran out
+of time before the birthday-problem teaser could be revealed). That
+reuse isn't incidental: Part 2 of that WOD (the lottery-ticket problem)
+and Part 3 (the birthday teaser) are both combinatorics problems, and
+today's lecture opens by formalizing the counting tools that problem
+set only asked students to feel their way through.
+
+- Last Wednesday (Week 3, Lecture 2): axioms of probability, joint/
+  marginal/conditional probability, Bayes' rule.
+- **Today:** formalize counting (permutations, combinations, the
+  binomial coefficient), resolve the birthday-problem teaser as the
+  worked example, then build up random variables, probability
+  distributions (pmf vs. pdf), and expectation/variance from
+  first principles.
+- **This Wednesday (Week 4, Lecture 2):** synthetic data simulation --
+  today's distributions become the stochastic half of a full
+  data-generating model, and today's expectation/variance machinery
+  gets reused immediately in the WOD deriving $\text{Var}(\bar{X})$.
+
+# Rationale for the flow
+
+This is a dense lecture -- four sub-topics in one 30-35 minute period
+-- so keep each one tight and lean on the WOD callback to avoid
+re-deriving things from zero. Students already computed a binomial pmf
+by hand in Lab 3 (Act 2, using $\binom{N}{k}$ as a given formula) and
+already have Bayes' rule and the axioms from last week; today's job is
+to open the black box on $\binom{N}{k}$ itself, then build the
+vocabulary (random variable, distribution, pmf/pdf, expectation,
+variance) that the rest of the semester leans on constantly.
+
+The birthday problem is doing double duty: it's the payoff students
+were promised last week (don't skip it -- it's the single best "wait,
+really?" moment available this week), and it's also the natural worked
+example for combinatorics, since the reveal explicitly needs
+$\binom{25}{2}$ to explain *why* the answer is so counterintuitive.
+
+# Part A: Counting -- permutations, combinations, and $\binom{N}{k}$ (~10-12 min)
+
+**Motivating question, recap from the WOD:** the lottery problem asked
+how many 5-number tickets are possible from 1-30, when order doesn't
+matter. Ask students what they got before revealing the general
+recipe.
+
+**Permutations first (order matters).** How many ways can you pick and
+*arrange* 5 distinct numbers out of 30? First pick: 30 choices. Second
+pick: 29 remain. Third: 28. Etc.
+
+$$30 \times 29 \times 28 \times 27 \times 26 = \frac{30!}{25!}$$
+
+In general, the number of ordered selections of $k$ items from $N$ is
+$$P(N,k) = \frac{N!}{(N-k)!}.$$
+
+**Combinations (order doesn't matter).** A lottery ticket
+$\{3,8,14,20,29\}$ is the same ticket no matter what order you wrote
+the numbers down in. Every unordered ticket got counted once for each
+of the $5!=120$ orders its 5 numbers could have been written in -- so
+the permutation count *overcounts* by a factor of $k!$. Divide it out:
+
+$$\binom{N}{k} = \frac{P(N,k)}{k!} = \frac{N!}{k!\,(N-k)!}$$
+
+```{r ticket-count}
+choose(30, 5)
+```
+
+**Sticking point to flag:** this is the single most common combinatorics
+error -- forgetting to divide by $k!$, i.e. answering with the
+permutation count instead of the combination count. Worth asking
+directly: "why divide by $5!$ and not, say, $4!$ or $6!$?" (Answer:
+because there are exactly $5!$ orderings of a 5-element set.)
+
+**Tie back to the binomial pmf**, which Lab 3 already used as a given
+formula:
+$$P(X=k) = \binom{N}{k}p^k(1-p)^{N-k}$$
+Now every piece of this formula has been derived from scratch:
+$\binom{N}{k}$ counts *how many* of the $N$ trials could be the $k$
+successes, and $p^k(1-p)^{N-k}$ is the probability of any *one*
+specific arrangement of $k$ successes and $N-k$ failures.
+
+# Part B: The birthday problem, revealed (~8 min)
+
+Callback: "last week I asked you to guess whether 25 people in a room
+have better than 50-50 odds of sharing a birthday. Who guessed yes? No?"
+Most students guessed no. Walk through the full derivation (complete
+version in `WOD_Week3_Lecture2_ProbabilityPuzzle_Key.Rmd`):
+
+$$P(\text{at least one match}) = 1 - P(\text{no matches at all})$$
+
+Building "no matches" one person at a time (each new person must avoid
+all previously-assigned birthdays):
+
+$$P(\text{no matches}) = \prod_{k=1}^{25}\frac{366-k}{365}$$
+
+```{r birthday-calc}
+n <- 25
+p_no_match <- prod((365 - 0:(n - 1)) / 365)
+p_match <- 1 - p_no_match
+p_match
+```
+
+**56.9%** -- comfortably past the 50% line.
+
+**Why this feels wrong, and why it's today's example (not just a fun
+fact):** the intuitive comparison is "25 people vs. 365 days," but the
+real driver is the number of *pairs* of people, since any pair could be
+the one that matches:
+
+```{r birthday-pairs}
+choose(25, 2)
+```
+
+25 people make $\binom{25}{2}=300$ distinct pairs -- that's a direct
+application of the combination formula from Part A, and it's *why* 300
+independent-ish chances at a 1-in-365 coincidence compounds into better
+than even odds. This is the payoff for teaching combinatorics before
+probability distributions: the binomial coefficient isn't just an
+input to a pmf formula, it's a general counting tool that shows up
+anywhere you need to count possibilities.
+
+# Part C: Random variables and probability distributions (~8 min)
+
+A **random variable** $X$ maps outcomes onto numbers. A **probability
+distribution** assigns a probability (discrete) or density (continuous)
+to every value in $X$'s support.
+
+**Discrete: probability mass function (pmf).** $P(X=x)$ for each
+possible value $x$. Must be non-negative and sum to 1 over the support.
+The binomial pmf from Part A is one example; write it on the board
+again, now fully derived.
+
+**Continuous: probability density function (pdf).** $f(x)$, a curve
+rather than a bar chart. Must integrate to 1 over the support.
+
+```{r normal-pdf-example}
+curve(dnorm(x, mean = 0, sd = 1), from = -4, to = 4, lwd = 2,
+      xlab = "x", ylab = "Density", main = "Standard normal pdf")
+```
+
+**Sticking point to flag -- density $\neq$ probability:** the height
+of $f(x)$ is *not* itself a probability -- it can exceed 1 (try
+`dnorm(0, 0, 0.1)`, a normal with a very small standard deviation).
+Only the **area under the curve** between two values is a probability:
+$$P(a \le X \le b) = \int_a^b f(x)\,dx$$
+Whereas for a discrete pmf, $P(X=x)$ *is* directly a probability -- you
+can read it straight off the bar chart. This distinction (mass you can
+read directly vs. density you have to integrate) is the core difference
+between the two kinds of distributions.
+
+```{r normal-pdf-tallpoint}
+dnorm(0, mean = 0, sd = 0.1)   # > 1 -- a density, not a probability
+```
+
+# Part D: Expectation and variance (~10 min)
+
+**Expectation** $E[X]$ is the long-run average value of $X$ -- a
+weighted average of every possible outcome, weighted by its probability
+(or density):
+
+$$E[X] = \sum_x x\, P(X=x) \quad \text{(discrete)} \qquad E[X] = \int x f(x)\,dx \quad \text{(continuous)}$$
+
+Physical intuition: $E[X]$ is the "center of mass" of the distribution
+-- if you cut the pmf/pdf out of cardboard, $E[X]$ is where it balances
+on a fingertip.
+
+**Linearity of expectation** (true always, no independence required):
+$$E[aX+b] = aE[X]+b \qquad E[X+Y] = E[X]+E[Y]$$
+This will get used immediately in Wednesday's WOD -- flag that it's
+coming back.
+
+**Variance** measures spread around the mean: $\text{Var}(X) =
+E[(X-\mu)^2]$, where $\mu=E[X]$. Worth deriving the computational
+formula on the board -- students will use it constantly but rarely see
+it derived (Calc-II algebra only, no new calculus):
+
+$$\text{Var}(X) = E[(X-\mu)^2] = E[X^2 - 2\mu X + \mu^2] = E[X^2] - 2\mu E[X] + \mu^2$$
+
+Since $E[X]=\mu$:
+$$= E[X^2] - 2\mu^2 + \mu^2 = E[X^2] - \mu^2$$
+
+This is just expanding a square and using linearity of expectation --
+nothing harder than what Week 1's algorithms lecture already assumed.
+
+**Variance scaling:** $\text{Var}(aX) = a^2\text{Var}(X)$ -- note the
+squared coefficient (variance doesn't scale linearly, since it's built
+from squared deviations). Also flag this as a preview for Wednesday's
+WOD.
+
+# Take-home message
+
+- $\binom{N}{k}$ counts unordered subsets; divide the permutation count
+  by $k!$ to remove the overcounting from order.
+- The birthday problem is counterintuitive because the real driver is
+  the number of *pairs* ($\binom{25}{2}=300$), not the number of people.
+- A pmf gives probabilities directly; a pdf gives densities, and only
+  an *area* under a pdf is a probability.
+- $E[X]$ is a weighted average (linear); $\text{Var}(X)=E[X^2]-\mu^2$
+  measures spread and scales as $a^2$, not $a$.
+
+# Roadmap tie-in
+
+- This Wednesday's WOD picks up immediately where Part D leaves off,
+  using linearity of expectation and variance scaling to derive
+  $\text{Var}(\bar{X}) = \text{Var}(X)/n$.
+- This Wednesday's lecture (synthetic data simulation) uses today's
+  distributions as the stochastic half of a full data-generating model.
+
+# Discussion seed (if time remains)
+
+Ask: *Lab 3's binomial and Poisson pmfs, and Wednesday's upcoming
+synthetic-data normal pdf -- can you think of an ecological quantity
+that would need a pmf (discrete) vs. one that would need a pdf
+(continuous)? What about a quantity that's naturally continuous but
+that ecologists often round to a discrete count anyway (e.g., body
+counts from a density estimate)?*
+
+\newpage
+\large
+
+# PART 2 -- PODIUM CHEAT SHEET
+
+\normalsize
+*Podium copy -- terse on purpose. Full derivations, rationale, and
+code: see Part 1 above.*
+\large
+
+## 0. Open (~2 min)
+
+- Callback: "who guessed yes/no on the birthday problem last week?" --
+  today gives you the tools to answer it for real
+
+## 1. Counting: permutations $\to$ combinations (~10-12 min)
+
+- Permutations (order matters): $P(N,k)=\dfrac{N!}{(N-k)!}$
+- Combinations (order doesn't): divide out the $k!$ overcounting --
+  $\binom{N}{k}=\dfrac{N!}{k!(N-k)!}$
+- **Sticking point:** forgetting to divide by $k!$
+- Ties to binomial pmf: $\binom{N}{k}$ counts *which* trials succeed;
+  $p^k(1-p)^{N-k}$ is the probability of *one* such arrangement
+
+## 2. Birthday problem, revealed (~8 min)
+
+```{r podium-birthday, echo=FALSE}
+n <- 25
+p_match <- 1 - prod((365 - 0:(n - 1)) / 365)
+```
+
+- $P(\text{match}) = 1-\prod_{k=1}^{25}\frac{366-k}{365} \approx$
+  `r round(p_match, 3)` -- past 50-50!
+- **Why:** the real driver is $\binom{25}{2}=300$ pairs, not 25 people
+  vs. 365 days
+
+## 3. Random variables and distributions: pmf vs. pdf (~8 min)
+
+```{r podium-normal, echo=FALSE, fig.width=3.3, fig.height=2.3}
+par(mar = c(4, 3, 1, 0.5))
+curve(dnorm(x), from = -4, to = 4, lwd = 2, xlab = "x", ylab = "Density")
+```
+
+- Discrete pmf: $P(X=x)$ read directly off the bar chart, sums to 1
+- Continuous pdf: $f(x)$, a curve; only *area* is a probability
+- **Sticking point:** density $\neq$ probability -- $f(x)$ can exceed 1
+
+## 4. Expectation and variance (~10 min)
+
+- $E[X]=\sum xP(X=x)$ or $\int xf(x)dx$ -- weighted average / center of
+  mass
+- Linearity (always true): $E[aX+b]=aE[X]+b$, $E[X+Y]=E[X]+E[Y]$
+- **Derive on board:**
+  $\text{Var}(X)=E[X^2]-2\mu E[X]+\mu^2=E[X^2]-\mu^2$
+- Scaling: $\text{Var}(aX)=a^2\text{Var}(X)$ -- squared, not linear
+
+## Discussion (if time)
+
+- *Which ecological quantities need a pmf? Which need a pdf? Any that
+  are naturally continuous but usually treated as discrete?*
