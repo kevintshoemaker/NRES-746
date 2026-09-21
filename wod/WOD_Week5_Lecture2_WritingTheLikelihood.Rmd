@@ -1,0 +1,435 @@
+---
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a table or code block
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+# chunk option tight_mar = TRUE trims the default plot margins
+knitr::knit_hooks$set(tight_mar = function(before, options, envir) {
+  if (before && isTRUE(options$tight_mar)) par(mar = c(4, 4.5, 1, 1))
+})
+
+nll_const <- function(p, y) -sum(dbinom(y, size = 1, prob = p, log = TRUE))
+y <- c(1, 1, 0, 1)
+```
+
+**NRES 746 -- Week 5, Lecture 2: Writing the Likelihood**
+
+&nbsp;
+
+Name: ___________________________________________
+
+&nbsp;
+
+**Hand this in.** Like every WOD, this one is collected, so make sure your
+name is at the top and turn in your own copy (not a group copy) next Monday.
+
+**Instructions:** This workout takes the place of today's lecture. Plan
+on about 30 minutes: work alone on Parts 1-3 (~15 min), check in with
+your group (~3 min), then work through Parts 4-5 with your group (~10
+min). Please keep laptops closed and do not use AI tools for this one.
+Everything here is designed for pencil and paper. Calculators are fine
+for arithmetic, and fractions are fine as final answers. If you get
+stuck, note where and move on. Nobody will call time, so someone in
+your group should keep an eye on the clock.
+
+## Where we left off
+
+On Monday you went *forward*: you chose a data-generating model and
+imagined the data it would produce. Today we go *backward*: the data are
+already in hand, and the question is what they tell us about the
+parameters. The probability formulas are the ones you already know from
+Monday and Lab 3. What changes is which quantity you treat as known and
+which you treat as unknown.
+
+We will stay with the sage-grouse nest-fate data from Monday. Here are
+four nests, with outcome $y_i=1$ if at least one egg hatched and
+$y_i=0$ if the nest failed:
+
+```{r nest-data}
+nests <- data.frame(
+  Nest = 1:4,
+  Cover = c(30, 20, 10, 30),
+  Outcome = c(1, 1, 0, 1)
+)
+knitr::kable(nests, col.names = c("Nest", "Sagebrush cover (%)",
+                                  "Outcome (1 = hatched, 0 = failed)"),
+             align = "ccc")
+```
+
+`r nq(5, 0, extra = 0.5)`
+
+## Part 1: One observation (individual, ~4 min)
+
+For now, ignore cover and suppose every nest has the same unknown
+probability $p$ of success.
+
+**1a.** Write down the probability of each possible outcome for a
+single nest.
+
+$P(y=1 \mid p) =$ ________________ &nbsp;&nbsp;&nbsp;&nbsp; $P(y=0 \mid p) =$ ________________
+
+`r nq(4, 3)`
+
+**1b.** Write one formula that gives the probability of an observed
+outcome $y$ (either 0 or 1) as a function of $y$ and $p$, with no "if"
+statements or separate cases. (The binomial pmf from Lab 3, with a single
+trial, is one place to start.)
+
+```{r fig.height=0.3*3}
+blank_space()
+```
+
+`r nq(7, 0)`
+
+> **Definition.** The **likelihood** of a parameter value is the
+> probability of the data you actually observed, if that parameter
+> value were the truth. It is written as a function of the parameter,
+> with the data held fixed: for a single observation,
+> $\mathcal{L}(p \mid y) = P(y \mid p)$.
+
+**1c.** Nest 1 hatched ($y_1=1$). Evaluate the likelihood of $p=0.75$
+and of $p=0.25$ given this observation.
+
+$\mathcal{L}(0.75 \mid y_1=1) =$ ________________ &nbsp;&nbsp;&nbsp;&nbsp; $\mathcal{L}(0.25 \mid y_1=1) =$ ________________
+
+`r nq(4, 2)`
+
+**1d.** In your formula from 1b, which symbol is the data and which is
+the parameter? When you did probability calculations in Lab 3, which
+one did you treat as known? In a likelihood, which one do you treat as
+known?
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+`r nq(5, 7, extra = 0.5)`
+
+## Part 2: Several observations (individual, ~8 min)
+
+Now use all four nests. Assume every nest has the same success
+probability $p$, and that the nests are independent of one another.
+
+**2a.** Write the likelihood of all four observations,
+$\mathcal{L}(p \mid y_1, y_2, y_3, y_4)$, in terms of your formula
+from 1b. Use product notation ($\prod$).
+
+```{r fig.height=0.3*7}
+blank_space()
+```
+
+`r nq(2, 0, extra = 0.3)`
+
+**2b.** Plug in the observed outcomes and simplify to the form
+$p^{j}(1-p)^{k}$. What are $j$ and $k$?
+
+$j =$ ________ &nbsp;&nbsp;&nbsp;&nbsp; $k =$ ________
+
+`r nq(2, 0, extra = 1.85)`
+
+**2c.** Evaluate your answer to 2b at the three values of $p$ below.
+Fractions are fine.
+
+```{r fill-lik-table, fig.height=0.35+3*0.5, fig.width=4}
+blank_table(
+  headers = list("p", "Likelihood"),
+  body = list(
+    list("0.25", ""),
+    list("0.50", ""),
+    list("0.75", "")
+  ),
+  col_widths = c(1, 1.6),
+  cex = 0.95
+)
+```
+
+`r nq(2, 3)`
+
+**2d.** Add up your three likelihood values. Do they sum to 1? Should
+they? What does your answer say about how to read a likelihood value?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(3, 0, extra = 2.4)`
+
+**2e.** Plot your three values on the axes below, then sketch the whole
+curve $\mathcal{L}(p)$ for $0 \le p \le 1$. Mark where you think the
+peak is. Is that where you would have guessed from the raw data alone?
+
+```{r sketch-axes, fig.width=5, fig.height=2.4}
+par(mar = c(4, 4.5, 1, 1))
+plot(NA, xlim = c(0, 1), ylim = c(0, 0.12), xaxs = "i", yaxs = "i",
+     xlab = "p", ylab = "Likelihood")
+abline(v = seq(0, 1, 0.25), h = seq(0, 0.12, 0.03), col = "grey85")
+box()
+```
+
+`r nq(5, 4, extra = 0.5)`
+
+## Part 3: The log-likelihood (individual, ~3 min)
+
+**3a.** Take the log of your product from 2a and use the log rules to
+rewrite it as a sum. (Recall that $\log(uv) = \log u + \log v$ and
+$\log(u^c) = c \log u$.) Write your result for a general set of $n$ nests
+with outcomes $y_1, \ldots, y_n$.
+
+$\ell(p) = \log \mathcal{L}(p \mid y_1,\ldots,y_n) =$
+
+```{r fig.height=0.3*4}
+blank_space()
+```
+
+`r nq(7, 4)`
+
+**3b.** Suppose the monitoring program had 2,000 nests and each nest
+contributed a likelihood of about 0.5. Roughly how big is the product
+of all 2,000 terms? (Use $\log_{10}2 \approx 0.30$ and give your answer
+as $10^{\text{something}}$.) Standard computer arithmetic cannot store
+positive numbers much smaller than $10^{-308}$. Why might you want to work
+with the sum from 3a instead? What is its value here (use
+$\ln 2 \approx 0.69$)?
+
+```{r fig.height=0.3*4}
+blank_space()
+```
+
+`r nq(7, 3, extra = 0.5)`
+
+## Group check-in (~3 min)
+
+Compare your answers to Parts 1-3 with your group. Where you differ,
+argue it out and revise. The sum-to-1 question (2d) and the location of
+the peak (2e) are good places to start. Then answer together:
+
+**Group question.** Multiplying the four nest likelihoods together
+depended on an assumption. Name one biological reason it might fail for
+real sage-grouse nests.
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(6, 0, extra = 1.1)`
+
+## Part 4: Adding the covariate (with your group, ~6 min)
+
+Monday's model had success probability rising with sagebrush cover. A
+logistic function keeps it between 0 and 1:
+
+$$p_i = \frac{1}{1 + e^{-(a + b x_i)}}$$
+
+where $x_i$ is the cover around nest $i$. Every nest now has its own
+$p_i$. Suppose a candidate pair of parameter values is $a=-2.2$ and
+$b=0.11$. Here are the success probabilities it predicts (rounded) for
+our four nests:
+
+```{r pred-table}
+nests$p_pred <- c(0.75, 0.50, 0.25, 0.75)
+knitr::kable(nests, col.names = c("Nest", "Sagebrush cover (%)",
+                                  "Outcome (1 = hatched, 0 = failed)",
+                                  "Predicted p"),
+             align = "cccc")
+```
+
+`r nq(1, 3)`
+
+**4a.** Check the predicted $p$ for nest 2 (20% cover) by hand.
+
+```{r fig.height=0.3*3}
+blank_space()
+```
+
+`r nq(3, 3)`
+
+**4b.** Assuming the nests are independent, what is the likelihood of
+this candidate parameter pair, $\mathcal{L}(a=-2.2, b=0.11 \mid \text{data})$?
+Careful with the nest that failed.
+
+```{r fig.height=0.3*3}
+blank_space()
+```
+
+`r nq(4, 3)`
+
+**4c.** Compare this to the best of your three constant-$p$ likelihoods
+from 2c. Which model do the data support more, and by what factor? Does
+that show that cover really matters for nest success? Give at least one
+reason for caution.
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(4, 5)`
+
+**4d.** Write the likelihood for $n$ nests in general,
+$\mathcal{L}(a, b \mid y_1,\ldots,y_n, x_1,\ldots,x_n)$, using
+$p_i = 1/(1+e^{-(a+bx_i)})$. Then underline the quantities that are
+fixed data and circle the quantities that the likelihood is a function of.
+
+```{r fig.height=0.3*5}
+blank_space()
+```
+
+`r nq(11, 0, extra = 1.3)`
+
+## Part 5: From math to R code, on paper (with your group, ~5 min)
+
+Later in the course you will fit models like this by writing the
+likelihood as an R function and handing it to an optimizer. You will
+get that practice in Lab 4 and beyond. For now, we only write and read
+code, with no computer. The built-in `dbinom(x, size = 1, prob = p)`
+gives the Bernoulli probability from Part 1: `x` is the observed outcome
+(0 or 1), `size` is the number of trials per observation, and `prob` is
+the success probability. Setting `log = TRUE` returns the log of the
+probability.
+
+**5a.** Fill in the blanks so this function returns the *negative*
+log-likelihood of a vector of nest outcomes `y` for a single success
+probability `p`.
+
+```{r nll-const-skeleton, echo=TRUE, eval=FALSE}
+nll_const <- function(p, y) {
+  -sum(dbinom(x = ________, size = ________, prob = ________, log = TRUE))
+}
+```
+
+`r nq(3, 3)`
+
+**5b.** With `y <- c(1, 1, 0, 1)`, what does `exp(-nll_const(0.5, y))`
+return? Work it out by hand. Which entry of your table in 2c should it
+match?
+
+```{r fig.height=0.3*3}
+blank_space()
+```
+
+`r nq(4, 0, extra = 3.7)`
+
+**5c.** A classmate ran the code below with a working `nll_const` and
+got this plot. (`sapply()` evaluates a function at each value of a vector
+in turn.)
+
+```{r nll-grid-plot, echo=TRUE, tight_mar=TRUE, fig.width=4.5, fig.height=2.4}
+p_grid <- seq(0.05, 0.95, by = 0.01)
+nll_vals <- sapply(p_grid, function(p) nll_const(p, y))
+plot(p_grid, nll_vals, type = "l", xlab = "p",
+     ylab = "neg. log-likelihood", xaxt = "n")
+axis(1, at = seq(0, 1, 0.25))
+abline(v = seq(0, 1, 0.25), col = "grey85")
+```
+
+`r nq(4, 4)`
+
+Which value of $p$ gives the smallest negative log-likelihood? Does it
+agree with your sketch in 2e? Why do you think we work with the
+*negative* log-likelihood rather than the log-likelihood itself?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(3, 4)`
+
+**What is still fuzzy?** (individual) What is the muddiest point about
+likelihood so far? What would you ask if this had been a lecture?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(2, 0, extra = 1.5)`
+
+**5d. Optional challenge, if you finish early.** Write the covariate version, using your
+formula from 4d.
+
+```{r nll-cover-skeleton, echo=TRUE, eval=FALSE}
+cover <- c(30, 20, 10, 30)
+
+nll_cover <- function(par, y, cover) {
+  p <- ______________________________
+  -sum(________________________________)
+}
+```
+
+`r nq(3, 3)`
+
+If you ran `exp(-nll_cover(c(-2.2, 0.11), y, cover))`, what number
+should you get, approximately, and why?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```

@@ -1,0 +1,384 @@
+---
+title: "Lab 4, Act 3"
+subtitle: "How much monitoring is enough?"
+author: "NRES 746 -- name: _______________   group: _____________________"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+```
+
+## Picking up where we left off
+
+In Act 1 you showed that a straight-line fit to log counts recovers the
+rate of decline, with a spread you could predict from a formula. In Act
+2 you saw that a wrong model can be harmless for a mild decline, badly
+wrong for a severe one, and that you can sometimes catch it by checking
+the data against datasets simulated from the fitted model. Now we use all
+of that to answer the question the agency actually cares about: what
+does it take to run a monitoring program that reliably detects the
+decline of the toad?
+
+## The design problem
+
+The true abundance in year 0 is $N_0 = 1000$ (assume it is known). Each
+animal present is detected independently with probability 0.02 per
+person-day of searching. A monitoring **bout** is defined by the number
+of observers $P$ and the number of days $D$, and bouts are repeated every
+$s$ years ($s = 1, 2, 3, 4$, or $5$), starting in year 1, for as long as
+they fit within the 25-year window ($t = 1, 1+s, 1+2s, \ldots \le 25$). Costs
+are \$200 per person-day, plus \$2,000 to mount each field expedition,
+regardless of its length.
+
+Each bout produces one count, $y_t$. The analysis is the one from Act 1:
+regress $\log(y_t)$ on $t$ with `lm()`. A decline is **detected** if the
+slope estimate is negative and its two-sided $p$-value is at most 0.05.
+The management goal is to have **at least a 75% chance of detecting a
+decline of 25% or more over 25 years.**
+
+**What is the cheapest design that meets the goal, and how sure are we?**
+
+Try Part 1 on paper first, before you open a laptop or start typing
+code. Resist the urge to jump straight to R or an AI assistant. Once
+your plan is finalized, AI tools, `?help`, and web searches are all fair
+game for Part 2.
+
+`r nq(4, 4, extra = 0.5)`
+
+## Part 1: Predict before you simulate (~30 min)
+
+**1a.** For a single animal, what is the probability of being detected
+during a bout with $P$ observers searching for $D$ days? (Assume every
+observer-day is an independent 0.02 chance.) Evaluate it for
+$P = 1$, $D = 3$, and give the expected count of a bout in year 0 and its
+variance. (This is where the index $N_0 = 60$ in Acts 1 and 2 came from.)
+
+```{r fig.height=0.3*5}
+blank_space()
+```
+
+`r nq(4, 4)`
+
+**1b.** Your formula depends on $P$ and $D$ only through one combined
+quantity. What is it? Is that also true of the *cost* of a bout? What
+does that imply for how many design dimensions we really have, and what
+might make 5 observers for 1 day differ from 1 observer for 5 days in the
+real world?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(8, 0, extra = 0.5)`
+
+Let $k = P \times D$ be the number of person-days per bout.
+
+**1c.** *Precision.* For a positive random variable $Y$ with mean $\mu$
+and variance $v$, the delta method gives $\text{Var}(\log Y) \approx v/\mu^2$
+(Bolker Appendix A.7). Apply this to a bout count with $N$ animals
+present and per-animal detection probability $q$, and find the SD of
+$\log(y_t)$ as a function of $N$ and $q$. Then evaluate it for $k = 3$
+and $N = 860$ (about the abundance at the midpoint of the 25 years).
+
+```{r fig.height=0.3*5}
+blank_space()
+```
+
+`r nq(5, 0, extra = 3.2)`
+
+**1d.** For $m$ surveys spaced $s$ years apart, $S_{tt} = s^2 m(m^2-1)/12$.
+Fill in the table, and use your Act 1 result $\text{SD}(\hat{b}) = \sigma/\sqrt{S_{tt}}$,
+where $\sigma$ is now your answer to 1c, to get the SD of the slope estimate for
+$k = 3$. (A calculator is fine.)
+
+```{r stt-table, fig.height=0.35+5*0.5, fig.width=5.5}
+blank_table(
+  headers = list("Interval s", "Surveys m", "S_tt", "SD of slope, k = 3"),
+  body = list(
+    list("1", "25", "1300", ""),
+    list("2", "13", "728", ""),
+    list("3", "", "", ""),
+    list("4", "", "", ""),
+    list("5", "", "", "")
+  ),
+  col_widths = c(1, 1, 1, 1.5),
+  cex = 0.9
+)
+```
+
+`r nq(6, 0, extra = 3.2)`
+
+**1e.** *Power.* A decline is detected when the slope estimate is negative
+and larger in magnitude than about 1.96 of its SDs. Ignoring the tiny
+chance of a significant *increase*, that gives
+$$\text{power} \approx \Phi\!\left(\frac{|b|}{\text{SD}(\hat{b})} - 1.96\right),$$
+where $\Phi$ is the standard normal cdf and $b = \ln(0.75)/25 = -0.0115$
+is the true rate of decline. Some values of $\Phi$: $\Phi(0) = 0.50$,
+$\Phi(0.25) = 0.60$, $\Phi(0.5) = 0.69$, $\Phi(0.75) = 0.77$,
+$\Phi(1) = 0.84$, $\Phi(1.25) = 0.89$, $\Phi(1.5) = 0.93$, $\Phi(2) = 0.98$.
+Approximate the power for $k = 3$ with annual surveys ($s = 1$) and with
+surveys every other year ($s = 2$).
+
+```{r fig.height=0.3*5}
+blank_space()
+```
+
+`r nq(4, 4)`
+
+**1f.** Design A is $k = 3$, $s = 1$. Design B is $k = 6$, $s = 2$. Which do
+you predict has higher power? (Hint: when $q$ is small, how does the SD
+from 1c change when $k$ doubles? How does $S_{tt}$ change when $s$
+doubles?) Compute the total cost of each design. What does this suggest
+about how to spend a monitoring budget?
+
+```{r fig.height=0.3*6}
+blank_space()
+```
+
+`r nq(5, 3)`
+
+**1g.** Suppose the population is actually *stable*. How often will this
+analysis declare a decline? It is not 5%. Explain, and predict the number.
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(5, 0, extra = 2.9)`
+
+**1h.** In plain English (no R code), write the procedure you would follow
+to estimate the power of one design ($k$ and $s$) by simulation, and the
+extra step you need to find the cheapest design that meets the goal.
+
+```{r fig.height=0.3*8}
+blank_lines(8)
+```
+
+`r nq(4, 4)`
+
+**Checkpoint: finalize your plan.** Reread your procedure from 1h and your
+predictions from 1e-1g. Would your plan work if you started typing it up
+right now? Revise anything incomplete or unclear before you write code.
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(6, 0, extra = 1)`
+
+## Part 2: Run the simulations (~60 min)
+
+Use these settings: $N_0 = 1000$, per-animal detection probability
+0.02 per person-day, $\lambda = 0.75^{1/25}$ so that the expected
+abundance is $N_t = \text{round}(N_0 \lambda^t)$, and analysis by
+`lm()` of $\log(y_t)$ on $t$. Detection is binomial: each bout count is a
+Binomial draw with size $N_t$ and detection probability $1 - 0.98^{k}$.
+
+**2a.** Write functions that (i) simulate the counts from one monitoring
+program, given $k$ and $s$; (ii) analyze them and report whether a decline was detected; and
+(iii) estimate the power of a design from $R$ simulated programs. Record
+the prompt you used if you asked an AI for help, but not the AI's code.
+
+**2b.** *Validate before you trust.* Set $\lambda = 1$ (no decline) and run
+$R = 2{,}000$ programs of the design $k = 3$, $s = 1$. Then compare your
+simulated power for $k = 3$ with $s = 1$ and $s = 2$ against your
+approximations in 1e.
+
+Null-simulation detection rate: ______ $\pm$ ______ (Monte Carlo SE)
+
+My prediction in 1g: ______
+
+Simulated power, $s = 1$: ________ &nbsp;&nbsp; Approximation from 1e: ________
+
+Simulated power, $s = 2$: ________ &nbsp;&nbsp; Approximation from 1e: ________
+
+`r nq(5, 4)`
+
+Does the null rate agree with your prediction? The approximations in 1e
+should be somewhat off. In which direction, and why? (Think about what
+the approximation ignored.)
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(5, 3)`
+
+**2c.** *The design space.* Estimate the power for $k = 1, \ldots, 15$ and
+$s = 1, \ldots, 5$ (1,000 programs per design is enough). Plot power against $k$, with one
+line for each $s$ and a horizontal line at 0.75. Describe the pattern. Which
+of your predictions in 1f held up?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(5, 0, extra = 2.4)`
+
+**2d.** *Cost.* Compute the cost of every design in your grid. Among designs with
+estimated power at or above 0.75, find the cheapest few. Because each power
+estimate has Monte Carlo error, re-estimate your top candidates with 5,000
+programs each.
+
+```{r candidates-table, fig.height=0.35+3*0.5, fig.width=5.5}
+blank_table(
+  headers = list("k", "Interval s", "Cost ($)", "Power (5,000 runs)", "MC SE"),
+  body = list(
+    list("", "", "", "", ""),
+    list("", "", "", "", ""),
+    list("", "", "", "", "")
+  ),
+  col_widths = c(0.8, 1, 1, 1.5, 0.9),
+  cex = 0.85
+)
+```
+
+Which design do you recommend, and why that one and not the cheapest one
+that squeaked past 0.75?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(5, 4)`
+
+**2e.** *Does the analysis scale matter here?* Rerun your recommended
+design, but analyze the raw counts, $y_t$, with `lm()` instead of the log counts.
+Does the power change noticeably? Connect your answer to what you saw in
+Act 2 (hint: which scenario is this closer to, mild or severe?).
+
+Power with raw counts: ________ &nbsp;&nbsp; Power with log counts: ________
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(8, 0, extra = 0.5)`
+
+**2f. Optional extension: environmental noise.** So far the only randomness
+in the abundance trajectory is sampling (detection) error. Real populations
+also experience year-to-year shocks that *persist*, such as a drought year
+that reduces the population, which the next year starts from. Modify your simulation so that
+$N_t = N_{t-1}\,\lambda\,e^{\varepsilon_t}$ with $\varepsilon_t \sim \text{Normal}(0, 0.05)$,
+and then rerun (i) the power of your recommended design and (ii) the
+detection rate when $\lambda = 1$. What happened, and which assumption
+from Act 1 is no longer true? What does this suggest about the kind of
+statistical model you would want for real monitoring data?
+
+Power with environmental noise: ________ &nbsp;&nbsp; Detection rate when $\lambda = 1$: ________
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(8, 5)`
+
+## Reflection (~10 min)
+
+**R1.** Summarize your recommended design, its cost, and its estimated power.
+Which assumption of the simulation would you worry about most, and how would
+you find out whether it matters?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(6, 5)`
+
+**R2.** Look back at the scenario in Act 1. Which result or derivation from
+Act 1 did you rely on most in this Act, and how?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(6, 5)`
+
+**R3.** In three or four sentences, explain your recommendation to the
+agency's director, who has no statistical training. Then say what
+result would make *you* doubt your own recommendation.
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(4, 4)`
+
+**R4.** If you used an AI tool, how did you use it, and what did you have to
+check or correct? If you did not, what was hardest?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```

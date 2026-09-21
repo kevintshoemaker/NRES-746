@@ -1,0 +1,287 @@
+---
+title: "Week 5, Lecture 1 WOD -- Answer Key"
+subtitle: "Choosing a Data-Generating Model"
+author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 3)
+```
+
+This WOD is ungraded, so this key is a quick reference for circulating during the 8-10 minute
+window, not a rubric. Nothing here has a single correct answer. Each data set was simulated
+from a specific generating model (the "truth", below), but several other answers are defensible.
+For each part the key gives the truth, the acceptable variants, and the red flags to listen
+for. Whatever a student picks, look for four things:
+
+1. The **function for the expected value** has a shape that matches the pattern in the figure
+   (decline, saturation, S-shape) and respects the range of the response.
+2. The **noise distribution** respects the type of data (discrete count, 0/1, positive
+   continuous).
+3. The **leftover noise parameter** is named ($\sigma$, $k$, a gamma shape, ...), or the student
+   notices that the distribution has none (Bernoulli, Poisson, exponential).
+4. The two lines are written as *expected value* plus *noise around it*, not as a model of the
+   raw data.
+
+## The generating models behind the figure
+
+The chunk below reproduces the handout's simulated data exactly (same seed and order of draws).
+
+```{r generate-data}
+set.seed(746)
+yr <- 0:19
+lek_mu <- 55 * exp(-0.06 * yr)
+lek <- rnbinom(20, mu = lek_mu, size = 8)
+
+cover <- runif(80, 5, 45)
+p_true <- plogis(-2.5 + 0.1 * cover)
+nest <- rbinom(80, 1, p_true)
+
+forb <- runif(60, 2, 30)
+mass_mu <- 350 * forb / (5 + forb)
+mass <- rgamma(60, shape = 25, rate = 25 / mass_mu)
+```
+
+```{r truth-table, echo=FALSE}
+truth <- data.frame(
+  Data = c("1. Lek counts", "2. Nest fate", "3. Chick mass", "4. Hen movement"),
+  Expected = c("55 exp(-0.06 t), t = 0, ..., 19",
+               "logistic(-2.5 + 0.1 cover)",
+               "350 forb / (5 + forb)",
+               "constant (no data plotted)"),
+  Noise = c("Negative binomial, mean = expected value, size k = 8",
+            "Bernoulli(p), p = expected value",
+            "Gamma, mean = expected value, shape 25 (scale = mean / 25)",
+            "Described only; gamma, shape 0.8, mean 250 m is consistent")
+)
+knitr::kable(truth, col.names = c("Data set", "Expected value", "Noise around it"))
+```
+
+```{r truth-figure, echo=FALSE, fig.height=2.6}
+par(mfrow = c(1, 3), mar = c(4, 4, 2.2, 0.8), mgp = c(2.4, 0.7, 0), cex = 0.75)
+plot(yr + 1, lek, pch = 16, xlab = "Year of monitoring", ylab = "Peak male count",
+     main = "Data set 1", ylim = c(0, 75))
+lines(yr + 1, lek_mu, col = "red", lwd = 2)
+lines(yr + 1, qnbinom(0.05, mu = lek_mu, size = 8), col = "red", lty = 2)
+lines(yr + 1, qnbinom(0.95, mu = lek_mu, size = 8), col = "red", lty = 2)
+plot(cover, jitter(nest, amount = 0.04), pch = 16, yaxt = "n", xlab = "Sagebrush cover (%)",
+     ylab = "", main = "Data set 2", ylim = c(-0.15, 1.15))
+axis(2, at = c(0, 1), labels = c("failed", "hatched"))
+o <- order(cover); lines(cover[o], p_true[o], col = "red", lwd = 2)
+plot(forb, mass, pch = 16, xlab = "Forb cover (%)", ylab = "Chick mass at 3 weeks (g)",
+     main = "Data set 3")
+o <- order(forb); lines(forb[o], mass_mu[o], col = "red", lwd = 2)
+```
+
+Red solid lines are the true expected values. The dashed red lines in panel 1 are the 5th and
+95th percentiles of the true negative binomial. The $x$-axis in panel 1 is year of monitoring
+$= t + 1$, while the generating function uses $t = 0, \ldots, 19$.
+
+## Part 1: Data set 1 -- lek counts
+
+**Truth and best answer.**
+
+Expected value: negative exponential, $\mu_t = N_0 e^{-rt}$. Noise distribution: negative
+binomial with mean $\mu_t$ and size $k$.
+
+$$\mu_t = N_0 e^{-rt} \qquad Y_t \sim \text{NegBin}(\text{mean} = \mu_t,\ \text{size} = k)$$
+
+The prompt says the counts fall by a constant *percentage* per year, which is exactly what an
+exponential function does ($\mu_{t+1}/\mu_t = e^{-r}$ for every $t$). The noise parameter is
+$k$: the variance is $\mu_t + \mu_t^2/k$, so smaller $k$ means more spread.
+
+**1b. Why a negative binomial rather than a Poisson.** Counts are discrete and non-negative,
+so Poisson and negative binomial are the natural first candidates. The prompt (and the figure)
+say the scatter is large. The Poisson variance equals the mean, so we can check how much
+scatter a Poisson would allow:
+
+```{r lek-dispersion}
+# Poisson would give Pearson dispersion (mean squared standardized residual) = 1
+mean((lek - lek_mu)^2 / lek_mu)
+# fraction of counts outside mu +/- 2 sqrt(mu) (about 5% under a Poisson)
+mean(abs(lek - lek_mu) > 2 * sqrt(lek_mu))
+# noise SD at the start and end of the series: Poisson vs negative binomial
+rbind(Poisson = sqrt(lek_mu[c(1, 20)]), NegBin = sqrt(lek_mu[c(1, 20)] + lek_mu[c(1, 20)]^2 / 8))
+```
+
+The dispersion is about 3.6 rather than 1, and 40% of the counts fall outside a range that
+should hold about 95% of Poisson counts. At the start of the series the Poisson would allow an
+SD of about 7 while the negative binomial (truth) has about 21.
+
+**Acceptable variants.**
+
+- *Poisson* is a reasonable first guess for counts. Treat it as a good answer if the
+  student flags that the scatter looks too large for it (equidispersion, from Monday's lecture).
+- *Normal, lognormal, or gamma* are defensible approximations for large counts (these run from
+  6 to 61), if the student says so. A normal with constant $\sigma$ would not shrink its noise
+  as the mean falls.
+- Any decreasing function is fine as long as it can't go negative: a straight line
+  $\mu_t = a - bt$ eventually crosses zero, which is the "doubt" for a linear function.
+
+**Red flags.** Choosing Poisson without any comment on the spread; a Ricker, Michaelis-Menten
+or logistic function for a monotone decline in time (they don't have the right shape); leaving
+out $k$ (a negative binomial is not complete without it).
+
+## Part 2: Data set 2 -- nest fate
+
+**Truth and best answer.**
+
+Expected value: a logistic function of cover. Noise distribution: Bernoulli (a binomial with
+size 1).
+
+$$p_i = \frac{1}{1 + e^{-(a + b\,\text{cover}_i)}} \qquad Y_i \sim \text{Bernoulli}(p_i)$$
+
+There is no leftover noise parameter. For a 0/1 response the expected value *is* the
+probability of success, and the variance $p_i(1 - p_i)$ is fixed by that mean.
+
+**2b. Why Bernoulli.** The response takes only two values, so the noise distribution must put
+all its probability on 0 and 1. A normal, gamma, or Poisson can't do that.
+
+**Why a bounded function.** The prompt hints that a probability can't leave $[0, 1]$. A straight
+line is fine over the observed range but not beyond it:
+
+```{r nest-linear}
+lp <- lm(nest ~ cover)
+range(fitted(lp))                               # inside [0, 1] over the observed 5-45%
+predict(lp, data.frame(cover = c(0, 60)))       # outside [0, 1] when extrapolated
+```
+
+```{r nest-linear-figure, echo=FALSE, fig.height=2.6, fig.width=4.5}
+par(mar = c(4, 4, 1, 1))
+cv <- seq(0, 60, length.out = 200)
+plot(cover, nest, pch = 16, xlim = c(0, 60), ylim = c(-0.2, 1.3), xlab = "Sagebrush cover (%)",
+     ylab = "Hatched (1) or failed (0)")
+lines(cv, plogis(-2.5 + 0.1 * cv), col = "red", lwd = 2)
+lines(cv, predict(lp, data.frame(cover = cv)), lty = 2, lwd = 2)
+abline(h = c(0, 1), col = "grey60")
+legend(0, 0.85, c("logistic (truth)", "straight line"), col = c("red", "black"),
+       lty = c(1, 2), lwd = 2, bty = "n", cex = 0.8)
+```
+
+**Acceptable variants.**
+
+- *Michaelis-Menten with an asymptote of at most 1*, $p = a\,\text{cover}/(b + \text{cover})$ with
+  $a \le 1$, is bounded, increasing, and defensible. A maximum-likelihood fit of both to these
+  data (not something the students can do yet) finds the logistic slightly better, with
+  negative log-likelihood 47.5 against 49.0, so the data don't strongly separate them.
+- *Binomial*, if the student says each nest is a single trial (size 1). A binomial with
+  $N = 80$ is a red flag: nests are 80 separate Bernoulli observations, not one experiment
+  with 80 trials.
+
+**Red flags.** Normal noise for a 0/1 response; a straight-line expected value with no
+comment on the bounds; applying the function to the 0/1 outcome itself instead of to the
+probability of success; adding a "$\sigma$" to a Bernoulli model.
+
+## Part 3: Data set 3 -- chick mass
+
+**Truth and best answer.**
+
+Expected value: Michaelis-Menten. Noise distribution: gamma with mean $\mu_i$ and a shape
+parameter $\alpha$ as the noise parameter.
+
+$$\mu_i = \frac{a\,\text{forb}_i}{b + \text{forb}_i} \qquad Y_i \sim \text{Gamma}(\text{mean} = \mu_i,\ \text{shape} = \alpha)$$
+
+Here $a$ is the asymptotic mass and $b$ is the forb cover at which the expected mass reaches
+half of $a$. Mass is positive, and its spread grows with its mean (below), which is what a gamma with a
+fixed shape gives.
+
+**3b. Why gamma.** The response is continuous and positive, which excludes Poisson and
+Bernoulli and makes a normal only an approximation. The spread grows with the mean:
+
+```{r mass-spread}
+bins <- cut(forb, c(0, 8, 16, 30))
+res <- mass - mass_mu
+tapply(mass, bins, mean)          # mean mass in each forb bin
+tapply(res, bins, sd)             # SD of the residuals rises with the mean
+tapply(res / mass_mu, bins, sd)   # CV roughly constant; the truth is 1 / sqrt(25) = 0.2
+```
+
+**Acceptable variants.**
+
+- *Lognormal*: also positive with spread proportional to the mean. If the student puts the
+  function on the *log* mean, that models the median rather than the mean:
+  $E[Y] = e^{m + s^2/2}$. To keep the function on the expected value, use
+  $m = \ln \mu_i - s^2/2$. With $\mu = 200$ and CV 0.2 that is $m = 5.279$, $s = 0.198$.
+- *Normal with constant $\sigma$*: defensible here. The residual SD only rises from about 48 to
+  64 g across the range, and with mean masses of 190 to 280 g and a CV of 0.2, a normal rarely
+  goes negative. Ask whether the spread grows with the mean, and whether they'd trust a normal
+  outside the observed range.
+- *Function*: any saturating shape in the grab bag is fine (Michaelis-Menten, a power law
+  with exponent below 1, a logistic-type curve). A hump (Ricker) or a straight line doesn't
+  match the description ("gains shrink at high cover").
+
+**Worth raising.** A Michaelis-Menten function passes through the origin, so it predicts zero
+mass at zero forb cover. Chicks are not born weighing nothing, so an intercept would be a
+reason to doubt it if the data extended to low cover.
+
+**3c (if time).** For a gamma with shape $\alpha$ and scale $s$, the mean is $\alpha s$. Setting
+this equal to $\mu_i$ gives
+
+$$s = \frac{\mu_i}{\alpha}, \qquad \text{Var}(Y_i) = \alpha s^2 = \frac{\mu_i^2}{\alpha}, \qquad \text{CV} = \frac{1}{\sqrt{\alpha}}.$$
+
+The shape therefore sets the *relative* noise: a large shape means small relative scatter, and
+the standard deviation grows in proportion to the mean. In R (rate $= 1/$scale):
+
+```{r gamma-check}
+alpha <- 25; mu <- 200
+y <- rgamma(1e6, shape = alpha, scale = mu / alpha)   # equivalently rate = alpha / mu
+c(mean = mean(y), CV = sd(y) / mean(y), one_over_sqrt_alpha = 1 / sqrt(alpha))
+```
+
+**Notation note.** The handout writes the gamma shape as $\alpha$ so that it doesn't collide
+with the $a$ students typically use for a function's parameter (the intercept, or the
+Michaelis-Menten asymptote). Bolker writes the gamma shape as $a$, so students who consult the
+book will see the other symbol. Accept any consistent naming.
+
+## Part 4: If time -- a fourth data set
+
+**Best answer.** The expected value is a **constant**, $\mu$, because no predictor is
+available. The model still has an expected value, it just doesn't vary. The noise must be
+positive and right-skewed with a few long moves: an exponential, gamma, or lognormal
+distribution with mean $\mu$.
+
+$$\mu_i = \mu \qquad Y_i \sim \text{Gamma}(\text{mean} = \mu,\ \text{shape} = \alpha)$$
+
+All three candidates reproduce the description ("a typical hen moves 100-200 m, a few days
+more than a kilometer") when the mean is about 250 m:
+
+```{r hen-candidates}
+mu <- 250
+cv <- 1.5; s_ln <- sqrt(log(1 + cv^2)); m_ln <- log(mu) - s_ln^2 / 2
+data.frame(
+  distribution = c("Exponential (CV = 1)", "Gamma, shape 0.8 (CV = 1.12)", "Lognormal, CV = 1.5"),
+  median_m = c(qexp(0.5, 1 / mu), qgamma(0.5, 0.8, scale = mu / 0.8), exp(m_ln)),
+  prob_over_1km = c(pexp(1000, 1 / mu, lower.tail = FALSE),
+                    pgamma(1000, 0.8, scale = mu / 0.8, lower.tail = FALSE),
+                    plnorm(1000, m_ln, s_ln, lower.tail = FALSE))
+)
+```
+
+The exponential has no noise parameter (its CV is fixed at 1). The gamma adds a shape and can
+make the tail heavier (CV above 1) or lighter. The lognormal has a log-scale SD as its noise
+parameter.
+
+**Red flags.** A normal distribution (symmetric around 250 m, puts probability below zero,
+and cannot produce a few very long moves); a Poisson (distance is continuous); a uniform.
+"There is no predictor so there is no model" misses the point: an intercept-only model is
+still a model, with a constant expected value, and it is what you would fit before adding
+covariates such as habitat or time of year.
+
+## Discussion prompts for the neighbor comparison
+
+Where students disagree, these are the productive questions.
+
+- **Lek counts:** what would a Poisson predict for the scatter, and does the figure agree? (The
+  answer is in 1b.)
+- **Nest fate:** a straight line fits the observed range. What goes wrong if you use it to
+  predict for a nest with 60% cover?
+- **Chick mass:** gamma, lognormal, and normal are all defensible. What would you check in a
+  residual plot to tell them apart?
+- **Hen movement:** exponential, gamma, and lognormal all match the description. What extra
+  data would separate them?
