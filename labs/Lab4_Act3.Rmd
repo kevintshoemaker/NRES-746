@@ -1,6 +1,6 @@
 ---
 title: "Lab 4, Act 3"
-subtitle: "How much monitoring is enough?"
+subtitle: "The model is wrong. Does it matter? (optional)"
 author: "NRES 746 -- name: _______________   group: _____________________"
 date: ""
 output:
@@ -82,303 +82,323 @@ nq <- function(lines, rows = 0, extra = 0) {
 
 ## Picking up where we left off
 
-In Act 1 you showed that a straight-line fit to log counts recovers the
-rate of decline, with a spread you could predict from a formula. In Act
-2 you saw that a wrong model can be harmless for a mild decline, badly
-wrong for a severe one, and that you can sometimes catch it by checking
-the data against datasets simulated from the fitted model. Now we use all
-of that to answer the question the agency actually cares about: what
-does it take to run a monitoring program that reliably detects the
-decline of the toad?
+**This Act is optional.** It's extra practice connecting Act 1's method
+to a question every real analyst eventually faces: what happens if you
+get the model wrong? It isn't required for Lab 4, but Act 2's whole
+power analysis leaned on the same log-scale method you'll interrogate
+here, so it's worth doing if you have time.
 
-## The design problem
+In Act 1 you fit a straight line to the *log* counts, which matches how
+the data were actually generated, and your simulations confirmed the
+slope estimate was unbiased with a spread that matched a formula you
+checked it against. Real analysts do not get to pick the analysis that
+matches the truth. Suppose a second analyst, following the agency's old
+spreadsheet protocol, fits a straight line to the *raw* counts instead.
+That model says the index falls by the same *number* of animals every
+year. The truth says it falls by the same *proportion*.
 
-The true abundance in year 0 is $N_0 = 1000$ (assume it is known). Each
-animal present is detected independently with probability 0.02 per
-person-day of searching. A monitoring **bout** is defined by the number
-of observers $P$ and the number of days $D$, and bouts are repeated every
-$s$ years ($s = 1, 2, 3, 4$, or $5$), starting in year 1, for as long as
-they fit within the 25-year window ($t = 1, 1+s, 1+2s, \ldots \le 25$). Costs
-are \$200 per person-day, plus \$2,000 to mount each field expedition,
-regardless of its length.
+We will compare the two analysts under two scenarios that differ only
+in how fast the population is declining. Both scenarios follow the
+*same* data-generating model as Act 1: lognormal counts, a log-linear
+decline, and constant scatter $\sigma$ on the log scale, with
+$I_0 = 60$ and $\sigma = 0.2$ throughout, and annual surveys
+($t = 1, \ldots, 25$). Only the rate of decline, $b$, differs:
 
-Each bout produces one count, $y_t$. The analysis is the one from Act 1:
-regress $\log(y_t)$ on $t$ with `lm()`. A decline is **detected** if the
-slope estimate is negative and its two-sided $p$-value is at most 0.05.
-The management goal is to have **at least a 75% chance of detecting a
-decline of 25% or more over 25 years.**
+```{r scenario-table}
+sc <- data.frame(
+  Scenario = c("Mild", "Severe"),
+  Decline = c("25% over 25 years", "90% over 25 years")
+)
+knitr::kable(sc, col.names = c("Scenario", "Total decline, year 0 to year 25"))
+```
 
-**What is the cheapest design that meets the goal, and how sure are we?**
+Both analysts report the same management quantity: the estimated
+**percent decline over the 25 years**. The log-scale analyst computes it
+as $1 - e^{25\hat{b}}$. The raw-scale analyst computes it as
+$1 - \hat{I}_{25} / \hat{I}_{0}$, using the fitted values of the
+straight line at $t = 25$ and $t = 0$.
+
+**Does the wrong model give the wrong answer? And can the data alone
+tell us the model is wrong?**
 
 Try Part 1 on paper first, before you open a laptop or start typing
-code. Resist the urge to jump straight to R or an AI assistant. Once
-your plan is finalized, AI tools, `?help`, and web searches are all fair
-game for Part 2.
+code. Resist the urge to jump straight to R or an AI assistant.
 
-`r nq(4, 4, extra = 0.5)`
+`r nq(4, 0, extra = 3.1)`
 
-## Part 1: Predict before you simulate (~30 min)
+## Part 1: What does each model assume about scatter? (individual, ~10 min)
 
-**1a.** For a single animal, what is the probability of being detected
-during a bout with $P$ observers searching for $D$ days? (Assume every
-observer-day is an independent 0.02 chance.) Evaluate it for
-$P = 1$, $D = 3$, and give the expected count of a bout in year 0 and its
-variance. (This is where the index $N_0 = 60$ in Acts 1 and 2 came from.)
+**1a.** The *variance function* of a distribution says how the variance
+changes with the mean $\mu$. Fill in the blanks. A gamma distribution
+with shape $\alpha$ and scale $s$ has mean $\alpha s$ and variance $\alpha s^2$. Bolker
+Ch. 4 is fair game.
 
-```{r fig.height=0.3*5}
-blank_space()
-```
-
-`r nq(4, 4)`
-
-**1b.** Your formula depends on $P$ and $D$ only through one combined
-quantity. What is it? Is that also true of the *cost* of a bout? What
-does that imply for how many design dimensions we really have, and what
-might make 5 observers for 1 day differ from 1 observer for 5 days in the
-real world?
-
-```{r fig.height=0.3*5}
-blank_lines(5)
-```
-
-`r nq(8, 0, extra = 0.5)`
-
-Let $k = P \times D$ be the number of person-days per bout.
-
-**1c.** *Precision.* For a positive random variable $Y$ with mean $\mu$
-and variance $v$, the delta method gives $\text{Var}(\log Y) \approx v/\mu^2$
-(Bolker Appendix A.7). Apply this to a bout count with $N$ animals
-present and per-animal detection probability $q$, and find the SD of
-$\log(y_t)$ as a function of $N$ and $q$. Then evaluate it for $k = 3$
-and $N = 860$ (about the abundance at the midpoint of the 25 years).
-
-```{r fig.height=0.3*5}
-blank_space()
-```
-
-`r nq(5, 0, extra = 3.2)`
-
-**1d.** For $m$ surveys spaced $s$ years apart, $S_{tt} = s^2 m(m^2-1)/12$.
-Fill in the table, and use your Act 1 result $\text{SD}(\hat{b}) = \sigma/\sqrt{S_{tt}}$,
-where $\sigma$ is now your answer to 1c, to get the SD of the slope estimate for
-$k = 3$. (A calculator is fine.)
-
-```{r stt-table, fig.height=0.35+5*0.5, fig.width=5.5}
+```{r variance-table, fig.height=0.35+5*0.5, fig.width=5.8}
 blank_table(
-  headers = list("Interval s", "Surveys m", "S_tt", "SD of slope, k = 3"),
+  headers = list("Distribution", "Var(Y) in terms of the mean", "Constant CV?"),
   body = list(
-    list("1", "25", "1300", ""),
-    list("2", "13", "728", ""),
-    list("3", "", "", ""),
-    list("4", "", "", ""),
-    list("5", "", "", "")
+    list("Normal (SD sigma)", "", ""),
+    list("Poisson", "", ""),
+    list("Negative binomial (mean, size k)", "", ""),
+    list("Gamma (mean, shape alpha)", "", ""),
+    list("Lognormal (log-SD s)", "(exp(s^2) - 1) x mean^2", "")
   ),
-  col_widths = c(1, 1, 1, 1.5),
+  col_widths = c(1.9, 1.9, 1),
+  cex = 0.85
+)
+```
+
+`r nq(5, 0, extra = 2.5)`
+
+**1b.** For a lognormal variable whose log has mean $m$ and SD $s$, the
+mean of the variable is $e^{m + s^2/2}$ and its SD is
+$\sqrt{e^{s^2} - 1}$ times that mean. In our model $s = \sigma = 0.2$ and
+the median in year 0 is $e^{m} = 60$. Fill in the table (using a
+calculator or your phone as a calculator is fine).
+
+```{r sd-table, fig.height=0.35+3*0.5, fig.width=5.8}
+blank_table(
+  headers = list("Year and scenario", "Median", "Mean", "SD"),
+  body = list(
+    list("Year 0", "60", "", ""),
+    list("Year 25, mild", "45", "", ""),
+    list("Year 25, severe", "6", "", "")
+  ),
+  col_widths = c(1.6, 1, 1, 1),
   cex = 0.9
 )
 ```
 
-`r nq(6, 0, extra = 3.2)`
+`r nq(5, 0, extra = 3.5)`
 
-**1e.** *Power.* A decline is detected when the slope estimate is negative
-and larger in magnitude than about 1.96 of its SDs. Ignoring the tiny
-chance of a significant *increase*, that gives
-$$\text{power} \approx \Phi\!\left(\frac{|b|}{\text{SD}(\hat{b})} - 1.96\right),$$
-where $\Phi$ is the standard normal cdf and $b = \ln(0.75)/25 = -0.0115$
-is the true rate of decline. Some values of $\Phi$: $\Phi(0) = 0.50$,
-$\Phi(0.25) = 0.60$, $\Phi(0.5) = 0.69$, $\Phi(0.75) = 0.77$,
-$\Phi(1) = 0.84$, $\Phi(1.25) = 0.89$, $\Phi(1.5) = 0.93$, $\Phi(2) = 0.98$.
-Approximate the power for $k = 3$ with annual surveys ($s = 1$) and with
-surveys every other year ($s = 2$).
+**1c.** For the severe scenario, use the axes below to sketch (i) the
+median trajectory, (ii) a band showing roughly $\pm 2$ SD around it,
+and (iii) the straight line an analyst would fit through the counts.
+Does this visualization point to any logical flaws with the straight
+line model?
 
-```{r fig.height=0.3*5}
-blank_space()
+```{r raw-axes, fig.width=5.5, fig.height=2.6}
+par(mar = c(4, 4.5, 1, 1))
+plot(NA, xlim = c(0, 25), ylim = c(-10, 80), xaxs = "i", yaxs = "i",
+     xlab = "Year", ylab = "Count index")
+abline(v = seq(0, 25, 5), h = seq(0, 80, 20), col = "grey85")
+abline(h = 0, lwd = 1.5)
+box()
 ```
 
-`r nq(4, 4)`
-
-**1f.** Design A is $k = 3$, $s = 1$. Design B is $k = 6$, $s = 2$. Which do
-you predict has higher power? (Hint: when $q$ is small, how does the SD
-from 1c change when $k$ doubles? How does $S_{tt}$ change when $s$
-doubles?) Compute the total cost of each design. What does this suggest
-about how to spend a monitoring budget?
-
-```{r fig.height=0.3*6}
-blank_space()
+```{r fig.height=0.3*2}
+blank_lines(2)
 ```
 
-`r nq(5, 3)`
+`r nq(3, 0, extra = 1.5)`
 
-**1g.** Suppose the population is actually *stable*. How often will this
-analysis declare a decline? It is not 5%. Explain, and predict the number.
+## Part 2: Commit to predictions (individual, ~4 min)
+
+**2a.** For each analyst and scenario, will the estimated percent
+decline be unbiased, too high, or too low? Write a word or two in each
+cell. Then say briefly why.
+
+```{r bias-pred-table, fig.height=0.35+2*0.5, fig.width=5.5}
+blank_table(
+  headers = list("", "Mild (25%)", "Severe (90%)"),
+  body = list(
+    list("Log-scale analyst", "", ""),
+    list("Raw-scale analyst", "", "")
+  ),
+  col_widths = c(1.6, 1, 1),
+  cex = 0.9
+)
+```
 
 ```{r fig.height=0.3*3}
 blank_lines(3)
 ```
 
-`r nq(5, 0, extra = 2.9)`
+`r nq(8, 3, extra = 0.7)`
 
-**1h.** In plain English (no R code), write the procedure you would follow
-to estimate the power of one design ($k$ and $s$) by simulation, and the
-extra step you need to find the cheapest design that meets the goal.
+## Part 3: A goodness of fit check (individual, ~5 min)
+
+In real life we never know the true model. What we can do is ask
+whether the data look like they could have come from the *fitted*
+model: fit the model, simulate many new datasets from the fitted model,
+and compare a summary statistic of the real data with the same
+statistic across the simulated datasets.
+
+Our statistic is the number of **sign changes** in the residuals over
+the 25 years (the number of times neighboring residuals switch between
+positive and negative). If the fitted line captures the pattern and the
+residuals are independent, about half of the 24 neighboring pairs
+should switch. If the true pattern is curved and the line is straight,
+residuals come in long runs of one sign, and very few switch.
+
+**3a.** Write, in plain English, the procedure for a check that returns
+a $p$-value: the fraction of simulated datasets with as few sign changes
+as the real data. Do not write R code. Be specific about what you fit
+to each simulated dataset and why.
 
 ```{r fig.height=0.3*8}
 blank_lines(8)
 ```
 
-`r nq(4, 4)`
+`r nq(3, 0, extra = 1.5)`
 
-**Checkpoint: finalize your plan.** Reread your procedure from 1h and your
-predictions from 1e-1g. Would your plan work if you started typing it up
-right now? Revise anything incomplete or unclear before you write code.
+**3b.** How often do you expect this check to flag each model in each
+scenario (rarely, sometimes, or usually)?
+
+```{r gof-pred-table, fig.height=0.35+2*0.5, fig.width=5.5}
+blank_table(
+  headers = list("", "Mild (25%)", "Severe (90%)"),
+  body = list(
+    list("Log-scale model", "", ""),
+    list("Raw-scale model", "", "")
+  ),
+  col_widths = c(1.6, 1, 1),
+  cex = 0.9
+)
+```
+
+`r nq(6, 0, extra = 0.5)`
+
+## Checkpoint: finalize your plan (~5 min)
+
+Reread your procedure from 3a and your predictions from 2a and 3b. Would
+your plan actually work if you started typing it up right now? Revise
+anything incomplete or unclear before you move on -- this is your last
+checkpoint before writing any code.
 
 ```{r fig.height=0.3*3}
 blank_lines(3)
 ```
 
-`r nq(6, 0, extra = 1)`
+---
 
-## Part 2: Run the simulations (~60 min)
+**Laptops open now.** Everything from here on is coding. You're welcome
+to use an AI assistant throughout -- record what you asked for and what
+you had to fix, the same way Act 2 asked you to.
 
-Use these settings: $N_0 = 1000$, per-animal detection probability
-0.02 per person-day, $\lambda = 0.75^{1/25}$ so that the expected
-abundance is $N_t = \text{round}(N_0 \lambda^t)$, and analysis by
-`lm()` of $\log(y_t)$ on $t$. Detection is binomial: each bout count is a
-Binomial draw with size $N_t$ and detection probability $1 - 0.98^{k}$.
+---
 
-**2a.** Write functions that (i) simulate the counts from one monitoring
-program, given $k$ and $s$; (ii) analyze them and report whether a decline was detected; and
-(iii) estimate the power of a design from $R$ simulated programs. Record
-the prompt you used if you asked an AI for help, but not the AI's code.
+`r nq(8, 0, extra = 1.5)`
 
-**2b.** *Validate before you trust.* Set $\lambda = 1$ (no decline) and run
-$R = 2{,}000$ programs of the design $k = 3$, $s = 1$. Then compare your
-simulated power for $k = 3$ with $s = 1$ and $s = 2$ against your
-approximations in 1e.
+## Part 4: Run the experiments (~40 min)
 
-Null-simulation detection rate: ______ $\pm$ ______ (Monte Carlo SE)
+Use these settings: $I_0 = 60$, $\sigma = 0.2$, $t = 1, \ldots, 25$,
+$b_{\text{mild}} = \ln(0.75)/25$ and $b_{\text{severe}} = \ln(0.10)/25$.
+The two helper functions below are ready-made. Type them into your R
+script.
 
-My prediction in 1g: ______
+```{r helpers, echo=TRUE, eval=FALSE}
+# number of times neighboring residuals switch sign
+sign_changes <- function(r) {
+  s <- sign(r)
+  sum(s[-1] != s[-length(s)])
+}
 
-Simulated power, $s = 1$: ________ &nbsp;&nbsp; Approximation from 1e: ________
+# t: years, y: observed counts, sims: matrix of simulated counts
+# (one row per year, one column per simulated data set)
+plot_envelope <- function(t, y, sims) {
+  lo <- apply(sims, 1, quantile, 0.05)
+  hi <- apply(sims, 1, quantile, 0.95)
+  plot(t, y, type = "n", ylim = range(y, lo, hi), xlab = "Year", ylab = "Count index")
+  polygon(c(t, rev(t)), c(lo, rev(hi)), col = "grey85", border = NA)
+  points(t, y, pch = 16)
+  abline(h = 0, lty = 3)
+}
+```
 
-Simulated power, $s = 2$: ________ &nbsp;&nbsp; Approximation from 1e: ________
+The three experiments:
 
-`r nq(5, 4)`
+1. **Two analysts.** For each scenario, simulate 2,000 datasets from the
+   model. Fit both analysts to every dataset and compute each one's
+   estimated percent decline. Record the mean and SD of the estimates and
+   the share of estimates above 100%.
+2. **An envelope.** Simulate one dataset from the severe scenario and fit
+   the raw-scale model. Simulate 500 new datasets from the fitted raw-scale
+   model (Normal with mean equal to the fitted values and SD equal to the
+   residual SD). Draw the envelope with `plot_envelope()`.
+3. **The check.** Implement your procedure from 3a as a function. For the
+   log-scale model, run the same check on $\log(y)$, with the simulated
+   datasets also generated on the log scale. Use 200 simulated datasets
+   inside the check. Apply it to 100 fresh datasets for each scenario and
+   each model, and record how often it returns $p < 0.05$.
 
-Does the null rate agree with your prediction? The approximations in 1e
-should be somewhat off. In which direction, and why? (Think about what
-the approximation ignored.)
+`r nq(3, 0, extra = 0.6)`
+
+Write the code for your three experiments (R's built-in help,
+documentation, human-written websites, an AI assistant, and your own
+notes from Act 2 are all fair game).
+
+**Notes on how you approached this** (if you used an AI assistant,
+record your prompt and what you had to change to get it to do what you
+intended; if not, note what gave you the most trouble):
 
 ```{r fig.height=0.3*4}
-blank_lines(4)
+blank_space()
 ```
 
-`r nq(5, 3)`
+`r nq(8, 0, extra = 2.5)`
 
-**2c.** *The design space.* Estimate the power for $k = 1, \ldots, 15$ and
-$s = 1, \ldots, 5$ (1,000 programs per design is enough). Plot power against $k$, with one
-line for each $s$ and a horizontal line at 0.75. Describe the pattern. Which
-of your predictions in 1f held up?
+### Results
 
-```{r fig.height=0.3*5}
-blank_lines(5)
-```
+**Experiment 1.** Estimated percent decline over 25 years.
 
-`r nq(5, 0, extra = 2.4)`
-
-**2d.** *Cost.* Compute the cost of every design in your grid. Among designs with
-estimated power at or above 0.75, find the cheapest few. Because each power
-estimate has Monte Carlo error, re-estimate your top candidates with 5,000
-programs each.
-
-```{r candidates-table, fig.height=0.35+3*0.5, fig.width=5.5}
+```{r results1-table, fig.height=0.35+4*0.5, fig.width=5.8}
 blank_table(
-  headers = list("k", "Interval s", "Cost ($)", "Power (5,000 runs)", "MC SE"),
+  headers = list("Scenario", "Analyst", "Mean", "SD", "Share > 100%"),
   body = list(
-    list("", "", "", "", ""),
-    list("", "", "", "", ""),
-    list("", "", "", "", "")
+    list("Mild (25%)", "Log-scale", "", "", ""),
+    list("Mild (25%)", "Raw-scale", "", "", ""),
+    list("Severe (90%)", "Log-scale", "", "", ""),
+    list("Severe (90%)", "Raw-scale", "", "", "")
   ),
-  col_widths = c(0.8, 1, 1, 1.5, 0.9),
+  col_widths = c(1.3, 1.1, 0.9, 0.9, 1.2),
   cex = 0.85
 )
 ```
 
-Which design do you recommend, and why that one and not the cheapest one
-that squeaked past 0.75?
+`r nq(3, 0, extra = 1.5)`
 
-```{r fig.height=0.3*4}
-blank_lines(4)
-```
+**Experiment 3.** Share of datasets for which the check returns $p < 0.05$.
 
-`r nq(5, 4)`
-
-**2e.** *Does the analysis scale matter here?* Rerun your recommended
-design, but analyze the raw counts, $y_t$, with `lm()` instead of the log counts.
-Does the power change noticeably? Connect your answer to what you saw in
-Act 2 (hint: which scenario is this closer to, mild or severe?).
-
-Power with raw counts: ________ &nbsp;&nbsp; Power with log counts: ________
-
-```{r fig.height=0.3*4}
-blank_lines(4)
-```
-
-`r nq(8, 0, extra = 0.5)`
-
-**2f. Optional extension: environmental noise.** So far the only randomness
-in the abundance trajectory is sampling (detection) error. Real populations
-also experience year-to-year shocks that *persist*, such as a drought year
-that reduces the population, which the next year starts from. Modify your simulation so that
-$N_t = N_{t-1}\,\lambda\,e^{\varepsilon_t}$ with $\varepsilon_t \sim \text{Normal}(0, 0.05)$,
-and then rerun (i) the power of your recommended design and (ii) the
-detection rate when $\lambda = 1$. What happened, and which assumption
-from Act 1 is no longer true? What does this suggest about the kind of
-statistical model you would want for real monitoring data?
-
-Power with environmental noise: ________ &nbsp;&nbsp; Detection rate when $\lambda = 1$: ________
-
-```{r fig.height=0.3*5}
-blank_lines(5)
-```
-
-`r nq(8, 5)`
-
-## Reflection (~10 min)
-
-**R1.** Summarize your recommended design, its cost, and its estimated power.
-Which assumption of the simulation would you worry about most, and how would
-you find out whether it matters?
-
-```{r fig.height=0.3*5}
-blank_lines(5)
-```
-
-`r nq(6, 5)`
-
-**R2.** Look back at the scenario in Act 1. Which result or derivation from
-Act 1 did you rely on most in this Act, and how?
-
-```{r fig.height=0.3*4}
-blank_lines(4)
-```
-
-`r nq(6, 5)`
-
-**R3.** In three or four sentences, explain your recommendation to the
-agency's director, who has no statistical training. Then say what
-result would make *you* doubt your own recommendation.
-
-```{r fig.height=0.3*5}
-blank_lines(5)
+```{r results3-table, fig.height=0.35+2*0.5, fig.width=5.5}
+blank_table(
+  headers = list("", "Mild (25%)", "Severe (90%)"),
+  body = list(
+    list("Log-scale model", "", ""),
+    list("Raw-scale model", "", "")
+  ),
+  col_widths = c(1.6, 1, 1),
+  cex = 0.9
+)
 ```
 
 `r nq(4, 4)`
 
-**R4.** If you used an AI tool, how did you use it, and what did you have to
-check or correct? If you did not, what was hardest?
+In one or two sentences, describe what the envelope in Experiment 2
+shows that a single glance at the raw counts might not.
 
-```{r fig.height=0.3*4}
-blank_lines(4)
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+---
+
+**If you want to go even further:** simulate 100,000 values of $I_0$ from the model.
+Compare `mean(log(i0))` with `log(mean(i0))`. The gap should match
+$\sigma^2/2$ from 1b. Why does the average of the logs differ from the log
+of the average?
+
+`r nq(8, 0, extra = 1)`
+
+## Reflection (~5 min)
+
+How did your predictions in 2a and 3b compare with your results? In
+which scenario did the wrong model matter, and could the check have
+warned you?
+
+Please take a minute to reflect on any areas of confusion ("muddiest
+points") or topics you want to review or dust off.
+
+```{r fig.height=0.3*6}
+blank_lines(6)
 ```

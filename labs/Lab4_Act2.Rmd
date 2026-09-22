@@ -1,6 +1,6 @@
 ---
 title: "Lab 4, Act 2"
-subtitle: "The model is wrong. Does it matter?"
+subtitle: "How much monitoring is enough?"
 author: "NRES 746 -- name: _______________   group: _____________________"
 date: ""
 output:
@@ -82,346 +82,312 @@ nq <- function(lines, rows = 0, extra = 0) {
 
 ## Picking up where we left off
 
-In Act 1 the analyst fit a straight line to the *log* counts, which
-matches how the data were generated, and your simulations showed the
-slope estimate was unbiased with the spread you predicted. Real
-analysts do not get to pick the analysis that matches the truth.
-Suppose a second analyst, following the agency's old spreadsheet
-protocol, fits a straight line to the *raw* counts instead. That model
-says the index falls by the same *number* of animals every year. The
-truth says it falls by the same *proportion*.
+In Act 1 you built and validated a simple log-scale regression tool: fit a
+straight line to the *log* counts, and the slope estimate comes out
+unbiased, with a spread that matched a formula you checked against your
+own simulation. Now we put that tool to work on the question the
+agency actually cares about: what does it take to run a monitoring
+program that reliably catches a real decline, without spending more
+than it has to?
 
-We will compare the two analysts under two truths. In both, the
-expected index in year 0 is $N_0 = 60$, the scatter is $\sigma = 0.2$ on
-the log scale, and surveys are annual ($t = 1, \ldots, 25$):
+## The design problem
 
-```{r scenario-table}
-sc <- data.frame(
-  Scenario = c("Mild", "Severe"),
-  Decline = c("25% over 25 years", "90% over 25 years")
-)
-knitr::kable(sc, col.names = c("Scenario", "Total decline, year 0 to year 25"))
-```
+The true abundance in year 0 is $N_0 = 1000$ (assume it is known). Each
+animal present is detected independently with probability 0.02 per
+person-day of searching. A monitoring **bout** uses $k$ person-days of
+total search effort (say, 3 observers for 1 day, or 1 observer for 3
+days -- see 1a for why these are treated the same), repeated every $s$
+years ($s = 1, 2, 3, 4$, or $5$), starting in year 1, for as long as
+they fit within the 25-year window ($t = 1, 1+s, 1+2s, \ldots \le 25$).
+Costs are \$200 per person-day, plus \$2,000 to mount each field
+expedition, regardless of its length.
 
-Both analysts report the same management quantity: the estimated
-**percent decline over the 25 years**. The log-scale analyst computes it
-as $1 - e^{25\hat{b}}$. The raw-scale analyst computes it as
-$1 - \hat{y}_{25} / \hat{y}_{0}$, using the fitted values of the
-straight line at $t = 25$ and $t = 0$.
+Each bout produces one count index, $I_t$. A decline is **detected** if a
+straight-line fit of $\log(I_t)$ on $t$ (the same analysis as Act 1)
+gives a negative slope with a two-sided $p$-value at or below 0.05. The
+management goal is to have **at least a 75% chance of detecting a
+decline of 25% or more over 25 years.**
 
-**Does the wrong model give the wrong answer? And can the data alone
-tell us the model is wrong?**
+**What is the cheapest design that meets the goal, and how sure are we?**
 
-**Before you do anything else: close your laptop and put your phone
-away.** Parts 1-3 and the group check-in that follows are pen-and-paper
-only.
+This Act has a lot of code to write, so you are **encouraged to use an
+AI assistant throughout Part 2**. But you will build and test one small
+function at a time rather than asking for the whole thing at once, and
+you'll check each piece yourself before trusting it. Part 1 is still
+worth doing on paper first: resist the urge to open a laptop or an AI
+assistant until you've thought each piece through.
 
-`r nq(4, 0, extra = 3.1)`
+`r nq(4, 0, extra = 0.5)`
 
-## Part 1: What does each model assume about scatter? (individual, ~10 min)
+## Part 1: Plan the pieces (individual, ~18 min)
 
-**1a.** The *variance function* of a distribution says how the variance
-changes with the mean $\mu$. Fill in the blanks. A gamma distribution
-with shape $\alpha$ and scale $s$ has mean $\alpha s$ and variance $\alpha s^2$. Bolker
-Ch. 4 is fair game.
+We're going to build the simulation out of four small functions, one
+piece of the problem at a time. Work out what each piece should do
+before you write any code.
 
-```{r variance-table, fig.height=0.35+5*0.5, fig.width=5.8}
-blank_table(
-  headers = list("Distribution", "Var(Y) in terms of the mean", "Constant CV?"),
-  body = list(
-    list("Normal (SD sigma)", "", ""),
-    list("Poisson", "", ""),
-    list("Negative binomial (mean, size k)", "", ""),
-    list("Gamma (mean, shape alpha)", "", ""),
-    list("Lognormal (log-SD s)", "(exp(s^2) - 1) x mean^2", "")
-  ),
-  col_widths = c(1.9, 1.9, 1),
-  cex = 0.85
-)
-```
-
-`r nq(5, 0, extra = 2.5)`
-
-**1b.** For a lognormal variable whose log has mean $m$ and SD $s$, the
-mean of the variable is $e^{m + s^2/2}$ and its SD is
-$\sqrt{e^{s^2} - 1}$ times that mean. In our model $s = \sigma = 0.2$ and
-the median in year 0 is $e^{m} = 60$. Fill in the table (a calculator is
-fine).
-
-```{r sd-table, fig.height=0.35+3*0.5, fig.width=5.8}
-blank_table(
-  headers = list("Year and scenario", "Median", "Mean", "SD"),
-  body = list(
-    list("Year 0", "60", "", ""),
-    list("Year 25, mild", "45", "", ""),
-    list("Year 25, severe", "6", "", "")
-  ),
-  col_widths = c(1.6, 1, 1, 1),
-  cex = 0.9
-)
-```
-
-`r nq(5, 0, extra = 3.5)`
-
-**1c.** For the severe scenario, use the axes below to sketch (i) the
-median trajectory, (ii) a band showing roughly $\pm 2$ SD around it,
-and (iii) the straight line an analyst would fit through the counts. Where
-does your line cross zero, and why is that a problem for a count?
-
-```{r raw-axes, fig.width=5.5, fig.height=2.6}
-par(mar = c(4, 4.5, 1, 1))
-plot(NA, xlim = c(0, 25), ylim = c(-10, 80), xaxs = "i", yaxs = "i",
-     xlab = "Year", ylab = "Count index")
-abline(v = seq(0, 25, 5), h = seq(0, 80, 20), col = "grey85")
-abline(h = 0, lwd = 1.5)
-box()
-```
-
-```{r fig.height=0.3*2}
-blank_lines(2)
-```
-
-`r nq(3, 0, extra = 1.5)`
-
-## Part 2: Commit to predictions (individual, ~4 min)
-
-**2a.** For each analyst and scenario, will the estimated percent
-decline be unbiased, too high, or too low? Write a word or two in each
-cell. Then say briefly why.
-
-```{r bias-pred-table, fig.height=0.35+2*0.5, fig.width=5.5}
-blank_table(
-  headers = list("", "Mild (25%)", "Severe (90%)"),
-  body = list(
-    list("Log-scale analyst", "", ""),
-    list("Raw-scale analyst", "", "")
-  ),
-  col_widths = c(1.6, 1, 1),
-  cex = 0.9
-)
-```
-
-```{r fig.height=0.3*3}
-blank_lines(3)
-```
-
-`r nq(8, 3, extra = 0.7)`
-
-## Part 3: A check that does not need the truth (individual, ~5 min)
-
-In real life we never know the true model. What we can do is ask
-whether the data look like they could have come from the *fitted*
-model: fit the model, simulate many new datasets from the fitted model,
-and compare a summary statistic of the real data with the same
-statistic across the simulated datasets.
-
-Our statistic is the number of **sign changes** in the residuals over
-the 25 years (the number of times neighboring residuals switch between
-positive and negative). If the fitted line captures the pattern and the
-residuals are independent, about half of the 24 neighboring pairs
-should switch. If the true pattern is curved and the line is straight,
-residuals come in long runs of one sign, and very few switch.
-
-**3a.** Write, in plain English, the procedure for a check that returns
-a $p$-value: the fraction of simulated datasets with as few sign changes
-as the real data. Do not write R code. Be specific about what you fit
-to each simulated dataset and why.
-
-```{r fig.height=0.3*8}
-blank_lines(8)
-```
-
-`r nq(3, 0, extra = 1.5)`
-
-**3b.** How often do you expect this check to flag each model in each
-scenario (rarely, sometimes, or usually)?
-
-```{r gof-pred-table, fig.height=0.35+2*0.5, fig.width=5.5}
-blank_table(
-  headers = list("", "Mild (25%)", "Severe (90%)"),
-  body = list(
-    list("Log-scale model", "", ""),
-    list("Raw-scale model", "", "")
-  ),
-  col_widths = c(1.6, 1, 1),
-  cex = 0.9
-)
-```
-
-`r nq(9, 0, extra = 0.5)`
-
-## Group check-in: finalize your plan, then choose your path (group, ~8 min)
-
-Compare your answers to Parts 1-3 with your group. Agree on one
-procedure for the check in 3a. Where your predictions in 2a and 3b
-differ, argue it out.
-
-Your group must now pick **one** of the two paths below for running the
-experiments. Both are equally valid; decide as a group before opening any
-laptops.
-
-- **Path A (AI-assisted):** write a prompt describing your procedure and the model, and have an AI assistant generate the R code.
-- **Path B (self-coded):** write the R code yourselves, using R's documentation and each other, but no AI tools.
-
-Our group is using: &nbsp;&nbsp; Path A (AI-assisted) &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; Path B (self-coded) &nbsp;&nbsp; *(circle one)*
-
----
-
-**Laptops open now.** Both paths run the same three experiments. Choose
-the instructions for your path.
-
----
-
-`r nq(8, 0, extra = 1.5)`
-
-## Part 4: Run the experiments (laptops, ~30 min)
-
-Use these settings: $N_0 = 60$, $\sigma = 0.2$, $t = 1, \ldots, 25$,
-$b_{\text{mild}} = \ln(0.75)/25$ and $b_{\text{severe}} = \ln(0.10)/25$.
-The two helper functions below are ready-made. Type them into your R
-script.
-
-```{r helpers, echo=TRUE, eval=FALSE}
-# number of times neighboring residuals switch sign
-sign_changes <- function(r) {
-  s <- sign(r)
-  sum(s[-1] != s[-length(s)])
-}
-
-# t: years, y: observed counts, sims: matrix of simulated counts
-# (one row per year, one column per simulated data set)
-plot_envelope <- function(t, y, sims) {
-  lo <- apply(sims, 1, quantile, 0.05)
-  hi <- apply(sims, 1, quantile, 0.95)
-  plot(t, y, type = "n", ylim = range(y, lo, hi), xlab = "Year", ylab = "Count index")
-  polygon(c(t, rev(t)), c(lo, rev(hi)), col = "grey85", border = NA)
-  points(t, y, pch = 16)
-  abline(h = 0, lty = 3)
-}
-```
-
-The three experiments:
-
-1. **Two analysts.** For each scenario, simulate 2,000 datasets from the
-   model. Fit both analysts to every dataset and compute each one's
-   estimated percent decline. Record the mean and SD of the estimates and
-   the share of estimates above 100%.
-2. **An envelope.** Simulate one dataset from the severe scenario and fit
-   the raw-scale model. Simulate 500 new datasets from the fitted raw-scale
-   model (Normal with mean equal to the fitted values and SD equal to the
-   residual SD). Draw the envelope with `plot_envelope()`.
-3. **The check.** Implement your procedure from 3a as a function. For the
-   log-scale model, run the same check on $\log(y)$, with the simulated
-   datasets also generated on the log scale. Use 200 simulated datasets
-   inside the check. Apply it to 100 fresh datasets for each scenario and
-   each model, and record how often it returns $p < 0.05$.
-
-`r nq(6, 0, extra = 0.6)`
-
-### Path A: AI-assisted
-
-Write a prompt describing your group's procedure and the model, and asking
-the AI to write R code for the three experiments. Record your prompt and
-what you had to change to make the code do what you intended (do not paste
-the AI's code).
+**1a.** A single animal is detected during a bout if *at least one* of
+the $k$ independent person-days of search finds it, each with
+probability 0.02. What is the probability it is **not** detected on a
+single person-day? Use that to write a formula for $q(k)$, the
+probability it **is** detected somewhere during the whole bout.
 
 ```{r fig.height=0.3*4}
 blank_space()
 ```
 
-`r nq(3, 4)`
+`r nq(4, 0, extra = 2.3)`
 
-**Reflection.** Did the AI's first attempt do what your procedure said? Where
-did your own understanding of the models from Parts 1-3 help you catch
-or fix something?
+Check your formula: $q(3)$ should come out to about $0.059$.
 
-```{r fig.height=0.3*4}
-blank_lines(4)
-```
-
-`r nq(5, 0, extra = 0.3)`
-
-### Path B: Self-coded
-
-Write the R code yourselves (R's built-in help, documentation, and
-human-written websites and neighbors are fair game; AI tools are not).
-
-**Reflection.** What part of turning your procedure into working R gave your group
-the most trouble? How did you resolve it?
-
-```{r fig.height=0.3*4}
-blank_lines(4)
-```
-
-`r nq(8, 0, extra = 2.5)`
-
-### Results (both paths)
-
-**Experiment 1.** Estimated percent decline over 25 years.
-
-```{r results1-table, fig.height=0.35+4*0.5, fig.width=5.8}
-blank_table(
-  headers = list("Scenario", "Analyst", "Mean", "SD", "Share > 100%"),
-  body = list(
-    list("Mild (25%)", "Log-scale", "", "", ""),
-    list("Mild (25%)", "Raw-scale", "", "", ""),
-    list("Severe (90%)", "Log-scale", "", "", ""),
-    list("Severe (90%)", "Raw-scale", "", "", "")
-  ),
-  col_widths = c(1.3, 1.1, 0.9, 0.9, 1.2),
-  cex = 0.85
-)
-```
-
-`r nq(3, 0, extra = 1.5)`
-
-**Experiment 3.** Share of datasets for which the check returns $p < 0.05$.
-
-```{r results3-table, fig.height=0.35+2*0.5, fig.width=5.5}
-blank_table(
-  headers = list("", "Mild (25%)", "Severe (90%)"),
-  body = list(
-    list("Log-scale model", "", ""),
-    list("Raw-scale model", "", "")
-  ),
-  col_widths = c(1.6, 1, 1),
-  cex = 0.9
-)
-```
-
-`r nq(4, 4)`
-
-In one or two sentences, describe what the envelope in Experiment 2 shows
-that a single glance at the raw counts might not.
+Notice $q(k)$ depends only on the *total* person-days $k$, not on how
+they're split between observers and days - 3 observers for 1 day and 1
+observer for 3 days give the same $q$. What might make those two designs
+differ in the real world, even though the formula treats them
+identically?
 
 ```{r fig.height=0.3*3}
 blank_lines(3)
 ```
 
+`r nq(4, 0, extra = 1.8)`
+
+**1b.** Using the same model as Act 1 ($\lambda = 0.75^{1/25}$, so a 25%
+decline compounds smoothly over 25 years), write the formula for the
+true expected abundance at year $t$, starting from $N_0 = 1000$.
+
+```{r fig.height=0.3*2}
+blank_space()
+```
+
+Check: $N_{25}$ should come out to a clean $750$.
+
+`r nq(5, 0, extra = 2)`
+
+**1c.** At year $t$, the true abundance is $N_t$ and each of those
+animals is detected independently with probability $q(k)$ (from 1a).
+What probability distribution would you use to generate the *number of
+animals actually counted* in that year's survey? Why that one? 
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(3, 0, extra = 1.6)`
+
+**1d.** Two quick predictions, before you build anything:
+
+- Do you expect a **bigger bout** (larger $k$) or **more frequent
+  surveys** (smaller $s$) to matter more for catching the decline?
+- If the population were actually **stable** (no decline at all), would
+  you expect this test to falsely detect a decline exactly 5% of the
+  time? More often? Less often? 
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(6, 0, extra = 0.5)`
+
+## Group check-in: finalize your plan (~5 min)
+
+Compare your three pieces (1a-1c) and your two predictions (1d) with
+your group. Agree on one version of each before opening any laptops.
+
 ---
 
-**If you finish early:** simulate 100,000 values of $y_0$ from the model.
-Compare `mean(log(y0))` with `log(mean(y0))`. The gap should match
-$\sigma^2/2$ from 1b. Why does the average of the logs differ from the log
-of the average?
+**Laptops open now.** From here on, Part 2 is a full group effort.
+Feel free to divide and conquer- not everyone needs to write out every
+answer: if one groupmate's packet has a result filled in, that's fine to
+stand for the whole group, and the rest of you can leave that spot
+blank. (The Reflection section at the very end is the one exception -- answer
+that individually, in your own words.) You are encouraged to use an AI
+assistant throughout Part 2 - there's a lot of code to write today.
+Build and test one function at a time; don't move on to the next piece
+until the current one checks out. **Turn in one R script per group**
+with all the code you worked out together (most groups will build this
+with an AI assistant, and that's expected), in addition to your written
+packets -- one member should email the script to the instructor, with
+everyone in your group listed on the email. [Note: I don't usually want to 
+see your AI-generated code but this time is an exception!]
 
-`r nq(8, 0, extra = 0.5)`
+---
 
-## Group discussion and revision (~5 min)
+`r nq(7, 0, extra = 0.6)`
 
-Compare your results with a different group (ideally one that took the
-other path). How did your predictions in 2a and 3b compare with the
-results? In which scenario did the wrong model matter, and could the
-check have warned you?
+## Part 2: Build, test, and search (laptops, AI encouraged, ~55 min)
 
-Feel free to revise any of your answers above based on the discussion
-(cross out and rewrite; I like to see your thinking evolve).
+For each piece below, build the function as a group (an AI assistant is
+a good way to get a working draft quickly), then run the check
+described and **record the result** in the space provided. You do not
+need to write any code by hand- your group's script covers that (see
+above).
 
-Please take a minute to record any changes you made and any new
-insights gained during the group discussion. You can also use this
-space to reflect on any areas of confusion ("muddiest points") or
-topics you want to review or dust off.
+`r nq(3, 0, extra = 0.6)`
 
-```{r fig.height=0.3*6}
-blank_lines(6)
+**2a. Detection probability.** Build `detect_prob(k, pobs = 0.02)`,
+implementing your formula from 1a.
+
+`detect_prob(3) =` ________ (should be about $0.0588$)
+
+`r nq(4, 0, extra = 0.6)`
+
+**2b. Abundance trajectory.** Build
+`true_abundance(t, N0 = 1000, lambda = 0.75^(1/25))`, implementing your
+formula from 1b. It needs to accept a whole vector of years at once, not
+just one at a time since that's how you'll call it in 2c and beyond.
+
+`true_abundance(0) =` ________ (should be $1000$)
+
+`true_abundance(c(0, 25)) =` ________ (should return $1000$ and $750$
+*together*, as one vector)
+
+`r nq(6, 0, extra = 0.6)`
+
+**2c. Simulated counts.** Build
+`simulate_counts(t_survey, k, N0 = 1000, lambda = 0.75^(1/25), pobs = 0.02)`,
+which returns one simulated count per year in `t_survey`. It should call
+your functions from 2a and 2b inside it rather than recomputing those
+formulas from scratch. Run it a few times with
+`t_survey = seq(1, 25, by = 1)` and `k = 3`, and check that the output
+is a **vector of 25 counts** (its `length()` should match
+`length(t_survey)`) -- not a single recycled number, which is what
+you'd get if 2b's function silently failed on a vector of years.
+
+Do the counts trend downward over time and stay well below the true
+abundance (detection is far from perfect)?
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+`r nq(6, 0, extra = 0.5)`
+
+**2d. Decision rule.** Build
+`detect_decline(t_survey, counts, alpha = 0.05)`, implementing the
+decision rule from the design problem above (a negative slope *and* a
+$p$-value at or below `alpha`); it should return `TRUE` or `FALSE`.
+
+Run `simulate_counts()` under the real decline ($\lambda = 0.75^{1/25}$)
+several times: how often did `detect_decline()` return `TRUE`?
+________ &nbsp;&nbsp; Run it with $\lambda = 1$ (no decline) several
+times: how often `TRUE`? ________
+
+`r nq(6, 0, extra = 0.5)`
+
+**2e. Power, and a validation check.** Combine 2c and 2d into
+`estimate_power(k, s, R = 1000, lambda = 0.75^(1/25), alpha = 0.05)`:
+build the survey years from `s` (`seq(1, 25, by = s)`), run `R`
+replicates, and return the fraction where a decline was detected. Before
+trusting it, set $\lambda = 1$ and estimate the false-decline rate for
+$k = 3$, $s = 1$.
+
+False-decline rate at $\lambda = 1$: ________
+
+Does this roughly match your prediction in 1d?
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+`r nq(5, 0, extra = 2.3)`
+
+**2f. The design space.** Estimate the power for $k = 1, \ldots, 15$ and
+$s = 1, \ldots, 5$ (1,000 replicates per design is enough). Plot power
+against $k$, with one line per $s$ and a horizontal line at 0.75.
+Describe the pattern. Did your 1d prediction (whether $k$ or $s$
+mattered more) hold up?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(6, 0, extra = 0.6)`
+
+**2g. Cost and recommendation.** Compute the cost of every design in
+your grid ($200 per person-day, $2,000 per expedition, however many
+bouts the design uses over 25 years). Among designs with estimated power
+at or above 0.75, find the cheapest few, and re-check your top 2-3
+candidates with 5,000 replicates each (Monte Carlo error matters most
+right near a threshold).
+
+```{r candidates-table, fig.height=0.35+3*0.5, fig.width=5.5}
+blank_table(
+  headers = list("k", "Interval s", "Cost ($)", "Power (5,000 reps)", "MC SE"),
+  body = list(
+    list("", "", "", "", ""),
+    list("", "", "", "", ""),
+    list("", "", "", "", "")
+  ),
+  col_widths = c(0.8, 1, 1, 1.5, 0.9),
+  cex = 0.85
+)
+```
+
+Which design do you recommend, and why that one rather than the
+cheapest one that just squeaked past 0.75? (If you're curious whether
+this recommendation would change if the analysis were done on the raw
+counts instead of the log counts, that's what the optional Act
+3 explores.)
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(9, 0, extra = 0.5)`
+
+**If you finish early: environmental noise.** So far the only randomness
+in the abundance trajectory is sampling (detection) error. Real
+populations also experience year-to-year shocks that *persist*, such as
+a drought year that reduces the population, which the next year starts
+from. Modify `true_abundance()` so that
+$N_t = N_{t-1}\,\lambda\,e^{\varepsilon_t}$ with
+$\varepsilon_t \sim \text{Normal}(0, 0.05)$, and then rerun (i) the power
+of your recommended design and (ii) the false-decline rate when
+$\lambda = 1$. What happened, and which assumption from Act 1 is no
+longer true? What does this suggest about the kind of statistical model
+you would want for real monitoring data?
+
+Power with environmental noise: ________ &nbsp;&nbsp; False-decline rate
+when $\lambda = 1$: ________
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(5, 5)`
+
+## Reflection (~8 min)
+
+**R1.** Summarize your recommended design, its cost, and its estimated
+power. Which assumption of the simulation would you worry about most,
+and how would you find out whether it matters?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(4, 4)`
+
+**R2.** In three or four sentences, explain your recommendation to the
+agency's director, who has no statistical training.
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(3, 5)`
+
+**R3.** Is the grid-search a reasonable approach for finding an optimal solution? Can you think of any better ways to optimize the experimental design in this case?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(4, 4)`
+
+**R4.** How did you use an AI assistant while building your four
+functions? What did you have to check, correct, or re-prompt for?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
 ```
