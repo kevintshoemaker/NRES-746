@@ -1,0 +1,384 @@
+---
+title: "Week 6, Lecture 1: Intro to Maximum Likelihood"
+subtitle: "Instructor notes. Part 1: prep reading. Part 2: podium cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 5, fig.height = 3.5)
+```
+
+\fbox{\parbox{0.95\textwidth}{\textbf{Bring to class:}
+\begin{itemize}
+\item \textbf{Index cards}, one per student plus a few spares (for the anonymous feedback in Part B).
+\item A printed copy of the Week 5, Lecture 2 WOD key (in \texttt{wod/answer\_keys/}).
+\item Collect last Wednesday's WOD handouts (the handout told students to turn it in today).
+\end{itemize}}}
+
+This file has two parts, both instructor-only. **Part 1** is read
+beforehand (worked examples and the reasoning behind the flow).
+**Part 2** (after the page break, large print) is the podium copy.
+
+There is no WOD today. The period has three beats:
+
+| Beat | Time |
+|---|---|
+| A. Debrief last Wednesday's WOD | ~12 min |
+| B. Course check-in: AI disclosure and anonymous feedback | ~20 min |
+| C. Big-picture overview of Bolker Ch. 6 | ~15 min |
+
+Beat B takes the place of the usual end-of-class discussion, so the
+order differs from a normal day. Putting the feedback in the middle
+keeps it from being squeezed out if the overview runs long.
+
+Source material: Bolker Ch. 6 intro and 6.2.1 (p. 227-234), plus legacy
+`LECTURE4.Rmd` ("Likelihood!"), whose MLE section and "why the
+log-likelihood" discussion are adapted below with a new example.
+
+# Where this sits in the week
+
+- **Last week:** Monday built data-generating models (forward:
+  parameters to data). Lab 4 used them for a power analysis, though
+  Act 2 never got started in lab. Wednesday's WOD, done without you in
+  the room, ran the idea backward: nest-fate data held fixed, the
+  likelihood written as a function of $p$, then logs, a logistic
+  covariate, and a first `dbinom()` negative log-likelihood in R.
+- **Today:** close the loop on that WOD, then name the next step. The
+  WOD found the lowest point of the NLL curve by looking at a plot.
+  Maximum likelihood estimation is the formal version of that.
+- **Tomorrow (Lab 5):** Act 1 finds an MLE with calculus, on paper.
+  Act 2 fits a model whose MLE has no algebraic solution, using
+  `optim()`.
+- **Wednesday:** a live-coding walkthrough of Lab 4 Act 2.
+
+Keep the overview conceptual. Tomorrow's lab does the derivation, so
+today should *not* work through the calculus for a binomial MLE (that
+would give away Act 1). Showing that the calculus route exists is
+enough.
+
+# Part A: WOD debrief (~12 min)
+
+Most of the WOD should need only a quick pass. Spend the time on the
+four questions that lead into today's overview. Answers are from the
+key.
+
+- **2d (do the three likelihoods sum to 1?).** They sum to
+  $46/256 \approx 0.18$, and the area under the whole curve is only
+  $1/20$. Probabilities sum to 1 across possible *outcomes* with $p$
+  fixed. A likelihood runs across possible *parameter values* with the
+  data fixed, and nothing makes those add to 1. So
+  $\mathcal{L}_4(0.75) \approx 0.105$ is not "the probability that
+  $p = 0.75$." This is the most important misconception to clear up
+  before tomorrow.
+- **3b (1,852 nests).** The product is about $10^{-558}$, which
+  underflows to 0 on a computer. The log-likelihood is about $-1283.7$,
+  an ordinary number. This is the practical reason for working on the
+  log scale.
+- **4c (covariate model vs. constant $p$).** A likelihood ratio of 2
+  ($27/128$ vs. $27/256$). Ask what students listed as reasons for
+  caution. The one to highlight: nobody checked whether some other
+  $(a, b)$ pair does better. Finding the best pair is the job of MLE,
+  and that's the transition to Part C.
+- **5c (why the *negative* log-likelihood?).** Take guesses. Answer it
+  properly in Part C, point 2.
+
+Ask briefly what gave people trouble in Part 5 (the R part), since
+some WOD reflections will say. Save a longer answer for Wednesday's
+live coding.
+
+# Part B: Course check-in (~20 min)
+
+## B1. AI disclosure (~5 min)
+
+These points are a **draft to rewrite in your own words**, not a
+script. Items in brackets need your confirmation.
+
+- This semester I'm using an AI assistant (Claude) to help redesign the
+  course. It drafts WODs, lab Acts, answer keys, and my own lecture
+  notes.
+- The course design is mine: the goals, what goes in each week, the
+  format (WODs, the Acts, pen and paper before laptops). I edit every
+  document, check the math and code, and rewrite or cut a lot of it.
+- Why I'm telling you: one goal of this course is learning to use AI
+  assistants well in an analysis workflow. It would be hypocritical to
+  ask that of you and hide my own use.
+- The standard I hold myself to is the one I'm asking of you. The AI
+  drafts, but the person has to understand the result, check it, and
+  take responsibility for it.
+- [What stays with me alone, e.g. grading and feedback on your work.]
+- If something in a handout looks wrong, say so. The error is mine to
+  fix, whoever drafted it.
+
+**Timing note:** do the disclosure *before* handing out the cards, so
+students can respond to it on the card if they want.
+
+## B2. Anonymous index cards (~8 min)
+
+Hand out the cards and write the prompts on the board. Say that the
+cards are anonymous and that honest criticism is more useful to you
+than politeness, especially about the book, since you're actively
+considering alternatives.
+
+**Side 1, class format.** *Start / Stop / Continue:* one thing I should
+start doing, one I should stop, one I should keep. Anything is fair
+game: WODs, lectures, lab Acts, pen-and-paper work before laptops, AI
+use in lab, pacing.
+
+**Side 2, the Bolker book.**
+
+- In what ways has it been helpful?
+- What has been frustrating or confusing about it?
+- Roughly how much of the assigned reading do you actually do? (Say
+  plainly that "not much" is a useful answer. The answer shapes whether
+  a different book would even help.)
+
+Collect the cards face down before starting the discussion.
+
+## B3. Short open discussion (~7 min)
+
+Cards come before discussion so the first few confident voices don't
+anchor everyone else's answers. After collecting them:
+
+- **Announce one change already made:** labs now have two shorter Acts
+  instead of three, since we have not finished all three yet.
+- Ask one or two open questions, e.g.: *What part of a typical week
+  helps you learn the most? What part feels like busywork?* Or: *When
+  the Bolker reading and the lecture disagree or use different
+  notation, which one do you trust?*
+- Don't try to resolve anything today. Say you'll read the cards and
+  report back what you're changing.
+
+# Part C: Big-picture overview of Ch. 6 (~15 min)
+
+The WOD introduced likelihood with one example worked in detail.
+This overview steps back to show the general recipe, using a new
+example so students see the same moves work beyond the Bernoulli.
+
+**Worked example (not from the WOD, the lab, or Bolker):** a biologist
+counts active pika haypiles in six talus plots of equal size and
+records 2, 5, 3, 0, 4, 4. Model each count as Poisson with an unknown
+mean $\lambda$ (haypiles per plot). What value of $\lambda$ do these
+data support best?
+
+## 1. Likelihood, restated (~2 min)
+
+$$\mathcal{L}_6(\lambda) = \prod_{i=1}^{6} P(y_i \mid \lambda)
+  = \prod_{i=1}^{6} \frac{\lambda^{y_i} e^{-\lambda}}{y_i!}$$
+
+The data are held fixed and $\lambda$ varies. $P(y_i \mid \lambda)$ is
+a conditional probability of the data. The likelihood itself is
+written as a function of $\lambda$ alone, with no bar (the Part A point
+about 2d).
+
+## 2. From likelihood to negative log-likelihood (~3 min)
+
+$$\ell_6(\lambda) = \log \mathcal{L}_6(\lambda) = \sum_{i=1}^{6} \log P(y_i \mid \lambda)
+\qquad \text{NLL}(\lambda) = -\ell_6(\lambda)$$
+
+- **Log:** turns the product into a sum, which avoids underflow (WOD
+  3b) and is easier to differentiate.
+- **Negative:** optimization software is written to *minimize*, by
+  convention. Flipping the sign turns "find the peak" into "find the
+  bottom of the valley." There is no deeper reason than that (answers
+  WOD 5c).
+
+```{r pika-likelihood, fig.width=6.5, fig.height=2.8}
+haypiles <- c(2, 5, 3, 0, 4, 4)
+
+nll_pois <- function(lambda, y) {
+  -sum(dpois(y, lambda = lambda, log = TRUE))
+}
+
+lambda_grid <- seq(0.5, 7, by = 0.01)
+lik_vals <- sapply(lambda_grid, function(l) prod(dpois(haypiles, l)))
+nll_vals <- sapply(lambda_grid, nll_pois, y = haypiles)
+
+par(mfrow = c(1, 2), mar = c(4, 4.5, 1, 1))
+plot(lambda_grid, lik_vals, type = "l", lwd = 2,
+     xlab = "lambda (haypiles per plot)", ylab = "Likelihood")
+abline(v = 3, lty = 3)
+plot(lambda_grid, nll_vals, type = "l", lwd = 2,
+     xlab = "lambda (haypiles per plot)", ylab = "Negative log-likelihood")
+abline(v = 3, lty = 3)
+```
+
+## 3. The maximum likelihood estimate (~2 min)
+
+$$\hat{\lambda} = \arg\max_{\lambda}\, \mathcal{L}_6(\lambda)
+  = \arg\min_{\lambda}\, \text{NLL}(\lambda)$$
+
+The two panels above peak and bottom out at the same place,
+$\lambda = 3$, because the log never changes which of two numbers is
+bigger (it's monotonic). Here $\hat\lambda$ equals the sample mean
+($18/6 = 3$). Don't generalize that out loud: it happens to hold for
+the Poisson, and tomorrow's Act 1 asks students to derive the analogous
+result for a binomial themselves.
+
+**Sticking point to flag:** students focus on the *height* of the
+curve (e.g. "the likelihood at the peak is only about
+`r signif(prod(dpois(haypiles, 3)), 1)`, so this is a bad estimate"). The height depends on how many data points there are and
+means almost nothing alone. What matters for estimation is *where*
+the peak is. Whether the curve is sharp or broad matters for
+uncertainty, which comes later in the semester.
+
+## 4. Three ways to find the MLE (~6 min)
+
+Bolker's framing: the answer is always the same point, and the methods
+differ in how they get there.
+
+1. **Calculus.** Differentiate $\ell(\lambda)$, set it to zero, solve.
+   Exact, but only works when the algebra cooperates. (Tomorrow, Act 1.)
+2. **Brute-force grid.** Evaluate the NLL at many candidate values and
+   keep the smallest. Easy to understand and to check, but slow, and
+   hopeless with many parameters (a 100-point grid in each of 5
+   parameters is $100^5 = 10^{10}$ evaluations). This is what the WOD's
+   `sapply()` plot did.
+3. **Numerical optimizer.** An algorithm starts from a guess and walks
+   downhill. R's `optim()` needs the NLL function and a starting value.
+   (Tomorrow, Act 2.)
+
+```{r pika-three-ways}
+lambda_grid[which.min(nll_vals)]            # grid
+
+fit <- optim(par = 2, fn = nll_pois, y = haypiles,
+             method = "Brent", lower = 0.01, upper = 20)
+fit$par                                     # optimizer
+fit$value                                   # NLL at the MLE
+```
+
+Both land at 3 (up to rounding). `method = "Brent"` is `optim()`'s
+option for a single parameter. With two or more parameters the
+default method works, which is the setting for Act 2.
+
+```{r pika-grid-vs-optim, fig.width=5, fig.height=3.2}
+coarse <- seq(1, 6, by = 0.5)
+par(mar = c(4, 4.5, 1, 1))
+plot(lambda_grid, nll_vals, type = "l", lwd = 2, col = "grey40",
+     xlab = "lambda (haypiles per plot)", ylab = "Negative log-likelihood")
+points(coarse, sapply(coarse, nll_pois, y = haypiles), pch = 16)
+points(fit$par, fit$value, pch = 4, cex = 2, lwd = 3, col = "red")
+legend("top", legend = c("grid points", "optim() result"),
+       pch = c(16, 4), col = c("black", "red"), bty = "n")
+```
+
+## 5. Teaser: continuous data (~2 min)
+
+For a continuous response the likelihood uses the probability *density*
+instead of a probability, e.g. `dnorm()` in place of `dpois()`. Densities
+can exceed 1, so a likelihood can too:
+
+```{r density-teaser}
+dnorm(0, mean = 0, sd = 0.2)   # a density above 1
+```
+
+This is fine. Only the location of the peak (and comparisons between
+likelihoods on the same data) carry meaning, so the scale was never
+interpretable anyway. Bolker 6.2.1 (p. 234-236) fits a Gamma model to
+myxomatosis virus titers this way.
+
+# Take-home message
+
+- A likelihood is the probability of the observed data, viewed as a
+  function of the parameters. It is not a probability distribution
+  over the parameters.
+- We minimize the negative log-likelihood: the log for numerical and
+  algebraic convenience, the minus sign because optimizers minimize.
+- The MLE is the parameter value at the bottom of the NLL curve.
+  Calculus, grids, and optimizers are three routes to the same point.
+
+\newpage
+\large
+
+# PART 2: PODIUM CHEAT SHEET
+
+\normalsize
+\textit{Terse on purpose. Full rationale and code: Part 1.}
+\large
+
+**Bring: index cards. Collect: last Wednesday's WOD.**
+
+## A. WOD debrief (~12 min)
+
+- **2d:** sums to 0.18, not 1. Likelihood runs over *parameters*, data
+  fixed. $\mathcal{L}_4(0.75)$ is not "P($p$ = 0.75)"
+- **3b:** product $\approx 10^{-558}$ underflows to 0; log sum $\approx -1284$
+- **4c:** ratio of 2, but nobody searched for the *best* $(a, b)$.
+  That search is MLE
+- **5c:** why negative? Hold the answer for Part C
+- Quick poll: what went wrong in the R part?
+
+\newpage
+
+## B. Course check-in (~20 min)
+
+**B1. AI disclosure (~5 min).** Own words. Points:
+
+- Claude drafts WODs, Acts, keys, my notes
+- Design is mine; I edit and check everything
+- Course goal includes using AI well, so it would be hypocritical to hide it
+- Same standard as for you: understand it, check it, own it
+- Found an error? Tell me
+
+**B2. Index cards (~8 min).** Anonymous. Honest beats polite.
+
+- Side 1: **Start / Stop / Continue** (WODs, lectures, Acts, laptops, AI in lab, pacing)
+- Side 2, **Bolker**: helpful? frustrating or confusing? how much reading do you actually do?
+- Collect face down
+
+**B3. Discussion (~7 min).**
+
+- Announce: labs now 2 shorter Acts
+- What helps you learn most? What feels like busywork?
+- Don't resolve; promise to report back
+
+\newpage
+
+## C. Overview of Ch. 6 (~15 min)
+
+Pika haypiles in 6 plots: **2, 5, 3, 0, 4, 4**. Poisson($\lambda$).
+
+**1. Likelihood (~2 min)**
+$$\mathcal{L}_6(\lambda) = \prod_{i=1}^{6} \frac{\lambda^{y_i}e^{-\lambda}}{y_i!}$$
+
+- Data fixed, $\lambda$ varies. No bar on $\mathcal{L}$
+
+**2. NLL (~3 min)**
+
+- Log: product to sum, no underflow, easier calculus
+- Minus: optimizers minimize (answers WOD 5c)
+
+**3. MLE (~2 min)**
+$$\hat\lambda = \arg\min_\lambda \text{NLL}(\lambda) = 3$$
+
+- Same location on $\mathcal{L}$, $\ell$, NLL (log is monotonic)
+- **Sticking point:** location matters, not height
+
+\newpage
+
+**4. Three routes to the MLE (~6 min)**
+
+```{r podium-grid-vs-optim, echo=FALSE, fig.width=4.2, fig.height=2.8}
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(lambda_grid, nll_vals, type = "l", lwd = 2, col = "grey40",
+     xlab = "lambda (haypiles per plot)", ylab = "NLL")
+points(coarse, sapply(coarse, nll_pois, y = haypiles), pch = 16)
+points(fit$par, fit$value, pch = 4, cex = 2, lwd = 3, col = "red")
+```
+
+- **Calculus:** $d\ell/d\lambda = 0$. Exact when algebra allows (Lab Act 1)
+- **Grid:** easy, slow; $100^5 = 10^{10}$ for 5 parameters (the WOD plot)
+- **Optimizer:** start from a guess, walk downhill; `optim()` (Lab Act 2)
+
+**5. Teaser (~2 min)**
+
+- Continuous data use densities: `dnorm(0, 0, 0.2)` $\approx 2$
+- Likelihood can exceed 1; only peak location and comparisons matter
+
+**Tomorrow:** Lab 5. Calculus, then `optim()`.

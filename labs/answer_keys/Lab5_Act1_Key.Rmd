@@ -1,0 +1,210 @@
+---
+title: "Lab 5, Act 1: Answer Key"
+subtitle: "Finding the Peak"
+author: "NRES 746, Instructor Answer Key (not for student distribution)"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 6, fig.height = 3)
+
+k <- c(3, 2, 7)
+N <- 10
+p_hat <- sum(k) / (length(k) * N)
+
+ll_3 <- function(p) sum(dbinom(k, N, p, log = TRUE))
+ll_3_nochoose <- function(p) sum(k) * log(p) + sum(N - k) * log(1 - p)
+
+p_grid <- seq(0.001, 0.999, by = 0.001)
+nll_3 <- -(12 * log(p_grid) + 18 * log(1 - p_grid))
+nll_30 <- -(120 * log(p_grid) + 180 * log(1 - p_grid))
+width_2 <- function(nll) range(p_grid[nll - min(nll) <= 2])
+int_3 <- width_2(nll_3)
+int_30 <- width_2(nll_30)
+```
+
+Each item repeats the handout's question, then gives the answer, a
+short rationale, and mistakes to watch for. Questions with one correct
+answer are answered directly. Open-ended items (1c, the "does it make
+sense" half of 2c, and 3a) get discussion points instead. All numbers
+are computed in R when this file is knitted.
+
+Data: detections $k = (3, 2, 7)$ out of $N = 10$ visits at each of
+three wetlands.
+
+## Part 1: The likelihood
+
+**1a.**
+
+> Write the likelihood of all three wetlands' data, $\mathcal{L}_3(p)$,
+> using product notation.
+
+**Answer.**
+$$\mathcal{L}_3(p) = \prod_{i=1}^{3} \binom{10}{k_i} p^{k_i}(1-p)^{10-k_i}
+= \binom{10}{3}\binom{10}{2}\binom{10}{7}\, p^{12}(1-p)^{18}$$
+
+**Why.** Each wetland's count is binomial with $N = 10$. Independence
+means the joint probability is the product. The exponents add: $3 + 2 +
+7 = 12$ detections and $7 + 8 + 3 = 18$ misses.
+
+**Watch for.**
+
+- Treating each wetland as a single Bernoulli trial (0/1) instead of a
+  binomial count out of 10.
+- Adding the three probabilities instead of multiplying.
+- Writing the product with no subscript $i$, so all three terms look
+  identical.
+
+**1b.**
+
+> Take the log and simplify $\ell_3(p) = \log \mathcal{L}_3(p)$ into a
+> sum, as far as you can.
+
+**Answer.**
+$$\ell_3(p) = \sum_{i=1}^{3}\left[\log\binom{10}{k_i} + k_i \log p + (10 - k_i)\log(1-p)\right]
+= C + 12\log p + 18\log(1-p)$$
+where $C = \log\binom{10}{3} + \log\binom{10}{2} + \log\binom{10}{7} = \log(120 \cdot 45 \cdot 120) \approx `r round(sum(lchoose(10, k)), 2)`$.
+
+**Why.** $\log(uv) = \log u + \log v$ turns the product into a sum, and
+$\log(u^c) = c\log u$ brings the exponents down.
+
+**Watch for.**
+
+- Writing $\log(1-p)$ as $\log 1 - \log p$.
+- Losing the $(10 - k_i)$ exponent, e.g. writing $\log(1-p)$ with no
+  coefficient.
+
+**1c.**
+
+> Your answer to 1b includes binomial coefficients such as
+> $\binom{10}{3}$. If you left them out, would that change which value
+> of $p$ maximizes $\ell_3(p)$? Why or why not?
+
+**Answer.** No.
+
+**Why.** The binomial coefficients don't depend on $p$. In the log
+scale they add a constant, which shifts the whole curve up or down
+without moving its peak. (On the likelihood scale they multiply the
+curve by a constant, which also leaves the peak in place.) Check:
+
+```{r part1c}
+optimize(ll_3, c(0, 1), maximum = TRUE)$maximum
+optimize(ll_3_nochoose, c(0, 1), maximum = TRUE)$maximum
+```
+
+**Watch for.** "Yes, because the likelihood value changes." The height
+changes, the location of the peak does not.
+
+## Part 2: Find the peak
+
+**2a.**
+
+> Find $\dfrac{d\ell_3}{dp}$.
+
+**Answer.**
+$$\frac{d\ell_3}{dp} = \frac{12}{p} - \frac{18}{1-p}$$
+
+**Why.** $\frac{d}{dp}\log p = \frac{1}{p}$. For $\log(1-p)$ the chain
+rule gives $\frac{1}{1-p}\cdot(-1)$. The constant $C$ drops out.
+
+**Watch for.**
+
+- **The missing minus sign** from the chain rule on $\log(1-p)$. This
+  is the most common error, and it leads to an equation with no
+  solution between 0 and 1.
+- Differentiating $\binom{10}{k_i}$ as if it depended on $p$.
+
+**2b.**
+
+> Set your derivative equal to zero and solve for $\hat{p}$, the maximum
+> likelihood estimate. Try to do this on your own first, but it's okay
+> to get help by looking at the Bolker book (beginning of Ch. 6).
+
+**Answer.** $\hat{p} = `r p_hat`$.
+
+**Why.**
+$$\frac{12}{p} = \frac{18}{1-p} \;\Rightarrow\; 12(1-p) = 18p
+\;\Rightarrow\; 12 = 30p \;\Rightarrow\; \hat{p} = \frac{12}{30} = 0.4$$
+The second derivative, $-12/p^2 - 18/(1-p)^2$, is negative for every
+$p$, so this is a maximum (students weren't asked to check).
+
+**Watch for.**
+
+- Cross-multiplying incorrectly (e.g. $12p = 18(1-p)$, giving 0.6).
+- Averaging the three wetlands' proportions separately. That also
+  gives 0.4 here only because all $N_i$ are equal (see 2c).
+
+**2c.**
+
+> Now suppose you surveyed $n$ wetlands, each visited $N$ times, with
+> $k_i$ detections at wetland $i$. Write a general formula for $\hat{p}$.
+> Does it make sense?
+
+**Answer.**
+$$\hat{p} = \frac{\sum_{i=1}^{n} k_i}{nN}$$
+Total detections divided by total visits.
+
+**Why (discussion).** Repeat 2a-2b with $\sum k_i$ in place of 12 and
+$\sum(N - k_i) = nN - \sum k_i$ in place of 18. It makes sense: the
+best estimate of a per-visit detection rate is the observed fraction
+of visits with a detection. Students may notice this is what they would
+have guessed without any calculus, which is a good sign rather than a
+letdown. The likelihood machinery earns its keep when there is no
+intuitive answer (Act 2).
+
+**Watch for.** Writing $\frac{1}{n}\sum \frac{k_i}{N}$ and calling it
+different. With equal $N$ it is the same formula. (It would differ if
+wetlands had different numbers of visits, where the MLE is
+$\sum k_i / \sum N_i$.)
+
+## Part 3: How sure are we?
+
+**3a.**
+
+> A colleague ran the same survey at 30 spring complexes where the
+> species is known to be present (10 visits each) and heard the frog on
+> 120 of the 300 visits. [Figure of both NLL curves, each shifted so
+> its minimum is zero.] Do the two surveys give the same $\hat{p}$?
+> Which survey pins $p$ down more tightly, and what feature of the curve
+> shows it?
+
+**Answer.** Yes, both give $\hat{p} = 0.4$ ($120/300 = 12/30$). The
+30-wetland survey pins $p$ down more tightly: its curve is much
+narrower and steeper around the minimum.
+
+**Why (discussion).** A steep curve means the NLL rises quickly as $p$
+moves away from 0.4, so values far from 0.4 are much less supported by
+the data. A shallow curve means a wide range of $p$ values fit nearly
+as well. For reference, the range of $p$ within 2 NLL units of the
+minimum is about `r int_3[1]` to `r int_3[2]` for 3 wetlands and
+`r int_30[1]` to `r int_30[2]` for 30 wetlands. (Don't give students
+this "within 2 units" rule yet. It comes later in the semester.)
+
+```{r part3a, echo=FALSE, fig.width=5, fig.height=2.8}
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(p_grid, nll_3 - min(nll_3), type = "l", lwd = 2, xlim = c(0.1, 0.8),
+     ylim = c(0, 6), xlab = "p", ylab = "NLL minus its minimum")
+lines(p_grid, nll_30 - min(nll_30), lwd = 2, lty = 2)
+abline(h = 2, col = "grey60")
+abline(v = c(int_3, int_30), lty = 3, col = "grey40")
+```
+
+**Watch for.**
+
+- Saying the 30-wetland survey gives a "better" or "higher" $\hat{p}$.
+  The estimate is identical, only the precision differs.
+- Reading the height of the curves as meaningful. Both were shifted to
+  a minimum of zero, and only the shape matters here.
+
+## Group discussion and revision
+
+No fixed answer. The derivative in 2a (the sign on the $\log(1-p)$
+term) and the difference between "same estimate" and "same certainty"
+in 3a are the most likely sources of disagreement. Muddiest points
+worth noting for the next lecture: likelihood vs. probability, and
+whether a narrow curve means the estimate is "right."

@@ -1,0 +1,274 @@
+---
+title: "Lab 5, Act 2: When Calculus Runs Out"
+subtitle: "Does highway noise quiet the frog chorus?"
+author: "NRES 746, name: _______________   group: _____________________"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+chorus_data <- read.csv("../data/FrogChorus.csv")
+dist_km <- chorus_data$dist_km
+males <- chorus_data$males
+
+nll_mono <- function(par, y, d) {
+  -sum(dpois(y, lambda = par[1] * (1 - exp(-par[2] * d)), log = TRUE))
+}
+```
+
+## The scenario
+
+Males of the frog species from Act 1 call to attract mates, and traffic
+noise can drown them out. A highway runs through the spring complex. To
+see how far the noise reaches, you visit 15 ponds at different
+distances from the road and count the calling males you hear during
+one 5-minute listen at each pond. Here are your observed measurements:
+
+```{r chorus-data}
+chorus <- rbind(c("Distance (km)", format(dist_km, drop0trailing = TRUE, trim = TRUE)),
+                c("Males heard", as.character(males)))
+knitr::kable(chorus, col.names = c("Pond", seq_along(dist_km)),
+             align = c("l", rep("c", length(dist_km))))
+```
+
+A reasonable model is that the expected count rises with distance and
+levels off far from the road:
+$$\lambda(d) = a\left(1 - e^{-b d}\right)$$
+This is the monomolecular function from Bolker's bestiary (Ch. 3).
+Bolker's worked examples in Ch. 6 (p. 243-249) are a useful guide for
+this Act (but this problem also differs in several ways).
+
+**How far from the road does the chorus recover, and how strong is the
+evidence that the road matters at all?**
+
+Try Part 1 on paper first, before you open a laptop or start typing
+code.
+
+`r nq(3, 3)`
+
+## Part 1: Plan it on paper (individual, ~25 min)
+
+**1a.** What do $a$ and $b$ mean biologically, and what are their
+units?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(3, 3)`
+
+**1b.** Act 1 used a binomial distribution. Why is a Poisson
+distribution a more reasonable choice for these counts?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(7, 7, extra = 2.9)`
+
+**1c.** Use the figure below and your function to estimate starting
+values for $a$ and $b$. Show how you got your estimated starting value for $b$.
+
+*Hint for $b$:* from the figure, estimate the distance $d_{1/2}$ at
+which the chorus is halfway to its maximum, so that
+$\lambda(d_{1/2}) = a/2$. Then solve that equation for $b$. Bolker's
+bestiary of functions (Ch. 3) shows how parameters like these relate
+to features of the curve.
+
+```{r chorus-plot, fig.width=5, fig.height=2.9}
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(NA, xlim = c(0, 8), ylim = c(0, 16), xaxs = "i", yaxs = "i",
+     xlab = "Distance from highway (km)", ylab = "Calling males heard")
+abline(v = 0:8, h = seq(0, 16, 2), col = "grey85")
+points(dist_km, males, pch = 16)
+box()
+```
+
+```{r fig.height=0.3*7}
+blank_space()
+```
+
+$a \approx$ ________ &nbsp;&nbsp;&nbsp;&nbsp; $b \approx$ ________
+
+`r nq(3, 8)`
+
+**1d.** Write the negative log-likelihood, $\text{NLL}(a, b)$, for the
+15 ponds using the Poisson pmf. Simplify it as far as you can. As in
+Act 1 (1c), you can drop any term that doesn't depend on $a$ or $b$,
+since it won't change where the minimum is.
+
+```{r fig.height=0.3*8}
+blank_space()
+```
+
+`r nq(7, 6)`
+
+In Act 1, calculus gave a formula for $\hat{p}$. That rarely happens
+with real models: for this one, no algebra trick produces a formula
+for $\hat{a}$ and $\hat{b}$. In practice we usually let a computer
+search for the minimum numerically instead, which is what you'll plan
+next.
+
+**1e.** In plain English (not R code), describe step by step what a
+function must do to compute the NLL for one candidate pair $(a, b)$.
+Then describe how you would use that function to find the MLE.
+
+```{r fig.height=0.3*6}
+blank_lines(6)
+```
+
+`r nq(8, 1)`
+
+## Checkpoint: finalize your plan (~5 min)
+
+Look back over 1c-1e and fix anything that no longer looks right. Then
+choose one path for Part 2:
+
+- **Path A (AI-assisted).** Write a prompt, based on your plan from
+  1e, asking an AI assistant for R code. Record your prompt (not the
+  code it returns) and your results.
+- **Path B (self-coded).** Write the R code yourself, without AI.
+  R's help pages, web search, and classmates are fine.
+
+Path chosen: ________
+
+`r nq(8, 0)`
+
+## Part 2: Fit the model (laptop, ~50 min)
+
+The data are in `FrogChorus.csv` (columns `pond`, `dist_km`,
+`males`), or you can paste them into R directly:
+
+```{r data-code, echo=TRUE, eval=FALSE}
+dist_km <- c(0.1, 0.2, 0.3, 0.5, 0.7, 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8)
+males   <- c(1, 0, 1, 2, 6, 4, 8, 11, 13, 5, 12, 6, 11, 12, 14)
+```
+
+```{r data-code-check}
+# the pasted vectors above must match the CSV
+stopifnot(all.equal(dist_km, c(0.1, 0.2, 0.3, 0.5, 0.7, 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8)),
+          all.equal(as.numeric(males), c(1, 0, 1, 2, 6, 4, 8, 11, 13, 5, 12, 6, 11, 12, 14)))
+```
+
+`r nq(4, 0)`
+
+**2a.** Write a function `nll_mono(par, y, d)` that implements your NLL
+from 1d, where `par` holds $a$ and $b$. Check it: `nll_mono(c(10, 1),
+males, dist_km)` should return about `r round(nll_mono(c(10, 1), males, dist_km), 2)`
+if you used `dpois()`, or about
+$`r round(nll_mono(c(10, 1), males, dist_km) - sum(lfactorial(males)), 2)`$
+if you coded the formula yourself and dropped the constant term. (Why
+can the second number be negative?)
+
+Your value: ________
+
+`r nq(6, 3)`
+
+**2b.** Evaluate the NLL at your starting values from 1c. Then use
+`optim()`, starting from those values, to find the MLE.
+
+NLL at your starting values: ________
+
+$\hat{a} =$ ________ &nbsp;&nbsp; $\hat{b} =$ ________ &nbsp;&nbsp;
+NLL at the MLE: ________ &nbsp;&nbsp; convergence code: ________
+
+Did `optim()` print any warnings? If so, what do you think caused
+them, and do they mean the answer is wrong?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(4, 3)`
+
+**2c.** Plot the data with your fitted curve and your hand-guessed
+curve from 1c. How far from the road does the expected chorus reach
+half its full size?
+
+Half-size distance: ________ km
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(6, 4)`
+
+**2d.** A skeptic says the road has no effect: every pond has the same
+expected count $\lambda$, whatever its distance. What is the MLE of
+$\lambda$ under that model, and what is its NLL? (Keep or drop the
+constant term the same way you did in 2a, so the two NLLs are
+comparable.) Which model do the data support more? Does the size of the
+difference convince you?
+
+$\hat{\lambda} =$ ________ &nbsp;&nbsp; NLL: ________
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(3, 6)`
+
+**2e. Path A:** write out the prompt you used. Did the AI's approach
+match your plan from 1e? What did you have to check or fix?
+**Path B:** what was hardest to translate from your plan into code?
+
+```{r fig.height=0.3*7}
+blank_lines(7)
+```
+
+`r nq(6, 4)`
+
+**If you finish early.** A colleague prefers a different saturating
+curve, $\lambda(d) = \dfrac{a d}{b + d}$. Fit it the same way and
+compare its NLL with the monomolecular model's. What do you conclude?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(5, 6)`
+
+## Reflection (~10 min)
+
+In Act 1, a single visit detected this frog only about 40% of the
+time. What does that suggest about what the counts in this Act really
+measure? Also record any changes you made, new insights, and any
+"muddiest points" or topics you want to review.
+
+```{r fig.height=0.3*6}
+blank_lines(6)
+```

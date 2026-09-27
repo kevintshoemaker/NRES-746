@@ -66,19 +66,31 @@ presenting it as the only definition in circulation.
 
 ## Writing style
 
-- **Avoid em-dashes and other tells of AI-generated writing.** Use a
-  comma, a period, or a plain hyphen with spaces (` -- `, as used
-  throughout this file) instead of an em-dash. Also avoid other common AI
-  writing tics: "it's not just X, it's Y" constructions, rule-of-three
-  rhetorical lists, throat-clearing openers ("It's worth noting that...",
-  "Furthermore,"), excessive hedging ("arguably", "in many ways"), and
-  overused intensifiers like "exactly" and "genuinely" -- cut them or
-  replace with a plainer word unless they're doing real work in the
-  sentence.
-  This applies to all student-facing prose (handouts, discussion prompts,
-  lecture text) -- I'm upfront with students that AI helped produce these
-  materials, but I'd rather the writing not constantly signal that on its
-  own, since it can make students take the exercises less seriously.
+- **Avoid em-dashes and other tells of AI-generated writing.** In any
+  `.Rmd` that gets knitted, this rules out the double-dash (`--`) as a
+  stand-in too: pandoc/LaTeX quietly turns it into an en-dash or
+  em-dash in the rendered PDF, so it doesn't actually dodge the tell.
+  Use a comma, a period, or parentheses instead (parentheses are fine to
+  reach for fairly often, for an aside or a short clarification). Also
+  avoid other common AI writing tics: "it's not just X, it's Y"
+  constructions, rule-of-three rhetorical lists, throat-clearing openers
+  ("It's worth noting that...", "Furthermore,"), excessive hedging
+  ("arguably", "in many ways"), and overused intensifiers like "exactly"
+  and "genuinely" (cut them or replace with a plainer word unless
+  they're doing real work in the sentence).
+  This applies to all student-facing prose (handouts, discussion
+  prompts, lecture text). I'm upfront with students that AI helped
+  produce these materials, but I'd rather the writing not constantly
+  signal that on its own, since it can make students take the exercises
+  less seriously.
+- **Prefer concise language over extra clarification.** If a shorter
+  phrasing says the same thing, use it. Err on the side of fewer words
+  rather than adding a clarifying clause just in case.
+- **Limit forward references to specific future labs or WODs.** Content
+  and scheduling can still shift, so a reference like "this comes up in
+  Lab 7" can go stale. A general pointer ("this returns later in the
+  semester") is safer than naming a specific lab or week number, unless
+  you're editing that material in the same session and can verify it.
 
 ## R style preferences
 
@@ -218,6 +230,16 @@ student-facing .Rmd documents:
   problem; WODs that are explicitly programming/pseudocoding exercises
   should present pseudocode (plain English, per above) or fill-in-
   the-blank R skeletons rather than runnable chunks.
+- **A WOD can also use a "Laptops open now" banner**, mirroring the lab
+  convention above, when its closing section is meant for genuine
+  hands-on R practice rather than paper fill-in-blanks (e.g. writing and
+  running a first likelihood function). Unlike a lab Act's laptop-open
+  section -- where AI is explicitly fair game, since the algorithm is
+  already finalized and what's left is translation into code -- a WOD's
+  laptop-open section can instead explicitly discourage an AI assistant,
+  when the point is for students to have their own first, unaided
+  experience turning a formula into working code and debugging it. See
+  `wod/WOD_Week5_Lecture2_WritingTheLikelihood.Rmd`'s Part 5.
 
 ## Lecture period structure
 
@@ -267,7 +289,7 @@ copied/downloaded/shared out of that context, e.g. via the course
 website, so the prefix needs to travel with the file). `Lecture1`/
 `Lecture2` is the Monday/Wednesday slot within that week (per
 `CourseSchedule.csv`), not a sequential count. The document's own
-header should match this directly: `**NRES 746 -- Week <N>, Lecture
+header should match this directly: `**NRES 746, Week <N>, Lecture
 <M>: <Title>**` -- not a separate sequential "Workout of the Day \#N"
 label (an earlier convention, now retired). If a week's schedule shifts
 (a cancelled Monday, a topic moved to a different week), rename the
@@ -279,7 +301,8 @@ WOD answer keys follow the same pattern as lab answer keys (see
 per WOD in `wod/answer_keys/`, named `WOD_Week<N>_Lecture<M>_
 <TopicInCamelCase>_Key.Rmd` (the full topic slug carried over from the
 source file, not shortened), same instructor-answer-key author line,
-same fixed-answer-vs-open-ended-discussion framing. A WOD key is worth
+same fixed-answer-vs-open-ended-discussion framing, and the same
+question / Answer / Why / Watch for layout for every sub-part. A WOD key is worth
 building any time a WOD ends on an unresolved teaser (e.g. the birthday
 problem in `WOD_Week3_Lecture2_ProbabilityPuzzle.Rmd`) -- walk through
 the full math for whenever the reveal happens in class, not just a
@@ -394,6 +417,26 @@ discarded. Prefer this survive/corroborate-vs-falsify vocabulary over
 testing, model selection, or the frequentist/likelihood/Bayesian
 framework tour (Bolker 1.4) later in the semester.
 
+## Notation conventions
+
+- **Likelihood: write as a function of the parameter alone, never with
+  a conditioning bar.** Use $\mathcal{L}(\theta)$, not
+  $\mathcal{L}(\theta \mid \text{data})$ -- the bar reads as an actual
+  conditional probability of the parameter given the data, which is
+  backwards (a likelihood is not a probability distribution over the
+  parameter) and clashes notationally with the real conditional
+  probability that shows up later in the semester, the Bayesian
+  posterior $P(\theta \mid y)$. When it's useful to mark how much data a
+  given likelihood is built from (one observation vs. a full dataset vs.
+  a general $n$), use a **subscript** instead: $\mathcal{L}_1(\theta)$,
+  $\mathcal{L}_4(\theta)$, $\mathcal{L}_n(\theta)$. This doesn't change
+  how a genuine conditional probability is written -- $P(y \mid \theta)$
+  (probability of the data, given a parameter value) still uses the bar
+  and is still correct; only the likelihood itself drops it. See
+  `wod/WOD_Week5_Lecture2_WritingTheLikelihood.Rmd` (its definition box
+  states the contrast explicitly) and carry the same convention into the
+  MLE/optimization weeks and any Bayesian material later in the semester.
+
 ## Lab structure: three Acts
 
 Labs are built as **three handouts** (Act 1, Act 2, Act 3 -- not a
@@ -413,6 +456,32 @@ transitions/wrap-up and a longer Act 2). Acts with a laptop-open coding
 phase run longer than this, sometimes 40+ minutes, since they also
 include a group check-in before laptops open plus the coding phase
 itself -- budget accordingly rather than compressing any of it to fit.
+
+**Timing estimates have been too optimistic, especially for coding.**
+Through Lab 4, the per-part minute estimates written into Act handouts
+consistently ran short in practice, and no lab has gotten through all
+of its planned Acts (e.g. Lab 4 never reached Act 2's ~55-minute
+coding phase). Two kinds of work are the worst offenders:
+
+- **Math problems** (derivations, algebra, hand calculations) take
+  noticeably longer than estimated. Students with a Calc II ceiling
+  work slowly through multi-step algebra and often restart after an
+  error.
+- **Coding exercises take much longer still, even with AI
+  assistance.** Setup, debugging, checking the AI's output, and
+  interpreting results each eat time that a "write this function"
+  estimate leaves out.
+
+Until there's better data, treat any gut-feel estimate as a floor:
+roughly **1.5x** for math parts and **2x or more** for coding parts
+are reasonable starting multipliers. Adjust the content to fit the
+period by cutting parts (or moving them to an "if you finish early"
+block), never by shrinking time estimates or work space. Labs are now
+planned as **two shorter Acts** rather than three (starting with Lab 5)
+for the same reason. This is an ongoing calibration: when the user
+reports how long a lab actually took, update this paragraph with the
+specifics.
+
 This structure suits weeks building
 *toward a single model*. (A separate "Model Court" format -- not
 individual/group/reflect but a structured debate between competing
@@ -424,7 +493,7 @@ Use `Lab1_Act1.Rmd` as the template for formatting all three
 Acts:
 
 - **YAML**: `title: "Lab N, Act X: <Name>"`, a one-line `subtitle` posing
-  the week's driving question, `author: "NRES 746 -- name: _______________   group: _____________________"`,
+  the week's driving question, `author: "NRES 746, name: _______________   group: _____________________"`,
   `date: ""`, dual word/pdf output as above. The "group" blank needs to
   be noticeably wider than the "name" blank -- despite the label, it's
   where students write the names of their groupmates (typically one or
@@ -434,8 +503,10 @@ Acts:
   was already written down when those were built, but got missed
   anyway, so don't copy that part of an existing Act file verbatim
   without checking the actual relative widths against this rule first.
-  `Lab3_Act1.Rmd` (and the rest of Lab 3) has the corrected version;
-  copy the author line from there instead. No need to go back and fix
+  `Lab3_Act1.Rmd` (and the rest of Lab 3) has the corrected widths,
+  but Labs 1-4 all still use the older `NRES 746 -- name:` separator,
+  which knits to a dash; from Lab 5 on, use the comma form shown
+  above. No need to go back and fix
   Lab 1/2 solely for this, but do fix it if you're touching those files
   for another reason anyway.
 - **A lab's last Act may need to double as an individual take-home.**
@@ -499,19 +570,36 @@ a lab's Acts are finalized, for grading or for a TA who wasn't in the
 room for the design discussion. Build one once a lab's Acts are
 stable, not while they're still being drafted.
 
-Format: `author: "NRES 746 -- Instructor Answer Key (not for student
+Format: `author: "NRES 746, Instructor Answer Key (not for student
 distribution)"`, dual pdf/word output (pdf default, matching other lab
 docs), and a short opening paragraph noting that fixed-answer
 questions are answered directly while open-ended/discussion questions
 get a sample answer or discussion points rather than an exact-match
 rubric. Mirror the student handout's own section headers and lettered
 sub-parts exactly (so a grader can find "2c" in the key as fast as in
-the handout), verify every numeric claim with real executed R code
-rather than restating it from memory, and fold "common mistakes to
-watch for" directly into the relevant question rather than a separate
-section. See `labs/answer_keys/Lab2_Act1_Key.Rmd` (the original
-precedent) or `labs/answer_keys/Lab3_Act1_Key.Rmd` for the target
-format.
+the handout), and verify every numeric claim with real executed R code
+rather than restating it from memory.
+
+Each sub-part in a key (lab or WOD) follows the same four-piece
+pattern, kept short:
+
+1. **The original question, repeated** as a blockquote (the handout's
+   wording, with blanks shown as `____`), so the key can be read
+   without the handout beside it.
+2. **Answer.** The concise answer: a number, a formula, or one or two
+   sentences. For open-ended items, a sample answer or a short list of
+   acceptable points.
+3. **Why.** A brief rationale (a sentence or two, or the key step of a
+   derivation), not a full re-teaching.
+4. **Watch for.** Common mistakes specific to that question, folded in
+   right there rather than collected in a separate section.
+
+Prefer concise over exhaustive: a grader should be able to scan a
+sub-part in a few seconds. See
+`wod/answer_keys/WOD_Week5_Lecture2_WritingTheLikelihood_Key.Rmd` for
+the target format. (Keys built before this convention, e.g.
+`labs/answer_keys/Lab2_Act1_Key.Rmd` through Lab 4, don't repeat the
+question; no need to rework them unless asked.)
 
 ## Calibrating difficulty and level
 

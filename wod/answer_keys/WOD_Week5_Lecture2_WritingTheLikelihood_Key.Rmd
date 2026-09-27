@@ -1,7 +1,7 @@
 ---
-title: "Week 5, Lecture 2 WOD -- Answer Key"
+title: "Week 5, Lecture 2 WOD: Answer Key"
 subtitle: "Writing the Likelihood"
-author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+author: "NRES 746, Instructor Answer Key (not for student distribution)"
 date: ""
 output:
   pdf_document: default
@@ -14,245 +14,328 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
                        fig.width = 6, fig.height = 3)
 ```
 
-This WOD took the place of the Wednesday lecture, so students met the idea of a likelihood for the
-first time here, working alone and then in groups. It is ungraded. Questions with a single correct
-answer are answered directly below. The open-ended items (1d, 2d, 2e, the group question, 4c, 5c,
-and the muddiest-point block) get discussion points instead of an exact-match rubric.
-
-Everything below is computed in the chunks, so the numbers can be checked against a student's
-paper. The handout's four nests are the same throughout.
-
-```{r data}
-y <- c(1, 1, 0, 1)             # outcomes for nests 1-4
-cover <- c(30, 20, 10, 30)     # percent sagebrush cover
+```{r compute, include=FALSE}
+y <- c(1, 1, 0, 1)
+cover <- c(30, 20, 10, 30)
+lik <- function(p) p^3 * (1 - p)
+p_vals <- c(0.25, 0.5, 0.75)
+lik_sum <- sum(lik(p_vals))
+lik_area <- integrate(lik, 0, 1)$value
+log10_prod <- 1852 * log10(0.5)
+log_sum <- 1852 * log(0.5)
+lik_cov_rounded <- 0.75 * 0.5 * (1 - 0.25) * 0.75
+lik_cov_exact <- prod(dbinom(y, 1, plogis(-2.2 + 0.11 * cover)))
 ```
 
-## What students should walk away with
+Each item repeats the handout's question, then gives the answer, a
+short rationale, and mistakes to watch for. Questions with one correct
+answer are answered directly. Open-ended items (1d, 2d, 2e, the group
+question, 4c, 5c, and the reflection) get discussion points instead.
+All numbers are computed in R when this file is knitted.
 
-1. A likelihood is the probability of the data you actually observed, viewed as a function of the
-   parameter with the data held fixed: $\mathcal{L}(p \mid y) = P(y \mid p)$. The formula is
-   the same one as in a probability calculation. What changes is which quantity is treated as known.
-2. Under independence, the likelihood of several observations is the **product** of the individual
-   probabilities. The **log** turns that product into a sum, which is what you compute in practice.
-3. A likelihood is **not** a probability distribution over the parameter. The values don't sum
-   to 1 (2d), and even the area under the whole curve is not 1.
-4. When the probability depends on a covariate, the likelihood is a function of the
-   *parameters of that relationship* ($a$ and $b$). The data (the outcomes and the covariate
-   values) are what is held fixed.
-5. The R version of all of this is `-sum(dbinom(y, size = 1, prob = p, log = TRUE))`.
+Data used throughout: four nests with outcomes $y = (1, 1, 0, 1)$ and
+sagebrush cover $x = (30, 20, 10, 30)$ percent.
 
 ## Part 1: One observation
 
-**1a.** For a single nest with success probability $p$:
+**1a.**
 
-$$P(y=1 \mid p) = p \qquad P(y=0 \mid p) = 1 - p$$
+> Write down the probability of each possible outcome for a single
+> nest. $P(y=1 \mid p) =$ ____ $\quad P(y=0 \mid p) =$ ____
 
-**1b.** The standard answer is
+**Answer.** $P(y=1 \mid p) = p$ and $P(y=0 \mid p) = 1-p$.
 
-$$P(y \mid p) = p^{y}(1-p)^{1-y}$$
+**Why.** The two outcomes are the only possibilities, so their
+probabilities sum to 1.
 
-When $y=1$ the second factor is $(1-p)^0 = 1$ and the answer is $p$. When $y=0$ the first factor
-is $p^0 = 1$ and the answer is $1-p$. This is the Lab 3 binomial pmf with one trial, because
-$\binom{1}{y} = 1$. An equally correct form with no exponents is $yp + (1-y)(1-p)$, which
-also gives $p$ and $1-p$.
+**Watch for.** Nothing much. This is a warm-up.
 
-```{r part1b}
-bern <- function(y, p) p^y * (1 - p)^(1 - y)
-c(bern(1, 0.75), bern(0, 0.75))     # 0.75 and 0.25
-```
+**1b.**
 
-**Common mistakes to watch for:** writing a piecewise or "if" rule (not allowed by the prompt);
-writing $p^y(1-p)$ and forgetting the exponent on the second factor; writing $y \cdot p$ alone
-(this is 0 when $y = 0$, which is not a probability of the outcome).
+> Write a single formula that gives the probability of an observed
+> outcome $y$. Make sure the formula gives the correct answer for both
+> possible outcomes of $y$ (0 or 1).
 
-> **Definition** (given in the handout). No answer needed.
+**Answer.** $P(y \mid p) = p^{y}(1-p)^{1-y}$. Also correct:
+$yp + (1-y)(1-p)$.
 
-**1c.** For nest 1, $y_1 = 1$, so $\mathcal{L}(p \mid y_1 = 1) = p$:
+**Why.** If $y=1$, the second factor is $(1-p)^0 = 1$, leaving $p$. If
+$y=0$, the first factor is $p^0 = 1$, leaving $1-p$. This is the
+binomial pmf with one trial, since $\binom{1}{y} = 1$.
 
-$$\mathcal{L}(0.75 \mid y_1=1) = 0.75 \qquad \mathcal{L}(0.25 \mid y_1=1) = 0.25$$
+**Watch for.**
 
-$p = 0.75$ makes the observed outcome three times as probable as $p = 0.25$ does. **Common
-mistake:** giving 0.75 for $\mathcal{L}(0.25 \mid y_1 = 1)$ or mixing up which of $y$ and $p$ is
-plugged into which slot.
+- $p^y(1-p)$, with the exponent missing on the second factor.
+- $yp$ alone, which gives 0 when $y = 0$.
+- A piecewise "if" rule, which doesn't answer the question.
 
-**1d.** *Discussion points.* In $p^y(1-p)^{1-y}$, $y$ is the data and $p$ is the parameter. In a
-Lab 3 probability calculation, the parameter $p$ was known (given) and the outcome $y$ was the
-thing we asked about. In a likelihood, the outcome is known (already observed) and $p$ is the
-unknown that we vary. The formula is the same. What changes is which symbol is fixed and which
-one we let vary. This is the single most important idea in the WOD, so listen for whether groups
-state it in their own words.
+**1c.**
+
+> Nest 1 hatched ($y_1=1$). Evaluate the likelihood of $p=0.75$ and of
+> $p=0.25$ given this observation.
+
+**Answer.** $\mathcal{L}_1(0.75) = 0.75$ and $\mathcal{L}_1(0.25) = 0.25$.
+
+**Why.** With $y = 1$, the formula from 1b reduces to $p$. The value
+$p = 0.75$ makes the observed outcome three times as probable as
+$p = 0.25$.
+
+**Watch for.** Plugging $y$ and $p$ into the wrong slots, which gives
+0.75 for both or reverses them.
+
+**1d.**
+
+> In your formula from 1b, which symbol is the data and which is the
+> parameter?
+
+**Answer.** $y$ is the data and $p$ is the parameter.
+
+**Why (discussion).** In a probability calculation (Lab 3), $p$ was
+given and we asked about $y$. In a likelihood, $y$ has already been
+observed and $p$ is what varies. The formula is the same, and only
+which symbol is fixed changes. This is the central idea of the WOD, so
+listen for whether students can say it in their own words.
+
+**Watch for.** Calling $p$ "the probability" and $y$ "the variable"
+without saying which one is fixed.
 
 ## Part 2: Several observations
 
-**2a.** With independent nests sharing one success probability $p$, the joint probability
-factors into a product:
+**2a.**
 
-$$\mathcal{L}(p \mid y_1, y_2, y_3, y_4) = \prod_{i=1}^{4} p^{y_i}(1-p)^{1-y_i}$$
+> Write the likelihood of all four observations, $\mathcal{L}_4(p)$, in
+> terms of your formula from 1b. We can assume all observations are
+> independent! Please use product notation ($\prod$) to write the
+> likelihood.
 
-**Common mistakes to watch for:** adding the individual probabilities instead of multiplying (this
-mixes up "or" and "and"); leaving out the product symbol and writing the four terms with no
-connection between them.
+**Answer.**
+$$\mathcal{L}_4(p) = \prod_{i=1}^{4} p^{y_i}(1-p)^{1-y_i}$$
 
-**2b.** With $y = (1, 1, 0, 1)$ there are three successes and one failure:
+**Why.** Independence means the joint probability of all four outcomes
+is the product of the individual probabilities.
 
-$$\mathcal{L}(p \mid \text{data}) = p \cdot p \cdot (1-p) \cdot p = p^{3}(1-p)^{1}, \qquad j = 3,\ k = 1.$$
+**Watch for.**
 
-The order of the nests doesn't matter, only the counts of successes and failures. **A
-variant answer to accept:** a student who treats the data as "3 successes out of 4 nests" and writes
-$\binom{4}{3}p^3(1-p)$ has used the binomial pmf with $N=4$. The factor $\binom{4}{3} = 4$ is a
-constant that doesn't depend on $p$, so it multiplies every value in the table by 4 (12/256, 64/256,
-108/256) but does not move the peak. This is worth raising in the group discussion if a group hits it.
+- Adding instead of multiplying (confusing "or" with "and").
+- Dropping the subscript $i$, so every term looks identical.
+
+**2b.**
+
+> Plug in the observed outcomes and simplify to the form
+> $p^{j}(1-p)^{k}$. What are $j$ and $k$?
+
+**Answer.** $j = 3$, $k = 1$, so $\mathcal{L}_4(p) = p^3(1-p)$.
+
+**Why.** Three nests hatched (each contributes $p$) and one failed
+(contributes $1-p$). The order of the nests doesn't matter.
+
+**Watch for.** A student who writes $\binom{4}{3}p^3(1-p)$ has used the
+binomial with $N = 4$. Accept it. The constant 4 scales every value in
+2c by 4 but doesn't move the peak, which is a good point to raise in
+discussion.
 
 **2c.**
 
-```{r part2c}
-lik <- function(p) p^3 * (1 - p)
-p_vals <- c(0.25, 0.5, 0.75)
-data.frame(p = p_vals, likelihood = lik(p_vals), in_256ths = lik(p_vals) * 256)
-```
+> Evaluate your answer to 2b at the three values of $p$ below.
+> Fractions are fine.
 
-$$\mathcal{L}(0.25) = \tfrac{1}{64}\cdot\tfrac{3}{4} = \tfrac{3}{256} \approx 0.012 \qquad
-\mathcal{L}(0.50) = \tfrac{1}{8}\cdot\tfrac{1}{2} = \tfrac{16}{256} = \tfrac{1}{16} = 0.0625 \qquad
-\mathcal{L}(0.75) = \tfrac{27}{64}\cdot\tfrac{1}{4} = \tfrac{27}{256} \approx 0.105$$
+**Answer.**
 
-**2d.** The three values sum to $46/256 \approx 0.18$, not 1.
+| $p$ | $\mathcal{L}_4(p)$ |
+|---|---|
+| 0.25 | $(1/64)(3/4) = 3/256 \approx `r round(lik(0.25), 3)`$ |
+| 0.50 | $(1/8)(1/2) = 1/16 = `r lik(0.5)`$ |
+| 0.75 | $(27/64)(1/4) = 27/256 \approx `r round(lik(0.75), 3)`$ |
 
-```{r part2d}
-sum(lik(p_vals))                           # 0.1797
-integrate(lik, 0, 1)$value                 # area under the whole curve = 1/20
-```
+**Watch for.** Arithmetic slips with $(3/4)^3 = 27/64$.
 
-Even the area under the whole curve from 0 to 1 is only $1/20 = 0.05$. *Discussion points.* The
-probabilities in a Lab 3 calculation sum to 1 across the *possible outcomes* for a fixed $p$. A
-likelihood is evaluated across *possible parameter values* for fixed data, and nothing forces those
-to add up to 1. A likelihood value is therefore **not** "the probability that $p$ is 0.75". It is the
-probability of *these data* if $p$ were 0.75, and it is only meaningful relative to other values of
-$p$. Students often assume the three numbers should sum to 1 because they came from probabilities:
-the sum-to-1 question is designed to surface that.
+**2d.**
 
-**2e.** The curve rises to a maximum at $p = 3/4$ and falls to 0 at both $p=0$ and $p=1$:
+> Add up your three likelihood values. Do they sum to 1? Should they?
 
-```{r part2e, fig.height=2.8, fig.width=4.5}
+**Answer.** They sum to $46/256 \approx `r round(lik_sum, 2)`$. No, and
+they shouldn't have to.
+
+**Why (discussion).** Probabilities sum to 1 across the possible
+*outcomes* with $p$ fixed. A likelihood runs across possible *parameter
+values* with the data fixed, and nothing forces those to add to 1. Even
+the area under the whole curve from 0 to 1 is only
+$`r round(lik_area, 2)`$ ($1/20$). So $\mathcal{L}_4(0.75)$ is not "the
+probability that $p = 0.75$." It is the probability of these data if
+$p$ were 0.75.
+
+**Watch for.** Students who think they made an arithmetic error because
+the sum isn't 1. This question is designed to surface that assumption.
+
+**2e.**
+
+> Plot your three values on the axes below, then sketch the whole curve
+> $\mathcal{L}_4(p)$ for $0 \le p \le 1$. Mark where you think the peak
+> is. Is that where you would have guessed from the raw data alone?
+
+**Answer.** The curve is 0 at both ends and peaks at $p = 0.75$:
+
+```{r part2e, echo=FALSE, fig.height=2.6, fig.width=4.5}
 par(mar = c(4, 4.5, 1, 1))
 curve(x^3 * (1 - x), 0, 1, xlab = "p", ylab = "Likelihood", ylim = c(0, 0.12))
 points(p_vals, lik(p_vals), pch = 16)
 abline(v = 0.75, lty = 3)
 ```
 
-The peak is at $p = 3/4$, which is also the sample proportion of successes (3 of 4). Setting the
-derivative to zero confirms it: $\frac{d}{dp}\, p^3(1-p) = p^2(3 - 4p) = 0$ at $p = 3/4$. Most
-students will guess 0.75 from the raw data ("three out of four hatched"), which is exactly the
-point: the peak of the likelihood agrees with intuition here. Students are not expected to do the
-derivative. It previews the maximum likelihood work in Week 6.
+**Why.** The peak matches the raw proportion (3 of 4 hatched). Setting
+the derivative to zero confirms it:
+$\frac{d}{dp}\,p^3(1-p) = p^2(3-4p) = 0$ at $p = 3/4$. Students weren't
+asked for the derivative.
+
+**Watch for.** A symmetric curve peaked at 0.5, or a curve that doesn't
+go to 0 at $p = 0$ and $p = 1$.
 
 ## Part 3: The log-likelihood
 
-**3a.** Take logs, then use $\log(uv) = \log u + \log v$ and $\log(u^c) = c\log u$:
+**3a.**
 
-$$\ell(p) = \log \prod_{i=1}^{n} p^{y_i}(1-p)^{1-y_i} = \sum_{i=1}^{n}\left[\,y_i \log p + (1-y_i)\log(1-p)\,\right]$$
+> Take the log of your product from 2a and use the log rules to rewrite
+> it as a sum. Write your result for a general set of $n$ nests with
+> outcomes $y_1, \ldots, y_n$.
 
-Grouping terms gives the equivalent form
-$\ell(p) = \left(\sum y_i\right)\log p + \left(n - \sum y_i\right)\log(1-p)$. For the four nests
-that is $3\log p + \log(1-p)$, and
+**Answer.**
+$$\ell_n(p) = \sum_{i=1}^{n}\left[\,y_i \log p + (1-y_i)\log(1-p)\,\right]$$
+Equivalently, $\left(\sum y_i\right)\log p + \left(n - \sum y_i\right)\log(1-p)$.
 
-```{r part3a}
-3 * log(0.75) + log(0.25)     # ell(0.75)
-log(27 / 256)                 # log of the likelihood at 0.75: same number
-```
+**Why.** $\log(uv) = \log u + \log v$ turns the product into a sum, and
+$\log(u^c) = c \log u$ brings the exponents down.
 
-**Common mistakes to watch for:** writing $\log(a + b)$ or trying to "distribute" the log over a sum;
-losing the $(1-y_i)$ exponent and writing $y_i \log p + \log(1-p)$.
+**Watch for.**
 
-**3b.** Each term is about $0.5$, so the product is $0.5^{2000} = 2^{-2000}$. With
-$\log_{10} 2 \approx 0.30$:
+- "Distributing" the log over a sum, e.g. writing $\log(1-p)$ as
+  $\log 1 - \log p$.
+- Losing the $(1-y_i)$ factor.
 
-$$\log_{10}\!\left(2^{-2000}\right) = -2000 \times 0.30 = -600, \quad\text{so the product is about } 10^{-600}.$$
+**3b.**
 
-(The exact value is $10^{-602}$; the rounded log gives 600.) That is far below $10^{-308}$, so a
-computer cannot store it and the product **underflows to exactly 0**. The sum from 3a stays
-representable: each term is $\ln 0.5 = -\ln 2 \approx -0.69$, so the sum is
-$2000 \times (-0.69) \approx -1380$ (exactly $-1386$).
+> Suppose the monitoring program had 1,852 nests and each nest
+> contributed a likelihood of about 0.5. Roughly how big is the product
+> of all 1,852 terms? Note that standard computer arithmetic cannot
+> store positive numbers much smaller than $10^{-308}$. Why might you
+> want to work with the sum from 3a instead? What is its value here?
 
-```{r part3b}
-prod(rep(0.5, 2000))          # underflows to 0
-sum(log(rep(0.5, 2000)))      # -1386.29
-c(exact_log10 = -2000 * log10(2), with_rounded_log = -2000 * 0.30)
-```
+**Answer.** The product is $0.5^{1852} \approx 10^{`r round(log10_prod)`}$,
+which a computer rounds to exactly 0. The log sum is
+$1852 \log(0.5) \approx `r round(log_sum, 1)`$.
 
-The moral is that a likelihood over many observations is a product of many numbers below 1, so
-in practice you work with the log-likelihood, a sum of moderately sized negative numbers. *Optional
-connection:* the birthday-problem code in the idea bank made the same move to log space.
+**Why.** A product of many numbers below 1 shrinks past what a computer
+can store (underflow). The sum of logs is an ordinary number.
+
+**Watch for.** Using $\log_{10}$ for the sum. That gives
+$`r round(log10_prod, 1)`$, which is fine as a size estimate but isn't
+the natural log that R's `log()` and `dbinom(..., log = TRUE)` use.
 
 ## Group check-in
 
-**Group question.** *Sample answers; accept any biologically sensible one.* Nests aren't independent
-when they share something that affects hatching beyond the modeled probability:
+> **Group question.** Multiplying the four nest likelihoods together
+> depended on an assumption. Name one biological reason it might fail
+> for real sage-grouse nests.
 
-- The same hen renests after a failure, or a single hen's condition affects all her nests.
-- Nests in the same area face the same predators, and a predator that finds one nest raises the
-  odds of finding its neighbors.
-- Nests in the same year or the same storm share weather.
-- Nests at the same lek or on the same ridge share habitat quality that cover doesn't fully capture.
+**Answer (any sensible one).** The assumption is independence. It fails
+when nests share an unmeasured cause:
 
-The general idea: shared, unmeasured causes make the outcomes of neighboring nests
-correlated. This foreshadows hierarchical models later in the course.
+- the same hen renests after a failure;
+- nearby nests share predators (a predator that finds one nest is more
+  likely to find its neighbors);
+- nests in the same year share weather;
+- nests on the same ridge share habitat quality that cover doesn't
+  capture.
+
+**Why.** Shared causes make outcomes correlated, so the product
+overstates how much information the data contain.
+
+**Watch for.** Answers about the covariate ("cover differs between
+nests"). That's a reason $p$ might differ, not a reason nests are
+dependent.
 
 ## Part 4: Adding the covariate
 
-**4a.** For nest 2, cover is 20%, so $a + b x = -2.2 + 0.11(20) = -2.2 + 2.2 = 0$:
+**4a.**
 
-$$p_2 = \frac{1}{1 + e^{-0}} = \frac{1}{1+1} = 0.5$$
+> Check the predicted $p$ for nest 2 (20% cover) by hand.
 
-```{r part4a}
-plogis(-2.2 + 0.11 * cover)   # exact predictions for all four nests
-```
+**Answer.** $a + bx = -2.2 + 0.11(20) = 0$, so $p_2 = 1/(1 + e^0) = 0.5$.
 
-The other three round to the handout's values: 0.7503 for nests 1 and 4, and 0.2497 for nest 3.
+**Watch for.** Sign errors in the exponent. It's $e^{-(a+bx)}$, and here
+$a + bx = 0$ anyway.
 
-**4b.** Each nest contributes $p_i$ if it hatched and $1 - p_i$ if it failed. Nests 1, 2 and 4
-hatched and nest 3 failed:
+**4b.**
 
-$$\mathcal{L} = 0.75 \times 0.5 \times (1 - 0.25) \times 0.75 = 0.75 \times 0.5 \times 0.75 \times 0.75 = \tfrac{27}{128} \approx 0.211$$
+> Assuming the nests are independent, what is the likelihood of this
+> candidate parameter pair, $\mathcal{L}_4(a=-2.2, b=0.11)$? Careful with
+> the nest that failed.
 
-```{r part4b}
-0.75 * 0.5 * (1 - 0.25) * 0.75                 # by hand with the rounded p's
-prod(dbinom(y, 1, plogis(-2.2 + 0.11 * cover))) # with the exact p's (0.2112)
-```
+**Answer.**
+$0.75 \times 0.5 \times (1 - 0.25) \times 0.75 = 27/128 \approx `r round(lik_cov_rounded, 3)`$.
+(With unrounded $p_i$ it's $`r round(lik_cov_exact, 4)`$.)
 
-**Common mistake to watch for (this is what the prompt warns about):** using $p_3 = 0.25$ for the
-failed nest instead of $1 - p_3 = 0.75$. That gives $0.75 \times 0.5 \times 0.25 \times 0.75 = 0.070$,
-which is a third of the right answer.
+**Why.** A nest that hatched contributes $p_i$. A nest that failed
+contributes $1 - p_i$.
 
-**4c.** The best constant-$p$ value from 2c is $27/256 \approx 0.105$ at $p = 0.75$. The covariate model
-gives $27/128 \approx 0.211$. That is **twice** as likely, so the data support the covariate
-model more. *Discussion points on caution.* Any of these is a good reason:
+**Watch for.** Using $p_3 = 0.25$ for the failed nest instead of
+$1 - p_3 = 0.75$. That gives $0.070$, a third of the right answer.
 
-- Only four nests, so a factor of 2 could easily arise by chance.
-- The covariate model has two parameters and the constant model has one. More flexible models can
-  fit data better even when the extra parameter is meaningless (this returns as model selection later).
-- The pair $(a, b) = (-2.2, 0.11)$ was handed to us. We never asked whether some other pair does even
-  better, or how much the answer would change under a different pair.
-- A likelihood ratio of 2 says nothing yet about uncertainty.
+**4c.**
 
-**Common mistake to watch for:** concluding "cover matters" without qualification, or comparing
-$0.211$ to a constant-$p$ likelihood that isn't the best of the three (for example $p=0.5$).
+> Compare this to the best of your three constant-$p$ likelihoods from
+> 2c. Which model do the data support more, and by what factor? Does
+> that show that cover really matters for nest success? Give at least
+> one reason for caution.
 
-**4d.** The likelihood for $n$ nests, with $p_i = 1/(1 + e^{-(a + b x_i)})$, is
+**Answer.** The covariate model: $27/128$ vs. $27/256$, a factor of 2.
+That does not show that cover matters.
 
-$$\mathcal{L}(a, b \mid y_1,\ldots,y_n, x_1,\ldots,x_n) = \prod_{i=1}^{n} p_i^{\,y_i}\,(1-p_i)^{1-y_i}, \qquad p_i = \frac{1}{1 + e^{-(a + b x_i)}}.$$
+**Why (discussion).** Any of these reasons for caution works:
 
-Written out in $a$ and $b$ only (using $1 - p_i = 1/(1 + e^{a + b x_i})$):
+- Four nests is very little data. A factor of 2 could easily arise by
+  chance.
+- The covariate model has two parameters and the constant model has
+  one, so it can fit better even if cover is irrelevant.
+- $(a, b)$ was handed to us. Nobody searched for the best pair.
+- A ratio says nothing yet about uncertainty.
 
-$$\mathcal{L}(a, b) = \prod_{i=1}^{n} \left(\frac{1}{1 + e^{-(a + b x_i)}}\right)^{y_i} \left(\frac{1}{1 + e^{a + b x_i}}\right)^{1-y_i}.$$
+**Watch for.**
 
-**Underline (fixed data):** $y_i$, $x_i$, and $n$. **Circle (what the likelihood is a function of):**
-$a$ and $b$. **Common mistake to watch for:** circling $p_i$. The $p_i$ are not free quantities:
-each is determined by $a$, $b$ and the nest's own $x_i$. The unknowns are the two parameters of the
-relationship. This is the step from Part 2 (one parameter $p$) to a real model.
+- Concluding "cover matters" with no qualification.
+- Comparing to $\mathcal{L}_4(0.5)$ instead of the best constant-$p$
+  value, $\mathcal{L}_4(0.75)$.
 
-## Part 5: From math to R code, on paper
+**4d.**
+
+> Write the likelihood for $n$ nests in general, $\mathcal{L}_n(a, b)$,
+> using $p_i = 1/(1+e^{-(a+bx_i)})$. Then underline the quantities that
+> are fixed data and circle the quantities that the likelihood is a
+> function of.
+
+**Answer.**
+$$\mathcal{L}_n(a, b) = \prod_{i=1}^{n} p_i^{\,y_i}(1-p_i)^{1-y_i},
+\qquad p_i = \frac{1}{1 + e^{-(a + b x_i)}}$$
+Underlined (data): $y_i$, $x_i$, $n$. Circled (parameters): $a$, $b$.
+
+**Why.** Each $p_i$ is fixed once $a$, $b$, and $x_i$ are known, so the
+only free quantities are $a$ and $b$.
+
+**Watch for.** Circling $p_i$. The $p_i$ are not separate parameters.
+
+## Part 5: From math to R code
+
+Students run this part themselves, with AI discouraged. Expect syntax
+errors (missing commas, unmatched parentheses). Let them work through
+the error message before offering a fix.
 
 **5a.**
+
+> Type this function into R, filling in the blanks so it returns the
+> *negative* log-likelihood of a vector of nest outcomes `y` for a
+> single success probability `p`.
+> `-sum(dbinom(x = ____, size = ____, prob = ____, log = TRUE))`
+
+**Answer.**
 
 ```{r part5a}
 nll_const <- function(p, y) {
@@ -260,68 +343,94 @@ nll_const <- function(p, y) {
 }
 ```
 
-The blanks are `x = y` (the observed outcomes), `size = 1` (one trial per nest, which makes the
-binomial a Bernoulli), and `prob = p`. `dbinom` is vectorized over `x`, so it returns one
-log-probability per nest, and `sum()` adds them, which is exactly the sum from 3a. The minus sign
-turns the log-likelihood into its negative. **Common mistakes to watch for:** `x = 1` or `x = p`
-(confusing which argument is the data); `size = length(y)` (this would treat all the nests as
-one binomial experiment, which changes the function); forgetting the minus sign.
+**Why.** `x` is the observed data, `size = 1` makes each nest a single
+trial, and `prob` is the parameter. `dbinom()` returns one log
+probability per nest, and `sum()` adds them (the sum from 3a).
 
-**5b.** `exp(-nll_const(0.5, y))` undoes both the log and the minus sign, returning the likelihood
-of $p=0.5$:
+**Watch for.**
 
-```{r part5b}
-exp(-nll_const(0.5, y))     # 0.0625 = 1/16
-nll_const(0.5, y)           # = log(16) = 2.77
-```
+- `x = 1` or `x = p` (confusing data with parameter).
+- `size = length(y)`, which treats all nests as one binomial draw.
+- Forgetting the minus sign.
 
-The answer is $1/16 = 0.0625$, which matches the $p=0.50$ row of the 2c table ($16/256$).
-**Common mistake to watch for:** stopping at $\text{nll} = \log 16 \approx 2.77$ without
-converting back with `exp(-...)`.
+**5b.**
 
-**5c.** The smallest negative log-likelihood is at $p = 0.75$, which agrees with the peak in the 2e
-sketch.
+> Run `y <- c(1, 1, 0, 1)`, then `exp(-nll_const(0.5, y))`. Which entry
+> of your table in 2c should it match? If it doesn't, use the mismatch
+> to track down the bug.
+
+**Answer.** `r exp(-nll_const(0.5, y))`, the $p = 0.50$ row of 2c
+($1/16$).
+
+**Why.** `exp(-...)` undoes the minus sign and the log, returning the
+likelihood itself.
+
+**Watch for.** Reporting `nll_const(0.5, y)` $= `r round(nll_const(0.5, y), 2)`$
+without converting back. If the number is way off, check `x` and `size`
+first.
+
+**5c.**
+
+> Run the code below with your own working `nll_const`. Which value of
+> $p$ gives the smallest negative log-likelihood? Does it agree with
+> your sketch in 2e? Why do you think we work with the *negative*
+> log-likelihood rather than the log-likelihood?
 
 ```{r part5c}
 p_grid <- seq(0.05, 0.95, by = 0.01)
 nll_vals <- sapply(p_grid, function(p) nll_const(p, y))
-p_grid[which.min(nll_vals)]                 # 0.75
-exp(-min(nll_vals))                         # 0.1055 = 27/256
+p_grid[which.min(nll_vals)]
 ```
 
-The minimum of the negative log-likelihood sits at the same $p$ as the maximum of the likelihood
-because $\log$ is increasing and the minus sign flips the curve. *Why negative?* Any of these is a good answer:
+**Answer.** $p = 0.75$, matching the peak in 2e.
 
-- Optimizers such as R's `optim()` **minimize** by default (as students saw with the SSR in Lab 2), so we hand them a
-  quantity that is smaller when the fit is better.
-- Since likelihoods for discrete data are at most 1, log-likelihoods are at most 0. Their negatives are
-  nonnegative "badness of fit" numbers, like the SSR.
-- Maximizing $\ell(p)$ and minimizing $-\ell(p)$ are the same problem.
+**Why negative (discussion).** Any of these:
+
+- Optimizers such as `optim()` minimize by default (as with the SSR in
+  Lab 2).
+- Discrete likelihoods are at most 1, so their logs are at most 0.
+  Negating gives a nonnegative "badness of fit" score, like SSR.
+- Maximizing $\ell$ and minimizing $-\ell$ are the same problem.
+
+**Watch for.** Thinking the minimum of the NLL and the maximum of the
+likelihood could be at different $p$. The log is increasing, so they
+can't be.
 
 **5d (optional).**
 
-```{r part5d}
-cover <- c(30, 20, 10, 30)
+> Write the covariate version, using your formula from 4d. If you ran
+> `exp(-nll_cover(c(-2.2, 0.11), y, cover))`, what number should you
+> get, approximately, and why?
 
+**Answer.**
+
+```{r part5d}
 nll_cover <- function(par, y, cover) {
   p <- 1 / (1 + exp(-(par[1] + par[2] * cover)))
   -sum(dbinom(y, size = 1, prob = p, log = TRUE))
 }
-
-exp(-nll_cover(c(-2.2, 0.11), y, cover))    # 0.2112, matches 27/128 = 0.2109 (rounded p's)
+exp(-nll_cover(c(-2.2, 0.11), y, cover))
 ```
 
-The value is approximately $0.211$, matching the hand answer to 4b. The small difference (0.2112
-against 0.2109) is because 4b used predicted $p$ values rounded to 0.75, 0.5 and 0.25.
+About 0.211, the answer to 4b. The small difference from $27/128$
+comes from rounding the $p_i$ in 4b.
 
-## What is still fuzzy?
+**Watch for.** Using `par$a` on an unnamed vector, or forgetting the
+minus sign inside `exp()`.
 
-Read these for where the class needs help. Likely muddiest points, and where to address them:
+## Reflection
 
-- **Likelihood versus probability** (the 2d sum-to-1 issue). This is the most likely one. Consider opening
-  next Monday's maximum likelihood lecture by returning to it.
-- **Why the product, why the log** (independence and underflow).
-- **What "the data are fixed" means** when the data are still random variables in the model.
-- **Whether the peak of the likelihood is "the answer"** and how sure we can be of it (uncertainty). This
-  comes in with confidence intervals in Weeks 6-7.
-- **The R syntax** in Part 5 (`dbinom` arguments, `sapply`), which is expected to be new for some students.
+> Now that you've written and run your first likelihood function, what
+> part of turning the math into code gave you the most trouble? And
+> more generally, what is still fuzzy about likelihood? What would you
+> like the instructor to review on Monday?
+
+No fixed answer. Read these to decide what to revisit.
+
+- **Common coding trouble:** matching `dbinom()` arguments to data vs.
+  parameter; why `size = 1`; trusting one vectorized call instead of a
+  loop; losing the minus sign.
+- **Likely conceptual gaps:** likelihood vs. probability (2d, the most
+  common); why multiply and why log; what "the data are fixed" means;
+  how sure we can be of the peak (uncertainty, which comes later in the
+  semester).
