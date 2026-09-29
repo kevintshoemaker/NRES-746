@@ -49,10 +49,12 @@ opt = optim(par=1,fn=nll,method="Brent",lower=0.1,upper=20)
 
 mle = opt$par   # value of lambda that minimizes the objective function (nll)
 
-
+mean(y)   # verify that the MLE of lambda is in fact the mean (can verify with calculus)
 
 plot(lams,nlls,type="b")
-abline (v=mle,lwd=2,color="darkgreen")
+abline (v=mle,lwd=2,col="darkgreen")
+
+
 
 
 
