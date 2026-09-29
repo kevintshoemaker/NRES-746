@@ -204,9 +204,8 @@ student-facing .Rmd documents:
   individual work and the group check-in that follows happen on paper,
   with any algorithm finalized before anyone opens a laptop; only then
   does the handout say **"Laptops open now"** (a bolded banner), after
-  which AI tools, `?help`, and web search are explicitly fair game,
-  since the thinking is done and what's left is translating it into
-  working code. The Act's closing group-discussion-and-revision
+  which `?help` and web search are fair game, and AI use follows the
+  per-task labels described below. The Act's closing group-discussion-and-revision
   section goes back to paper. See `Lab2_Act1.Rmd`, `Lab2_Act2.Rmd`, and
   `Lab2_Act3.Rmd` for the target format.
 - **"Pseudocode" means plain English, not R syntax.** A pseudocode
@@ -218,14 +217,41 @@ student-facing .Rmd documents:
   translating an already-known formula into R syntax by hand (no real
   algorithm design involved), call it "write the R function/code," not
   "pseudocode."
-- **Optional AI-assisted vs. self-coded split**, for the laptop-open
-  portion of a coding-heavy Act: let each group (not individuals within
-  a group) choose one of two paths -- (A) write an AI prompt and record
-  the prompt (never the AI's code) plus results and a reflection on
-  whether it matched their own plan, or (B) write the R themselves, no
-  AI, and reflect on what was hardest. This keeps AI use available
-  without making it mandatory, and keeps the graded artifact the
-  student's own reasoning, not AI-authored code.
+- **AI use: a per-task recommendation plus disclosure** (adopted with
+  Lab 5; replaces the earlier "Path A (AI-assisted) / Path B
+  (self-coded)" choice used through Lab 4). Label every coding
+  question in a lab (or a WOD's laptop section) with one of two
+  labels, worded as in `labs/Lab5_Act2.Rmd`:
+  - **Recommended: no AI:** try to build it yourself (`?help`, web
+    search, and classmates are fine). Use this for the week's core
+    skill, especially short pieces that are central to understanding
+    (e.g. writing a likelihood function, calling `optim()`).
+  - **AI optional/encouraged:** the results matter, but writing this
+    code by hand isn't the point (e.g. plot formatting, loops over a
+    design grid).
+
+  Put the label in italics right after the question number
+  (`**2a.** *(Recommended: no AI.)* ...`). After each coding question, add a
+  disclosure line: `AI use (circle one): none / help or debugging /
+  wrote the code`. At the start of the laptop section, explain the
+  labels and say plainly that **using AI never costs points; only
+  undisclosed use does**, so students have no reason to under-report.
+  Close with one short reflection question (where did you use AI and
+  what did you have to check or fix; or, if none, what was hardest).
+  Keys should treat a mismatch between a label and a student's
+  disclosure as something to talk about, not a penalty. See
+  `labs/Lab5_Act2.Rmd` for the target format.
+- **Students submit outputs, not code.** Graded artifacts are the
+  filled-in handout values, written interpretation, and specified
+  outputs (figures, tables), not R scripts, whether or not AI was
+  used. Name exactly which figure(s)/table(s) to turn in at the start
+  of the laptop section, and prefer outputs that show the student's
+  own choices (e.g. "your hand-guessed curve alongside the fitted
+  curve," not just "a plot of the fit"), since an AI can reproduce a
+  generic output end to end. Paper planning/pseudocode, check values
+  printed in the handout, and interpretation questions carry the rest
+  of the weight. (Final projects are the likely exception, where
+  reproducible code matters.)
 - WOD handouts follow the pen-and-paper rule when the WOD is a math
   problem; WODs that are explicitly programming/pseudocoding exercises
   should present pseudocode (plain English, per above) or fill-in-
@@ -233,12 +259,10 @@ student-facing .Rmd documents:
 - **A WOD can also use a "Laptops open now" banner**, mirroring the lab
   convention above, when its closing section is meant for genuine
   hands-on R practice rather than paper fill-in-blanks (e.g. writing and
-  running a first likelihood function). Unlike a lab Act's laptop-open
-  section -- where AI is explicitly fair game, since the algorithm is
-  already finalized and what's left is translation into code -- a WOD's
-  laptop-open section can instead explicitly discourage an AI assistant,
-  when the point is for students to have their own first, unaided
-  experience turning a formula into working code and debugging it. See
+  running a first likelihood function). Label its coding tasks the same
+  way as a lab's (usually "No AI," when the point is for students to
+  have their own first, unaided experience turning a formula into
+  working code and debugging it). See
   `wod/WOD_Week5_Lecture2_WritingTheLikelihood.Rmd`'s Part 5.
 
 ## Lecture period structure
