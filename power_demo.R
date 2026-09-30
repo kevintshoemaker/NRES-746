@@ -1,4 +1,6 @@
 
+rm(list=ls())
+
 ## Set global parameters --------------
 
 base_params = list()
@@ -8,54 +10,55 @@ base_params$p = 0.02
 base_params$k = 3
 base_params$s = 1
 base_params$y = 25
-base_params$mindecline_25 = 0.75
+mindecline_25 = 0.75
 base_params$alpha = 0.05
-base_params$lam = base_params$mindecline_25^(1/base_params$y)
+base_params$lam = mindecline_25^(1/base_params$y)
 
 
 ## custom functions ----------
 
 
-p_bout <- function(pars){
-  1 - (1-pars$p)^pars$k
-}
+p_bout <- function(p,k)  1 - (1-p)^k
 
    # tests
-p_test = base_params; p_test$k = Inf   # try known edge cases
-p_bout(p_test)
+p_bout(0.02,3)
 1- 0.98^3
 
-
-true_pop_traj = function(pars){
-  pars$N_0 * pars$lam^(1:pars$y)
-}
-
-p_test = base_params; p_test$lam = 0.98
-true_pop_traj(p_test)
+true_pop_traj = function(n0, l, y) n0 *l^(1:y)
 
 
-survyears <- function(pars) seq(1,pars$y,by=pars$s)
+true_pop_traj(100,1,10)
 
+plot(1:50,true_pop_traj(100,0.95,50))
+
+survyears <- function(y,s) seq(1,y,by=s)
+survyears(10,2)
+
+pars=base_params
 sim_counts = function(pars){
-  rbinom(length(survyears(pars)),round(true_pop_traj(pars)[survyears(pars)]),p_bout(pars))
+  ys = survyears(pars$y,pars$s)
+  traj = true_pop_traj(pars$N_0,pars$lam,pars$y)
+  rbinom(length(ys),round(traj[ys]),p_bout(pars$p,pars$k))
 }
 
+p_test = base_params; p_test$lam = 0.95
 sim_counts(p_test)
 
-counts=sim_counts(pars); years=survyears(pars)
-detect_decline = function(years,counts,pars){
+
+counts=sim_counts(pars); years=survyears(pars$y,pars$s)
+detect_decline = function(years,counts,a){
   mod = lm(log(counts)~years)
   is_decline = unname(coef(mod)[2] < 0)
-  is_sig = summary(mod)$coefficients[2,4] < pars$alpha
+  is_sig = summary(mod)$coefficients[2,4] < a
   is_decline && is_sig 
 }
 
-counts=sim_counts(pars); years=survyears(pars)
-detect_decline(counts,years,p_test)
+counts=sim_counts(pars); years=survyears(pars$y,pars$s)
+detect_decline(counts,years,0.05)
 
 do_rep = function(pars){
-  counts=sim_counts(pars); years=survyears(pars)
-  detect_decline(counts,years,pars)
+  counts=sim_counts(pars); years=survyears(pars$y,pars$s)
+  detect_decline(counts,years,pars$alpha)
 }
 
 get_power = function(reps,pars){
@@ -75,7 +78,7 @@ for(g in 1:nrow(grid)){
   params = base_params
   params$k = grid$k[g]
   params$s = grid$s[g]
-  sy = survyears(params)
+  sy = survyears(params$y,params$s)
   grid$cost[g] = length(sy)*(2000+params$k*200)
   grid$pow[g] = get_power(1000,params)
 }

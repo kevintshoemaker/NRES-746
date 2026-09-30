@@ -16,8 +16,9 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, error = TRU
 Each item repeats the handout's question, then gives the answer, a
 short rationale, and mistakes to watch for. Both buggy functions are
 run below, so the symptoms described are real R output. The corrected
-functions match the Lab 4, Act 2 key, and they are the ones built live
-in today's demo.
+`detect_prob()` matches the Lab 4, Act 2 key and is built live in
+today's demo. `sim_detect()` is a stand-alone stand-in with the same
+loop pattern as the demo's `estimate_power()`.
 
 ```{r fixed-functions, include=FALSE}
 detect_prob <- function(k, pobs = 0.02) 1 - (1 - pobs)^k
@@ -56,28 +57,37 @@ is the probability of being missed, not detected.
 
 **1b.**
 
-> `estimate_power()`: circle the bug, write the corrected line, and say
-> what would go wrong if you ran the buggy version.
+> `sim_detect()`: circle the bug, write the corrected line, and say what
+> would go wrong if you ran the buggy version.
 
-**Answer.** `detected <- ...` should be `detected[i] <- ...`.
+**Answer.** `detected <- n_det > 0` should be
+`detected[i] <- n_det > 0`.
 
 **Why.** Without the index, each pass through the loop overwrites the
 whole vector with a single `TRUE` or `FALSE`. After the loop,
-`detected` holds only the last replicate, so the "power" is always
-exactly 0 or 1:
+`detected` holds only the last survey, so the result is always exactly
+0 or 1 instead of about $1 - 0.6^3 = 0.784$:
 
 ```{r bug2}
-estimate_power_bug <- function(k, s, R = 1000) {
-  t_survey <- seq(1, 25, by = s)
+sim_detect_bug <- function(R = 1000, visits = 3, p = 0.4) {
   detected <- logical(R)
   for (i in seq_len(R)) {
-    counts <- simulate_counts(t_survey, k)
-    detected <- detect_decline(t_survey, counts)
+    n_det <- rbinom(1, size = visits, prob = p)
+    detected <- n_det > 0
+  }
+  mean(detected)
+}
+sim_detect <- function(R = 1000, visits = 3, p = 0.4) {
+  detected <- logical(R)
+  for (i in seq_len(R)) {
+    n_det <- rbinom(1, size = visits, prob = p)
+    detected[i] <- n_det > 0
   }
   mean(detected)
 }
 set.seed(3)
-replicate(8, estimate_power_bug(3, 1, R = 50))
+replicate(8, sim_detect_bug())
+c(fixed = sim_detect(), exact = 1 - 0.6^3)
 ```
 
 **Watch for.** Students who fix it by moving `mean()` inside the loop.
@@ -92,11 +102,15 @@ That still keeps only one replicate's result.
 
 - **1a:** `detect_prob(1)` should return `0.02` (one day of effort
   should equal `pobs`).
-- **1b:** run `estimate_power(3, 1)` twice. Each should be a value
-  between 0 and 1 (about 0.8 here), not exactly 0 or 1.
+- **1b:** `sim_detect()` should come out near
+  $1 - (1 - 0.4)^3 = 0.784$, the same formula as 1a. At minimum, it
+  should never be exactly 0 or 1.
 
 **Why.** Good checks use cases where you already know the answer: an
-edge case (`k = 1`) or a range of values the output must fall in.
+edge case (`k = 1`) or an exact answer the simulation should
+approximate. Students who notice that 1a's formula gives 1b's exact
+answer have made a nice connection: a simulation can be checked
+against math whenever the math is available.
 These are the same kinds of checks to demand from AI-written code in
 today's demo.
 
