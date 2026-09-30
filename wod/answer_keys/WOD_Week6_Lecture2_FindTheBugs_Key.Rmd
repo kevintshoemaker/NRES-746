@@ -14,8 +14,8 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, error = TRU
 ```
 
 Each item repeats the handout's question, then gives the answer, a
-short rationale, and mistakes to watch for. Every buggy function is run
-below, so the symptoms described are real R output. The corrected
+short rationale, and mistakes to watch for. Both buggy functions are
+run below, so the symptoms described are real R output. The corrected
 functions match the Lab 4, Act 2 key, and they are the ones built live
 in today's demo.
 
@@ -29,7 +29,6 @@ detect_decline <- function(t_survey, counts, alpha = 0.05) {
   s <- summary(lm(log(counts) ~ t_survey))$coefficients[2, ]
   unname(s[1] < 0 && s[4] <= alpha)
 }
-t1 <- seq(1, 25, by = 1)
 ```
 
 ## Part 1: Find and fix
@@ -57,60 +56,6 @@ is the probability of being missed, not detected.
 
 **1b.**
 
-> `simulate_counts()`: circle the bug, write the corrected line, and
-> say what would go wrong if you ran the buggy version.
-
-**Answer.** `rbinom(1, ...)` should be `rbinom(length(t_survey), ...)`.
-
-**Why.** The first argument of `rbinom()` is how many draws to make.
-With 1, the function returns a single count (using only the first
-year's abundance) instead of one count per survey year. `lm()` then
-fails because `counts` and `t_survey` have different lengths:
-
-```{r bug2}
-simulate_counts_bug <- function(t_survey, k, N0 = 1000, lambda = 0.75^(1/25)) {
-  N_t <- N0 * lambda^t_survey
-  rbinom(1, size = round(N_t), prob = detect_prob(k))
-}
-set.seed(1)
-simulate_counts_bug(t1, k = 3)
-tryCatch(detect_decline(t1, simulate_counts_bug(t1, k = 3)),
-         error = function(e) conditionMessage(e))
-```
-
-**Watch for.** Students who say "`size` should be `N0`." That would
-remove the decline entirely. `size` must follow `N_t`.
-
-**1c.**
-
-> `detect_decline()`: circle the bug, write the corrected line, and
-> say what would go wrong if you ran the buggy version.
-
-**Answer.** `||` (or) should be `&&` (and):
-`s[1] < 0 && s[4] <= alpha`.
-
-**Why.** With "or," any negative slope counts as a detected decline,
-significant or not, and so does any significant *increase*. Under a
-stable population ($\lambda = 1$), about half of all slopes are
-negative by chance, so the buggy rule "detects" a decline roughly half
-the time instead of about 2.5%:
-
-```{r bug3}
-detect_decline_bug <- function(t_survey, counts, alpha = 0.05) {
-  s <- summary(lm(log(counts) ~ t_survey))$coefficients[2, ]
-  s[1] < 0 || s[4] <= alpha
-}
-set.seed(2)
-null_sims <- replicate(1000, simulate_counts(t1, k = 3, lambda = 1), simplify = FALSE)
-c(buggy = mean(sapply(null_sims, function(y) detect_decline_bug(t1, y))),
-  fixed = mean(sapply(null_sims, function(y) detect_decline(t1, y))))
-```
-
-**Watch for.** Changing `<=` to `<`. That's a harmless difference, not
-the bug.
-
-**1d.**
-
 > `estimate_power()`: circle the bug, write the corrected line, and say
 > what would go wrong if you ran the buggy version.
 
@@ -121,7 +66,7 @@ whole vector with a single `TRUE` or `FALSE`. After the loop,
 `detected` holds only the last replicate, so the "power" is always
 exactly 0 or 1:
 
-```{r bug4}
+```{r bug2}
 estimate_power_bug <- function(k, s, R = 1000) {
   t_survey <- seq(1, 25, by = s)
   detected <- logical(R)
@@ -140,26 +85,21 @@ That still keeps only one replicate's result.
 
 ## Part 2: Catch it next time
 
-> Pick one of the bugs. Describe a quick test, one line of code and the
-> answer you'd expect, that would have caught it before you trusted the
-> function.
+> For one of the bugs, what quick check (one line of code and the
+> answer you'd expect) would have caught it?
 
-**Sample answers (any one is fine).**
+**Sample answers (either is fine).**
 
 - **1a:** `detect_prob(1)` should return `0.02` (one day of effort
   should equal `pobs`).
-- **1b:** `length(simulate_counts(1:25, 3))` should return `25`.
-- **1c:** run `detect_decline()` many times on data simulated with
-  `lambda = 1`. It should return `TRUE` only about 2-3% of the time.
-- **1d:** run `estimate_power(3, 1)` twice. Each should be a value
+- **1b:** run `estimate_power(3, 1)` twice. Each should be a value
   between 0 and 1 (about 0.8 here), not exactly 0 or 1.
 
-**Why.** Good tests use cases where you already know the answer: an
-edge case (`k = 1`), a shape check (`length()`), or a scenario with
-known truth (no decline). These are the same checks built into the Lab
-4, Act 2 handout, and the same ones to demand from AI-written code in
+**Why.** Good checks use cases where you already know the answer: an
+edge case (`k = 1`) or a range of values the output must fall in.
+These are the same kinds of checks to demand from AI-written code in
 today's demo.
 
 **Watch for.** "Run it and see if the answer looks reasonable." Bug 1a
-gives counts that look like plausible numbers unless you know what to
-expect. A test needs a specific expected value.
+gives counts that look plausible unless you know what to expect. A
+check needs a specific expected value.
