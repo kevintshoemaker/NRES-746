@@ -270,7 +270,9 @@ student-facing .Rmd documents:
 Every M/W 50-minute lecture period follows the same three-beat shape:
 
 1. **WOD ("Workout of the Day"), ~5-10 min.** A short, ungraded,
-   self-contained problem set on a math or programming topic -- either
+   self-contained problem set on a math or programming topic (in-class
+   WODs have been running about double their planned time, so keep them
+   short; see "In-class vs. take-home WODs" below) -- either
    directly load-bearing for that day's lecture content or usefully
    tangential (e.g., a calculus refresher the week before it's needed, a
    base-R idiom that will matter in an upcoming lab). Students work alone
@@ -284,7 +286,15 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
    at the end so students can flag what needs more study. Not every WOD
    needs a self-rating table -- reserve it for diagnostic/review WODs, not
    routine ones.
-2. **Lecture, ~30-35 min.** Core content delivery. When developing a
+2. **Lecture, ~30-35 min.** Core content delivery. **Open with the big
+   picture** before any details or math: where today's topic sits in the
+   course arc (e.g. the THEORY -> MODEL -> DATA -> COMPARE loop below, or
+   the "deterministic function + probability distribution = likelihood
+   -> fit" thread), what question it lets us answer that we couldn't
+   before, and how it connects to the last lecture and this week's lab.
+   Students asked for more of this in a mid-semester poll, so budget a
+   real 2-3 minutes for it rather than a one-line recap, and return to
+   it briefly at the end. When developing a
    lecture plan (not just a WOD), structure it as a short sequence of
    sub-topics with: the key idea in one sentence, the minimal formal
    development needed (no more than the Calc-II/intro-stats floor
@@ -305,6 +315,53 @@ When asked to build a lecture plan or WOD, produce all three pieces
 together (WOD handout, lecture outline, discussion prompt) unless told
 otherwise, and note approximate timing for each.
 
+**In-class vs. take-home WODs.** Student feedback (mid-semester poll)
+and instructor experience: WODs have routinely taken about twice their
+allotted time, eating into lecture. Going forward:
+
+- Aim for roughly **2/3 short in-class WODs and 1/3 more involved
+  take-home WODs** over the semester.
+- An in-class WOD should be finishable in ~5-10 min *in practice*
+  (apply the same timing multipliers as for labs, below): one or two
+  focused parts, not a multi-page problem set. Cut parts rather than
+  squeeze work space.
+- Anything more involved, and especially anything with real coding
+  (possibly AI-assisted), becomes a **take-home WOD**. Prefer the
+  **Wednesday** slot for these, since students then have until the
+  following Monday to finish. Take-home WODs follow the lab's AI-label
+  and disclosure conventions for any coding tasks, and should not rely
+  on neighbor/group comparison.
+- Budget time at the start of the **next lecture** (usually ~5-10 min
+  of Monday's WOD beat) to go over a take-home WOD. That Monday can use
+  the review in place of a new WOD, or pair it with a very short one.
+  Build an answer key for every take-home WOD, since it will be walked
+  through in class.
+
+**Paper-discussion Wednesdays (later in the course).** Once students
+have the core toolkit (likelihood, optimization, model comparison,
+Bayesian basics), occasionally use a Wednesday lecture period to
+discuss a recent paper from the primary literature in ecology or
+environmental science tied to that week's methods. Either kind of paper
+works: a fun/novel application of the methods, or a more
+methods-focused paper. For these periods, the deliverables change:
+pick (or propose candidate) papers, write a short reading guide
+(what to focus on, which model/equations to find, which figure to
+understand), and a discussion plan built around questions like "what
+is the deterministic function and the error distribution here?", "what
+would you have done differently?", and "is the model corroborated or
+just fit?". Give students the paper at least a week ahead. The WOD
+slot can become a quick "write down the model in this paper" warm-up.
+
+**Full analysis workflows (later in the course).** Students want to
+see complete analyses going from raw data to finished figures/tables.
+Later in the semester, build some lecture examples and/or lab Acts as
+end-to-end workflows: raw (messy) data import and cleaning, exploratory
+plots, model specification, fitting, model comparison/checking, and
+publication-style figures and tables with a short written
+interpretation. These double as models for the final project, where
+students run such a workflow on their own data (and where, unlike
+labs, reproducible code matters).
+
 WOD files (`wod/`) are named
 `WOD_Week<N>_Lecture<M>_<TopicInCamelCase>.Rmd` -- the `WOD_`/`NOTES_`
 prefix is what lets you tell a `wod/` file and a `lecture_notes/` file
@@ -321,7 +378,7 @@ file *and* update this header together so they can't drift apart --
 see the Week 3/4 Labor Day reshuffle for a worked example.
 
 WOD answer keys follow the same pattern as lab answer keys (see
-`labs/answer_keys/` under "Lab structure: three Acts" below): one file
+`labs/answer_keys/` under "Lab structure: two Acts" below): one file
 per WOD in `wod/answer_keys/`, named `WOD_Week<N>_Lecture<M>_
 <TopicInCamelCase>_Key.Rmd` (the full topic slug carried over from the
 source file, not shortened), same instructor-answer-key author line,
@@ -359,6 +416,25 @@ knit to PDF, containing two parts back to back:
   (e.g. a simulation histogram), re-plot from the existing R objects
   instead of re-simulating -- one R session per document means the two
   parts can never numerically disagree with each other.
+
+**Every lecture notes file (lecture or lab) opens with a short "How to
+prepare" block**, placed before Part 1, written in student-facing
+prose (so the instructor can copy it straight into an announcement;
+the writing-style rules apply). Students asked for clearer guidance on
+what to prepare before each lecture and lab. Keep it to a few bullets:
+
+- the general topic areas and the big-picture question the session
+  addresses;
+- specific things to review or study ahead of time: named probability
+  distributions (e.g. Poisson, negative binomial), deterministic
+  functions from Bolker's bestiary (e.g. Michaelis-Menten, Ricker),
+  math skills (e.g. log rules, derivatives), or R skills the session
+  assumes;
+- the relevant Bolker reading (chapter/section, printed page numbers),
+  and for labs, any math or R the Acts will lean on.
+
+Keep it specific enough to act on, and avoid giving away the answers
+to the WOD or lab questions.
 
 Base `fontsize: 12pt` in the YAML works well for both parts (Part 2's
 `\large` stacks on top of it). One file per lecture keeps the
@@ -461,22 +537,35 @@ framework tour (Bolker 1.4) later in the semester.
   states the contrast explicitly) and carry the same convention into the
   MLE/optimization weeks and any Bayesian material later in the semester.
 
-## Lab structure: three Acts
+## Lab structure: two Acts
 
-Labs are built as **three handouts** (Act 1, Act 2, Act 3 -- not a
-formalized Diagnose/Derive/Defend framework; a subtitle can still use
-words like "derive" or "defend" descriptively if it fits that week's
-content), each following the same individual -> group -> individual
-cycle:
+Labs are built as **two handouts** (Act 1 and Act 2; starting with
+Lab 5, replacing the earlier three-Act design, which never fit the
+period -- not a formalized Diagnose/Derive/Defend framework; a subtitle
+can still use words like "derive" or "defend" descriptively if it fits
+that week's content). The default split:
+
+- **Act 1: closed-laptop**, pen-and-paper math/concepts/planning, so
+  every group finishes at least one complete Act in the room.
+- **Act 2: coding-intensive**, using the closed -> closed -> open ->
+  closed laptop rhythm described above, and built so it can double as
+  an individual take-home if time runs out (see below).
+
+**Time budget.** Of the 2h45m lab period, the instructor typically uses
+the first **~25 min** for opening remarks, leaving **~2h20m** for both
+Acts combined (including transitions). Size the two Acts to fit that
+window using realistic (multiplied) estimates, not the full 2h45m.
+
+Each Act follows the same individual -> group -> individual cycle:
 
 - **~15 min individual work**
 - **~5 min group discussion and revision** (merged, not two separate
   phases -- see below; this is the closing section, distinct from any
   earlier laptop-open "group check-in" a coding-heavy Act might also have)
 
-Roughly 20 min per Act for the simple individual -> group-revision
-pattern, three Acts per lab (fits the 2h45m period with room for
-transitions/wrap-up and a longer Act 2). Acts with a laptop-open coding
+Roughly 20 min for a simple individual -> group-revision cycle (a
+closed-laptop Act 1 may run through this cycle more than once). Acts
+with a laptop-open coding
 phase run longer than this, sometimes 40+ minutes, since they also
 include a group check-in before laptops open plus the coding phase
 itself -- budget accordingly rather than compressing any of it to fit.
@@ -500,11 +589,16 @@ Until there's better data, treat any gut-feel estimate as a floor:
 roughly **1.5x** for math parts and **2x or more** for coding parts
 are reasonable starting multipliers. Adjust the content to fit the
 period by cutting parts (or moving them to an "if you finish early"
-block), never by shrinking time estimates or work space. Labs are now
-planned as **two shorter Acts** rather than three (starting with Lab 5)
-for the same reason. This is an ongoing calibration: when the user
-reports how long a lab actually took, update this paragraph with the
-specifics.
+block), never by shrinking time estimates or work space. The move to
+two Acts (starting with Lab 5) was for the same reason.
+
+**Lab 5 calibration:** the overall timing was about right, but only one
+group finished both Acts in the allotted time. So plan future labs with
+**slightly less total work than Lab 5** (e.g. one fewer sub-part in
+Act 2, or move a part to an "if you finish early" block); after that
+trim, the timing should be close to calibrated. This is an ongoing
+calibration: when the user reports how long a lab actually took,
+update this paragraph with the specifics.
 
 This structure suits weeks building
 *toward a single model*. (A separate "Model Court" format -- not
@@ -513,8 +607,8 @@ candidate models -- is used instead for weeks with genuine model-vs-model
 competition; don't force this individual/group/revise structure onto
 those weeks.)
 
-Use `Lab1_Act1.Rmd` as the template for formatting all three
-Acts:
+Use `Lab1_Act1.Rmd` as the template for formatting each Act (and
+`labs/Lab5_Act1.Rmd`/`labs/Lab5_Act2.Rmd` for the two-Act split):
 
 - **YAML**: `title: "Lab N, Act X: <Name>"`, a one-line `subtitle` posing
   the week's driving question, `author: "NRES 746, name: _______________   group: _____________________"`,
@@ -534,8 +628,8 @@ Acts:
   Lab 1/2 solely for this, but do fix it if you're touching those files
   for another reason anyway.
 - **A lab's last Act may need to double as an individual take-home.**
-  Three Acts often won't fit in the 2h45m period; when that happens,
-  the last Act typically goes home to be finished individually before
+  Even with two Acts, not every group finishes in the period; when that
+  happens, the last Act typically goes home to be finished individually before
   the following week. The handout doesn't need to say so explicitly --
   just make sure it *works* that way without changes, since in-class
   time sometimes does allow finishing it as a group after all. That
@@ -648,12 +742,12 @@ question; no need to rework them unless asked.)
 - Always build in a moment for students to compare/defend differing
   answers (peer evaluation) rather than just checking a single correct
   answer -- Model Court weeks make this the whole point; regular
-  three-Act weeks build it into the group-discussion-and-revision phase
-  of every Act.
+  Act-based weeks build it into the group-discussion-and-revision phase
+  of every in-class Act.
 - Give students an explicit, recorded chance to self-diagnose gaps
   (muddiest points, what they'd still need to know) -- but as a generic
   invitation within the open group-discussion-and-revision block, not as
-  a separate mandated question. See the "Lab structure: three Acts"
+  a separate mandated question. See the "Lab structure: two Acts"
   section above.
 
 ## Before considering a task done
@@ -677,8 +771,8 @@ question; no need to rework them unless asked.)
   fractions) in places where students will do the same calculation by
   hand -- I'd rather adjust the example than hand students messy
   arithmetic.
-- For labs, confirm all three Acts stay on one running dataset/narrative
-  thread and that the closing reflection questions in Act 3 tie back to
+- For labs, confirm both Acts stay on one running dataset/narrative
+  thread and that the closing reflection in the last Act ties back to
   the opening scenario in Act 1.
 - Verify statistical or mathematical claims that go into student
   materials numerically before writing them down, not just visually --
