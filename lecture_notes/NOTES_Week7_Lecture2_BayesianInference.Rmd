@@ -1,0 +1,475 @@
+---
+title: "Week 7, Lecture 2: Bayesian Inference"
+subtitle: "Instructor notes. Part 1: prep reading. Part 2: podium cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 5, fig.height = 3.3)
+```
+
+# How to prepare (for students)
+
+- **Big picture.** So far we have treated a parameter as a fixed but
+  unknown number and described our uncertainty with confidence
+  intervals. Bayesian inference describes that uncertainty with a
+  probability distribution over the parameter values. Today we build
+  that idea from Bayes' rule, work one example all the way through, and
+  talk about why Bayesian methods have become so common.
+- **Read:** Bolker 6.2.2 (Bayesian analysis, printed p. 237-243) and
+  6.4.2 (posterior and marginal distributions, p. 258-260).
+- **Review:** Bayes' rule from Week 3 (Bolker 4.3, p. 145-152,
+  especially 4.3.3 on priors), and the Beta distribution (Bolker
+  4.5.2.5, p. 176). Look back at the Week 5 WOD (*Writing the
+  Likelihood*) and your likelihood values from Part 2.
+- **Wednesday's take-home WOD** will be handed out at the start of
+  class and is due Monday.
+
+# Overview (instructor only)
+
+This file has two parts, both instructor-only. **Part 1** is read
+beforehand. **Part 2** (after the page break, large print) is the
+podium copy.
+
+| Beat | Time |
+|---|---|
+| Hand out take-home WOD (*Curvature by Hand*) | ~3 min |
+| Lecture | ~37 min |
+| Discussion | ~8 min |
+
+No in-class WOD today. Hand out
+`wod/WOD_Week7_Lecture2_CurvatureByHand.Rmd`, say it's due Monday at
+the start of class, and point out that Part 3 is the only part that
+needs R. Budget time Monday to go over it (key in
+`wod/answer_keys/`).
+
+Source material: Bolker 4.3.3 (priors, and why flat priors aren't
+neutral), 6.2.2.1 (binomial/Beta conjugate example; the numbers below
+are his, recast as a germination trial), 6.4.2 (credible intervals);
+legacy `LECTURE6.Rmd` ("Bayesian Analysis #1: Concepts": prior $\times$
+likelihood figures, brute-force Bayes, mean vs. mode, credible
+intervals); archival `LAB4.Rmd` for the Stan preview (not used today).
+
+**Example choice.** The conjugate example is a seed-germination trial
+rather than Bolker's tadpoles. The numbers (30 of 40, and a prior worth
+120 of 200) are Bolker's from p. 237-238, so students who did the
+reading can check them, but the setting is one the agricultural and
+restoration students will recognize. The opening grid example reuses
+the Week 5 WOD nest data, because students already computed those
+likelihoods by hand.
+
+# Where this sits in the week
+
+- **Monday:** uncertainty from the shape of the likelihood: likelihood
+  ratio intervals, profiles, the Hessian. Section 3 of Monday's lecture
+  gave a four-minute preview of today (prior $\times$ likelihood on the
+  pika data, credible interval [1.91, 4.74]).
+- **Tuesday (Lab 6):** Bliss's beetle fumigation data. Profile and
+  Hessian intervals for the LD50.
+- **Today:** Bayesian inference from the ground up. Keep the math to
+  one-parameter examples; MCMC and Stan come later.
+- **Coming up:** optimization (Week 8), then MCMC and Lab 7 on Bayesian
+  inference (Week 9).
+
+# Part 1: Lecture content
+
+## 1. Big picture (~3 min)
+
+Loop on the board:
+
+$$\text{THEORY} \to \text{MODEL(S)} \to \text{DATA (fit)} \to \text{COMPARE} \to \text{repeat}$$
+
+- The model and the likelihood don't change today. What changes is how
+  we turn the likelihood into a statement about the parameter.
+- **Frequentist view (Monday):** the parameter is a fixed, unknown
+  number. The data are random. A 95% confidence interval is a
+  procedure that captures the true value in 95% of repeated
+  experiments.
+- **Bayesian view (today):** our uncertainty about the parameter is
+  itself described by a probability distribution over the parameter
+  values. Before the data, that distribution is the **prior**; after,
+  it's the **posterior**. The likelihood is what connects them.
+- The tool that does the updating is one students already know: Bayes'
+  rule, from Week 3 and Lab 3's camera-trap classifier.
+
+## 2. Bayes' rule, from a few hypotheses to a whole distribution (~7 min)
+
+Recall Week 3:
+$$P(H_i \mid D) = \frac{P(D \mid H_i)\,P(H_i)}{\sum_j P(D \mid H_j)\,P(H_j)}.$$
+In Lab 3, the hypotheses were "target species" and "not." Now make the
+hypotheses be **values of a parameter**.
+
+**Step 1: three hypotheses.** Week 5 WOD nest data: 4 nests, outcomes
+1, 1, 0, 1, so $\mathcal{L}_4(p) = p^3(1-p)$. Treat $p = 0.25, 0.5,
+0.75$ as three competing hypotheses, equally likely beforehand.
+
+```{r grid3}
+p3 <- c(0.25, 0.5, 0.75)
+lik3 <- p3^3 * (1 - p3)
+prior3 <- rep(1/3, 3)
+post3 <- lik3 * prior3 / sum(lik3 * prior3)
+round(rbind(likelihood = lik3, posterior = post3), 3)
+sum(lik3)          # Week 5 WOD 2d: likelihoods don't sum to 1
+```
+
+- Students computed these likelihoods in the Week 5 WOD
+  (3/256, 16/256, 27/256) and found they sum to 46/256, not 1.
+  Bayes' rule fixes that: multiply by the prior, divide by the total.
+  Posterior probabilities 3/46, 16/46, 27/46.
+- With equal priors, the posterior is just the likelihood rescaled to
+  sum to 1 (Bolker eq. 4.3.16).
+
+**Step 2: more hypotheses.** Nothing stops us using 100 or 10,000
+values of $p$. The sum becomes an integral and the prior and posterior
+become probability **densities**:
+
+$$\underbrace{P(p \mid y)}_{\text{posterior}} =
+  \frac{\overbrace{\mathcal{L}(p)}^{\text{likelihood}}\;\overbrace{P(p)}^{\text{prior}}}
+       {\int_0^1 \mathcal{L}(p)\,P(p)\,dp}$$
+
+```{r grid-refine, fig.width=6.5, fig.height=2.6}
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 0.5))
+for (n_grid in c(3, 11, 101)) {
+  p_g <- seq(0, 1, length.out = n_grid + 2)[-c(1, n_grid + 2)]
+  w <- p_g^3 * (1 - p_g)
+  plot(p_g, w / sum(w), type = "h", lwd = if (n_grid < 20) 4 else 1,
+       xlim = c(0, 1), xlab = "p", ylab = "Posterior probability",
+       main = paste(n_grid, "hypotheses"), cex.main = 0.9)
+}
+```
+
+- The denominator is a single number, the **marginal likelihood**: the
+  probability of the data averaged over all parameter values. It only
+  rescales the curve to area 1. For one parameter it's easy (a sum or
+  an integral). For 20 parameters it's a 20-dimensional integral, which
+  is why MCMC exists (later in the semester).
+- Notation: the posterior $P(p \mid y)$ is a real conditional
+  probability, so it gets a bar. The likelihood $\mathcal{L}(p)$ still
+  doesn't.
+
+**Sticking point:** students conflate "a probability distribution for
+$p$" with "$p$ is random, like a coin flip." Say plainly: to a Bayesian
+the posterior describes *our knowledge* of $p$, not variation in $p$
+itself. The germination rate is one number; we're uncertain about it.
+
+## 3. A worked example: the Beta prior (~8 min)
+
+**Setting.** A restoration crew tests a native seed lot: 30 of 40 seeds
+germinate. What is the lot's germination probability $p$?
+
+**The likelihood** is binomial: $\mathcal{L}(p) \propto p^{30}(1-p)^{10}$.
+
+**The prior.** A Beta($\alpha$, $\beta$) density is
+$P(p) \propto p^{\alpha - 1}(1-p)^{\beta - 1}$. Same shape as a
+binomial likelihood. Multiply them:
+$$P(p \mid y) \propto p^{30 + \alpha - 1}(1-p)^{10 + \beta - 1},$$
+which is another Beta: **Beta($\alpha + k$, $\beta + n - k$)**. A
+prior that gives a posterior from the same family is called
+**conjugate**. It means no integral: just add counts.
+
+- Interpretation (Bolker p. 237): $\alpha - 1$ and $\beta - 1$ act
+  like earlier successes and failures. Beta(1, 1) is flat: no prior
+  seeds.
+- **Flat prior:** posterior Beta(31, 11).
+- **Informative prior:** the supplier's records say 120 of 200 seeds
+  from earlier lots germinated. Prior Beta(121, 81); posterior
+  Beta(151, 91).
+
+```{r germ-setup}
+k <- 30; n <- 40
+post_flat <- c(1 + k, 1 + n - k)
+post_info <- c(121 + k, 81 + n - k)
+beta_mean <- function(ab) ab[1] / sum(ab)
+beta_mode <- function(ab) (ab[1] - 1) / (sum(ab) - 2)
+summ <- rbind(
+  flat = c(mean = beta_mean(post_flat), mode = beta_mode(post_flat),
+           qbeta(c(0.025, 0.975), post_flat[1], post_flat[2])),
+  informative = c(mean = beta_mean(post_info), mode = beta_mode(post_info),
+                  qbeta(c(0.025, 0.975), post_info[1], post_info[2]))
+)
+colnames(summ)[3:4] <- c("lower95", "upper95")
+round(summ, 3)
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+```
+
+```{r germ-fig, fig.width=6.5, fig.height=2.8}
+p_seq <- seq(0.001, 0.999, length.out = 500)
+lik_scaled <- dbeta(p_seq, k + 1, n - k + 1)   # likelihood rescaled to area 1
+plot_panel <- function(prior_ab, post_ab, title) {
+  plot(p_seq, dbeta(p_seq, post_ab[1], post_ab[2]), type = "l", lwd = 2,
+       ylim = c(0, 14), xlab = "Germination probability, p", ylab = "Density",
+       main = title, cex.main = 0.9)
+  lines(p_seq, dbeta(p_seq, prior_ab[1], prior_ab[2]), lwd = 2, col = "grey60")
+  lines(p_seq, lik_scaled, lwd = 2, lty = 2, col = "darkorange")
+}
+par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 0.5))
+plot_panel(c(1, 1), post_flat, "Flat prior, Beta(1, 1)")
+legend("topleft", c("prior", "likelihood (rescaled)", "posterior"),
+       lwd = 2, lty = c(1, 2, 1), col = c("grey60", "darkorange", "black"),
+       bty = "n", cex = 0.7)
+plot_panel(c(121, 81), post_info, "Supplier prior, Beta(121, 81)")
+```
+
+- **Flat prior:** the posterior *is* the rescaled likelihood. Its mode
+  is 0.75, the MLE; its mean is `r round(beta_mean(post_flat), 3)`,
+  slightly pulled toward 0.5.
+- **Supplier prior:** the posterior sits between prior and data, closer
+  to the prior (mean `r round(beta_mean(post_info), 3)`), because the
+  prior is "worth" 200 seeds and the data only 40.
+- **More data wins.** If the crew had tested 400 seeds with 300
+  germinating, the same supplier prior gives a posterior mean of
+  `r round(beta_mean(c(121 + 300, 81 + 100)), 3)`: the data now
+  outweigh the prior two to one.
+- **Updating in sequence.** Today's posterior is tomorrow's prior.
+  Testing 40 seeds and then 40 more gives the same answer as testing 80
+  at once (Bolker p. 237).
+
+## 4. Summarizing a posterior (~4 min)
+
+- **Point estimates.** Posterior mean (most common), median, or mode.
+  With a flat prior, the mode equals the MLE. For skewed posteriors the
+  three differ; Bolker prefers the mean because it uses the whole
+  distribution.
+- **Credible interval.** The central 95% of the posterior (2.5% and
+  97.5% quantiles), or the highest posterior density (HPD) interval,
+  the shortest interval holding 95% (Bolker p. 258-259). For
+  symmetric posteriors they coincide.
+- **Interpretation.** "Given the model, the prior, and the data, there
+  is a 95% probability that $p$ is between
+  `r f2(summ["flat", "lower95"])` and
+  `r f2(summ["flat", "upper95"])`." That is the sentence most
+  people *want* to say about a confidence interval (Monday's discussion
+  question 1), and a Bayesian is allowed to say it.
+
+## 5. Where new Bayesians get stuck (~8 min)
+
+Pick four or five; each takes a minute or two.
+
+**(a) "The likelihood is the posterior."** Only after multiplying by a
+prior and rescaling to area 1. The likelihood alone doesn't integrate
+to 1 (Week 5 WOD) and isn't a distribution for $p$.
+
+**(b) "A flat prior means no information."** Flat on one scale isn't
+flat on another (Bolker 4.3.3, the bird-mass example). A uniform prior
+on $p$ implies a prior on the log-odds, $\log\frac{p}{1-p}$, that is
+peaked at 0:
+
+```{r flat-not-flat, fig.width=6.5, fig.height=2.4}
+set.seed(746)
+p_draws <- runif(1e5)
+par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 0.5))
+hist(p_draws, breaks = 40, freq = FALSE, col = "grey80", border = "white",
+     main = "Flat prior on p", xlab = "p", cex.main = 0.9)
+hist(qlogis(p_draws), breaks = 60, freq = FALSE, col = "grey80", border = "white",
+     main = "Same prior, log-odds scale", xlab = "log(p / (1 - p))",
+     xlim = c(-8, 8), cex.main = 0.9)
+curve(dlogis(x), add = TRUE, lwd = 2)
+```
+
+So "uninformative" always means "uninformative on some scale." With
+plenty of data it rarely matters; with little data it can.
+
+**(c) "Priors let you get any answer you want."** In principle yes
+(Bolker p. 150: a prior of 0 on a hypothesis means no data can ever
+support it). In practice: priors must be reported, reviewers can
+object, and the standard move is a **prior sensitivity analysis**: rerun
+with a few reasonable priors and see whether the conclusion changes.
+If it does, the data are weak and that's worth knowing.
+
+**(d) "Bayesian means MCMC."** MCMC is a computing method for
+approximating posteriors when the denominator can't be computed. The
+germination example needed none. Conversely, MCMC can be used for
+non-Bayesian problems too.
+
+**(e) "The credible interval and the confidence interval are the same
+thing."** With a flat prior and plenty of data the numbers are often
+close (Monday: likelihood-ratio [1.82, 4.61] vs. credible [1.91, 4.74]
+for the pikas), but the statements differ: a credible interval is a
+probability statement about the parameter; a confidence interval is a
+statement about the procedure.
+
+**(f) "A high posterior probability proves the model."** Every
+posterior is conditional on the model being right. A Bayesian model
+still has to be confronted with data (does it predict data that look
+like what we saw?) and compared with rivals. The loop on the board
+doesn't change.
+
+## 6. Why Bayesian methods are so widely used (~5 min)
+
+**Interpretation.**
+
+- Direct probability statements about parameters and hypotheses: "95%
+  probability the germination rate is between
+  `r f2(summ["flat", "lower95"])` and `r f2(summ["flat", "upper95"])`."
+- Natural accumulation of evidence: last year's posterior is this
+  year's prior.
+
+**Practical.**
+
+- **Uncertainty in derived quantities is easy to get.** Callback to
+  Lab 6: for the LD50, a Bayesian draws many $(a, b)$ pairs from the
+  posterior and computes $-a/b$ for each; the spread of those values is
+  the posterior for the LD50. No profile, no reparameterization.
+- **Hierarchical models.** Plots within sites within regions, animals
+  measured repeatedly, many species sharing information: these models
+  have many parameters, some describing variation among groups. They
+  are awkward to fit by maximum likelihood and natural in a Bayesian
+  framework (later in the semester).
+- **Hidden quantities.** True occupancy when detection is imperfect
+  (the frog from Lab 5), true infection status behind a noisy test, the
+  true population size behind a count. These are just more unknowns in
+  a Bayesian model.
+- **Small samples.** No reliance on large-sample approximations like
+  the Hessian interval that went negative for the chytrid data (the
+  take-home WOD shows this).
+- **Prior information.** Previous studies, expert knowledge, or
+  physical limits can be built in openly.
+
+**Costs.** Priors must be chosen and defended; computation
+can be slow; MCMC output has to be checked for convergence.
+
+## 7. Return to the big picture (~1 min)
+
+- Same model, same likelihood. Bayesian inference multiplies by a prior
+  and reads uncertainty off a posterior distribution.
+- With one parameter and a conjugate prior, it's just adding counts.
+  With many parameters, we need MCMC (Week 9).
+
+# Discussion (~8 min)
+
+Pick one or two:
+
+1. A restoration manager says, "I don't want the supplier's claims
+   anywhere near my germination estimate." Is that a reasonable
+   position? What would you show them?
+2. Two analysts fit the same germination data with "flat" priors, one
+   flat on $p$ and one flat on the log-odds of $p$. Could they get
+   different answers? When would it matter?
+3. In Lab 6 you built a profile interval for the LD50. How would a
+   Bayesian get an interval for the LD50, and which approach would you
+   rather use for a model with ten parameters?
+
+Question 1 surfaces the "priors are cheating" worry. Question 3
+connects today to Tuesday's lab and sets up MCMC.
+
+\newpage
+\large
+
+# PART 2: PODIUM CHEAT SHEET
+
+\normalsize
+\textit{Terse on purpose. Full rationale and code: Part 1.}
+\large
+
+**Take-home WOD ~3 min. Lecture ~37 min. Discussion ~8 min.**
+
+- Hand out *Curvature by Hand*; due Monday; only Part 3 needs R
+
+## 1. Big picture (~3 min)
+
+- Loop on board: THEORY $\to$ MODEL $\to$ DATA (fit) $\to$ COMPARE $\to$ repeat
+- Same likelihood; new way to describe uncertainty
+- Frequentist: parameter fixed, data random, CI = procedure
+- Bayesian: uncertainty about parameter = probability distribution
+- Prior $\to$ (likelihood) $\to$ posterior, via Bayes' rule (Week 3, Lab 3)
+
+\newpage
+
+## 2. Bayes' rule, few hypotheses to many (~7 min)
+
+$$P(H_i \mid D) = \frac{P(D \mid H_i)P(H_i)}{\sum_j P(D \mid H_j)P(H_j)}$$
+
+- Week 5 nests: $\mathcal{L}_4(p) = p^3(1-p)$
+- $p$ = 0.25, 0.5, 0.75: likelihoods 3, 16, 27 (/256), sum 46/256
+- Equal priors $\to$ posterior 3/46, 16/46, 27/46
+
+```{r podium-grid, echo=FALSE, fig.width=6, fig.height=2.2}
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 0.5))
+for (n_grid in c(3, 11, 101)) {
+  p_g <- seq(0, 1, length.out = n_grid + 2)[-c(1, n_grid + 2)]
+  w <- p_g^3 * (1 - p_g)
+  plot(p_g, w / sum(w), type = "h", lwd = if (n_grid < 20) 4 else 1,
+       xlim = c(0, 1), xlab = "p", ylab = "", main = paste(n_grid),
+       cex.main = 0.9)
+}
+```
+
+$$P(p \mid y) = \frac{\mathcal{L}(p)\,P(p)}{\int \mathcal{L}(p)\,P(p)\,dp}$$
+
+- Denominator = one number; hard in many dimensions $\to$ MCMC
+- **Sticking point:** posterior = our knowledge of $p$, not $p$ varying
+
+\newpage
+
+## 3. Beta prior (~8 min)
+
+Seeds: **30 of 40** germinate. Supplier: 120 of 200.
+
+- Beta prior $\times$ binomial $\to$ Beta($\alpha + k$, $\beta + n - k$)
+- Conjugate = add counts; $\alpha-1$, $\beta-1$ = prior successes, failures
+- Flat: Beta(31, 11); mean `r round(beta_mean(post_flat), 3)`, mode 0.75 = MLE
+- Supplier: Beta(151, 91); mean `r round(beta_mean(post_info), 3)`
+- 300 of 400 with supplier prior: mean `r round(beta_mean(c(421, 181)), 3)`
+- Sequential updating = same answer
+
+```{r podium-germ, echo=FALSE, fig.width=6, fig.height=2.5}
+par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 0.5))
+plot_panel(c(1, 1), post_flat, "Flat")
+plot_panel(c(121, 81), post_info, "Supplier")
+```
+
+\newpage
+
+## 4. Summaries (~4 min)
+
+- Mean (usual), median, mode (= MLE if flat)
+- Credible interval: quantiles or HPD
+- Flat: [`r f2(summ["flat", "lower95"])`, `r f2(summ["flat", "upper95"])`]; supplier: [`r f2(summ["informative", "lower95"])`, `r f2(summ["informative", "upper95"])`]
+- "95% probability $p$ is in here" is allowed
+
+## 5. Where people get stuck (~8 min)
+
+- (a) Likelihood $\neq$ posterior (Week 5 WOD)
+- (b) Flat isn't flat on every scale
+
+```{r podium-flat, echo=FALSE, fig.width=5, fig.height=1.9}
+par(mfrow = c(1, 2), mar = c(4, 2, 1, 0.5))
+hist(p_draws, breaks = 40, freq = FALSE, col = "grey80", border = "white",
+     main = "", xlab = "p", ylab = "")
+hist(qlogis(p_draws), breaks = 60, freq = FALSE, col = "grey80", border = "white",
+     main = "", xlab = "log-odds", ylab = "", xlim = c(-8, 8))
+```
+
+- (c) Priors: report them; sensitivity analysis
+- (d) Bayes $\neq$ MCMC
+- (e) Credible $\neq$ confidence (pikas: [1.82, 4.61] vs. [1.91, 4.74])
+- (f) Posterior is conditional on the model; still check and compare
+
+\newpage
+
+## 6. Why so popular (~5 min)
+
+- Direct probability statements
+- Evidence accumulates: posterior $\to$ next prior
+- Derived quantities: LD50 = $-a/b$ for each posterior draw (Lab 6)
+- Hierarchical models (later)
+- Hidden quantities: occupancy, true infection status
+- Small samples: no Hessian approximation (chytrid)
+- Costs: priors, computation, convergence
+
+## 7. Wrap (~1 min)
+
+- Conjugate = add counts; many parameters = MCMC (Week 9)
+
+## Discussion (~8 min)
+
+1. Manager: "keep supplier claims out of my estimate." Reasonable?
+2. Flat on $p$ vs. flat on log-odds: different answers?
+3. Bayesian interval for the LD50? Which approach for 10 parameters?

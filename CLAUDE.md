@@ -83,6 +83,16 @@ presenting it as the only definition in circulation.
   produce these materials, but I'd rather the writing not constantly
   signal that on its own, since it can make students take the exercises
   less seriously.
+- **Specific phrases to avoid** (they have crept into drafts and read
+  as AI-written): "pin down" / "pin it down" / "pins down" (say "how
+  uncertain," "how much the data tell us," or "rule out"); "exactly"
+  and "precisely" as intensifiers (e.g. "exactly the same set" should be
+  "the same set"; "how precisely" should be "how uncertain"); and
+  callbacks framed as "X is [earlier material] applied to Y" (e.g.
+  "SE1 is Monday's one-parameter rule applied to b's curvature").
+  Describe what the thing does instead ("SE1 uses only b's own
+  curvature"). Plain references to earlier material ("Monday's pika
+  data") are fine.
 - **Prefer concise language over extra clarification.** If a shorter
   phrasing says the same thing, use it. Err on the side of fewer words
   rather than adding a clarifying clause just in case.
@@ -232,8 +242,11 @@ student-facing .Rmd documents:
 
   Put the label in italics right after the question number
   (`**2a.** *(Recommended: no AI.)* ...`). After each coding question, add a
-  disclosure line: `AI use (circle one): none / help or debugging /
-  wrote the code`. At the start of the laptop section, explain the
+  disclosure line: `AI use (circle one): no AI / AI helped (e.g.,
+  debugging) / AI wrote the code`. (Every option names AI as the
+  subject: the earlier wording, "none / help or debugging / wrote the
+  code", led a student to circle "wrote the code" meaning *they* wrote
+  it.) At the start of the laptop section, explain the
   labels and say plainly that **using AI never costs points; only
   undisclosed use does**, so students have no reason to under-report.
   Close with one short reflection question (where did you use AI and

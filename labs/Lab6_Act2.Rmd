@@ -1,0 +1,232 @@
+---
+title: "Lab 6, Act 2: An Interval for the Lethal Dose"
+subtitle: "How uncertain is our estimate of the LD50?"
+author: "NRES 746, name: _______________   group: _____________________"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+beetles <- read.csv("../data/BeetleFumigation.csv")
+x <- beetles$log10_dose
+n_exposed <- beetles$beetles
+killed <- beetles$killed
+
+nll_ld50 <- function(par) {
+  -sum(dbinom(killed, size = n_exposed, prob = plogis(par[2] * (x - par[1])), log = TRUE))
+}
+check_val <- nll_ld50(c(1.75, 30))
+check_val_nc <- check_val - sum(lchoose(n_exposed, killed))
+```
+
+## The scenario
+
+A pest manager has seen the fumigation results from Act 1 and wants to
+know the dose that kills half the beetles (the **LD50**) in mg/L, with
+a 95% interval. The model from Act 1 has no LD50 parameter; the LD50 is
+a function of $a$ and $b$. In this Act you rewrite the model so that
+$L$, the LD50 on the log10 dose scale, appears as a parameter. You then
+build two intervals for $L$ (one from the Hessian, one from the
+likelihood profile) and convert them to mg/L at the end
+($\text{LD50} = 10^L$).
+
+**How uncertain is the LD50, and do the two methods agree?**
+
+Try Part 1 on paper first, before you open a laptop or start typing
+code.
+
+`r nq(4, 7)`
+
+## Part 1: Plan it on paper (individual, ~20 min)
+
+**1a.** Act 1 used the model
+$$\log\frac{p}{1-p} = a + b\,x,$$
+where $p$ is the probability that a beetle dies at log10 dose $x$. Let
+$L$ be the log10 dose at which $p = 0.5$. Find $L$ in terms of $a$ and
+$b$, and show that this model can be rewritten as
+$\log\frac{p}{1-p} = b\,(x - L)$. Then use Act 1's MLEs
+($\hat a = -60.72$, $\hat b = 34.27$) to estimate $L$, and convert your
+estimate to mg/L.
+
+```{r fig.height=0.3*7}
+blank_space()
+```
+
+$\hat L \approx$ ________ (log10 dose) \qquad LD50 $= 10^{\hat L} \approx$ ________ mg/L
+
+`r nq(3, 8)`
+
+**1b.** Write the negative log-likelihood, $\text{NLL}(L, b)$, for the
+eight doses. You can drop terms that don't depend on $L$ or $b$.
+
+```{r fig.height=0.3*8}
+blank_space()
+```
+
+`r nq(5, 7)`
+
+**1c.** In plain English (not R code), describe step by step how you
+would compute the likelihood profile for $L$ and read a 95% interval
+off it. (Recall how the profile differed from the slice in Act 1.)
+
+```{r fig.height=0.3*7}
+blank_lines(7)
+```
+
+`r nq(4, 0)`
+
+## Checkpoint: finalize your plan (~5 min)
+
+Look back over 1a-1c and fix anything that no longer looks right
+before you start coding.
+
+`r nq(12, 0, extra = 0.8)`
+
+## Part 2: Fit and compare (laptop, ~50 min)
+
+Each coding question is labeled with a recommendation:
+
+- **Recommended: no AI:** try to build this yourself. R's help pages,
+  web search, and classmates are fine.
+- **AI optional/encouraged:** the result matters, but writing this code
+  by hand isn't the point.
+
+After each one, circle how you actually used AI. Using AI never costs
+points; only undisclosed use does.
+
+**What to turn in:** your filled-in answers and your 2c figure as an
+image (upload in WebCampus). You don't need to submit your code.
+
+The data are in `BeetleFumigation.csv` (columns `log10_dose`,
+`beetles`, `killed`), or you can paste them into R directly:
+
+```{r data-code, echo=TRUE, eval=FALSE}
+log10_dose <- c(1.6907, 1.7242, 1.7552, 1.7842, 1.8113, 1.8369, 1.8610, 1.8839)
+beetles    <- c(59, 60, 62, 56, 63, 59, 62, 60)
+killed     <- c(6, 13, 18, 28, 52, 53, 61, 60)
+```
+
+```{r data-code-check}
+# the pasted vectors above must match the CSV
+stopifnot(all.equal(x, c(1.6907, 1.7242, 1.7552, 1.7842, 1.8113, 1.8369, 1.8610, 1.8839)),
+          all.equal(n_exposed, c(59, 60, 62, 56, 63, 59, 62, 60)),
+          all.equal(killed, c(6, 13, 18, 28, 52, 53, 61, 60)))
+```
+
+`r nq(12, 1)`
+
+**2a.** *(Recommended: no AI.)* Write an NLL function whose first
+argument is `par = c(L, b)`. Check it: at $L = 1.75$, $b = 30$ it should
+return about `r round(check_val, 2)` if you used `dbinom()`, or about
+`r round(check_val_nc, 2)` if you coded the formula yourself and dropped
+the constant. Then fit it with `optim(..., hessian = TRUE)`, starting
+from your values in 1a. Use `solve()` on the Hessian to get the
+variance-covariance matrix; the square roots of its diagonal are the
+standard errors. Report the 95% quadratic interval,
+$\hat L \pm 1.96\,\text{SE}$.
+
+$\hat L =$ ________ \quad $\hat b =$ ________ \quad NLL at the MLE: ________
+
+$\text{SE}(\hat L) =$ ________ \quad interval for $L$: ________ to ________
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(4, 3)`
+
+**2b.** *(Recommended: no AI.)* Implement your profile from 1c and
+report the 95% profile interval for $L$. How does it compare with 2a?
+
+Profile interval for $L$: ________ to ________
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(6, 3)`
+
+**2c.** *(AI optional/encouraged.)* Plot your profile. Put $L$ on the
+x-axis. On the y-axis, put the profile NLL at each value of $L$ minus
+the smallest profile NLL, so the lowest point of the curve is at zero.
+Add a horizontal line at 1.92 and mark both intervals (from 2a and 2b).
+Then convert $\hat L$ and the profile interval to mg/L.
+
+LD50 $= 10^{\hat L}$: ________ mg/L, from ________ to ________ mg/L
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(3, 4)`
+
+**2d.** Where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest to get working?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(7, 3)`
+
+**If you finish early.** *(AI optional/encouraged.)* The dose that kills
+99% of beetles, $L_{99}$, satisfies
+$\log\frac{p}{1-p} = b\,(x - L_{99}) + \log\frac{0.99}{0.01}$. Profile
+$L_{99}$ the same way and compare the width of its interval with the
+LD50's.
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(8, 6)`
+
+## Reflection (~10 min)
+
+Suppose the pest manager wants a dose that kills 99% of beetles instead
+of 50%. Without computing anything, would you expect its interval to be
+wider or narrower than the LD50's? (Look at where the data sit in Act
+1's figure.) The Hessian and profile intervals nearly agreed here. When
+would you expect them to disagree? Think back to the chytrid curve from
+Monday's WOD.
+
+Also record any changes you made, new insights, and any "muddiest
+points" or topics you want to review.
+
+```{r fig.height=0.3*6}
+blank_lines(6)
+```

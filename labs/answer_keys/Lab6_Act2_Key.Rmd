@@ -1,0 +1,298 @@
+---
+title: "Lab 6, Act 2: Answer Key"
+subtitle: "An Interval for the Lethal Dose"
+author: "NRES 746, Instructor Answer Key (not for student distribution)"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 6, fig.height = 3.5)
+
+beetles <- read.csv("../../data/BeetleFumigation.csv")
+log_choose <- sum(lchoose(beetles$beetles, beetles$killed))
+f2 <- function(v, d = 2) formatC(v, format = "f", digits = d)
+```
+
+Each item repeats the handout's question, then gives the answer, a
+short rationale, and mistakes to watch for. Questions with one correct
+answer are answered directly. Open-ended items (1c, the comparison in
+2b, 2d, the early-finisher question, and the reflection) get sample
+answers or discussion points instead. All numbers are computed in R
+when this file is knitted.
+
+Part 2 labels 2a and 2b "Recommended: no AI" and 2c and the
+early-finisher question "AI optional/encouraged." Students turn in their
+filled-in answers and the 2c figure, not code. AI use doesn't cost
+points; only undisclosed use does. Treat a mismatch between a label and
+a student's disclosure as something to talk about, not a penalty.
+
+Students may keep or drop the binomial coefficients $\log\binom{n_i}{k_i}$,
+so NLL values are given both ways. The constant is
+$\sum \log\binom{n_i}{k_i} = `r f2(log_choose)`$ for these data;
+differences between NLLs are the same either way.
+
+Notation: $x$ = log10 dose, $L$ = LD50 on the log10 scale,
+$\text{LD50} = 10^L$ mg/L.
+
+## Part 1: Plan it on paper
+
+**1a.**
+
+> Act 1 used the model $\log\frac{p}{1-p} = a + b\,x$, where $p$ is the
+> probability that a beetle dies at log10 dose $x$. Let $L$ be the log10
+> dose at which $p = 0.5$. Find $L$ in terms of $a$ and $b$, and show
+> that this model can be rewritten as $\log\frac{p}{1-p} = b\,(x - L)$.
+> Then use Act 1's MLEs ($\hat a = -60.72$, $\hat b = 34.27$) to
+> estimate $L$, and convert your estimate to mg/L.
+>
+> $\hat L \approx$ ____ (log10 dose) LD50 $= 10^{\hat L} \approx$ ____ mg/L
+
+**Answer.** $p = 0.5$ means the log-odds is 0, so $a + bL = 0$ and
+$L = -a/b$. Then $a + bx = b\,(x + a/b) = b\,(x - L)$.
+$\hat L = 60.72/34.27 \approx `r f2(60.72 / 34.27, 3)`$, and
+LD50 $= 10^{`r f2(60.72 / 34.27, 3)`} \approx `r f2(10^(60.72 / 34.27), 1)`$ mg/L.
+
+**Why.** $\log(0.5/0.5) = \log 1 = 0$. Factoring $b$ out of $a + bx$ is
+the whole rewrite.
+
+**Watch for.** $L = a/b$ (sign error, gives a negative log dose).
+Converting with $e^L$ instead of $10^L$ (gives about 5.9, a warning sign
+since that's far below every tested dose). Students who say "the model
+changed" have missed that the two forms describe the same curves.
+
+**1b.**
+
+> Write the negative log-likelihood, $\text{NLL}(L, b)$, for the eight
+> doses. You can drop terms that don't depend on $L$ or $b$.
+
+**Answer.** With $p_i = 1 / \left(1 + e^{-b(x_i - L)}\right)$,
+$$\text{NLL}(L, b) = -\sum_{i=1}^{8}\left[k_i \log p_i + (n_i - k_i)\log(1 - p_i)\right],$$
+where $k_i$ is the number killed and $n_i$ the number exposed at dose
+$i$. An equivalent simplified form, with $\eta_i = b(x_i - L)$, is
+$\text{NLL} = -\sum\left[k_i\eta_i - n_i\log(1 + e^{\eta_i})\right]$.
+
+**Why.** Binomial pmf, logged and summed over independent doses, with
+$\log\binom{n_i}{k_i}$ dropped because it doesn't involve $L$ or $b$.
+
+**Watch for.** Using a single $p$ for all doses (forgetting that $p$
+depends on $x_i$). Writing a product with no log, or a sum with no
+negative sign. The simplified form is not expected.
+
+**1c.**
+
+> In plain English (not R code), describe step by step how you would
+> compute the likelihood profile for $L$ and read a 95% interval off it.
+
+**Sample answer.** (1) Choose a grid of candidate values of $L$ around
+$\hat L$. (2) For each candidate $L$, hold it fixed and find the value of
+$b$ that minimizes the NLL; record that minimum NLL. (3) Subtract the
+overall minimum NLL (at the MLE) from each recorded value. (4) Keep every
+$L$ whose value is 1.92 or less; the smallest and largest of those are
+the ends of the 95% interval.
+
+**Why.** The profile re-optimizes the other parameter at each value of
+the focal one; the slice in Act 1 didn't.
+
+**Watch for.** Holding $b$ at $\hat b$ instead of re-optimizing (that's
+the slice). Using 2 or 3.84 as the cutoff on the NLL scale (3.84 applies
+to the deviance, twice the NLL difference). A grid that is too coarse or
+too narrow to see the curve cross 1.92 on both sides.
+
+## Part 2: Fit and compare
+
+```{r key-data}
+x <- beetles$log10_dose
+n_exposed <- beetles$beetles
+killed <- beetles$killed
+
+nll_ld50 <- function(par) {
+  eta <- par[2] * (x - par[1])
+  -sum(dbinom(killed, size = n_exposed, prob = plogis(eta), log = TRUE))
+}
+```
+
+**2a.**
+
+> *(Recommended: no AI.)* Write an NLL function whose first argument is
+> `par = c(L, b)`. Check it: at $L = 1.75$, $b = 30$ it should return
+> about `r f2(nll_ld50(c(1.75, 30)))` if you used `dbinom()`, or about
+> `r f2(nll_ld50(c(1.75, 30)) - log_choose)` if you coded the formula
+> yourself and dropped the constant. Then fit it with
+> `optim(..., hessian = TRUE)`, starting from your values in 1a. Use
+> `solve()` on the Hessian to get the variance-covariance matrix; the
+> square roots of its diagonal are the standard errors. Report the 95%
+> quadratic interval, $\hat L \pm 1.96\,\text{SE}$.
+
+```{r key-2a}
+fit <- optim(c(1.77, 34), nll_ld50, hessian = TRUE)
+fit$par
+fit$value
+vc <- solve(fit$hessian)
+se_L <- sqrt(diag(vc))[1]
+wald_L <- fit$par[1] + c(-1, 1) * 1.96 * se_L
+se_L
+wald_L
+```
+
+**Answer.** $\hat L = `r f2(fit$par[1], 4)`$, $\hat b = `r f2(fit$par[2])`$,
+NLL at the MLE $= `r f2(fit$value)`$ with `dbinom()` (or
+$`r f2(fit$value - log_choose)`$ without the constant). $\text{SE}(\hat L)
+= `r f2(se_L, 4)`$; interval `r f2(wald_L[1], 4)` to
+`r f2(wald_L[2], 4)`.
+
+**Why.** Same fit as Act 1, just a different parameterization, so
+$\hat b$ and the NLL at the MLE match Act 1 and
+$\hat L = -\hat a/\hat b$. The correlation between $\hat L$ and
+$\hat b$ is only `r f2(cov2cor(vc)[1, 2])`, so this parameterization
+behaves well.
+
+**Watch for.** Forgetting the minus sign in the NLL (the optimizer then
+runs off to a boundary). Using `solve(-fit$hessian)`: `optim()` minimized
+the NLL, so no sign flip is needed; a negative variance is the giveaway.
+Rounding $\hat L$ to two decimals (the interval becomes 1.76 to 1.78,
+which is hard to compare with 2b); ask for four. A "NaNs produced" warning is possible from
+some starting values and is harmless if the fit converges
+(`fit$convergence == 0`).
+
+**2b.**
+
+> *(Recommended: no AI.)* Implement your profile from 1c and report the
+> 95% profile interval for $L$. How does it compare with 2a?
+
+```{r key-2b}
+L_grid <- seq(1.755, 1.790, by = 0.0001)
+prof <- sapply(L_grid, function(L) {
+  optimize(function(b) nll_ld50(c(L, b)), interval = c(5, 80))$objective
+})
+dprof <- prof - fit$value
+prof_L <- range(L_grid[dprof <= qchisq(0.95, 1) / 2])
+prof_L
+```
+
+**Answer.** About `r f2(prof_L[1], 4)` to `r f2(prof_L[2], 4)`. It is
+nearly identical to the quadratic interval from 2a.
+
+**Why.** With about 480 beetles and $\hat L$ in the middle of the data,
+the profile is close to a parabola, so the quadratic approximation works
+well here.
+
+**Watch for.** Reusing `optim()` with a two-element starting vector
+inside the loop, so that $L$ gets re-estimated instead of held fixed
+(an easy mistake to miss in AI-written code). Students may use `optim(method = "Brent")` or
+`optimize()` for the inner one-parameter fit; both are fine. Small
+differences in the fourth decimal come from grid spacing.
+
+**2c.**
+
+> *(AI optional/encouraged.)* Plot your profile. Put $L$ on the x-axis.
+> On the y-axis, put the profile NLL at each value of $L$ minus the
+> smallest profile NLL, so the lowest point of the curve is at zero. Add
+> a horizontal line at 1.92 and mark both intervals (from 2a and 2b).
+> Then convert $\hat L$ and the profile interval to mg/L.
+>
+> LD50 $= 10^{\hat L}$: ____ mg/L, from ____ to ____ mg/L
+
+```{r key-2c, fig.width=5.5, fig.height=3.3}
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(L_grid, dprof, type = "l", lwd = 2, ylim = c(0, 4),
+     xlab = "L (log10 dose)", ylab = "Profile NLL minus its minimum")
+abline(h = qchisq(0.95, 1) / 2, col = "red")
+abline(v = prof_L, lty = 2)
+abline(v = wald_L, lty = 3, col = "blue")
+legend("top", c("profile interval", "Hessian interval"), lty = c(2, 3),
+       col = c("black", "blue"), bty = "n", cex = 0.8)
+```
+
+**Answer.** LD50 $= 10^{`r f2(fit$par[1], 4)`} \approx
+`r f2(10^fit$par[1], 1)`$ mg/L, from `r f2(10^prof_L[1], 1)` to
+`r f2(10^prof_L[2], 1)` mg/L.
+
+**Why.** $10^L$ is increasing in $L$, so the endpoints convert directly.
+
+**Watch for.** Figures without the zero-shift (the y-axis shows raw NLL
+around 18.7 or $-148.8$ and the 1.92 line is missing or misplaced).
+Figures where the two intervals can't be told apart are fine; they
+nearly coincide here, and saying so is a good answer. Converting with
+$e^L$.
+
+**2d.**
+
+> Where did you use AI, if anywhere, and what did you have to check or
+> fix? If you didn't use it, what was hardest to get working?
+
+**Discussion points.** No single correct answer. Useful responses name a
+specific step: the inner optimization in the profile loop, the sign on
+the Hessian, getting the plot's y-axis right. If an AI-written profile
+loop re-estimated $L$ instead of holding it fixed, that's a good example
+to share (anonymously) with the class.
+
+**If you finish early.**
+
+> *(AI optional/encouraged.)* The dose that kills 99% of beetles,
+> $L_{99}$, satisfies $\log\frac{p}{1-p} = b\,(x - L_{99}) + \log\frac{0.99}{0.01}$.
+> Profile $L_{99}$ the same way and compare the width of its interval
+> with the LD50's.
+
+```{r key-early}
+nll_ld99 <- function(par) {
+  eta <- par[2] * (x - par[1]) + qlogis(0.99)
+  -sum(dbinom(killed, size = n_exposed, prob = plogis(eta), log = TRUE))
+}
+fit99 <- optim(c(1.9, 34), nll_ld99)
+L99_grid <- seq(1.86, 1.98, by = 0.0002)
+prof99 <- sapply(L99_grid, function(L) {
+  optimize(function(b) nll_ld99(c(L, b)), interval = c(5, 80))$objective
+})
+prof_L99 <- range(L99_grid[prof99 - fit99$value <= qchisq(0.95, 1) / 2])
+c(fit99$par[1], prof_L99)
+10^c(fit99$par[1], prof_L99)
+```
+
+**Answer.** $\hat L_{99} \approx `r f2(fit99$par[1], 3)`$
+(`r f2(10^fit99$par[1], 1)` mg/L), profile interval
+`r f2(prof_L99[1], 3)` to `r f2(prof_L99[2], 3)`
+(`r f2(10^prof_L99[1], 1)` to `r f2(10^prof_L99[2], 1)` mg/L). On the
+log scale it is about `r round(diff(prof_L99) / diff(prof_L))` times as
+wide as the LD50's interval.
+
+**Why.** See the reflection. Note that $\hat L_{99}$ is above the
+highest dose tested (`r max(x)`), so this is an extrapolation.
+
+**Watch for.** Forgetting the $\log(0.99/0.01)$ offset (that just
+refits the LD50). Reusing the LD50 grid, which is far too narrow.
+
+## Reflection
+
+> Suppose the pest manager wants a dose that kills 99% of beetles
+> instead of 50%. Without computing anything, would you expect its
+> interval to be wider or narrower than the LD50's? (Look at where the
+> data sit in Act 1's figure.) The Hessian and profile intervals nearly
+> agreed here. When would you expect them to disagree? Think back to the
+> chytrid curve from Monday's WOD.
+
+**Sample answer.** Wider. The doses with intermediate kill rates carry
+the most information about where the curve crosses 50%. Near 99%, a
+batch of 60 beetles can only show "all or nearly all died," and the
+LD99 lies above the highest dose tested, so the data say much less about
+where the curve reaches 99%. The LD99 also depends heavily on the slope
+$b$: a small change in $b$ moves the 99% point a long way, while the 50%
+point barely moves. The Hessian and profile intervals disagree when the
+NLL curve isn't close to a parabola: small samples, estimates near a
+boundary (like prevalence near 0 in the chytrid WOD), or quantities
+estimated outside the range of the data.
+
+**Discussion points.** Tie this back to the opening question: the LD50
+is well determined by these data, but the dose a pest manager would
+actually use is not. For the LD99 the two methods still roughly agree
+here (the Hessian interval is `r {
+f99 <- optim(c(1.9, 34), nll_ld99, hessian = TRUE)
+w99 <- f99$par[1] + c(-1, 1) * 1.96 * sqrt(diag(solve(f99$hessian)))[1]
+paste(f2(10^w99[1], 1), "to", f2(10^w99[2], 1))
+}` mg/L), but the profile is a little lopsided and shifted toward higher
+doses. Also accept answers that mention the curve being "flatter" at the
+edge of the data, which is the curvature idea from Monday's lecture.

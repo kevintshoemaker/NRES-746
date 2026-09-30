@@ -1,0 +1,210 @@
+---
+title: "Lab 6, Act 1: Answer Key"
+subtitle: "Reading the Surface"
+author: "NRES 746, Instructor Answer Key (not for student distribution)"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                       fig.width = 6, fig.height = 3.5)
+
+beetles <- read.csv("../../data/BeetleFumigation.csv")
+x <- beetles$log10_dose
+n_exposed <- beetles$beetles
+killed <- beetles$killed
+
+nll_ab <- function(a, b, xx = x) {
+  -sum(dbinom(killed, size = n_exposed, prob = plogis(a + b * xx), log = TRUE))
+}
+fit <- optim(c(-60, 34), function(p) nll_ab(p[1], p[2]), method = "BFGS",
+             hessian = TRUE, control = list(maxit = 1000, reltol = 1e-12))
+fit_c <- optim(c(1, 34), function(p) nll_ab(p[1], p[2], x - 1.8), method = "BFGS",
+               hessian = TRUE, control = list(reltol = 1e-12))
+a_hat <- fit$par[1]
+b_hat <- fit$par[2]
+lr_cut <- qchisq(0.95, df = 1) / 2
+
+b_seq <- seq(26, 43, by = 0.005)
+prof_b <- sapply(b_seq, function(b) optimize(function(a) nll_ab(a, b), c(-95, -30))$objective)
+slice_b <- sapply(b_seq, function(b) nll_ab(a_hat, b))
+prof_int <- range(b_seq[prof_b <= fit$value + lr_cut])
+slice_int <- range(b_seq[slice_b <= fit$value + lr_cut])
+
+# centered Hessian as printed in the handout
+h_aa <- 58.5; h_ab <- -1.26; h_bb <- 0.145
+se1_c <- 1 / sqrt(h_bb)
+r_c <- -h_ab / sqrt(h_aa * h_bb)
+se2_c <- se1_c / sqrt(1 - r_c^2)
+b_used <- round(b_hat, 2)
+int1_c <- b_used + c(-1, 1) * 1.96 * se1_c
+int2_c <- b_used + c(-1, 1) * 1.96 * se2_c
+
+# uncentered values as printed in 2b
+se1_u <- 1 / sqrt(185)
+se2_u <- se1_u / sqrt(1 - 0.99968^2)
+int1_u <- b_used + c(-1, 1) * 1.96 * se1_u
+int2_u <- b_used + c(-1, 1) * 1.96 * se2_u
+se_exact <- sqrt(diag(solve(fit$hessian)))[2]
+r_exact_u <- cov2cor(solve(fit$hessian))[1, 2]
+r_exact_c <- cov2cor(solve(fit_c$hessian))[1, 2]
+ld50_log <- -a_hat / b_hat
+
+f2 <- function(v, d = 2) formatC(v, format = "f", digits = d)
+```
+
+Each item repeats the handout's question, then gives the answer, a
+short rationale, and mistakes to watch for. Questions with one correct
+answer are answered directly. Open-ended items (the "which is honest"
+part of 1a, the explanation in 1b, the judgment part of 2a, and the last
+part of 2b) get sample answers or discussion points instead. All
+numbers are computed in R when this file is knitted.
+
+Model: killed$_i \sim \text{Binomial}(n_i, p_i)$ with
+$\log\frac{p_i}{1-p_i} = a + b x_i$, $x_i$ = log10 dose. MLEs:
+$\hat a = `r f2(a_hat)`$, $\hat b = `r f2(b_hat)`$. The whole Act is
+pen and paper; students read values off the printed figures and use a
+calculator for Part 2.
+
+## Part 1: The likelihood surface
+
+**1a.**
+
+> Estimate two intervals for $b$ by eye from the figure (rough values
+> are fine). The **slice** interval: hold $a$ at $\hat a$ and find the
+> range of $b$ that stays inside the thick curve. The **profile**
+> interval: the full range of $b$ values the thick curve reaches. Which
+> interval is honest, and why?
+>
+> Slice: ____ to ____ Profile: ____ to ____
+
+**Answer.** Slice: about `r f2(slice_int[1])` to `r f2(slice_int[2])`
+(by eye, "about 34.3, basically a single point" is a full-credit
+answer). Profile: about `r f2(prof_int[1], 1)` to
+`r f2(prof_int[2], 1)` (anything from roughly 28-29 to 40-41 is fine).
+The profile interval is the honest one.
+
+**Why.** The slice asks how far $b$ can move with $a$ frozen at
+$\hat a$. Because the valley is so thin and tilted, $b$ can barely move
+before the fit gets much worse. But $a$ is uncertain too; if $b$
+changes, $a$ can change with it and the fit stays good. The profile lets
+$a$ adjust for every value of $b$, which is what the extreme top and
+bottom points of the thick curve represent.
+
+**Watch for.** Reading the slice as the width of the whole ellipse
+along some diagonal. Students who say the slice is honest "because it
+uses the best $a$" have missed that $\hat a$ is itself uncertain; this is
+the misconception to target in the group discussion.
+
+**1b.**
+
+> The intercept $a$ is the log-odds of death at what dose (as $x$, and
+> in mg/L)? Use your answer to explain why the valley is a long, thin
+> diagonal: why does every good fit with a steeper slope also need a more
+> negative intercept?
+
+**Answer.** $a$ is the log-odds of death at $x = 0$, a dose of
+$10^0 = 1$ mg/L, far below the tested doses (49-77 mg/L). Every good fit
+has to pass through roughly 50% mortality near the middle of the data
+($x \approx `r f2(ld50_log)`$). A line that stays near that point but gets
+steeper must drop further by the time it reaches $x = 0$, so a larger
+$b$ needs a more negative $a$.
+
+**Why.** At the LD50, $a + b\,x_{50} = 0$, so $a = -b\,x_{50}$. Along
+the valley, a change in $b$ is matched by a change in $a$ about
+$`r f2(ld50_log)`$ times as large in the opposite direction, which is
+the slope of the thick curve on the figure. Because $x = 0$ is so far
+from the data, a tiny change in $b$ swings $a$ a long way, which is why
+the valley is so long and thin.
+
+**Watch for.** Answering "at the lowest dose tested." Some students say
+"$a$ has no biological meaning" and stop; push them to say where
+$x = 0$ is relative to the data. A good group-discussion prompt: if we
+measured dose so that $x = 0$ fell in the middle of the data, what would
+the surface look like? (Part 2 answers this.)
+
+## Part 2: Curvature with two parameters
+
+**2a.**
+
+> Compute $\text{SE}_1$, $r$, and $\text{SE}_2$, and the approximate 95%
+> interval $\hat b \pm 1.96\,\text{SE}$ for each (use
+> $\hat b = `r b_used`$). Which do you think better characterizes our
+> uncertainty about $b$, and why? Relate your answer to Part 1.
+
+**Answer.**
+$\text{SE}_1 = 1/\sqrt{0.145} = `r f2(se1_c)`$;
+$r = 1.26/\sqrt{58.5 \times 0.145} = `r f2(r_c, 3)`$;
+$\text{SE}_2 = `r f2(se1_c)`/\sqrt{1 - `r f2(r_c, 3)`^2} = `r f2(se2_c)`$.
+Intervals: `r f2(int1_c, 1)[1]` to `r f2(int1_c, 1)[2]` using
+$\text{SE}_1$; `r f2(int2_c, 1)[1]` to `r f2(int2_c, 1)[2]` using
+$\text{SE}_2$. $\text{SE}_2$ is the better description of uncertainty:
+its interval is close to the profile interval from 1a
+(`r f2(prof_int[1], 1)` to `r f2(prof_int[2], 1)`).
+
+**Why.** $\text{SE}_1$ uses only the curvature along the $b$ axis, with
+$a'$ held fixed: it is the quadratic version of the slice.
+$\text{SE}_2$ accounts for the fact that $a'$ can shift to compensate
+when $b$ moves, as the profile does. The correction factor
+$1/\sqrt{1 - r^2}$ is always at least 1, so ignoring the correlation can
+only make us overconfident. (For two parameters, $\text{SE}_2$ is what
+`sqrt(diag(solve(H)))` returns; with the unrounded Hessian it is
+`r f2(se_exact)`.)
+
+**Watch for.** Sign of $r$: $H_{ab}$ is negative, so $r$ is positive
+(`r f2(r_c, 3)`). Getting the sign wrong doesn't change $\text{SE}_2$
+because $r$ is squared, but it's worth checking. Students who pick
+$\text{SE}_1$ "because it's simpler" or "because it's smaller, so more
+precise" are the ones to talk to: smaller isn't better if it ignores real
+uncertainty.
+
+**2b.**
+
+> For the original, uncentered fit, $H_{bb} = 185$ and $r = -0.99968$.
+> Compute both standard errors and their intervals again. Compare them
+> with your slice and profile intervals from 1a, and with your answers
+> to 2a. Centering didn't change the fitted curve, so what did it
+> change?
+
+**Answer.** $\text{SE}_1 = 1/\sqrt{185} = `r f2(se1_u, 4)`$, interval
+`r f2(int1_u)[1]` to `r f2(int1_u)[2]`. $\text{SE}_2 =
+`r f2(se1_u, 4)`/\sqrt{1 - 0.99968^2} = `r f2(se2_u)`$, interval
+`r f2(int2_u, 1)[1]` to `r f2(int2_u, 1)[2]`. The $\text{SE}_1$ interval
+matches the slice from 1a; the $\text{SE}_2$ interval is close to the
+profile, and $\text{SE}_2$ is essentially the same as in 2a.
+
+Centering changed the **shape and tilt of the surface** (correlation
+`r f2(r_exact_u, 4)` before, `r f2(r_exact_c, 2)` after) and the meaning
+of the intercept ($a'$ is the log-odds of death at $x = 1.8$, about 63
+mg/L, inside the data). It did not change the fitted curve, the maximum
+likelihood, $\hat b$, or the honest uncertainty in $b$.
+
+**Why.** $\text{SE}_1$ depends on how the model is written (it
+changes by a factor of about `r round(se2_u / se1_u)` here), so it
+can't be a property of what the data say about $b$. $\text{SE}_2$ and the
+profile describe the same quantity either way. The inflation factor
+$1/\sqrt{1 - r^2} \approx `r round(1 / sqrt(1 - 0.99968^2))`$ is the
+numerical version of the near-point slice in 1a.
+
+**Watch for.** Rounding $r$ to $-0.9997$ or $-1$ before squaring: with
+$r = -0.9997$, $\text{SE}_2$ comes out near 3.0; with $r = -1$ it's
+undefined. Worth pointing out that when estimates are this correlated,
+the arithmetic becomes touchy, which is one practical reason to center.
+Some students will also say centering "made $b$ more precise"; it didn't,
+it only made $\text{SE}_1$ less misleading.
+
+**Discussion point (optional).** A thin, tilted valley is also hard for
+optimizers to walk down, so centering or rescaling predictors often
+helps fitting as well. This comes back when we cover optimization.
+
+## Group discussion and revision
+
+No fixed answer. The most useful disagreements are likely to be in 1b
+(what $a$ means and why it trades off with $b$) and in 2a (why the
+smaller standard error isn't the better one). Look for reflections that
+connect the slice/profile picture in Part 1 to $\text{SE}_1$/$\text{SE}_2$
+in Part 2.
