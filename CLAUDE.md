@@ -265,6 +265,15 @@ student-facing .Rmd documents:
   printed in the handout, and interpretation questions carry the rest
   of the weight. (Final projects are the likely exception, where
   reproducible code matters.)
+- **Link data files on the handout.** When a lab or WOD uses a dataset,
+  put the CSV in `data/` and give its full course-website URL in the
+  handout (`https://kevintshoemaker.github.io/NRES-746/data/<file>.csv`),
+  plus a short `read.csv()` chunk that reads from that URL (split the
+  URL onto its own line so it doesn't overflow the PDF code box). Keep
+  the paste-in vectors as a fallback for small datasets. The file must be
+  pushed to `gh-pages` before the handout goes out; check the URL loads.
+  The instructor may also post data on WebCampus, but the handout
+  shouldn't depend on it. See `labs/Lab6_Act2.Rmd`.
 - WOD handouts follow the pen-and-paper rule when the WOD is a math
   problem; WODs that are explicitly programming/pseudocoding exercises
   should present pseudocode (plain English, per above) or fill-in-
