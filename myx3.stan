@@ -10,24 +10,24 @@ data {
 }
 
 parameters {
-  real<lower=0> a,b,rate;
+  real<lower=0> a,b,shape;
 }
 
 transformed parameters {
   vector[N] m = mm(day,a,b);   // mean expected titer  
-  vector[N] shape = rate * m;     // compute gamma shape parameter
+  vector[N] rate = shape ./ m;     // gamma rate = shape / mean (shape held constant)
 }
 
 model {
   a ~ exponential(.1);   // prior on a
   b ~ exponential(.1);   // prior on b
-  rate ~ exponential(.1);   // prior on rate
+  shape ~ exponential(.01);   // weak prior on shape (prior mean 100)
   titer ~ gamma(shape, rate);   // likelihood
 }
 
 generated quantities {
   vector[N] log_lik; // N is the number of data points
   for (n in 1:N) {
-    log_lik[n] = gamma_lpdf(titer[n] | shape[n], rate); // Replace with your model's likelihood
+    log_lik[n] = gamma_lpdf(titer[n] | shape, rate[n]); // Replace with your model's likelihood
   }
 }

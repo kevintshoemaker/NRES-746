@@ -9,25 +9,25 @@ data {
 }
 
 parameters {
-  real<lower=0> a,b,rate;
+  real<lower=0> a,b,shape;
 }
 
 transformed parameters {
   vector[N] m = (a * day) .* exp( -b * day);   // mean expected titer  // note elementwise mult - '.*'
-  vector[N] shape = rate * m;     // compute gamma shape parameter
+  vector[N] rate = shape ./ m;     // gamma rate = shape / mean (shape held constant)
 }
 
 model {
   a ~ exponential(.1);   // prior on a
   b ~ exponential(.1);   // prior on b
-  rate ~ exponential(.1);   // prior on rate
+  shape ~ exponential(.01);   // weak prior on shape (prior mean 100)
   titer ~ gamma(shape, rate);   // likelihood
 }
 
 generated quantities {
   vector[N] log_lik; // N is the number of data points
   for (n in 1:N) {
-    log_lik[n] = gamma_lpdf(titer[n] | shape[n], rate); // Replace with your model's likelihood
+    log_lik[n] = gamma_lpdf(titer[n] | shape, rate[n]); // Replace with your model's likelihood
   }
 }
     
@@ -48,7 +48,7 @@ inits <- function(){
   list(
     a=runif(1,1,10),
     b=runif(1,.01,0.1),
-    rate=runif(1,1,10)
+    shape=runif(1,20,150)
   )
 }
 # inits()
@@ -67,7 +67,7 @@ fit2$summary()
 samples_rick <- fit2$draws(format="draws_df")
 bayesplot::mcmc_trace(samples_rick,"a")
 bayesplot::mcmc_trace(samples_rick,"b")
-bayesplot::mcmc_trace(samples_rick,"rate")
+bayesplot::mcmc_trace(samples_rick,"shape")
 
 
 
@@ -83,25 +83,25 @@ data {
 }
 
 parameters {
-  real<lower=0> a,b,rate;
+  real<lower=0> a,b,shape;
 }
 
 transformed parameters {
   vector[N] m = mm(day,a,b);   // mean expected titer  
-  vector[N] shape = rate * m;     // compute gamma shape parameter
+  vector[N] rate = shape ./ m;     // gamma rate = shape / mean (shape held constant)
 }
 
 model {
   a ~ exponential(.1);   // prior on a
   b ~ exponential(.1);   // prior on b
-  rate ~ exponential(.1);   // prior on rate
+  shape ~ exponential(.01);   // weak prior on shape (prior mean 100)
   titer ~ gamma(shape, rate);   // likelihood
 }
 
 generated quantities {
   vector[N] log_lik; // N is the number of data points
   for (n in 1:N) {
-    log_lik[n] = gamma_lpdf(titer[n] | shape[n], rate); // Replace with your model's likelihood
+    log_lik[n] = gamma_lpdf(titer[n] | shape, rate[n]); // Replace with your model's likelihood
   }
 }
     
@@ -122,7 +122,7 @@ inits <- function(){
   list(
     a=runif(1,1,10),
     b=runif(1,.01,0.1),
-    rate=runif(1,1,10)
+    shape=runif(1,20,150)
   )
 }
 # inits()
@@ -141,7 +141,7 @@ fit3$summary()
 samples_mm <- fit3$draws(format="draws_df")
 bayesplot::mcmc_trace(samples_mm,"a")
 bayesplot::mcmc_trace(samples_mm,"b")
-bayesplot::mcmc_trace(samples_mm,"rate")
+bayesplot::mcmc_trace(samples_mm,"shape")
 
 
 
@@ -161,8 +161,7 @@ legend("topleft",lwd=c(2,2),lty=c(1,2),col=c("red","green"),legend=c("MM","Ricke
 
 simfun <- function(par,df,predfun,r){
   df$titer_e = predfun(x=df$day,a=par$a,b=par$b)
-  shape = df$titer_e*par$rate
-  df$titer_p = rgamma(nrow(df),shape,par$rate)
+  df$titer_p = rgamma(nrow(df), shape=par$shape, rate=par$shape/df$titer_e)
   df$res1 = df$titer - df$titer_e      # obs - exp
   df$res2 = df$titer_p - df$titer_e     # pred - exp
   df$rep = r
@@ -173,10 +172,10 @@ simfun <- function(par,df,predfun,r){
 Myx_PostPredCheck <- function(MCMC,predfun,dat){
   lots <- 1000; nMCMC <- length(MCMC$a); nobs = nrow(dat); nobs <- nrow(Myx)
   ret = list()   # initialize return list
-  parnames = c("a","b","rate")   # hard coding the parameter names (not best coding practice!)
+  parnames = c("a","b","shape")   # hard coding the parameter names (not best coding practice!)
   ndx = sample(1:nMCMC,lots,replace = T)
   params <- as.data.frame(MCMC)[ndx,parnames]     
-  reps = lapply(1:lots, function(t) simfun(par=params[t,c("a","b","rate")],df=dat,predfun,t)     ) 
+  reps = lapply(1:lots, function(t) simfun(par=params[t,c("a","b","shape")],df=dat,predfun,t)     ) 
   reps = do.call("rbind",reps)   # put everything into a bit data frame
   ppc1 <- reps |> 
     group_by(rep) |> 

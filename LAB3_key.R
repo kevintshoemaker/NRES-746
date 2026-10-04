@@ -103,12 +103,11 @@ Ricker <- function(x,a,b){
 
 NLL_myxRicker <- function(params){
   mn <- Ricker(myxdat$day,params["a"],params["b"])
-  sh <- mn * params["rate"]
-  -sum(dgamma(myxdat$titer,shape=sh,rate=params["rate"],log=TRUE))
+  -sum(dgamma(myxdat$titer,shape=params["shape"],scale=mn/params["shape"],log=TRUE))
 }
 
 
-NLL_myxRicker(params=c(a=4,b=0.2,rate=2))   # test the function
+NLL_myxRicker(params=c(a=4,b=0.2,shape=50))   # test the function
 
 
 # 3.3b --------------
@@ -118,8 +117,8 @@ predict_myxRicker1 <- function(mle){
     x=seq(min(myxdat$day)-1,max(myxdat$day)+1,length=100)
   )
   df$mean <- Ricker(df$x,mle["a"],mle["b"])
-  df$lwr <- qgamma(0.025,df$mean*mle["rate"],mle["rate"] )
-  df$upr <- qgamma(0.975,df$mean*mle["rate"],mle["rate"] )
+  df$lwr <- qgamma(0.025,shape=mle["shape"],scale=df$mean/mle["shape"])
+  df$upr <- qgamma(0.975,shape=mle["shape"],scale=df$mean/mle["shape"])
   g = ggplot(df,aes(x,mean)) +
     geom_ribbon(aes(ymin=lwr,ymax=upr),fill="gray") +
     geom_path(col="darkgreen",lwd=2) +
@@ -151,7 +150,7 @@ CI_myxRicker1(MLE,H)   # test the function
 ci_fun = function(par, d) par[1]*d * exp(-par[2]*d)
   
 pi_fun = function(par, d){
-  (par[1]*d * exp(-par[2]*d)) * par[3]
+  (par[1]*d * exp(-par[2]*d)) / par[3]
 }
 
 predict_myxRicker2 <- function(mle, H, prediction=F){
@@ -165,7 +164,7 @@ predict_myxRicker2 <- function(mle, H, prediction=F){
     for(i in 1:nrow(df)){
       g <- numDeriv::grad(pi_fun, mle, d=df$x[i])
       se_shap <- sqrt(t(g) %*% VCV %*% g)
-      df[i,c("lwr","upr")] <- qgamma(c(0.025,0.975),df$mean[i]*mle["rate"],mle["rate"] )
+      df[i,c("lwr","upr")] <- qgamma(c(0.025,0.975),shape=mle["shape"],scale=df$mean[i]/mle["shape"])
     }
   }else{
     se <- sapply(df$x,function(t){
@@ -200,11 +199,11 @@ CI_myxRicker2 <- function(mle, H, nll, profile=T,alpha=0.05){
     for(i in 1:npar){
       thisparname = parnames[i]
       otherparnames = setdiff(parnames,thisparname)
-      parvals = seq(mle[thisparname]-0.25*mle[thisparname],mle[thisparname]+0.25*mle[thisparname],length=500)
+      parvals = seq(0.4*mle[thisparname],2*mle[thisparname],length=500)
       thisNLL = function(params,thispar){
         params = c(params,thispar)
-        mn <- Ricker(myxdat$day,params["a"],params["b"]); sh <- mn * params["rate"]
-       -sum(dgamma(myxdat$titer,shape=sh,rate=params["rate"],log=TRUE))
+        mn <- Ricker(myxdat$day,params["a"],params["b"])
+       -sum(dgamma(myxdat$titer,shape=params["shape"],scale=mn/params["shape"],log=TRUE))
       }
       thispar= mle[thisparname] 
       thisprofile = suppressWarnings( sapply(parvals,function(t){ thispar[]=t; optim(mle[otherparnames], thisNLL, thispar=thispar )$value } ) )

@@ -546,11 +546,11 @@ plot(myxdat$titer~myxdat$day,xlim=c(0,10))    # visualize the relationship
 Write a function called "NLL_myxRicker()" for computing the data likelihood and plotting the goodness-of-fit for this model.
 
 + **input**:         
-    + params = named vector of initial values for the params to estimate (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution)(names should be "a","b", and "rate")        
+    + params = named vector of initial values for the params to estimate (length 3: *a* and *b* params from the Ricker model [see below], and the *shape* parameter of the Gamma distribution)(names should be "a","b", and "shape")        
 
 + **suggested algorithm**:   
     + Compute the deterministic function: use a Ricker deterministic equation to model the mean virus titer as a function of days since infection
-    + Compute the "shape" parameter of the Gamma distribution as a function of (1) mean virus titer and (2) the "rate" parameter of the Gamma distribution [NOTE: the variance and the mean of the Gamma distribution are dependent- so we can't simply model the expected value and the noise separately! See below for more details]
+    + Compute the "scale" parameter of the Gamma distribution for each observation as a function of (1) mean virus titer and (2) the "shape" parameter of the Gamma distribution, which is held constant across observations (scale = mean/shape) [NOTE: the variance and the mean of the Gamma distribution are dependent- so we can't simply model the expected value and the noise separately! See below for more details]
     + Compute the sum of the negative log-likelihoods of all observations (use the "dgamma()" function)
     + NOTE: you can assume the existence of the "myxdat" data object in the workspace, exactly as in the above code block.  
 
@@ -570,9 +570,9 @@ Start by plotting the histogram of the response variable. Bolker suggests a gamm
 Plot the data points (hint: look at figure 6.5b).  Bolker suggests the Ricker curve – does it look like the Ricker curve would work? Write down the equation and parameters for the Ricker curve (page 94).
 
 **Step 4**. *Specify the likelihood of the data given our deterministic expectations and the stochastic distribution.*
-Take a moment to think how the parameters of the stochastic distribution are determined by the parameters of the deterministic function. For the gamma distribution, both the shape and scale parameters are related to the mean of the distribution, i.e., mean =  shape / rate (page 133)(or shape * scale). So how will you specify that the deterministic function (the Ricker model) should represent the mean? What parameters do you need your (negative) log-likelihood function to estimate? Write out your negative log-likelihood function to solve for the likelihood.
+Take a moment to think how the parameters of the stochastic distribution are determined by the parameters of the deterministic function. For the gamma distribution, the mean is shape * scale (equivalently, shape / rate; page 133). Following Bolker (p. 245-246), we treat the shape parameter as a constant that describes how variable the titers are around the mean, and let the scale change with the mean: scale = mean / shape. So the Ricker model gives the mean, the shape parameter is estimated along with the Ricker parameters, and the scale for each observation is computed from the two. What parameters do you need your (negative) log-likelihood function to estimate? Write out your negative log-likelihood function to solve for the likelihood.
 
-ASIDE: the mean and variance of the gamma distribution are inter-related: the shape parameter can be specified as: $\frac{mean^2}{var}$ and the rate parameter can be specified as $\frac{mean}{var}$!
+ASIDE: the mean and variance of the gamma distribution are inter-related: the shape parameter can be specified as: $\frac{mean^2}{var}$ and the rate parameter can be specified as $\frac{mean}{var}$! Holding the shape constant means the coefficient of variation ($\frac{sd}{mean} = \frac{1}{\sqrt{shape}}$) is the same at every mean, so the spread of the titers grows in proportion to the mean.
 
 Include your function in your submitted r script!
 
@@ -586,8 +586,7 @@ Ricker <- function(x,a,b){
 
 NLL_myxRicker <- function(params){
   mn <- Ricker(myxdat$day,params["a"],params["b"])
-  sh <- mn * params["rate"]
-  -sum(dgamma(myxdat$titer,shape=sh,rate=params["rate"],log=TRUE))
+  -sum(dgamma(myxdat$titer,shape=params["shape"],scale=mn/params["shape"],log=TRUE))
 }
 
 ```
@@ -596,7 +595,7 @@ You can test your function using something like this:
 
 ```{r testq3_3a}
 
-NLL_myxRicker(params=c(a=4,b=0.2,rate=2))   # test the function
+NLL_myxRicker(params=c(a=4,b=0.2,shape=50))   # test the function
 
 ```
 
@@ -611,7 +610,7 @@ Now use 'optim()' to get your maximum likelihood parameter estimates.
 
 ```{r q3_3a-solution2, context="data"}
 
-temp <- optim(NLL_myxRicker,par = c(a=2,b=0.2,rate=2))
+temp <- optim(NLL_myxRicker,par = c(a=1,b=0.2,shape=50))
 MLE = temp$par
 MinNLL = temp$value 
 MLE
@@ -623,7 +622,7 @@ MLE
 Write a function called "predict_myxRicker1()" for computing the maximum likelihood estimates and plotting the goodness-of-fit for this model.
 
 + **input**:         
-    + mle = named vector of MLE values for the model params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution) (named "a", "b", and "rate", in that order)
+    + mle = named vector of MLE values for the model params (length 3: *a* and *b* params from the Ricker model [see below], and the *shape* parameter of the Gamma distribution) (named "a", "b", and "shape", in that order)
 
 + **suggested algorithm**: 
      + make a data frame with a column "x" spanning the range of the time-since-infection (predictor variable, in days). [I suggest making this vector at least 100 elements]
@@ -654,8 +653,8 @@ NOTE: You can use the "qgamma()" function to build your plug-in intervals!
 
 # Plug-in prediction intervals!
 
-upper<-qgamma(0.975,shape=?, rate=?)   # remember that the mean of the gamma distribution is shape*scale
-lower<-qgamma(0.025,shape=?, rate=?)
+upper<-qgamma(0.975,shape=?, scale=?)   # remember that the mean of the gamma distribution is shape*scale
+lower<-qgamma(0.025,shape=?, scale=?)
 
 ```
 
@@ -670,8 +669,8 @@ predict_myxRicker1 <- function(mle){
     x=seq(min(myxdat$day)-1,max(myxdat$day)+1,length=100)
   )
   df$mean <- Ricker(df$x,mle["a"],mle["b"])
-  df$lwr <- qgamma(0.025,df$mean*mle["rate"],mle["rate"] )
-  df$upr <- qgamma(0.975,df$mean*mle["rate"],mle["rate"] )
+  df$lwr <- qgamma(0.025,shape=mle["shape"],scale=df$mean/mle["shape"])
+  df$upr <- qgamma(0.975,shape=mle["shape"],scale=df$mean/mle["shape"])
   g = ggplot(df,aes(x,mean)) +
     geom_ribbon(aes(ymin=lwr,ymax=upr),fill="gray") +
     geom_path(col="darkgreen",lwd=2) +
@@ -707,7 +706,7 @@ The first step is to optimize your likelihood function, this time using the "hes
 
 # 3.4a -----------
 
-temp <- optim(NLL_myxRicker,par = c(a=2,b=0.2,rate=2),hessian = T)
+temp <- optim(NLL_myxRicker,par = c(a=1,b=0.2,shape=50),hessian = T)
 MLE = temp$par
 MinNLL = temp$value 
 H = temp$hessian
@@ -721,7 +720,7 @@ Once you have computed the variance covariance matrix for the MLE parameters, yo
 Write a function called "CI_myxRicker1()" for computing a confidence interval for all free parameters in this model.
 
 + **input**:         
-    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution)(names should be "a","b", and "rate") 
+    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *shape* parameter of the Gamma distribution)(names should be "a","b", and "shape") 
     + H = the hessian matrix obtained from optimizing the negative-log-likelihood function (i.e., from 'optim()' with 'hessian=T')
 
 + **suggested algorithm**:   
@@ -730,7 +729,7 @@ Write a function called "CI_myxRicker1()" for computing a confidence interval fo
     + compute the margin of error by multiplying the standard error of each parameter by the appropriate quantile of the z distribution (standard normal). In this case you want the 97.5% quantile. 
 
 + **return**:    
-    + a matrix: each row is a parameter (in order: a, b, and rate) and there are four columns: first, the mle values, second, the standard error, third, the lower bound of the confidence interval, and fourth, the upper bound of the confidence interval. 
+    + a matrix: each row is a parameter (in order: a, b, and shape) and there are four columns: first, the mle values, second, the standard error, third, the lower bound of the confidence interval, and fourth, the upper bound of the confidence interval. 
 
 HINT: to take the inverse of a matrix in R, you can use the "solve()" function. 
 
@@ -801,12 +800,12 @@ ci_fX
 ```
 Note that Bolker's 'emdbook' package has a 'deltavar()' function for computing variances using the delta method. You are welcome to use Bolker's function, but I encourage you to apply the delta method 'from scratch' using the 'numDeriv' package to compute gradients. 
 
-As extra credit, see if you can compute and visualize a 95% prediction interval. You can do this by applying the delta method to compute the 'shape' parameter of the gamma distribution, which is a derived parameter involving all three parameters you estimated in this problem (a, b, and rate). 
+As extra credit, see if you can compute and visualize a 95% prediction interval. You can do this by applying the delta method to compute the 'scale' parameter of the gamma distribution, which is a derived parameter involving all three parameters you estimated in this problem (a, b, and shape). 
 
 NOTE: you will need to apply the delta method for every prediction you make- that is, as you vary the number of days since exposure, the variance of the predictions will change. 
 
 + **input**:         
-    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution)(names should be "a","b", and "rate") 
+    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *shape* parameter of the Gamma distribution)(names should be "a","b", and "shape") 
     + H = the hessian matrix obtained from optimizing the negative-log-likelihood function (i.e., from 'optim()' with 'hessian=T')
     + prediction = a logical T/F indicating whether to generate a prediction interval (if TRUE) or a confidence interval (if FALSE). Set this to FALSE as a default. Since this is an optional problem, you don't need to incorporate this argument in your algorithm, but please include it anyway! 
 
@@ -821,7 +820,7 @@ NOTE: you will need to apply the delta method for every prediction you make- tha
     + compute the margin of error by multiplying the standard error of each parameter by the appropriate quantile of the z distribution (standard normal). In this case you want the 97.5% quantile (make sure you know why!). 
 
 + **return**:    
-    + a matrix: each row is a parameter (in order: a, b, and rate) and there are three columns: first, the mle values, second, the lower bound of the confidence/prediction interval, and third, the upper bound of the confidence/prediction interval. 
+    + a matrix: each row is a parameter (in order: a, b, and shape) and there are three columns: first, the mle values, second, the lower bound of the confidence/prediction interval, and third, the upper bound of the confidence/prediction interval. 
 
 ```{r q3_4b-solution, echo=FALSE, context="data"}
 
@@ -830,7 +829,7 @@ NOTE: you will need to apply the delta method for every prediction you make- tha
 ci_fun = function(par, d) par[1]*d * exp(-par[2]*d)
   
 pi_fun = function(par, d){
-  (par[1]*d * exp(-par[2]*d)) * par[3]
+  (par[1]*d * exp(-par[2]*d)) / par[3]
 }
 
 predict_myxRicker2 <- function(mle, H, prediction=F){
@@ -844,7 +843,7 @@ predict_myxRicker2 <- function(mle, H, prediction=F){
     for(i in 1:nrow(df)){
       g <- numDeriv::grad(pi_fun, mle, d=df$x[i])
       se_shap <- sqrt(t(g) %*% VCV %*% g)
-      df[i,c("lwr","upr")] <- qgamma(c(0.025,0.975),df$mean[i]*mle["rate"],mle["rate"] )
+      df[i,c("lwr","upr")] <- qgamma(c(0.025,0.975),shape=mle["shape"],scale=df$mean[i]/mle["shape"])
     }
   }else{
     se <- sapply(df$x,function(t){
@@ -886,7 +885,7 @@ Again, you can assume that there is a dataframe in your environment named 'myxda
 Since this is for extra credit, I am not giving you a suggested algorithm here. Take this as a fun challenge! You might start by writing down some psuedocode to think through the problem before you start coding. Try to do it without help from a chatbot. If you do use a chatbot, ask it to help find solutions using base R. This course is about building custom algorithms so it's kind of cheating if you use higher level functions that "hide" the underlying algorithms.
 
 + **input**:         
-    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *rate* parameter of the Gamma distribution)(names should be "a","b", and "rate") 
+    + mle = named vector containing the maximum likelihood values for the params (length 3: *a* and *b* params from the Ricker model [see below], and the *shape* parameter of the Gamma distribution)(names should be "a","b", and "shape") 
     + H = the hessian matrix obtained from optimizing the negative-log-likelihood function (i.e., from 'optim()' with 'hessian=T')
     + nll = the minimum negative-log-likelihood at the MLE
     + profile = a logical T/F indicating whether or not to use the profile likelihood method. If not, the function should return confidence intervals using the normal approximation with the hessian matrix. 
@@ -895,7 +894,7 @@ Since this is for extra credit, I am not giving you a suggested algorithm here. 
     Up to you!
 
 + **return**:    
-    + a matrix: each row is a parameter (in order: a, b, and rate) and there are three columns: first, the mle values, second, the lower bound of the confidence interval, and third, the upper bound of the confidence interval. 
+    + a matrix: each row is a parameter (in order: a, b, and shape) and there are three columns: first, the mle values, second, the lower bound of the confidence interval, and third, the upper bound of the confidence interval. 
     
 
 ```{r q3_4c-solution, echo=FALSE, context="data"}
@@ -910,11 +909,11 @@ CI_myxRicker2 <- function(mle, H, nll, profile=T,alpha=0.05){
     for(i in 1:npar){
       thisparname = parnames[i]
       otherparnames = setdiff(parnames,thisparname)
-      parvals = seq(mle[thisparname]-0.5*mle[thisparname],mle[thisparname]+0.5*mle[thisparname],length=500)
+      parvals = seq(0.4*mle[thisparname],2*mle[thisparname],length=500)
       thisNLL = function(params,thispar){
         params = c(params,thispar)
-        mn <- Ricker(myxdat$day,params["a"],params["b"]); sh <- mn * params["rate"]
-       -sum(dgamma(myxdat$titer,shape=sh,rate=params["rate"],log=TRUE))
+        mn <- Ricker(myxdat$day,params["a"],params["b"])
+       -sum(dgamma(myxdat$titer,shape=params["shape"],scale=mn/params["shape"],log=TRUE))
       }
       thispar= mle[thisparname] 
       thisprofile = suppressWarnings( sapply(parvals,function(t){ thispar[]=t; optim(mle[otherparnames], thisNLL, thispar=thispar )$value } ) )
