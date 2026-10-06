@@ -1,7 +1,7 @@
 ---
-title: "Lab 3, Act 2 -- Answer Key"
+title: "Lab 3, Act 2: Answer Key"
 subtitle: "Counting detections: binomial or Poisson?"
-author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+author: "NRES 746, Instructor Answer Key (not for student distribution)"
 date: ""
 output:
   pdf_document: default
@@ -12,89 +12,197 @@ knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding,
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
                        fig.width = 6, fig.height = 4)
+f4 <- function(v) formatC(v, format = "f", digits = 4)
 ```
 
-This key follows the same section structure as the student handout. Questions with a single
-correct numeric answer are answered directly; open-ended items (interpretation, discussion) are
-given sample answers/discussion points rather than a fixed "correct" response.
+Each item repeats the handout's question, then gives the answer, a
+short rationale, and mistakes to watch for. Questions with one correct
+answer are answered directly. Open-ended items (the "plausible or not"
+part of 1a, 2e, and the group discussion) get sample answers or
+discussion points instead. All numbers are computed in R when this file
+is knitted.
+
+Setting: the carnivore is confirmed present; a camera detects it on a
+given night with probability $p = 0.3$, independently from night to
+night, over $N = 8$ nights.
 
 ## Part 1: Binomial by hand
 
-**1a.** The binomial's full assumption list is exactly four items -- fixed $N$, binary
-(Bernoulli) outcome per trial, independence across trials, constant $p$ across trials -- and a
-complete answer names all four. What separates a thin answer from a strong one is engaging with
-"plausible or not":
+**1a.**
 
-- **Fixed $N=8$** and **binary outcome per night** are true *by construction* (the deployment
-  length is set in advance; "at least one detection" vs. none is how the variable is defined) --
-  not much to interrogate in either one.
-- **Independence** and **constant $p$** are the two actually worth scrutinizing. Independence
-  could break down if a malfunction, a multi-night weather event, or the animal revisiting a
-  scent-marked area links one night's outcome to the next's. Constant $p$ could drift with moon
-  phase, temperature, food availability, or the animal habituating to (or growing wary of) the
-  camera.
+> Why is "number of nights with a detection, out of 8" a reasonable
+> binomial random variable here? Name the assumptions the binomial
+> distribution requires, and say briefly why each one seems plausible
+> (or not) for this camera.
 
-A student who only recites the four assumptions without engaging with which ones are actually
-shaky hasn't fully answered 1a.
+**Answer.** Four assumptions:
+
+- **Fixed number of trials** ($N = 8$ nights): true by design.
+- **Two outcomes per trial** (detection or not on each night): true by
+  how the variable is defined.
+- **Independent trials:** plausible but questionable. A storm lasting
+  several nights, a camera malfunction, or an animal returning to a
+  marked spot links one night to the next.
+- **Constant $p$ across trials:** also questionable. Detection can
+  change with moon phase, weather, season, or the animal getting used
+  to (or wary of) the camera.
+
+**Why.** The first two hold by construction, so the substance of a
+good answer is in the last two.
+
+**Watch for.** Listing the four assumptions with no judgment about
+which are shaky. Confusing "constant $p$" with "$p$ is known."
 
 **1b.**
 
+> Using the binomial pmf, $P(X=k) = \binom{N}{k}p^k(1-p)^{N-k}$,
+> compute by hand the probability of exactly 3 detections in the 8
+> nights ($N=8$, $k=3$, $p=0.3$). Show your work.
+
+**Answer.**
+$P(X = 3) = \binom{8}{3}(0.3)^3(0.7)^5 = 56 \times 0.027 \times 0.16807 = `r f4(dbinom(3, 8, 0.3))`$.
+
 ```{r binom-hand}
-N <- 8; p <- 0.3; k <- 3
-choose(N, k) * p^k * (1 - p)^(N - k)
-dbinom(k, N, p)   # check
+choose(8, 3) * 0.3^3 * 0.7^5
+dbinom(3, 8, 0.3)   # check
 ```
 
-$P(X=3) = 0.2541$.
+**Why.** $\binom{8}{3} = \frac{8!}{3!\,5!} = 56$ ways to choose which 3
+nights had detections; each such sequence has probability
+$0.3^3 \times 0.7^5$.
+
+**Watch for.** Leaving out $\binom{8}{3}$ (gives 0.0045, the
+probability of one particular sequence). Using $(0.7)^3(0.3)^5$.
+Arithmetic slips in $8!/(3!\,5!)$.
 
 **1c.**
 
+> The mean of this distribution is $Np = 8 \times 0.3 = 2.4$, but the
+> tallest bar (the mode) sits at a different whole number. Why can't
+> the mode land exactly on the mean here? And what does the direction
+> of the gap between them (mode below the mean, or above?) tell you
+> about the shape of this distribution?
+
+**Answer.** The mode is 2. It can't equal 2.4 because the number of
+detections must be a whole number, while the mean is an average and
+can fall between whole numbers. The mode sits below the mean, so the
+distribution is right-skewed: it's bounded at 0 on the left and has a
+longer tail toward higher counts, which pulls the mean up.
+
 ```{r mode-mean}
-which.max(dbinom(0:8, 8, 0.3)) - 1   # mode, 0-indexed
-8 * 0.3                              # mean
+(0:8)[which.max(dbinom(0:8, 8, 0.3))]   # mode
+8 * 0.3                                 # mean
 ```
 
-Mode $=2$; mean $=Np=2.4$. The mode can't land exactly on the mean because the mode must be a
-whole number (a specific count, $k$), while the mean is a continuous expected value with no such
-restriction -- they coincide only in special cases (e.g. a symmetric distribution where $Np$
-happens to be an integer). Here the mean sits *above* the mode, which signals the distribution
-is right-skewed: bounded at 0 on the left with more room to stretch toward higher counts on the
-right, pulling the mean up above the single most common outcome.
+**Why.** In a right-skewed distribution, the few large values in the
+long tail pull the mean above the most common value.
+
+**Watch for.** "Because the distribution is skewed" as the only answer
+to the first question (the whole-number reason comes first). Reading
+the skew backward (mode below mean means a right tail, not a left one).
 
 ## Part 2: Comparing to Poisson
 
-**2a.** Scenario A (binomial vs. Poisson, both mean 2.4): the two bar charts disagree most in
-the tails -- the Poisson has a visibly fatter right tail (it has no upper bound, while the
-binomial is capped at 8) -- and somewhat in peak height. Scenario B: the two charts are nearly
-indistinguishable across center, spread, and tails.
+**2a.**
+
+> Look closely at both pairs of bar charts. In Scenario A, where
+> specifically do the binomial and Poisson bars disagree most: the
+> center, the spread, or the tails? Does Scenario B show the same kind
+> of disagreement, a different kind, or none at all?
+
+**Answer.** Scenario A: the spread. The binomial is taller in the
+middle (2 to 4 detections); the Poisson puts more probability in both
+tails (0 and 1 detections, and 5 or more). Scenario B: almost no
+disagreement anywhere.
+
+```{r compare-ab}
+round(rbind(binom_A = dbinom(0:8, 8, 0.3),
+            binom_B = dbinom(0:8, 100, 0.024),
+            poisson = dpois(0:8, 2.4)), 3)
+```
+
+**Why.** The Poisson is wider than Binomial(8, 0.3) even though both
+have mean 2.4 (2b shows why). Binomial(100, 0.024) has nearly the same
+spread as the Poisson.
+
+**Watch for.** "The Poisson has a fatter right tail" alone; it's also
+higher at 0 and 1. "The center differs": both means are 2.4.
 
 **2b.**
 
-```{r variances}
-N <- 8; p <- 0.3
-N * p * (1 - p)          # Scenario A binomial variance
-2.4                       # Scenario A/B Poisson variance (same lambda both scenarios)
-100 * 0.024 * (1 - 0.024) # Scenario B binomial variance
-```
+> Compute the variance of each distribution by hand, using
+> $\text{Var} = Np(1-p)$ for the binomial and $\text{Var} = \lambda$
+> for the Poisson.
 
-Scenario A: binomial variance $=1.68$ vs. Poisson variance $=2.4$ -- mismatched. Scenario B:
-binomial variance $=2.3424$ vs. Poisson variance $=2.4$ -- close match.
+**Answer.**
 
-**2c.** Yes -- the variance mismatch in Scenario A (1.68 vs. 2.4) explains the visible
-disagreement in 2a; the near-equal variances in Scenario B (2.3424 vs. 2.4) explain why those
-charts looked nearly identical.
+- Scenario A binomial: $8 \times 0.3 \times 0.7 = 1.68$.
+- Scenario B binomial: $100 \times 0.024 \times 0.976 = 2.3424$.
+- Poisson (both scenarios): $\lambda = 2.4$.
 
-**2d.** *Poisson is a good stand-in for binomial when $N$ is large and $p$ is small*, so that
-$(1-p)\approx1$ and $Np(1-p)\approx Np=\lambda$. Watch for students who conclude "Poisson is
-just always fine" from Scenario B alone without registering that Scenario A disagreed -- push
-them back to the variance mismatch as the reason it isn't universal.
+**Why.** Direct substitution. The binomial variance equals the Poisson
+variance times $(1 - p)$, so the two match only when $1 - p$ is close
+to 1.
 
-**2e.** No fixed answer. Reasonable examples: a multi-night weather event (a storm suppressing
-detections across several consecutive nights, breaking independence), seasonal or lunar changes
-in animal activity (breaking constant $p$), or the animal habituating to (or growing wary of)
-the camera over the deployment (also breaking constant $p$).
+**Watch for.** Using $p$ instead of $1 - p$ in the binomial formula.
+Computing only Scenario A.
+
+**2c.**
+
+> Does the pattern of variances you just computed explain what you saw
+> by eye in 2a?
+
+**Answer.** Yes. In Scenario A the Poisson's variance (2.4) is about
+40% larger than the binomial's (1.68), matching its wider spread. In
+Scenario B the variances are nearly equal (2.40 vs. 2.34), matching
+the near-identical bars.
+
+**Why.** With the same mean, the variance is what controls the width.
+
+**Watch for.** "Yes" with no reference to the numbers.
+
+**2d.**
+
+> Finish this rule of thumb in your own words: *"A Poisson distribution
+> is a good stand-in for a binomial distribution when..."*
+
+**Answer.** "...the number of trials is large and the probability per
+trial is small," so that $1 - p \approx 1$ and the binomial variance
+$Np(1-p)$ is close to the Poisson's $\lambda = Np$.
+
+**Why.** Scenario B (large $N$, small $p$) matched; Scenario A (small
+$N$, $p = 0.3$) didn't.
+
+**Watch for.** "When the means are equal" (they were equal in both
+scenarios). "Always" based on Scenario B alone. Mentioning only large
+$N$ or only small $p$; both are needed.
+
+**2e.**
+
+> Back in the original 8-night scenario ($p = 0.3$): name one realistic
+> reason the constant, independent per-night detection probability
+> assumption from 1a might be violated in the field.
+
+**Sample answer.** Any one realistic mechanism, for example:
+
+- A multi-night storm suppresses detections on several nights in a row
+  (breaks independence).
+- Moon phase or season changes the animal's activity (breaks constant
+  $p$).
+- The animal learns to avoid the camera, or is drawn to the site by
+  scent (changes $p$ over the deployment).
+
+**Why.** Each of these makes a night's detection depend on something
+other than a single fixed $p$.
+
+**Watch for.** Reasons that change whether the animal is present (the
+Act assumes it is). Restating the assumption without a mechanism.
 
 ## Group discussion and revision
 
-No fixed answer -- students compare variances and their Part 2d rule of thumb, and flag their
-own muddiest points.
+> Compare your variances and rule of thumb from 2d with your group.
+> Record any changes, new insights, and muddiest points.
+
+**Discussion points.** No fixed answer. Useful reflections connect the
+variance formulas in 2b to the picture in 2a, or note why matching
+means alone doesn't make two distributions interchangeable.

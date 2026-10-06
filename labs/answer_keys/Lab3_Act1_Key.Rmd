@@ -1,7 +1,7 @@
 ---
-title: "Lab 3, Act 1 -- Answer Key"
+title: "Lab 3, Act 1: Answer Key"
 subtitle: "Trusting a positive detection"
-author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+author: "NRES 746, Instructor Answer Key (not for student distribution)"
 date: ""
 output:
   pdf_document: default
@@ -11,95 +11,212 @@ knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding,
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 4.5)
+                       fig.width = 6, fig.height = 4)
 
-p_S  <- 1e-4   # prevalence
+p_s <- 1e-4    # prevalence
 sens <- 0.98   # sensitivity
-fpr  <- 0.01   # false positive rate
+fpr <- 0.01    # false positive rate
+n_events <- 1e5
+
+flag_s <- n_events * p_s * sens
+flag_not <- n_events * (1 - p_s) * fpr
+ppv_count <- round(flag_s) / (round(flag_s) + round(flag_not))
+ppv_formula <- (p_s * sens) / (p_s * sens + (1 - p_s) * fpr)
+p_s_b <- 0.01
+ppv_b <- (p_s_b * sens) / (p_s_b * sens + (1 - p_s_b) * fpr)
+
+f3 <- function(v, d = 3) formatC(v, format = "f", digits = d)
 ```
 
-This key follows the same section structure as the student handout. Questions with a single
-correct numeric or derived answer are answered directly; open-ended items (interpretation,
-discussion) are given sample answers/discussion points rather than a fixed "correct" response --
-use these to gauge whether a student's reasoning is on track, not as an exact-match rubric.
-Act 1 is deliberately discovery-based (no formula is given up front), so expect more variation
-in *how* students get to a correct answer than in later Acts.
+Each item repeats the handout's question, then gives the answer, a
+short rationale, and mistakes to watch for. Questions with one correct
+answer are answered directly. Open-ended items (1c, 2c, 3b, and the
+group discussion) get sample answers or discussion points instead. All
+numbers are computed in R when this file is knitted.
+
+This Act is discovery-based (no formula is given up front), so expect
+more variation in *how* students reach a correct answer than in later
+Acts. Rates used throughout: prevalence = 0.0001, sensitivity = 0.98,
+false positive rate = 0.01.
 
 ## Part 1: Count your way to an answer
 
-**1a.** Completed table ($N=100{,}000$), rounded to the nearest whole number:
+**1a.**
 
-```{r freq-table}
-N <- 1e5
-species     <- N * p_S
-not_species <- N * (1 - p_S)
-flag_S      <- species * sens
-flag_notS   <- not_species * fpr
-data.frame(
-  row         = c("Actually the species", "Not the species", "Total"),
-  flagged     = round(c(flag_S, flag_notS, flag_S + flag_notS)),
-  not_flagged = round(c(species - flag_S, not_species - flag_notS,
-                         (species - flag_S) + (not_species - flag_notS))),
-  total       = c(species, not_species, N)
+> Suppose the cameras log $N = 100{,}000$ trigger events over a season.
+> Fill in the table below using only the rates given above. Every blank
+> cell is just one of those rates applied to a total you already know.
+> Round to the nearest whole number.
+
+**Answer.**
+
+```{r freq-table, echo=FALSE}
+species <- n_events * p_s
+not_species <- n_events * (1 - p_s)
+tab <- data.frame(
+  row = c("Actually the species", "Not the species", "Total"),
+  flagged = round(c(flag_s, flag_not, flag_s + flag_not)),
+  not_flagged = round(c(species - flag_s, not_species - flag_not,
+                        n_events - flag_s - flag_not)),
+  total = c(species, not_species, n_events)
 )
+knitr::kable(tab, col.names = c("", "Flagged", "Not flagged", "Total"),
+             format.args = list(big.mark = ","), align = "lccc")
 ```
 
-**1b.** PPV $=10/1010\approx0.0099\approx1\%$ -- pure counting, no formula needed.
+**Why.** Flagged species events = 10 $\times$ 0.98 = 9.8 $\approx$ 10.
+Flagged non-species events = 99,990 $\times$ 0.01 = 999.9 $\approx$
+1,000. The "not flagged" cells are what's left in each row.
 
-**1c.** No fixed answer, but a correct response should register that $\approx1\%$ is
-*surprisingly low* given how good 98% sensitivity / 1% false-positive rate sounded at the
-start. A good response to the field team: a single flagged image alone isn't enough to act on
-confidently -- look for corroborating evidence (a second independent detection, a track, scat)
-before committing resources to that flag.
+**Watch for.** Applying the false positive rate to the 10 species
+events, or the sensitivity to the 99,990 non-species events. Rows that
+don't add up to their totals.
+
+**1b.**
+
+> Of the images the classifier *flagged*, what fraction are actually the
+> target species? No formula needed; just use the counts in your
+> completed table.
+
+**Answer.** $10 / 1{,}010 \approx `r f3(ppv_count, 4)`$, about 1%.
+
+**Why.** The denominator is everything in the "Flagged" column (true
+and false alarms together); the numerator is the true detections in
+that column.
+
+**Watch for.** Dividing by 10 (the species total) instead of by 1,010
+(the flagged total), which gives 0.98, the sensitivity. That's the
+central confusion of this Act: $P(\text{flagged} \mid \text{species})$
+is not $P(\text{species} \mid \text{flagged})$.
+
+**1c.**
+
+> Is this number close to what you expected, given how good the
+> classifier's sensitivity and false-positive rate sounded at the
+> start? In a sentence or two, what would you tell the field team about
+> how to handle a single flagged image?
+
+**Sample answer.** No, about 1% is far lower than the 98% and 1% rates
+suggest. A single flagged image is almost always a false alarm, so the
+team should look for confirmation (a second independent detection,
+tracks, scat, or a person checking the image) before acting on it.
+
+**Why.** False alarms come from the huge pool of non-species events;
+even a 1% false positive rate applied to 99,990 events swamps the 10
+real ones.
+
+**Watch for.** Answers that call the classifier "bad." Its error rates
+are fine; the problem is how rare the species is. Saying so here sets
+up 3b.
 
 ## Part 2: Turn your counting into a general recipe
 
-**2a.** Flagged-and-truly-the-species count $=N\times\text{prevalence}\times\text{sensitivity}$.
-Total flagged count $=N\times\text{prevalence}\times\text{sensitivity} +
-N\times(1-\text{prevalence})\times\text{false positive rate}$.
+**2a.**
 
-**2b.** $N$ cancels from top and bottom, leaving:
+> Rewrite the two counts you used in 1b (the number of flagged images
+> that are truly the species, and the total number of flagged images)
+> as expressions using $N$ and the rates given at the top (prevalence,
+> sensitivity, false positive rate), instead of plugged-in numbers.
 
-```{r ppv-formula}
-ppv <- (p_S * sens) / (p_S * sens + (1 - p_S) * fpr)
-ppv
-```
+**Answer.**
 
-$$\text{PPV} = \frac{\text{prevalence}\times\text{sensitivity}}
-{\text{prevalence}\times\text{sensitivity} + (1-\text{prevalence})\times\text{false positive rate}}
-\approx 0.0097$$
+- Flagged and truly the species: $N \times \text{prevalence} \times \text{sensitivity}$.
+- All flagged: $N \times \text{prevalence} \times \text{sensitivity} + N \times (1 - \text{prevalence}) \times \text{false positive rate}$.
 
-**2c.** Any phrasing that captures the formula above is correct -- word-for-word notation
-doesn't matter. This is Bayes' rule/PPV, arrived at without a name; don't volunteer the name
-"Bayes' rule" when grading this -- that reveal is Wednesday's lecture.
+**Why.** Each count is "how many events are in that row" times "the
+chance an event in that row gets flagged," as in the table.
 
-**Common snags:** students who divide by $P(S)$ (the marginal probability of being the
-species) instead of $P(F)$ (the marginal probability of being flagged) in 2b -- this produces a
-PPV $>0.5$ at Site A, which is the tell. Students who try to cancel something other than $N$ in
-2b, or who stall because they're trying to recall "the formula" instead of generalizing their
-own Part 1 arithmetic.
+**Watch for.** Leaving out the $(1 - \text{prevalence})$ factor, i.e.
+applying the false positive rate to all $N$ events. With prevalence this
+small the number barely changes, so ask the student which events can
+produce a false alarm.
+
+**2b.**
+
+> Divide your two expressions from 2a to reconstruct the fraction from
+> 1b. $N$ should appear in both the top and bottom; cancel it out. What
+> are you left with?
+
+**Answer.**
+$$\text{PPV} = \frac{\text{prevalence} \times \text{sensitivity}}
+{\text{prevalence} \times \text{sensitivity} + (1 - \text{prevalence}) \times \text{false positive rate}}
+= `r f3(ppv_formula, 4)`$$
+
+**Why.** $N$ multiplies every term, so it cancels. The value differs
+slightly from 1b (`r f3(ppv_count, 4)`) only because 1a rounded 9.8 and
+999.9 to whole numbers.
+
+**Watch for.** Students who think the 0.0097 vs. 0.0099 difference
+means an error. Cancelling a rate instead of $N$. Stalling while trying
+to recall "the formula" instead of generalizing their own Part 1
+arithmetic.
+
+**2c.**
+
+> State your result from 2b as a general rule, in your own words or
+> symbols: given a classifier's sensitivity, false-positive rate, and
+> the prevalence of the thing it's looking for, how do you compute the
+> chance that a flagged event is real?
+
+**Sample answer.** "The chance a flag is real equals the true flags
+divided by all flags, where true flags = prevalence $\times$
+sensitivity and false flags = (1 $-$ prevalence) $\times$ false
+positive rate." Any wording or notation that captures the 2b formula is
+correct.
+
+**Why.** This is Bayes' rule (the positive predictive value), which
+students built here before seeing its name in lecture.
+
+**Watch for.** A rule that restates the 1b numbers instead of
+generalizing them.
 
 ## Part 3: Try it somewhere else
 
-**3a.** Site B (prevalence $=0.01$, same sensitivity/false-positive rate):
+**3a.**
 
-```{r site-b}
-p_S_B <- 0.01
-ppv_B <- (p_S_B * sens) / (p_S_B * sens + (1 - p_S_B) * fpr)
-ppv_B
-```
+> A second survey site uses the same classifier, but prevalence is
+> 0.01 (1 in 100 trigger events). Using your recipe from Part 2 (or a
+> fresh counting table), find this second site's PPV.
 
-PPV $\approx0.497\approx50\%$.
+**Answer.** PPV $= \dfrac{0.01 \times 0.98}{0.01 \times 0.98 + 0.99 \times 0.01} = `r f3(ppv_b, 3)`$, about 50%.
 
-**3b.** No fixed answer, but a strong response identifies that the classifier's own properties
-(sensitivity, false-positive rate) were *identical* at both sites -- only prevalence changed,
-and yet PPV swung from $\approx1\%$ to $\approx50\%$. The intended takeaway: prevalence (the
-"base rate") matters at least as much as the classifier's own accuracy, and a classifier that
-sounds great in isolation can still be dominated by false positives when the target is rare.
-Students who bring up the "base rate fallacy" by name (even loosely) should get full credit for
-connecting today's exercise to that idea -- the formal term arrives Wednesday.
+**Why.** Prevalence is 100 times higher, so true flags (0.0098) are now
+about as common as false flags (0.0099).
+
+**Watch for.** Changing the sensitivity or false positive rate too (the
+handout says they're the same). Students who use a counting table get
+the same answer (980 true flags vs. 990 false flags out of 100,000).
+
+**3b.**
+
+> Same classifier, same sensitivity, same false-positive rate, but a
+> different answer. What does comparing these two sites tell you about
+> how much those two classifier properties matter versus how common
+> (prevalent) the thing you're looking for actually is? Feel free to
+> use the term "base rate" and speculate on how your findings relate to
+> the "base rate fallacy."
+
+**Sample answer.** The classifier's properties didn't change, yet the
+chance a flag is real went from about 1% to about 50%. Prevalence (the
+base rate) matters as much as the classifier's accuracy. The base rate
+fallacy is judging a positive result by the test's accuracy alone and
+ignoring how rare the target is.
+
+**Why.** When the target is rare, almost every event is a non-target
+event, so even a small false positive rate produces far more false
+flags than true ones.
+
+**Watch for.** Concluding that the classifier "works better" at the
+second site. Give full credit for any reasonable connection to the base
+rate fallacy, even if loosely stated.
 
 ## Group discussion and revision
 
-No fixed answer -- the point is for students to compare their Part 2 recipes and reconcile any
-differences in notation or approach, and to flag their own muddiest points.
+> Compare your Part 2 recipe and your Part 3 answer with your group.
+> Does everyone's recipe agree once you strip away notation
+> differences? If not, find where they diverge. Record any changes,
+> new insights, and muddiest points.
+
+**Discussion points.** No fixed answer. Look for students who found the
+sensitivity-vs-PPV confusion in their own or a groupmate's work, or
+who reconciled different notations for the same recipe.

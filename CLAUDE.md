@@ -325,6 +325,20 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
    flagging the origin of a tricky term in a derivation). Anchor new
    concepts in ecological intuition first, then formalize -- don't open
    with bare notation.
+
+   **Lecture content has been running about double what fits.** Week 7
+   Lecture 1 (Oct. 5) planned eight sub-topics for ~35 min and covered
+   four in the period; the Bayesian preview and the quadratic
+   approximation/multiparameter material had to move to Wednesday and
+   the Lab 6 opening. When planning a lecture, aim for roughly half of
+   what seems to fit: about **3-4 sub-topics** in the ~30 min beat
+   (counting the big-picture opening and reading questions), with one
+   worked example carried through. Put anything beyond that in a clearly
+   marked "if time" section (or plan it for the next session) rather
+   than squeezing it into the core, and keep per-section time
+   estimates honest using the same ~1.5-2x multipliers as for labs.
+   Update this paragraph as the instructor reports how later lectures
+   actually went.
 3. **Discussion, remaining time.** A short, open-ended prompt or question
    set meant to surface misconceptions and get students talking before
    they leave -- not a review quiz. Good discussion prompts ask students
@@ -805,6 +819,15 @@ question; no need to rework them unless asked.)
   having it open, not a content error. Render a scratch copy elsewhere
   to confirm the content is fine, ask them to close the viewer, then
   re-knit to the real path -- don't assume the Rmd itself is broken.
+- After rendering any HTML page for the website, check that every
+  figure it references is tracked by git. `.gitignore` excludes
+  `*_files/`, so a new page's figure folder is silently left out of the
+  commit and its images break online (older pages only work because
+  their `_files/` folders were committed before the rule existed). Fix
+  by setting `self_contained: true` in that page's YAML or by
+  force-adding the folder (`git add -f`), and say which in the summary.
+  Quick check: list the `<page>_files/...png` paths in the HTML and run
+  `git ls-files --error-unmatch` on each.
 - When renaming or moving a course file, grep the whole repo for the
   old filename before considering the rename done -- `index.Rmd`'s
   manual render script, this file's own file-path callouts, and
