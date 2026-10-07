@@ -337,6 +337,19 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
    marked "if time" section (or plan it for the next session) rather
    than squeezing it into the core, and keep per-section time
    estimates honest using the same ~1.5-2x multipliers as for labs.
+   Week 7 Lecture 2 (Oct. 7) confirmed this even after trimming: of
+   seven planned sections, the period covered three (big picture,
+   Bayes' rule for parameters with the grid example, and the
+   Beta-binomial conjugacy math), plus ~10 unplanned minutes on
+   logistic regression and the log-odds, and had no discussion
+   period. The worked germination example and everything after it
+   moved to Week 8 Lecture 1. Two lessons: (1) leave slack for
+   unplanned catch-up, and when planning a lecture, check whether
+   that week's lab used a model or idea lecture hasn't covered yet
+   (Lab 6 used a logistic dose-response model before lecture had
+   introduced it); (2) a lecture that derives something (e.g. the
+   conjugacy algebra) fills its time with the derivation, so put the
+   worked numerical example *first* or plan it for the next session.
    Update this paragraph as the instructor reports how later lectures
    actually went.
 3. **Discussion, remaining time.** A short, open-ended prompt or question
@@ -345,7 +358,13 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
    to compare interpretations, defend a choice, or connect the day's
    content back to an ongoing dataset/model thread. This is a lighter-
    weight cousin of a lab's "group discussion" phase, scaled to a few
-   minutes.
+   minutes. Put the concrete numbers the question turns on into the
+   prompt itself (e.g. "with the supplier prior the posterior mean is
+   0.62; with a flat prior it's 0.74. A manager says..."), rather than
+   assuming students remember a figure; otherwise the point of the
+   question gets lost. Follow each prompt set with a short instructor
+   note on what the question is meant to surface and where the
+   discussion should land.
 
 When asked to build a lecture plan or WOD, produce all three pieces
 together (WOD handout, lecture outline, discussion prompt) unless told
@@ -515,6 +534,51 @@ read the matching week's WOD/Lab handouts already built in
 `wod/`/`labs/` so the lecture can explicitly call back to (or set up)
 what students already did that week, rather than repeating it or
 contradicting it.
+
+**Companion R scripts** (`CODE_Week<N>_Lecture<M>_<Topic>.R`, posted
+to WebCampus for students) follow the lecture's outline: one
+subheading per lecture section, numbered to match the NOTES file
+(e.g. `# 3. Worked example: ... ----`), with that section's podium
+bullets as short comment lines directly below the subheading and the
+code after. This lets the script double as a podium cheat sheet and
+makes it easy to cross-reference the notes mid-lecture. Include the
+discussion prompts as a closing comment section. Comment blocks
+directly under these subheadings are an allowed exception to the
+no-comment-stacking rule. Run the script end to end before handing it
+back. See `lecture_notes/CODE_Week8_Lecture1_PriorsAndPosteriors.R`
+(and `CODE_Week7_Lecture2_BayesianInference.R`; the Week 7 Lecture 1
+script predates this format).
+
+**After a lecture is given ("as taught" updates).** When the
+instructor reports what a lecture actually covered:
+
+1. Add a dated **"As taught (Day, Mon. D)"** note to the top of that
+   lecture's NOTES Overview listing what was covered (including any
+   unplanned material, which gets written up as its own section so the
+   notes stay an accurate record), and trim the uncovered sections
+   out of both Part 1 and the podium copy.
+2. Move the uncovered material into the **next session's** NOTES file
+   (create it if needed), renumbering sections and fixing day
+   references ("Monday's pikas" becomes "Week 7 pikas"), with a short
+   "Where this came from" note in its Overview.
+3. Split the companion R script the same way, so each script matches
+   its NOTES file.
+4. Update `CourseSchedule.csv` (topics and readings) and re-render
+   `schedule.html` with `rmarkdown::render_site("schedule.Rmd")`.
+5. Update the calibration paragraph under "Lecture period structure."
+
+See `NOTES_Week7_Lecture1_LikelihoodUncertainty.Rmd` and
+`NOTES_Week7_Lecture2_BayesianInference.Rmd` (as-taught notes) and
+`NOTES_Week8_Lecture1_PriorsAndPosteriors.Rmd` (the receiving file).
+
+**Reference handouts.** Standalone explainers not tied to a single
+session (e.g. a graphical guide to why likelihood intervals work) go
+in `lecture_notes/` as `NOTES_Reference_<TopicInCamelCase>.Rmd`, knit
+to PDF. They don't need the "How to prepare" block or a podium Part
+2, but they follow the writing-style rules (they may be handed to
+students). See `NOTES_Reference_LikelihoodTheory.Rmd` (score, Fisher
+information, the information identity, Wald vs. likelihood ratio
+intervals, Wilks, and when the approximations break).
 
 As with any `.Rmd`, actually knit the document to PDF and read
 through the rendered output (not just the source) before considering
@@ -834,3 +898,35 @@ question; no need to rework them unless asked.)
   cross-references between Rmd docs (e.g. a lecture note pointing at a
   WOD's filename) are easy to miss and go stale silently since nothing
   errors until someone tries to render off the old path.
+
+## Development status (update at the end of each thread)
+
+Snapshot as of Wed., Oct. 7, 2026 (end of Week 7). The schedule of
+record is `CourseSchedule.csv`.
+
+- **Built and taught through Week 7.** Week 7's two NOTES files carry
+  "as taught" notes. Lab 6 (Acts, keys, `NOTES_Lab6_LikelihoodIntervals.Rmd`)
+  is done; the quadratic approximation/Hessian material lives in the
+  Lab 6 notes, not a lecture.
+- **Week 8 (next up).**
+  - Monday, Oct. 12: `lecture_notes/NOTES_Week8_Lecture1_PriorsAndPosteriors.Rmd`
+    and its companion script are drafted (germination example, posterior
+    summaries, where new Bayesians get stuck, why Bayes is popular,
+    discussion; optimization preview only if time). **Its WOD is not
+    chosen yet.**
+  - Tuesday: group meetings on final project proposals (no lab).
+  - Wednesday, Oct. 14: optimization (Bolker Ch. 7, 7.1-7.2 and 7.4).
+    Nothing built yet.
+- **Unused WOD.** `wod/WOD_Week7_Lecture2_CurvatureByHand.Rmd` (and its
+  key) was never handed out (students were busy with proposals). It
+  covers Poisson/binomial curvature by hand and the chytrid Wald
+  interval going negative; students have not seen it. Tentative plan:
+  a shortened version in Week 8. Rename the file, header, and key to
+  the new week/slot if it's used.
+- **Coming later:** MCMC and Lab 7 on Bayesian inference (Week 9).
+- **Framing to keep:** Hessian (quadratic approximation) intervals are
+  the practical default for multiparameter models; profile intervals
+  are the check when it matters (Bolker's cautions still apply).
+  Gamma regressions use Bolker's parameterization (constant shape,
+  scale = mean/shape); legacy LAB3/LAB4/LECTURE9 pages were fixed to
+  match.

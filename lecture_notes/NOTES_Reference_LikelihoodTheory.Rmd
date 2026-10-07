@@ -1,0 +1,357 @@
+---
+title: "Why Likelihood Intervals Work: A Graphical Guide"
+subtitle: "Reference notes on the score, Fisher information, and the sampling distribution of the MLE"
+fontsize: 12pt
+output:
+  pdf_document: default
+  # word_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=3pt, parsep=0pt, topsep=3pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 3.2, fig.align = "center")
+
+lambda0 <- 3
+lam <- seq(1.4, 6, length.out = 400)
+nll <- function(l, y) -sum(dpois(y, l, log = TRUE))
+score <- function(l, y) sum(y) / l - length(y)
+```
+
+These notes explain why the standard error of a maximum likelihood
+estimate is $1/\sqrt{\text{curvature}}$, why the MLE is approximately
+normal, and where the 1.92 cutoff for likelihood ratio intervals comes
+from. The approach is graphical; the only math needed is a derivative
+and the central limit theorem.
+
+The running example is the pika survey from lecture: active haypiles
+counted in $n$ talus plots, each count Poisson with mean $\lambda$. To
+see how estimates behave across repeated surveys, we simulate surveys
+from a known truth, $\lambda_0 = 3$.
+
+# 1. Two views of the same curve
+
+For one survey, the negative log-likelihood (NLL) is a valley whose
+bottom is the MLE, $\hat\lambda$. Its slope, with the sign flipped so
+that it points uphill on the log-likelihood, is called the **score**:
+$$U(\lambda) = \frac{d}{d\lambda}\log\mathcal{L}(\lambda) = -\frac{d}{d\lambda}\text{NLL}(\lambda).$$
+For the Poisson, $U(\lambda) = \sum y_i/\lambda - n$.
+
+For the data 2, 5, 3, 0, 4, 4 (figure below):
+
+- The bottom of the valley (top panel) is where the score crosses zero
+  (bottom panel). Both mark the MLE, $\hat\lambda = 3$.
+- The **curvature** of the valley is the **steepness of the score**.
+  A sharp valley means a steep score line; a broad valley means a
+  shallow one.
+- Near the MLE, a **parabola-shaped valley** and a **straight-line
+  score** are the same statement. Everything below depends on it.
+
+The expected steepness of the score (the expected curvature of the NLL)
+is the **Fisher information**, $I$. For the Poisson, $I = n/\lambda$.
+
+```{r fig-two-views, fig.height=4.4}
+set.seed(1)
+y1 <- c(2, 5, 3, 0, 4, 4)
+lam_hat1 <- mean(y1)
+d_nll <- sapply(lam, nll, y = y1) - nll(lam_hat1, y1)
+u1 <- sapply(lam, score, y = y1)
+
+par(mfrow = c(2, 1), mar = c(2, 4.5, 1.5, 0.5), oma = c(2, 0, 0, 0))
+plot(lam, d_nll, type = "l", lwd = 2, ylim = c(0, 5), xlab = "",
+     ylab = "NLL minus its minimum", main = "Negative log-likelihood", cex.main = 0.9)
+abline(v = lam_hat1, lty = 3)
+plot(lam, u1, type = "l", lwd = 2, col = "steelblue", xlab = "",
+     ylab = "Score U", main = "Score (slope of the log-likelihood)", cex.main = 0.9)
+abline(h = 0)
+abline(v = lam_hat1, lty = 3)
+points(lam_hat1, 0, pch = 16, col = "red")
+mtext("lambda", side = 1, line = 0.5, outer = TRUE)
+```
+
+
+# 2. Many surveys, many score curves
+
+A new survey gives new counts, so a new score curve. The figure shows
+the score from 15 simulated surveys at two sample sizes.
+
+```{r fig-many, fig.height=3.4}
+score_panel <- function(n, n_sims = 15, ylim = c(-12, 12)) {
+  info <- n / lambda0
+  plot(NA, xlim = c(1.6, 5.5), ylim = ylim, xlab = "lambda", ylab = "Score U",
+       main = paste0(n, " plots (I = ", round(info, 1), ")"), cex.main = 0.9)
+  abline(h = 0, lwd = 1.5)
+  abline(v = lambda0, lty = 3, col = "grey40")
+  for (i in seq_len(n_sims)) {
+    y <- rpois(n, lambda0)
+    lines(lam, sapply(lam, score, y = y), col = adjustcolor("steelblue", 0.6))
+    points(mean(y), 0, pch = 16, col = "red", cex = 0.8)
+    points(lambda0, score(lambda0, y), pch = 16, col = "steelblue4", cex = 0.6)
+  }
+  yy <- seq(ylim[1], ylim[2], length.out = 200)
+  lines(lambda0 + 0.55 * dnorm(yy, 0, sqrt(info)) / dnorm(0, 0, sqrt(info)), yy,
+        col = "steelblue4", lwd = 2)
+  xx <- seq(1.6, 5.5, length.out = 300)
+  dx <- dnorm(xx, lambda0, sqrt(1 / info))
+  lines(xx, ylim[1] + 5 * dx / max(dx), col = "red", lwd = 2)
+}
+set.seed(746)
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 0.5))
+score_panel(6)
+score_panel(24)
+```
+
+Read it in four steps.
+
+1. **Each curve crosses zero at that survey's MLE** (red dots). The
+   crossings spread along the axis: that spread is the sampling
+   distribution of $\hat\lambda$.
+2. **At the true value, look up and down.** The blue dots are each
+   curve's height at $\lambda_0 = 3$. They are centered on 0, because
+   at the truth the log-likelihood is flat on average.
+3. **Those heights are normal.** The score is a sum over plots,
+   $U(\lambda_0) = \sum_i (y_i/\lambda_0 - 1)$, so the central limit
+   theorem applies. Their variance turns out to be $I$ (section 4
+   explains why), drawn as the blue bell.
+4. **Each curve slopes down at about $-I$.** Section 3 turns this into
+   the spread of the red dots.
+
+# 3. Turning vertical spread into horizontal spread
+
+Zoom in near the truth, where each score curve is close to a straight
+line with slope $-I$.
+
+```{r fig-shift, fig.height=3}
+info6 <- 6 / lambda0
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 0.5))
+plot(NA, xlim = c(2.4, 4.1), ylim = c(-1.5, 2.2), xlab = "lambda", ylab = "Score U",
+     main = "Shift = height / slope", cex.main = 0.9)
+abline(h = 0)
+abline(v = lambda0, lty = 3, col = "grey40")
+h <- 1.6
+for (s in c(info6, 2.5 * info6)) {
+  xs <- seq(2.4, 4.1, length.out = 50)
+  lines(xs, h - s * (xs - lambda0), lwd = 2, col = if (s == info6) "steelblue" else "darkorange")
+  points(lambda0 + h / s, 0, pch = 16, col = "red")
+}
+points(lambda0, h, pch = 16, col = "steelblue4")
+legend("topright", c("shallow (small I)", "steep (large I)"), lwd = 2,
+       col = c("steelblue", "darkorange"), bty = "n", cex = 0.75)
+
+set.seed(746)
+sims_n <- 24
+hats <- replicate(4000, mean(rpois(sims_n, lambda0)))
+hist(hats, breaks = seq(1.5, 4.6, by = 1 / sims_n), freq = FALSE, col = "grey85",
+     border = "white", main = "MLE across 4,000 surveys (24 plots)", cex.main = 0.9,
+     xlab = "MLE of lambda")
+curve(dnorm(x, lambda0, sqrt(lambda0 / sims_n)), add = TRUE, lwd = 2, col = "red")
+```
+
+- **Left:** a curve that sits a height $h$ above zero at the truth has
+  to travel $h/I$ to the right before it reaches zero. A steeper line
+  (larger $I$) gets there sooner, so its MLE lands closer to the truth.
+- The heights have variance $I$. Dividing by the constant slope $I$
+  gives the MLEs a variance of
+  $$\frac{\text{Var}(U)}{I^2} = \frac{I}{I^2} = \frac{1}{I}.$$
+- **Right:** across 4,000 simulated surveys of 24 plots, the MLEs
+  follow the predicted $\text{Normal}(\lambda_0,\ 1/I) =
+  \text{Normal}(3,\ 3/24)$ (red curve).
+
+**More data.** With 24 plots instead of 6, the heights at the truth
+spread *more* (their variance $I$ grows with $n$), but the lines get
+steeper just as fast (their slope is also $I$). Spread grows like
+$\sqrt{n}$, slope like $n$, so the MLEs tighten like $1/\sqrt{n}$. This
+also settles a common puzzle: more data lowers the maximum likelihood
+itself, but what matters for the estimate is the steepness, not the
+height.
+
+**Check with the pikas.** Here the straight-line step is exact:
+$$\hat\lambda - \lambda_0 = \frac{U(\lambda_0)}{n/\lambda_0}
+ = \frac{\sum y_i/\lambda_0 - n}{n/\lambda_0} = \bar y - \lambda_0,
+ \qquad \text{Var}(\hat\lambda) = \frac{\lambda_0}{n} = \frac{1}{I}.$$
+
+# 4. Why the variance of the score equals its slope
+
+Section 3 needed the variance of the score and its slope to be the same
+number, $I$. This is the **information identity**, and the score
+curves show why it has to hold: **the curves must move when the truth
+moves.**
+
+```{r fig-identity, fig.height=3.2}
+n_id <- 6
+delta <- 0.5
+exp_score <- function(l, lam_true) n_id * lam_true / l - n_id
+par(mar = c(4, 4, 1.5, 0.5))
+plot(lam, exp_score(lam, lambda0), type = "l", lwd = 2, col = "steelblue",
+     xlim = c(2, 5), ylim = c(-2.5, 3), xlab = "lambda", ylab = "Average score")
+lines(lam, exp_score(lam, lambda0 + delta), lwd = 2, col = "darkorange")
+abline(h = 0)
+abline(v = c(lambda0, lambda0 + delta), lty = 3, col = "grey40")
+gap <- exp_score(lambda0, lambda0 + delta)
+arrows(lambda0 - 0.08, 0, lambda0 - 0.08, gap, length = 0.08, lwd = 2)
+text(lambda0 - 0.12, gap / 2, "gap", pos = 2, cex = 0.8)
+legend("topright", c("data from lambda = 3", "data from lambda = 3.5"),
+       lwd = 2, col = c("steelblue", "darkorange"), bty = "n", cex = 0.8)
+```
+
+The blue curve is the average score when the data come from
+$\lambda_0 = 3$; it crosses zero at 3. Now nudge the truth to
+$\lambda_0 + \delta = 3.5$ (orange). The new curve must cross zero at
+3.5, or the MLE wouldn't track the truth.
+
+- **How far it needs to move (the slope).** The curves fall at slope
+  $-I$, so to cross zero $\delta$ further right, the new curve must
+  sit about $\delta \cdot I$ above zero at the old value, 3. That's the
+  gap.
+- **How far it does move (the variance).** Changing the truth changes
+  which surveys are likely. A survey becomes more likely by a factor of
+  about $(1 + \delta\, U)$, where $U$ is that survey's score at 3: the
+  surveys that already "pointed" toward larger $\lambda$ become more
+  common. So the average score at 3 rises by
+  $E[U \cdot \delta U] = \delta \cdot \text{Var}(U)$.
+
+Both describe the same gap, so $\delta \cdot \text{Var}(U) = \delta
+\cdot I$, which means $\text{Var}(U) = I$. For these numbers the gap is
+`r round(gap, 2)` $=\delta \cdot I = 0.5 \times 6/3$.
+
+**The calculus version, for one observation.** Write the score as
+$u = f'/f$, so $f' = u f$. The score averages to zero for every value
+of the parameter, $E[u] = \int f'\,dy = \frac{d}{d\theta}\int f\,dy = 0$.
+Differentiating that once more:
+$$0 = \int \left(u' f + u f'\right) dy = E[u'] + E[u^2]
+ \quad\Rightarrow\quad E[-u'] = E[u^2] = \text{Var}(u).$$
+The first term is the curve tilting (slope); the second is the data
+being reweighted toward high-score outcomes (variance).
+
+# 5. The parabola, the interval, and the 1.92 cutoff
+
+Sections 2 and 3 described many surveys. In practice we have one, and
+we use the shape of its NLL near the MLE. The second-order Taylor
+expansion around $\hat\lambda$ (the first derivative is zero there) is
+$$\text{NLL}(\lambda) \approx \text{NLL}(\hat\lambda) +
+ \tfrac{1}{2}\, I\, (\lambda - \hat\lambda)^2,$$
+a parabola whose curvature is the slope of the score.
+
+```{r fig-parabola, fig.height=3.1}
+info_obs <- sum(y1) / lam_hat1^2
+quad <- 0.5 * info_obs * (lam - lam_hat1)^2
+cut <- qchisq(0.95, 1) / 2
+f_cut <- function(l) nll(l, y1) - nll(lam_hat1, y1) - cut
+lr_int <- c(uniroot(f_cut, c(0.5, 3))$root, uniroot(f_cut, c(3, 8))$root)
+wald_int <- lam_hat1 + c(-1, 1) * qnorm(0.975) / sqrt(info_obs)
+
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 0.5))
+plot(lam, d_nll, type = "l", lwd = 2, ylim = c(0, 5), xlab = "lambda",
+     ylab = "NLL minus its minimum", main = "NLL and its parabola", cex.main = 0.9)
+lines(lam, quad, lwd = 2, lty = 2, col = "blue")
+abline(h = cut, col = "red")
+abline(v = lr_int, lty = 3)
+abline(v = wald_int, lty = 3, col = "blue")
+plot(lam, u1, type = "l", lwd = 2, col = "steelblue", ylim = c(-4, 6), xlab = "lambda",
+     ylab = "Score U", main = "Score and its straight line", cex.main = 0.9)
+lines(lam, -info_obs * (lam - lam_hat1), lwd = 2, lty = 2, col = "blue")
+abline(h = 0)
+legend("topright", c("exact", "approximation"), lwd = 2, lty = c(1, 2),
+       col = c("steelblue", "blue"), bty = "n", cex = 0.75)
+```
+
+- **The interval from the parabola.** Setting the rise equal to the
+  cutoff, $\tfrac12 I d^2 = 1.92$, gives $d = 1.96/\sqrt{I}$: the
+  Hessian (Wald) interval, $\hat\lambda \pm 1.96\,\text{SE}$, here
+  [`r round(wald_int[1], 2)`, `r round(wald_int[2], 2)`].
+- **Where 1.92 comes from.** Put the true value into the parabola:
+  $$2\,[\text{NLL}(\lambda_0) - \text{NLL}(\hat\lambda)] \approx
+   I\,(\hat\lambda - \lambda_0)^2 =
+   \left(\frac{\hat\lambda - \lambda_0}{1/\sqrt{I}}\right)^2 = Z^2.$$
+  Section 3 showed that the quantity in parentheses is a standard
+  normal, $Z$, so twice the NLL difference is $\chi^2_1$ (Wilks'
+  theorem). Its 95th percentile is 3.84, and half of that is 1.92.
+- **The likelihood ratio interval** uses the 1.92 cutoff on the true
+  curve instead of the parabola: [`r round(lr_int[1], 2)`,
+  `r round(lr_int[2], 2)`]. It follows the curve's lopsidedness, which
+  the parabola can't.
+
+So the Hessian interval and the likelihood ratio interval come from the
+same idea. They agree when the score is close to a straight line, and
+they part ways when it bends, as it does here with only 6 plots.
+
+```{r fig-wilks, fig.height=2.8}
+set.seed(746)
+dev_stat <- replicate(4000, {
+  y <- rpois(24, lambda0)
+  2 * (nll(lambda0, y) - nll(mean(y), y))
+})
+par(mar = c(4, 4, 1.5, 0.5))
+hist(dev_stat, breaks = 60, freq = FALSE, col = "grey85", border = "white",
+     xlim = c(0, 8), main = "", xlab = "2 x [NLL(true value) - NLL(MLE)], 24 plots")
+curve(dchisq(x, 1), add = TRUE, lwd = 2, col = "red", from = 0.05)
+abline(v = qchisq(0.95, 1), lty = 2)
+```
+
+Across 4,000 simulated surveys, twice the NLL difference at the true
+value follows a $\chi^2_1$ distribution (red curve); about 95% of
+surveys fall below 3.84 (dashed line). In this simulation the share is
+`r round(mean(dev_stat <= qchisq(0.95, 1)), 3)`.
+
+# 6. When the picture breaks
+
+Every step above assumed the score curves are close to straight lines,
+their heights are close to normal, and the model is right. Each can
+fail.
+
+```{r fig-breaks, fig.height=3.1}
+set.seed(746)
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 0.5))
+small_lam <- 0.5
+hats_small <- replicate(4000, mean(rpois(6, small_lam)))
+hist(hats_small, breaks = seq(-0.5 / 6, 3, by = 1 / 6), freq = FALSE, col = "grey85",
+     border = "white", main = "Small lambda (0.5), 6 plots", cex.main = 0.9,
+     xlab = "MLE of lambda", xlim = c(-0.5, 2))
+curve(dnorm(x, small_lam, sqrt(small_lam / 6)), add = TRUE, lwd = 2, col = "red")
+abline(v = 0, lty = 3)
+
+heights_nb <- replicate(4000, score(lambda0, rnbinom(24, mu = lambda0, size = 2)))
+hist(heights_nb, breaks = 60, freq = FALSE, col = "grey85", border = "white",
+     main = "Overdispersed counts, 24 plots", cex.main = 0.9,
+     xlab = "Score at the true value", xlim = c(-15, 20))
+curve(dnorm(x, 0, sqrt(24 / lambda0)), add = TRUE, lwd = 2, col = "red")
+```
+
+- **Near a boundary or with little data (left).** With $\lambda_0 =
+  0.5$ and 6 plots, the MLE is skewed, and the normal approximation
+  (red) puts probability below zero, where $\lambda$ can't go. This is
+  why a Hessian interval for a prevalence of 2 in 20 can have a
+  negative lower limit. The likelihood ratio interval or a Bayesian
+  interval handles this better.
+- **Wrong model (right).** Here the counts are more variable than a
+  Poisson allows (negative binomial), but we still fit a Poisson. The
+  score heights spread far more than the predicted bell (red). Variance
+  and slope no longer match, so the Hessian standard errors are too
+  small. "Sandwich" (robust) standard errors estimate the two pieces
+  separately for this reason.
+- **Several parameters.** The same argument runs with vectors and
+  matrices: $\hat\theta - \theta_0 \approx I^{-1} U$, so the
+  variance-covariance matrix of the estimates is $I^{-1}$, the inverse
+  of the Hessian. Its off-diagonal entries are the correlations between
+  estimates, the tilt of the likelihood surface.
+
+# Summary
+
+| Idea | Graphical meaning | Formula |
+|:-------------------|:-------------------------------------|:--------------------------|
+| Score | slope of the log-likelihood | $U(\theta) = \frac{d}{d\theta}\log\mathcal{L}(\theta)$ |
+| MLE | where the score crosses zero | $U(\hat\theta) = 0$ |
+| Fisher information | steepness of the score; curvature of the NLL | $I = E[-U'(\theta_0)]$ |
+| Score at the truth | heights of the curves at $\theta_0$; normal by the CLT | $U(\theta_0) \approx \text{Normal}(0,\, I)$ |
+| Information identity | curves must move when the truth moves | $\text{Var}(U) = I$ |
+| Sampling distribution of the MLE | crossing points = height / slope | $\hat\theta \approx \text{Normal}(\theta_0,\, 1/I)$ |
+| Hessian (Wald) interval | width of the parabola at 1.92 | $\hat\theta \pm 1.96/\sqrt{I}$ |
+| Likelihood ratio cutoff | squared standard normal | $2\,\Delta\text{NLL} \sim \chi^2_1$, cutoff 1.92 |
+
+One sentence holds it together: **a parabola-shaped log-likelihood and a
+straight-line score are the same assumption, and the normal sampling
+distribution, the Hessian interval, and the 1.92 cutoff all rest on
+it.**

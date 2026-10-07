@@ -29,8 +29,6 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
   especially 4.3.3 on priors), and the Beta distribution (Bolker
   4.5.2.5, p. 176). Look back at the Week 5 WOD (*Writing the
   Likelihood*) and your likelihood values from Part 2.
-- **Wednesday's take-home WOD** will be handed out at the start of
-  class and is due Monday.
 
 # Overview (instructor only)
 
@@ -38,36 +36,33 @@ This file has two parts, both instructor-only. **Part 1** is read
 beforehand. **Part 2** (after the page break, large print) is the
 podium copy.
 
-| Beat | Time |
-|---|---|
-| Hand out take-home WOD (*Curvature by Hand*) | ~3 min |
-| Lecture | ~37 min |
-| Discussion | ~8 min |
+**As taught (Wed., Oct. 7).** The period covered:
 
-**Pacing.** Monday's lecture held about twice what fit, so plan on
-covering less than the section times suggest. Core: sections 1-3, two
-confusions from section 5 ((a) and (b)), two reasons from section 6,
-and section 7. Section 4 and the rest of 5-6 are "if time."
+- logistic regression and the log-odds (not planned; Lab 6 used a
+  logistic dose-response model that hadn't come up in lecture), now
+  written up as the opening section below;
+- section 1 (big picture: parameter uncertainty as a probability
+  distribution);
+- section 2 (Bayes' rule applied to parameter values, with the focus on
+  the numerator, prior $\times$ likelihood; the worked nest example);
+- section 3 (the Beta-binomial conjugacy math).
 
-No in-class WOD today. Hand out
-`wod/WOD_Week7_Lecture2_CurvatureByHand.Rmd`, say it's due Monday at
-the start of class, and point out that Part 3 is the only part that
-needs R. Budget time Monday to go over it (key in
-`wod/answer_keys/`).
+No discussion period. The rest of the original plan (the germination
+example, summarizing a posterior, where new Bayesians get stuck, why
+Bayesian methods are so widely used, and the discussion questions)
+moved to `NOTES_Week8_Lecture1_PriorsAndPosteriors.Rmd`, which starts
+with the germination example.
 
-Source material: Bolker 4.3.3 (priors, and why flat priors aren't
-neutral), 6.2.2.1 (binomial/Beta conjugate example; the numbers below
-are his, recast as a germination trial), 6.4.2 (credible intervals);
+**No WOD today (as taught, Wed., Oct. 7).** The planned take-home WOD,
+`wod/WOD_Week7_Lecture2_CurvatureByHand.Rmd` (key in
+`wod/answer_keys/`), was not handed out because students are working
+on project proposals. It is unused and can be reused later, tentatively
+as a shortened version in Week 8.
+
+Source material: Bolker 6.2.2.1 (binomial/Beta conjugate example);
 legacy `LECTURE6.Rmd` ("Bayesian Analysis #1: Concepts": prior $\times$
-likelihood figures, brute-force Bayes, mean vs. mode, credible
-intervals); archival `LAB4.Rmd` for the Stan preview (not used today).
-
-**Example choice.** The conjugate example is a seed-germination trial
-rather than Bolker's tadpoles. The numbers (30 of 40, and a prior worth
-120 of 200) are Bolker's from p. 237-238, so students who did the
-reading can check them, but the setting is one the agricultural and
-restoration students will recognize. The opening grid example reuses
-the Week 5 WOD nest data, because students already computed those
+likelihood figures, brute-force Bayes). The grid example reuses the
+Week 5 WOD nest data, because students already computed those
 likelihoods by hand.
 
 # Where this sits in the week
@@ -81,10 +76,53 @@ likelihoods by hand.
   beetle fumigation data: profile and Hessian intervals for the LD50.
 - **Today:** Bayesian inference from the ground up. Keep the math to
   one-parameter examples; MCMC and Stan come later.
-- **Coming up:** optimization (Week 8), then MCMC and Lab 7 on Bayesian
-  inference (Week 9).
+- **Coming up:** Week 8 Monday continues with the germination example
+  and the rest of the Bayesian material, then starts optimization
+  (Bolker Ch. 7) if time; MCMC and Lab 7 on Bayesian inference follow
+  in Week 9.
 
 # Part 1: Lecture content
+
+## Opening: logistic regression and the log-odds (~10 min, added in class)
+
+Lab 6 fit a logistic dose-response curve to the beetle data, but
+lecture hadn't covered the logistic function or the log-odds. Written
+up here as taught, with a neutral example (not the lab's numbers).
+
+**The model.** For a probability that changes with a covariate $x$:
+$$p(x) = \frac{e^{a + bx}}{1 + e^{a + bx}} = \frac{1}{1 + e^{-(a + bx)}}.$$
+It's S-shaped and stays between 0 and 1 for any $a$, $b$, and $x$
+(Bolker's bestiary, Ch. 3).
+
+**The log-odds.** The odds are $p/(1-p)$ (e.g. $p = 0.75$ is odds of
+3, "3 to 1"). Taking logs of the odds undoes the logistic:
+$$\log\frac{p}{1-p} = a + bx.$$
+So logistic regression is a straight line on the log-odds scale.
+
+- $b$ is the change in log-odds per unit of $x$; $e^b$ multiplies the
+  odds.
+- $p = 0.5$ where $a + bx = 0$, so at $x = -a/b$ (the LD50 in Lab 6).
+- In R: `plogis()` is the logistic function, `qlogis()` the log-odds.
+
+```{r logistic-fig, fig.width=6.5, fig.height=2.6}
+a_ex <- -2; b_ex <- 0.8   # nest success vs. distance from edge (100s of m)
+x_seq <- seq(0, 6, length.out = 200)
+par(mfrow = c(1, 2), mar = c(4, 4.5, 1.5, 0.5))
+plot(x_seq, plogis(a_ex + b_ex * x_seq), type = "l", lwd = 2, ylim = c(0, 1),
+     xlab = "Distance from edge (100 m)", ylab = "P(nest succeeds)",
+     main = "Probability scale", cex.main = 0.9)
+abline(h = 0.5, v = -a_ex / b_ex, lty = 3)
+plot(x_seq, a_ex + b_ex * x_seq, type = "l", lwd = 2,
+     xlab = "Distance from edge (100 m)", ylab = "log(p / (1 - p))",
+     main = "Log-odds scale", cex.main = 0.9)
+abline(h = 0, v = -a_ex / b_ex, lty = 3)
+```
+
+**Sticking point:** odds and probability get used interchangeably in
+casual speech. Odds of 3 is a probability of 0.75, not 3.
+
+The log-odds scale comes back with priors: a prior that is flat on $p$
+is not flat on the log-odds (next session).
 
 ## 1. Big picture (~3 min)
 
@@ -133,23 +171,60 @@ sum(lik3)          # Week 5 WOD 2d: likelihoods don't sum to 1
   sum to 1 (Bolker eq. 4.3.16).
 
 **Step 2: more hypotheses.** Nothing stops us using 100 or 10,000
-values of $p$. The sum becomes an integral and the prior and posterior
-become probability **densities**:
+values of $p$, still with equal prior weight on each. Below, the same
+calculation with 3, 11, and 101 values:
+
+```{r grid-refine, fig.width=6.5, fig.height=2.6}
+# posterior probability at each of n_grid equally spaced values of p (flat prior)
+grid_post <- function(n_grid) {
+  p_g <- seq(0, 1, length.out = n_grid + 2)[-c(1, n_grid + 2)]
+  w <- p_g^3 * (1 - p_g)
+  list(p = p_g, prob = w / sum(w), spacing = diff(p_g)[1])
+}
+# bars = probabilities; on the finest grid, overlay Beta(4, 2) density x spacing
+plot_grids <- function(ylab = "Posterior probability", titles = TRUE) {
+  par(mfrow = c(1, 3), mar = c(4, 4, 2, 2.5))
+  for (n_grid in c(3, 11, 101)) {
+    g <- grid_post(n_grid)
+    plot(g$p, g$prob, type = "h", lwd = if (n_grid < 20) 4 else 1,
+         col = if (n_grid < 20) "black" else "grey60",
+         xlim = c(0, 1), xlab = "p", ylab = ylab, cex.main = 0.9,
+         main = if (titles) paste(n_grid, "hypotheses") else n_grid)
+    if (n_grid == 101) {
+      lines(g$p, dbeta(g$p, 4, 2) * g$spacing, lwd = 2, col = "darkorange")
+      axis(4, at = (0:2) * g$spacing, labels = 0:2, col.axis = "darkorange")
+      mtext("density", side = 4, line = 1.6, cex = 0.6, col = "darkorange")
+    }
+  }
+}
+plot_grids()
+grid_tab <- t(sapply(c(3, 11, 101), function(n_grid) {
+  g <- grid_post(n_grid)
+  c(n = n_grid, tallest_bar = max(g$prob),
+    bar_over_spacing = max(g$prob) / g$spacing)
+}))
+round(grid_tab, 3)
+dbeta(0.75, 4, 2)   # peak of the limiting density
+```
+
+- **The bars shrink.** The tallest bar goes from
+  `r round(grid_tab[1, 2], 3)` to `r round(grid_tab[2, 2], 3)` to
+  `r round(grid_tab[3, 2], 3)`. With more hypotheses the same total
+  probability is split among more of them, and with infinitely many,
+  each single value of $p$ has probability zero.
+- **Divide by the spacing and it settles down.** Probability per unit
+  of $p$ (bar $\div$ spacing) gives `r round(grid_tab[1, 3], 2)`,
+  `r round(grid_tab[2, 3], 2)`, `r round(grid_tab[3, 3], 2)`: by 101
+  values it matches the peak of the orange curve
+  (`r round(dbeta(0.75, 4, 2), 2)`). That curve is a probability
+  **density**, Beta(4, 2) (section 3 explains
+  the name). Probabilities now come from areas under it.
+- So the sum becomes an integral and the prior and posterior become
+  densities:
 
 $$\underbrace{P(p \mid y)}_{\text{posterior}} =
   \frac{\overbrace{\mathcal{L}(p)}^{\text{likelihood}}\;\overbrace{P(p)}^{\text{prior}}}
        {\int_0^1 \mathcal{L}(p)\,P(p)\,dp}$$
-
-```{r grid-refine, fig.width=6.5, fig.height=2.6}
-par(mfrow = c(1, 3), mar = c(4, 4, 2, 0.5))
-for (n_grid in c(3, 11, 101)) {
-  p_g <- seq(0, 1, length.out = n_grid + 2)[-c(1, n_grid + 2)]
-  w <- p_g^3 * (1 - p_g)
-  plot(p_g, w / sum(w), type = "h", lwd = if (n_grid < 20) 4 else 1,
-       xlim = c(0, 1), xlab = "p", ylab = "Posterior probability",
-       main = paste(n_grid, "hypotheses"), cex.main = 0.9)
-}
-```
 
 - The denominator is a single number, the **marginal likelihood**: the
   probability of the data averaged over all parameter values. It only
@@ -163,212 +238,42 @@ for (n_grid in c(3, 11, 101)) {
 **Sticking point:** students conflate "a probability distribution for
 $p$" with "$p$ is random, like a coin flip." Say plainly: to a Bayesian
 the posterior describes *our knowledge* of $p$, not variation in $p$
-itself. The germination rate is one number; we're uncertain about it.
+itself. The nest success rate is one number; we're uncertain about it.
 
-## 3. A worked example: the Beta prior (~8 min)
+**Second sticking point:** "the posterior probability that $p = 0.75$
+is 2.1." A density isn't a probability (it can exceed 1). Ask the room
+why the bars keep shrinking before giving the answer.
 
-**Setting.** A restoration crew tests a native seed lot: 30 of 40 seeds
-germinate. What is the lot's germination probability $p$?
+## 3. The Beta prior and conjugacy (~8 min)
 
-**The likelihood** is binomial: $\mathcal{L}(p) \propto p^{30}(1-p)^{10}$.
+For $k$ successes in $n$ binomial trials, the likelihood is
+$\mathcal{L}(p) \propto p^{k}(1-p)^{n-k}$.
 
 **The prior.** A Beta($\alpha$, $\beta$) density is
 $P(p) \propto p^{\alpha - 1}(1-p)^{\beta - 1}$. Same shape as a
-binomial likelihood. Multiply them:
-$$P(p \mid y) \propto p^{30 + \alpha - 1}(1-p)^{10 + \beta - 1},$$
+binomial likelihood. Multiply them (the numerator of Bayes' rule):
+$$P(p \mid y) \propto p^{k + \alpha - 1}(1-p)^{n - k + \beta - 1},$$
 which is another Beta: **Beta($\alpha + k$, $\beta + n - k$)**. A
 prior that gives a posterior from the same family is called
 **conjugate**. It means no integral: just add counts.
 
 - Interpretation (Bolker p. 237): $\alpha - 1$ and $\beta - 1$ act
   like earlier successes and failures. Beta(1, 1) is flat: no prior
-  seeds.
-- **Flat prior:** posterior Beta(31, 11).
-- **Informative prior:** the supplier's records say 120 of 200 seeds
-  from earlier lots germinated. Prior Beta(121, 81); posterior
-  Beta(151, 91).
+  data.
+- The nests: 3 of 4 with a flat prior gives Beta(4, 2), the orange
+  curve in the grid figure above.
 
-```{r germ-setup}
-k <- 30; n <- 40
-post_flat <- c(1 + k, 1 + n - k)
-post_info <- c(121 + k, 81 + n - k)
-beta_mean <- function(ab) ab[1] / sum(ab)
-beta_mode <- function(ab) (ab[1] - 1) / (sum(ab) - 2)
-summ <- rbind(
-  flat = c(mean = beta_mean(post_flat), mode = beta_mode(post_flat),
-           qbeta(c(0.025, 0.975), post_flat[1], post_flat[2])),
-  informative = c(mean = beta_mean(post_info), mode = beta_mode(post_info),
-                  qbeta(c(0.025, 0.975), post_info[1], post_info[2]))
-)
-colnames(summ)[3:4] <- c("lower95", "upper95")
-round(summ, 3)
-f2 <- function(v) formatC(v, format = "f", digits = 2)
-```
+**Sticking point:** the proportionality sign. The constant in front of
+the Beta density gets dropped while multiplying and comes back at the
+end, because a density has to integrate to 1. That's the denominator
+of Bayes' rule doing its job.
 
-```{r germ-fig, fig.width=6.5, fig.height=2.8}
-p_seq <- seq(0.001, 0.999, length.out = 500)
-lik_scaled <- dbeta(p_seq, k + 1, n - k + 1)   # likelihood rescaled to area 1
-plot_panel <- function(prior_ab, post_ab, title) {
-  plot(p_seq, dbeta(p_seq, post_ab[1], post_ab[2]), type = "l", lwd = 2,
-       ylim = c(0, 14), xlab = "Germination probability, p", ylab = "Density",
-       main = title, cex.main = 0.9)
-  lines(p_seq, dbeta(p_seq, prior_ab[1], prior_ab[2]), lwd = 2, col = "grey60")
-  lines(p_seq, lik_scaled, lwd = 2, lty = 2, col = "darkorange")
-}
-par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 0.5))
-plot_panel(c(1, 1), post_flat, "Flat prior, Beta(1, 1)")
-legend("topleft", c("prior", "likelihood (rescaled)", "posterior"),
-       lwd = 2, lty = c(1, 2, 1), col = c("grey60", "darkorange", "black"),
-       bty = "n", cex = 0.7)
-plot_panel(c(121, 81), post_info, "Supplier prior, Beta(121, 81)")
-```
-
-- **Flat prior:** the posterior *is* the rescaled likelihood. Its mode
-  is 0.75, the MLE; its mean is `r round(beta_mean(post_flat), 3)`,
-  slightly pulled toward 0.5.
-- **Supplier prior:** the posterior sits between prior and data, closer
-  to the prior (mean `r round(beta_mean(post_info), 3)`), because the
-  prior is "worth" 200 seeds and the data only 40.
-- **More data wins.** If the crew had tested 400 seeds with 300
-  germinating, the same supplier prior gives a posterior mean of
-  `r round(beta_mean(c(121 + 300, 81 + 100)), 3)`: the data now
-  outweigh the prior two to one.
-- **Updating in sequence.** Today's posterior is tomorrow's prior.
-  Testing 40 seeds and then 40 more gives the same answer as testing 80
-  at once (Bolker p. 237).
-
-## 4. Summarizing a posterior (~4 min, if time)
-
-- **Point estimates.** Posterior mean (most common), median, or mode.
-  With a flat prior, the mode equals the MLE. For skewed posteriors the
-  three differ; Bolker prefers the mean because it uses the whole
-  distribution.
-- **Credible interval.** The central 95% of the posterior (2.5% and
-  97.5% quantiles), or the highest posterior density (HPD) interval,
-  the shortest interval holding 95% (Bolker p. 258-259). For
-  symmetric posteriors they coincide.
-- **Interpretation.** "Given the model, the prior, and the data, there
-  is a 95% probability that $p$ is between
-  `r f2(summ["flat", "lower95"])` and
-  `r f2(summ["flat", "upper95"])`." That is the sentence most
-  people *want* to say about a confidence interval (Monday's discussion
-  question 1), and a Bayesian is allowed to say it.
-
-## 5. Where new Bayesians get stuck (~8 min)
-
-Pick four or five; each takes a minute or two.
-
-**(a) "The likelihood is the posterior."** Only after multiplying by a
-prior and rescaling to area 1. The likelihood alone doesn't integrate
-to 1 (Week 5 WOD) and isn't a distribution for $p$.
-
-**(b) "A flat prior means no information."** Flat on one scale isn't
-flat on another (Bolker 4.3.3, the bird-mass example). A uniform prior
-on $p$ implies a prior on the log-odds, $\log\frac{p}{1-p}$, that is
-peaked at 0:
-
-```{r flat-not-flat, fig.width=6.5, fig.height=2.4}
-set.seed(746)
-p_draws <- runif(1e5)
-par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 0.5))
-hist(p_draws, breaks = 40, freq = FALSE, col = "grey80", border = "white",
-     main = "Flat prior on p", xlab = "p", cex.main = 0.9)
-hist(qlogis(p_draws), breaks = 60, freq = FALSE, col = "grey80", border = "white",
-     main = "Same prior, log-odds scale", xlab = "log(p / (1 - p))",
-     xlim = c(-8, 8), cex.main = 0.9)
-curve(dlogis(x), add = TRUE, lwd = 2)
-```
-
-So "uninformative" always means "uninformative on some scale." With
-plenty of data it rarely matters; with little data it can.
-
-**(c) "Priors let you get any answer you want."** In principle yes
-(Bolker p. 150: a prior of 0 on a hypothesis means no data can ever
-support it). In practice: priors must be reported, reviewers can
-object, and the standard move is a **prior sensitivity analysis**: rerun
-with a few reasonable priors and see whether the conclusion changes.
-If it does, the data are weak and that's worth knowing.
-
-**(d) "Bayesian means MCMC."** MCMC is a computing method for
-approximating posteriors when the denominator can't be computed. The
-germination example needed none. Conversely, MCMC can be used for
-non-Bayesian problems too.
-
-**(e) "The credible interval and the confidence interval are the same
-thing."** With a flat prior and plenty of data the numbers are often
-close (Monday's pikas: likelihood ratio [1.82, 4.61]; with a flat prior
-the posterior is Gamma(19, 6), credible interval [1.91, 4.74]), but the
-statements differ: a credible interval is a
-probability statement about the parameter; a confidence interval is a
-statement about the procedure.
-
-**(f) "A high posterior probability proves the model."** Every
-posterior is conditional on the model being right. A Bayesian model
-still has to be confronted with data (does it predict data that look
-like what we saw?) and compared with rivals. The loop on the board
-doesn't change.
-
-## 6. Why Bayesian methods are so widely used (~5 min)
-
-**Interpretation.**
-
-- Direct probability statements about parameters and hypotheses: "95%
-  probability the germination rate is between
-  `r f2(summ["flat", "lower95"])` and `r f2(summ["flat", "upper95"])`."
-- Natural accumulation of evidence: last year's posterior is this
-  year's prior.
-
-**Practical.**
-
-- **Uncertainty in derived quantities is easy to get.** Callback to
-  Lab 6: for the LD50, a Bayesian draws many $(a, b)$ pairs from the
-  posterior and computes $-a/b$ for each; the spread of those values is
-  the posterior for the LD50. No profile, no reparameterization.
-- **Hierarchical models.** Plots within sites within regions, animals
-  measured repeatedly, many species sharing information: these models
-  have many parameters, some describing variation among groups. They
-  are awkward to fit by maximum likelihood and natural in a Bayesian
-  framework (later in the semester).
-- **Hidden quantities.** True occupancy when detection is imperfect
-  (the frog from Lab 5), true infection status behind a noisy test, the
-  true population size behind a count. These are just more unknowns in
-  a Bayesian model.
-- **Small samples.** No reliance on large-sample approximations like
-  the Hessian interval that went negative for the chytrid data (the
-  take-home WOD shows this).
-- **Prior information.** Previous studies, expert knowledge, or
-  physical limits can be built in openly.
-
-**Costs.** Priors must be chosen and defended; computation
-can be slow; MCMC output has to be checked for convergence.
-
-## 7. Return to the big picture (~1 min)
+## 4. Return to the big picture (~1 min)
 
 - Same model, same likelihood. Bayesian inference multiplies by a prior
   and reads uncertainty off a posterior distribution.
 - With one parameter and a conjugate prior, it's just adding counts.
-  With many parameters, we need MCMC (Week 9).
-
-# Discussion (~8 min)
-
-Pick one or two:
-
-1. A restoration manager says, "I don't want the supplier's claims
-   anywhere near my germination estimate." Is that a reasonable
-   position? What would you show them?
-2. Two analysts fit the same germination data with "flat" priors, one
-   flat on $p$ and one flat on the log-odds of $p$. Could they get
-   different answers? When would it matter?
-3. In Lab 6 you built a profile interval for the LD50. How would a
-   Bayesian get an interval for the LD50, and which approach would you
-   rather use for a model with ten parameters?
-4. Monday's 95% likelihood ratio interval for the pikas was about
-   [1.8, 4.6]. A land manager asks, "So there's a 95% chance the true
-   density is between 1.8 and 4.6?" Can you say yes? What could a
-   Bayesian say instead?
-
-Question 1 surfaces the "priors are cheating" worry. Question 3
-connects today to Tuesday's lab and sets up MCMC.
+  Next time: a worked example with two different priors.
 
 \newpage
 \large
@@ -376,12 +281,29 @@ connects today to Tuesday's lab and sets up MCMC.
 # PART 2: PODIUM CHEAT SHEET
 
 \normalsize
-\textit{Terse on purpose. Full rationale and code: Part 1.}
+\textit{Terse on purpose. Full rationale and code: Part 1. As taught, Oct. 7.}
 \large
 
-**Take-home WOD ~3 min. Lecture ~37 min. Discussion ~8 min.**
+**No WOD. Logistic ~10 min. Lecture ~35 min.**
 
-- Hand out *Curvature by Hand*; due Monday; only Part 3 needs R
+## Opening: logistic regression (~10 min)
+
+$$p = \frac{1}{1 + e^{-(a + bx)}} \qquad \log\frac{p}{1-p} = a + bx$$
+
+- Odds = $p/(1-p)$; $p = 0.75$ is odds 3
+- Straight line on the log-odds scale; $e^b$ multiplies the odds
+- $p = 0.5$ at $x = -a/b$ (Lab 6 LD50)
+- `plogis()`, `qlogis()`
+
+```{r podium-logistic, echo=FALSE, fig.width=6, fig.height=2.2}
+par(mfrow = c(1, 2), mar = c(4, 4, 1, 0.5))
+plot(x_seq, plogis(a_ex + b_ex * x_seq), type = "l", lwd = 2, ylim = c(0, 1),
+     xlab = "x", ylab = "p")
+plot(x_seq, a_ex + b_ex * x_seq, type = "l", lwd = 2, xlab = "x",
+     ylab = "log-odds")
+```
+
+\newpage
 
 ## 1. Big picture (~3 min)
 
@@ -402,86 +324,30 @@ $$P(H_i \mid D) = \frac{P(D \mid H_i)P(H_i)}{\sum_j P(D \mid H_j)P(H_j)}$$
 - Equal priors $\to$ posterior 3/46, 16/46, 27/46
 
 ```{r podium-grid, echo=FALSE, fig.width=6, fig.height=2.2}
-par(mfrow = c(1, 3), mar = c(4, 4, 2, 0.5))
-for (n_grid in c(3, 11, 101)) {
-  p_g <- seq(0, 1, length.out = n_grid + 2)[-c(1, n_grid + 2)]
-  w <- p_g^3 * (1 - p_g)
-  plot(p_g, w / sum(w), type = "h", lwd = if (n_grid < 20) 4 else 1,
-       xlim = c(0, 1), xlab = "p", ylab = "", main = paste(n_grid),
-       cex.main = 0.9)
-}
+plot_grids(ylab = "", titles = FALSE)
 ```
+
+- Flat prior on every grid
+- Ask: why do the bars shrink? (`r round(grid_tab[1, 2], 2)`, `r round(grid_tab[2, 2], 2)`, `r round(grid_tab[3, 2], 3)`)
+- Bar $\div$ spacing: `r round(grid_tab[1, 3], 2)`, `r round(grid_tab[2, 3], 2)`, `r round(grid_tab[3, 3], 2)` $\to$ density, Beta(4, 2) peak `r round(dbeta(0.75, 4, 2), 2)`
+- One value of $p$ has probability 0; areas give probabilities
 
 $$P(p \mid y) = \frac{\mathcal{L}(p)\,P(p)}{\int \mathcal{L}(p)\,P(p)\,dp}$$
 
 - Denominator = one number; hard in many dimensions $\to$ MCMC
-- **Sticking point:** posterior = our knowledge of $p$, not $p$ varying
+- **Sticking points:** posterior = our knowledge of $p$, not $p$ varying; density $\neq$ probability (can exceed 1)
 
 \newpage
 
-## 3. Beta prior (~8 min)
+## 3. Beta prior and conjugacy (~8 min)
 
-Seeds: **30 of 40** germinate. Supplier: 120 of 200.
-
-- Beta prior $\times$ binomial $\to$ Beta($\alpha + k$, $\beta + n - k$)
+- Binomial: $\mathcal{L}(p) \propto p^k(1-p)^{n-k}$
+- Beta prior: $P(p) \propto p^{\alpha-1}(1-p)^{\beta-1}$
+- Numerator: $p^{k+\alpha-1}(1-p)^{n-k+\beta-1}$ $\to$ Beta($\alpha + k$, $\beta + n - k$)
 - Conjugate = add counts; $\alpha-1$, $\beta-1$ = prior successes, failures
-- Flat: Beta(31, 11); mean `r round(beta_mean(post_flat), 3)`, mode 0.75 = MLE
-- Supplier: Beta(151, 91); mean `r round(beta_mean(post_info), 3)`
-- 300 of 400 with supplier prior: mean `r round(beta_mean(c(421, 181)), 3)`
-- Sequential updating = same answer
+- Beta(1, 1) = flat; nests: Beta(4, 2)
+- Constant dropped, comes back so area = 1
 
-```{r podium-germ, echo=FALSE, fig.width=6, fig.height=2.5}
-par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 0.5))
-plot_panel(c(1, 1), post_flat, "Flat")
-plot_panel(c(121, 81), post_info, "Supplier")
-```
+## 4. Wrap (~1 min)
 
-\newpage
-
-## 4. Summaries (~4 min, if time)
-
-- Mean (usual), median, mode (= MLE if flat)
-- Credible interval: quantiles or HPD
-- Flat: [`r f2(summ["flat", "lower95"])`, `r f2(summ["flat", "upper95"])`]; supplier: [`r f2(summ["informative", "lower95"])`, `r f2(summ["informative", "upper95"])`]
-- "95% probability $p$ is in here" is allowed
-
-## 5. Where people get stuck (~8 min)
-
-- (a) Likelihood $\neq$ posterior (Week 5 WOD)
-- (b) Flat isn't flat on every scale
-
-```{r podium-flat, echo=FALSE, fig.width=5, fig.height=1.9}
-par(mfrow = c(1, 2), mar = c(4, 2, 1, 0.5))
-hist(p_draws, breaks = 40, freq = FALSE, col = "grey80", border = "white",
-     main = "", xlab = "p", ylab = "")
-hist(qlogis(p_draws), breaks = 60, freq = FALSE, col = "grey80", border = "white",
-     main = "", xlab = "log-odds", ylab = "", xlim = c(-8, 8))
-```
-
-- (c) Priors: report them; sensitivity analysis
-- (d) Bayes $\neq$ MCMC
-- (e) Credible $\neq$ confidence (pikas: [1.82, 4.61] vs. [1.91, 4.74])
-- (f) Posterior is conditional on the model; still check and compare
-
-\newpage
-
-## 6. Why so popular (~5 min)
-
-- Direct probability statements
-- Evidence accumulates: posterior $\to$ next prior
-- Derived quantities: LD50 = $-a/b$ for each posterior draw (Lab 6)
-- Hierarchical models (later)
-- Hidden quantities: occupancy, true infection status
-- Small samples: no Hessian approximation (chytrid)
-- Costs: priors, computation, convergence
-
-## 7. Wrap (~1 min)
-
-- Conjugate = add counts; many parameters = MCMC (Week 9)
-
-## Discussion (~8 min)
-
-1. Manager: "keep supplier claims out of my estimate." Reasonable?
-2. Flat on $p$ vs. flat on log-odds: different answers?
-3. Bayesian interval for the LD50? Which approach for 10 parameters?
-4. Pikas [1.8, 4.6]: "95% chance"? Can you say yes?
+- Next time: germination example, two priors
