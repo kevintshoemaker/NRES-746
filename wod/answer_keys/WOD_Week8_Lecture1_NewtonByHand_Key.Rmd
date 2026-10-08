@@ -1,0 +1,224 @@
+---
+title: "Week 8, Lecture 1 WOD: Answer Key"
+subtitle: "Newton's Method by Hand (take-home)"
+author: "NRES 746, Instructor Answer Key (not for student distribution)"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6, fig.height = 3)
+```
+
+```{r compute, include=FALSE}
+nll <- function(l) 6 * l - 18 * log(l)
+d1 <- function(l) 6 - 18 / l
+d2 <- function(l) 18 / l^2
+f <- round(nll(c(1.5, 2, 2.5)), 4)
+fwd <- (f[3] - f[2]) / 0.5
+ctr <- (f[3] - f[1]) / 1
+sec <- (f[3] - 2 * f[2] + f[1]) / 0.25
+
+steps <- matrix(NA, 3, 4, dimnames = list(NULL, c("guess", "slope", "curv", "next")))
+l <- 2
+for (i in seq_len(3)) {
+  steps[i, ] <- c(l, d1(l), d2(l), l - d1(l) / d2(l))
+  l <- steps[i, 4]
+}
+from7 <- 7 - d1(7) / d2(7)
+fd_step <- 2 - ctr / sec
+
+log_steps <- numeric(4)
+th <- log(7)
+for (i in seq_along(log_steps)) {
+  th <- th - (6 * exp(th) - 18) / (6 * exp(th))
+  log_steps[i] <- exp(th)
+}
+r4 <- function(v) formatC(v, format = "f", digits = 4)
+r3 <- function(v) formatC(v, format = "f", digits = 3)
+```
+
+Each item repeats the handout's question, then gives the answer, a
+short rationale, and mistakes to watch for. All numbers are computed
+in R when this file is knitted.
+
+Plan about 8 minutes at the start of Wednesday's class to go over this,
+focusing on 3b and 3c. 3c leads straight into the lecture: the fixes
+students propose there (smaller steps, better starting values, fitting
+on the log scale) are what real optimizers do.
+
+## Part 1: Slope and curvature
+
+**1a.**
+
+> Find $\text{NLL}'(\lambda)$ and $\text{NLL}''(\lambda)$ for
+> $\text{NLL}(\lambda) = 6\lambda - 18\log\lambda$. Then set
+> $\text{NLL}'(\lambda) = 0$ and solve for the MLE, $\hat\lambda$.
+
+**Answer.** $\text{NLL}'(\lambda) = 6 - \dfrac{18}{\lambda}$,
+$\text{NLL}''(\lambda) = \dfrac{18}{\lambda^2}$, and $\hat\lambda = 3$.
+
+**Why.** $\frac{d}{d\lambda}\log\lambda = 1/\lambda$ and
+$\frac{d}{d\lambda}\lambda^{-1} = -\lambda^{-2}$ (the two minus signs
+cancel). $6 - 18/\lambda = 0$ gives $\lambda = 18/6 = 3$, the sample
+mean.
+
+**Watch for.** A negative $\text{NLL}''$ (sign slip); the NLL has a
+minimum, so its curvature must be positive.
+
+## Part 2: Slopes without calculus
+
+**2a.**
+
+> Estimate $\text{NLL}'(2)$ two ways: with the forward formula (using
+> $\lambda = 2$ and 2.5), and with a centered version that uses
+> $\lambda = 1.5$ and 2.5. Compare both with the exact value from 1a.
+> Which is closer?
+
+**Answer.** Forward: $(-1.4932 - (-0.4766))/0.5 = `r r4(fwd)`$.
+Centered: $(-1.4932 - 1.7016)/1 = `r r4(ctr)`$. Exact: $-3$. The
+centered estimate is much closer.
+
+**Why.** The forward difference is the slope of a chord from 2 to
+2.5, which matches the curve's slope near the chord's middle, 2.25
+(exact $\text{NLL}'(2.25) = -2$), not at 2. The centered chord's middle
+is at 2.
+
+**Watch for.** Dividing the centered difference by $h$ (0.5) instead
+of $2h$ (1). Sign errors from subtracting a negative number.
+
+**2b.**
+
+> Curvature is the slope of the slope. Use that idea to build a
+> finite-difference approximation to $f''(x)$ that uses only
+> $f(x - h)$, $f(x)$, and $f(x + h)$. Then use it to estimate
+> $\text{NLL}''(2)$ and compare with the exact value.
+
+**Answer.**
+$$f''(x) \approx \frac{f(x + h) - 2f(x) + f(x - h)}{h^2}$$
+Estimate: $(-1.4932 + 0.9532 + 1.7016)/0.25 = `r r4(sec)`$. Exact:
+$18/4 = 4.5$.
+
+**Why.** Two forward slopes,
+$f'(x + h/2) \approx [f(x+h) - f(x)]/h$ and
+$f'(x - h/2) \approx [f(x) - f(x-h)]/h$, are a distance $h$ apart.
+Their difference divided by $h$ is the slope of the slope at $x$:
+$$\frac{1}{h}\left[\frac{f(x+h) - f(x)}{h} - \frac{f(x) - f(x-h)}{h}\right]$$
+which simplifies to the formula above.
+
+**Watch for.** Dividing by $h$ instead of $h^2$ (gives 2.32). Using
+slopes at $x$ and $x + h$, which needs $f(x + 2h)$ and estimates the
+curvature at $x + h$. A student who gets the right formula by
+"guessing the pattern" should still be able to show where $h^2$ comes
+from.
+
+## Part 3: Newton's method
+
+**3a.**
+
+> In words: what does dividing by the curvature do to the size of the
+> step? When will Newton's method take big steps, and when small ones?
+
+**Answer.** Strong curvature means small steps; weak curvature (a
+nearly straight NLL) means big steps. The sign of the slope sets the
+direction (downhill).
+
+**Why.** A sharply curved parabola has its bottom close by; a nearly
+flat one has its bottom far away. Newton's method assumes the parabola
+is a good stand-in for the NLL and jumps all the way to its bottom.
+
+**Watch for.** "Steep slope means a big step" is only half of it: the
+same slope gives a small step where the curvature is large.
+
+**3b.**
+
+> Start at $\lambda = 2$ and take three Newton steps, using your exact
+> derivatives from 1a.
+
+**Answer.**
+
+| Step | Guess | Slope, NLL$'$ | Curvature, NLL$''$ | Next guess |
+|:---:|:---:|:---:|:---:|:---:|
+| 1 | `r r4(steps[1, 1])` | `r r4(steps[1, 2])` | `r r4(steps[1, 3])` | `r r4(steps[1, 4])` |
+| 2 | `r r4(steps[2, 1])` | `r r4(steps[2, 2])` | `r r4(steps[2, 3])` | `r r4(steps[2, 4])` |
+| 3 | `r r4(steps[3, 1])` | `r r4(steps[3, 2])` | `r r4(steps[3, 3])` | `r r4(steps[3, 4])` |
+
+**Why.** The distance to the MLE goes 1, 0.33, 0.037, 0.0005: each
+error is roughly the square of the one before. That fast ("quadratic")
+convergence near the answer is why derivative-based methods are
+popular.
+
+**Watch for.** Rounding $\lambda$ to 2.67 and carrying the rounding
+error forward (still converges, just more slowly). Plugging the new
+guess into the old curvature.
+
+**3c.**
+
+> Now start at $\lambda = 7$ and take one step. What went wrong? Sketch
+> the NLL curve and the parabola Newton's method used at $\lambda = 7$
+> to explain why, and suggest one way to fix it.
+
+**Answer.** $\text{NLL}'(7) = `r r3(d1(7))`$, $\text{NLL}''(7) =
+`r r3(d2(7))`$, so the next guess is
+$7 - `r r3(d1(7))`/`r r3(d2(7))` = `r r3(from7)`$. A Poisson mean
+can't be negative, and the NLL isn't even defined there.
+
+```{r key-overshoot}
+l_seq <- seq(0.3, 10, length.out = 400)
+parab <- function(l, l0) nll(l0) + d1(l0) * (l - l0) + 0.5 * d2(l0) * (l - l0)^2
+par(mar = c(4, 4, 0.5, 0.5))
+plot(l_seq, nll(l_seq), type = "l", lwd = 2.5, xlim = c(-4, 10), ylim = c(-10, 16),
+     xlab = expression(lambda), ylab = "NLL")
+l_par <- seq(-4, 10, length.out = 400)
+lines(l_par, parab(l_par, 7), lwd = 2, lty = 2, col = "darkorange")
+abline(v = 0, col = "grey60")
+points(c(7, from7), c(nll(7), parab(from7, 7)), pch = 19, col = c("black", "darkorange"))
+legend("topright", c("NLL", "Newton's parabola at 7"), lwd = 2, lty = c(1, 2),
+       col = c("black", "darkorange"), bty = "n", cex = 0.8)
+```
+
+**Why.** Far from the MLE the NLL is nearly a straight line (small
+curvature), so the matching parabola is very wide and its bottom is far
+to the left, past zero. In general the update here simplifies to
+$\lambda_{\text{new}} = 2\lambda - \lambda^2/3$, which is negative for
+any start above 6.
+
+Acceptable fixes (any one):
+
+- **Shorter steps.** If a step makes the NLL worse or leaves the
+  allowed range, halve it and try again ("backtracking").
+- **Better starting values.** Start near a sensible guess, such as the
+  sample mean.
+- **Constraints.** Use a method that respects bounds (e.g.
+  `method = "L-BFGS-B"` with `lower = 0.001`).
+- **Fit on the log scale.** Optimize over $\theta = \log\lambda$, so
+  every value of $\theta$ gives a positive $\lambda$. Newton's method on
+  $\theta$ from $\lambda = 7$ gives $\lambda$ =
+  `r paste(r3(log_steps), collapse = ", ")`: no overshoot. (This one
+  comes up in Wednesday's lecture.)
+
+**Watch for.** Concluding Newton's method is "broken." It works well
+near the answer and badly far from it, which is why starting values
+matter for every optimizer.
+
+**3d.**
+
+> *(If you have time.)* Take one Newton step from $\lambda = 2$ using
+> your finite-difference estimates from 2a (centered) and 2b instead.
+> How close is it to your first step in 3b?
+
+**Answer.** $2 - (`r r4(ctr)`)/`r r4(sec)` = `r r4(fd_step)`$, versus
+`r r4(steps[1, 4])` with exact derivatives. Close, and it would still
+converge.
+
+**Why.** Errors in the slope and curvature only change where each step
+lands, not where the method stops ($\text{NLL}' = 0$). `optim()` uses a
+much smaller $h$ (0.001 by default), so its estimates are closer still.
+
+**Watch for.** Using the forward slope from 2a, which gives
+$2 + 2.033/4.646 = 2.44$; still in the right direction, but a worse
+step.

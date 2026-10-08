@@ -1,0 +1,212 @@
+---
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# fill-in table drawn with base graphics so row height is controllable ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+```
+
+**NRES 746, Week 8, Lecture 1: Newton's Method by Hand (take-home)**
+
+Name: ___________________________________________
+
+**Bring this to class on Wednesday.** We'll start by going over it, and
+Wednesday's lecture picks up where it leaves off. Work on paper; a
+calculator is all you need.
+
+## Putting it in context
+
+Since Week 6 we've found MLEs with `optim()` without asking how it
+finds them. On Wednesday we open the black box. This WOD works through
+the core of one method, Newton's method, on a problem small enough to
+do by hand.
+
+The data are the Week 7 pika haypile counts from six talus plots: 2, 5,
+3, 0, 4, 4 (sum 18), modeled as Poisson with mean $\lambda$. Dropping
+terms that don't involve $\lambda$,
+
+$$\text{NLL}(\lambda) = 6\lambda - 18\log\lambda$$
+
+`r nq(3, 12)`
+
+## Part 1: Slope and curvature
+
+**1a.** Find $\text{NLL}'(\lambda)$ and $\text{NLL}''(\lambda)$. Then
+set $\text{NLL}'(\lambda) = 0$ and solve for the MLE, $\hat\lambda$.
+
+```{r fig.height=0.3*12}
+blank_space()
+```
+
+`r nq(10, 2)`
+
+## Part 2: Slopes without calculus
+
+`optim()` can't do calculus. It estimates slopes from NLL values at
+nearby points, using a **finite difference**: for a small step $h$,
+
+$$f'(x) \approx \frac{f(x + h) - f(x)}{h}$$
+
+Here are NLL values at three points spaced $h = 0.5$ apart:
+
+| $\lambda$ | 1.5 | 2.0 | 2.5 |
+|:---:|:---:|:---:|:---:|
+| $\text{NLL}(\lambda)$ | 1.7016 | $-0.4766$ | $-1.4932$ |
+
+**2a.** Estimate $\text{NLL}'(2)$ two ways: with the formula above
+(using $\lambda = 2$ and 2.5), and with a centered version that uses
+$\lambda = 1.5$ and 2.5. Compare both with the exact value from 1a.
+Which is closer?
+
+```{r fig.height=0.3*5}
+blank_space()
+```
+
+Forward: ________ \qquad Centered: ________ \qquad Exact: ________
+
+`r nq(4, 14)`
+
+**2b.** Curvature is the slope of the slope. Use that idea to build a
+finite-difference approximation to $f''(x)$ that uses only
+$f(x - h)$, $f(x)$, and $f(x + h)$. Then use it to estimate
+$\text{NLL}''(2)$ and compare with the exact value.
+
+```{r fig.height=0.3*14}
+blank_space()
+```
+
+Estimate: ________ \qquad Exact: ________
+
+`r nq(9, 3)`
+
+## Part 3: Newton's method
+
+Newton's method looks for the point where $\text{NLL}'(\lambda) = 0$.
+At the current guess, it replaces the NLL with a parabola that has the
+same slope and curvature, then jumps to the bottom of that parabola:
+
+$$\lambda_{\text{new}} = \lambda - \frac{\text{NLL}'(\lambda)}{\text{NLL}''(\lambda)}$$
+
+**3a.** In words: what does dividing by the curvature do to the size of
+the step? When will Newton's method take big steps, and when small
+ones?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(3, 0, extra = 0.35 + 3 * 0.55 + 0.3)`
+
+**3b.** Start at $\lambda = 2$ and take three Newton steps, using your
+exact derivatives from 1a. Keep at least three decimal places.
+
+```{r newton-table, fig.width=6.2, fig.height=0.35+3*0.55}
+blank_table(
+  headers = list("Step", "Guess", "Slope, NLL'", "Curvature, NLL''", "Next guess"),
+  body = list(
+    list("1", "2", "", "", ""),
+    list("2", "", "", "", ""),
+    list("3", "", "", "", "")
+  ),
+  col_widths = c(0.6, 1, 1.2, 1.4, 1.1),
+  row_height = 0.55
+)
+```
+
+```{r fig.height=0.3*4}
+blank_space()
+```
+
+`r nq(5, 10)`
+
+**3c.** Now start at $\lambda = 7$ and take one step. What went wrong?
+Sketch the NLL curve and the parabola Newton's method used at
+$\lambda = 7$ to explain why, and suggest one way to fix it.
+
+```{r fig.height=0.3*10}
+blank_space()
+```
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(5, 5)`
+
+**3d.** *(If you have time.)* `optim()`'s derivative-based methods
+don't know the exact derivatives. Take one Newton step from
+$\lambda = 2$ using your finite-difference estimates from 2a (centered)
+and 2b instead. How close is it to your first step in 3b?
+
+```{r fig.height=0.3*5}
+blank_space()
+```

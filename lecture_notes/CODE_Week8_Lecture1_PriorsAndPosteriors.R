@@ -89,7 +89,7 @@ round(rbind(central = summ["flat", c("lower95", "upper95")],
 
 # 4. Where new Bayesians get stuck --------------------------------------------
 #  (a) likelihood is not the posterior (needs prior, rescaling)
-#  (b) flat isn't flat on every scale (log-odds from Wednesday)
+#  (b) flat isn't flat on every scale (callback; covered Week 7 Wednesday)
 #  (c) priors: report them; prior sensitivity analysis
 #  (d) Bayes is not the same as MCMC (germination needed none)
 #  (e) credible interval is not a confidence interval
@@ -135,20 +135,14 @@ hist(odds_draws, breaks = 60, freq = FALSE, col = "grey80", border = "white",
 # probability statements come straight from the draws
 mean(draws_flat > 0.6)   # P(germination rate > 0.6 | data, flat prior)
 
-# 6. Optimization preview (only if time) --------------------------------------
-#  MLEs so far: calculus, grids, optim() as a black box
-#  Grids don't scale: 100 values per parameter, 100^10 = 1e20 evaluations for 10
-#  Optimizers: start somewhere, use slope (and curvature) to step, stop
-#  Wednesday: why optim() can stop in the wrong place; starting values
-
-# 7. Return to the big picture ------------------------------------------------
+# 6. Return to the big picture ------------------------------------------------
 #  Same model, same likelihood; multiply by a prior, read off the posterior
 #  Conjugate = add counts; many parameters = MCMC (Week 9)
+#  Take-home WOD (Newton's method by hand) due Wednesday: optim() opened up
 
 # Discussion ------------------------------------------------------------------
 #  1. Supplier prior: posterior mean 0.62; flat prior: 0.74. Manager says
 #     "keep the supplier's numbers out of my estimate." Reasonable? What
 #     would you report to them?
-#  2. Flat on p vs. flat on log-odds: different answers? When would it matter?
-#  3. Bayesian interval for the LD50? Which approach for ten parameters?
-#  4. Week 7 pikas [1.8, 4.6]: "95% chance the density is in here"? Can you say yes?
+#  2. Bayesian interval for the LD50? Which approach for ten parameters?
+#  3. Week 7 pikas [1.8, 4.6]: "95% chance the density is in here"? Can you say yes?

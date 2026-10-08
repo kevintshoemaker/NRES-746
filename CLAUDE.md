@@ -901,29 +901,36 @@ question; no need to rework them unless asked.)
 
 ## Development status (update at the end of each thread)
 
-Snapshot as of Wed., Oct. 7, 2026 (end of Week 7). The schedule of
+Snapshot as of Wed., Oct. 7, 2026 (end of Week 7; Week 8 built). The schedule of
 record is `CourseSchedule.csv`.
 
 - **Built and taught through Week 7.** Week 7's two NOTES files carry
   "as taught" notes. Lab 6 (Acts, keys, `NOTES_Lab6_LikelihoodIntervals.Rmd`)
   is done; the quadratic approximation/Hessian material lives in the
   Lab 6 notes, not a lecture.
-- **Week 8 (next up).**
-  - Monday, Oct. 12: `lecture_notes/NOTES_Week8_Lecture1_PriorsAndPosteriors.Rmd`
-    and its companion script are drafted (germination example, posterior
-    summaries, where new Bayesians get stuck, why Bayes is popular,
-    discussion; optimization preview only if time). **Its WOD is not
-    chosen yet.**
+- **Week 8 (built, not yet taught).**
+  - Monday, Oct. 12: `NOTES_Week8_Lecture1_PriorsAndPosteriors.Rmd` and
+    script (germination example, sticking points, why Bayes is popular;
+    the optimization preview was cut, and flat priors on different
+    scales is a callback only, since Week 7 Wednesday covered it). In-class WOD
+    `WOD_Week8_Lecture1_HowMuchDidThePriorMatter.Rmd`. Take-home WOD
+    `WOD_Week8_Lecture1_NewtonByHand.Rmd`, handed out Monday, due
+    Wednesday. Both have keys.
   - Tuesday: group meetings on final project proposals (no lab).
-  - Wednesday, Oct. 14: optimization (Bolker Ch. 7, 7.1-7.2 and 7.4).
-    Nothing built yet.
-- **Unused WOD.** `wod/WOD_Week7_Lecture2_CurvatureByHand.Rmd` (and its
-  key) was never handed out (students were busy with proposals). It
-  covers Poisson/binomial curvature by hand and the chytrid Wald
-  interval going negative; students have not seen it. Tentative plan:
-  a shortened version in Week 8. Rename the file, header, and key to
-  the new week/slot if it's used.
-- **Coming later:** MCMC and Lab 7 on Bayesian inference (Week 9).
+  - Wednesday, Oct. 14: `NOTES_Week8_Lecture2_Optimization.Rmd` and
+    `CODE_Week8_Lecture2_Optimization.R`. No new WOD: ~8 min take-home
+    debrief, then lecture with three short discussion pauses (no
+    separate discussion beat). Myxomatosis Gamma example: Newton/BFGS,
+    Nelder-Mead, start of simulated annealing.
+- **Unused WOD, shelved.** `wod/WOD_Week7_Lecture2_CurvatureByHand.Rmd`
+  (and key) was never handed out; students have not seen it. The
+  Newton take-home absorbed its pika part. Its chytrid Wald interval
+  part is a candidate for Lab 7 (a contrast with a credible interval).
+- **Coming later (Week 9):** Monday finishes simulated annealing
+  (whatever didn't fit Wednesday) and turns it into MCMC. The Week 8
+  notes' "if time" section (Gamma reparameterization, Bolker 7.4
+  fitting checklist) goes to Week 9 or Lab 7. Lab 7 on Bayesian
+  inference.
 - **Framing to keep:** Hessian (quadratic approximation) intervals are
   the practical default for multiparameter models; profile intervals
   are the check when it matters (Bolker's cautions still apply).
