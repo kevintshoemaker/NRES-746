@@ -182,40 +182,70 @@ moves.**
 
 ```{r fig-identity, fig.height=3.2}
 n_id <- 6
-delta <- 0.5
+delta <- 0.1
+info_id <- n_id / lambda0
 exp_score <- function(l, lam_true) n_id * lam_true / l - n_id
 par(mar = c(4, 4, 1.5, 0.5))
 plot(lam, exp_score(lam, lambda0), type = "l", lwd = 2, col = "steelblue",
-     xlim = c(2, 5), ylim = c(-2.5, 3), xlab = "lambda", ylab = "Average score")
+     xlim = c(2.6, 3.5), ylim = c(-0.9, 0.9), xlab = "lambda",
+     ylab = "Average score")
 lines(lam, exp_score(lam, lambda0 + delta), lwd = 2, col = "darkorange")
 abline(h = 0)
 abline(v = c(lambda0, lambda0 + delta), lty = 3, col = "grey40")
 gap <- exp_score(lambda0, lambda0 + delta)
-arrows(lambda0 - 0.08, 0, lambda0 - 0.08, gap, length = 0.08, lwd = 2)
-text(lambda0 - 0.12, gap / 2, "gap", pos = 2, cex = 0.8)
-legend("topright", c("data from lambda = 3", "data from lambda = 3.5"),
+arrows(lambda0 - 0.02, 0, lambda0 - 0.02, gap, length = 0.06, lwd = 2)
+text(lambda0 - 0.03, gap / 2, "gap", pos = 2, cex = 0.8)
+legend("topright", c("data from lambda = 3", "data from lambda = 3.1"),
        lwd = 2, col = c("steelblue", "darkorange"), bty = "n", cex = 0.8)
 ```
 
 The blue curve is the average score when the data come from
-$\lambda_0 = 3$; it crosses zero at 3. Now nudge the truth to
-$\lambda_0 + \delta = 3.5$ (orange). The new curve must cross zero at
-3.5, or the MLE wouldn't track the truth.
+$\lambda_0 = 3$; it crosses zero at 3. Now nudge the truth by
+$\delta = 0.1$, to 3.1 (orange). The new curve must cross zero at 3.1,
+or the MLE wouldn't track the truth. The **gap** is how far the
+average score at $\lambda = 3$ rises. There are two ways to get it.
 
-- **How far it needs to move (the slope).** The curves fall at slope
-  $-I$, so to cross zero $\delta$ further right, the new curve must
-  sit about $\delta \cdot I$ above zero at the old value, 3. That's the
-  gap.
-- **How far it does move (the variance).** Changing the truth changes
-  which surveys are likely. A survey becomes more likely by a factor of
-  about $(1 + \delta\, U)$, where $U$ is that survey's score at 3: the
-  surveys that already "pointed" toward larger $\lambda$ become more
-  common. So the average score at 3 rises by
-  $E[U \cdot \delta U] = \delta \cdot \text{Var}(U)$.
+**Route 1: what the slope requires.** The curves fall at slope $-I$, so
+to cross zero $\delta$ further right, the new curve must sit about
+$\delta \cdot I$ above zero at 3. For six plots, $I = 6/3 = 2$, so the
+gap should be $0.1 \times 2 = 0.2$.
 
-Both describe the same gap, so $\delta \cdot \text{Var}(U) = \delta
-\cdot I$, which means $\text{Var}(U) = I$. For these numbers the gap is
-`r round(gap, 2)` $=\delta \cdot I = 0.5 \times 6/3$.
+**Route 2: what reweighting the surveys delivers.** Keep reading the
+score at $\lambda = 3$. For six plots with total count $S$, that's
+$U(3) = S/3 - 6$, a fixed formula applied to each survey. Changing the
+truth doesn't change the formula; it changes **how often each survey
+turns up**, and the average is a probability-weighted sum over surveys.
+
+How much more likely does a survey get? The score is, by definition,
+how fast a survey's log-probability rises as $\lambda$ increases. So a
+small step $\delta$ multiplies its probability by about
+$e^{\delta U} \approx 1 + \delta U$:
+
+```{r reweight-table}
+s_ex <- c(12, 18, 24)
+u_ex <- s_ex / lambda0 - n_id
+ratio_ex <- dpois(s_ex, n_id * (lambda0 + delta)) / dpois(s_ex, n_id * lambda0)
+knitr::kable(data.frame(s_ex, u_ex, sprintf("%.3f", ratio_ex),
+                        sprintf("%.1f", 1 + delta * u_ex)),
+             col.names = c("Total count S", "Score at 3, U", "Exact ratio",
+                           "1 + 0.1 U"),
+             align = "c")
+```
+
+Surveys whose score points toward a larger $\lambda$ become more common,
+and surveys pointing lower become rarer. The new average score at 3 is
+then
+$$\sum U \cdot P_3 \cdot (1 + \delta U)
+  = \underbrace{E[U]}_{0} + \delta\, E[U^2] = \delta \cdot \text{Var}(U).$$
+The variance appears because reweighting only moves the average when
+surveys disagree. If every survey had a score of 0, tilting the weights
+would change nothing; the more the scores spread, the more the average
+moves. For six plots, $\text{Var}(U) = \text{Var}(S)/9 = 18/9 = 2$, so
+the gap is again $0.1 \times 2 = 0.2$.
+
+Both routes describe the same gap, so $\delta \cdot I = \delta \cdot
+\text{Var}(U)$, which means $\text{Var}(U) = I$. In the figure, the gap
+is `r round(gap, 2)`.
 
 **The calculus version, for one observation.** Write the score as
 $u = f'/f$, so $f' = u f$. The score averages to zero for every value
@@ -223,8 +253,9 @@ of the parameter, $E[u] = \int f'\,dy = \frac{d}{d\theta}\int f\,dy = 0$.
 Differentiating that once more:
 $$0 = \int \left(u' f + u f'\right) dy = E[u'] + E[u^2]
  \quad\Rightarrow\quad E[-u'] = E[u^2] = \text{Var}(u).$$
-The first term is the curve tilting (slope); the second is the data
-being reweighted toward high-score outcomes (variance).
+The first term is route 1 (the curve's slope); the second is route 2
+(the data reweighted toward high-score outcomes, since $f' = u f$ is
+the $\delta U$ in $1 + \delta U$).
 
 # 5. The parabola, the interval, and the 1.92 cutoff
 
