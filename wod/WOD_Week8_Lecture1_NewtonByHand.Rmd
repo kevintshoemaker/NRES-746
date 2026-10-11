@@ -111,34 +111,71 @@ blank_space()
 
 ## Part 2: Slopes without calculus
 
-`optim()` can't do calculus. It estimates slopes from NLL values at
-nearby points, using a **finite difference**: for a small step $h$,
+`optim()` can't do calculus on its own.^[If you know the formula for
+the first derivatives, you can write it as an R function and pass it to
+`optim()` through the `gr` argument. Derivative-based methods such as
+`method = "BFGS"` then skip the finite differences, which makes them
+faster and more reliable (Bolker p. 301). `optim()` has no way to take
+second derivatives, but `nlm()` can use both.] By default it estimates
+slopes from NLL values at nearby points, using a **finite difference**: the slope of a straight
+line (a chord) between two points a fixed, small distance $\Delta$
+apart. Unlike the definition of a derivative, $\Delta$ never shrinks to
+zero, so the result is an approximation. The **forward difference**
+uses the current point and one step ahead:
 
-$$f'(x) \approx \frac{f(x + h) - f(x)}{h}$$
+$$f'(x) \approx \frac{f(x + \Delta) - f(x)}{\Delta}$$
 
-Here are NLL values at three points spaced $h = 0.5$ apart:
+Here are NLL values at three points spaced $\Delta = 0.5$ apart:
 
 | $\lambda$ | 1.5 | 2.0 | 2.5 |
 |:---:|:---:|:---:|:---:|
 | $\text{NLL}(\lambda)$ | 1.7016 | $-0.4766$ | $-1.4932$ |
 
-**2a.** Estimate $\text{NLL}'(2)$ two ways: with the formula above
-(using $\lambda = 2$ and 2.5), and with a centered version that uses
-$\lambda = 1.5$ and 2.5. Compare both with the exact value from 1a.
-Which is closer?
+**2a.** Use the forward difference to estimate $\text{NLL}'(2)$ and
+compare it with the exact value from 1a. Then find the exact
+$\text{NLL}'(2.25)$. What do you notice?
 
-```{r fig.height=0.3*5}
+```{r fig.height=0.3*6}
 blank_space()
 ```
 
-Forward: ________ \qquad Centered: ________ \qquad Exact: ________
+Forward estimate: ________ \qquad Exact $\text{NLL}'(2)$: ________
+\qquad Exact $\text{NLL}'(2.25)$: ________
 
-`r nq(4, 14)`
+`r nq(12, 0, extra = 2.8)`
 
-**2b.** Curvature is the slope of the slope. Use that idea to build a
-finite-difference approximation to $f''(x)$ that uses only
-$f(x - h)$, $f(x)$, and $f(x + h)$. Then use it to estimate
-$\text{NLL}''(2)$ and compare with the exact value.
+**2b.** Curvature is the slope of the slope: how fast the slope changes
+per unit change in the parameter. The figure below starts from a center
+point $x$ and draws two chords: a **backward difference** (from $x$ back
+to $x - \Delta$) and a forward difference (from $x$ to $x + \Delta$).
+Combine these two slopes into a finite-difference approximation to
+$f''(x)$ that uses only $f(x - \Delta)$, $f(x)$, and $f(x + \Delta)$.
+(What you noticed in 2a may help you decide what to divide by.) Then
+use it to estimate $\text{NLL}''(2)$ and compare with the exact value.
+
+```{r second-diff-schematic, fig.width=6, fig.height=2.8, dev="png", dpi=250}
+f_demo <- function(t) 0.35 * t^2
+x_pts <- c(1, 2, 3)
+par(mar = c(3.2, 1, 0.5, 1))
+curve(f_demo, 0.4, 3.5, lwd = 2, axes = FALSE, xlab = "", ylab = "",
+      ylim = c(-0.3, 4.3))
+axis(1, at = c(1, 1.5, 2, 2.5, 3), padj = 0.3,
+     labels = c(expression(x - Delta), expression(x - Delta/2), expression(x),
+                expression(x + Delta/2), expression(x + Delta)))
+points(x_pts, f_demo(x_pts), pch = 19)
+segments(x_pts[1], f_demo(x_pts[1]), x_pts[2], f_demo(x_pts[2]), lwd = 2,
+         col = "steelblue")
+segments(x_pts[2], f_demo(x_pts[2]), x_pts[3], f_demo(x_pts[3]), lwd = 2,
+         col = "darkorange")
+abline(v = c(1.5, 2.5), lty = 3, col = "grey50")
+text(1.45, 1.25, "backward difference\nfrom x", col = "steelblue", pos = 2,
+     cex = 0.85)
+text(2.55, 2.75, "forward difference\nfrom x", col = "darkorange", pos = 2,
+     cex = 0.85)
+text(3.4, f_demo(3.4), "f", pos = 4, font = 3)
+arrows(1.5, -0.15, 2.5, -0.15, code = 3, length = 0.07)
+text(2, -0.15, expression(Delta), pos = 3, cex = 0.9)
+```
 
 ```{r fig.height=0.3*14}
 blank_space()
@@ -146,28 +183,33 @@ blank_space()
 
 Estimate: ________ \qquad Exact: ________
 
-`r nq(9, 3)`
+`r nq(12, 14)`
 
 ## Part 3: Newton's method
 
-Newton's method looks for the point where $\text{NLL}'(\lambda) = 0$.
-At the current guess, it replaces the NLL with a parabola that has the
-same slope and curvature, then jumps to the bottom of that parabola:
+The MLE is where the slope is zero: $\text{NLL}'(\lambda) = 0$. Newton's
+method finds that point by guessing and correcting. At the current
+guess $\lambda$, it pretends the slope $\text{NLL}'$ changes *linearly*
+across parameter space, starting at $\text{NLL}'(\lambda)$ and changing
+at a constant rate $\text{NLL}''(\lambda)$.
 
-$$\lambda_{\text{new}} = \lambda - \frac{\text{NLL}'(\lambda)}{\text{NLL}''(\lambda)}$$
+**3a.** Under that linear approximation, find the value $\lambda^*$
+where the slope reaches zero. Write $\lambda^*$ in terms of $\lambda$,
+$\text{NLL}'(\lambda)$, and $\text{NLL}''(\lambda)$. (A sketch of
+$\text{NLL}'$ against $\lambda$ may help.) Your answer is Newton's
+update rule: $\lambda^*$ becomes the next guess.
 
-**3a.** In words: what does dividing by the curvature do to the size of
-the step? When will Newton's method take big steps, and when small
-ones?
-
-```{r fig.height=0.3*3}
-blank_lines(3)
+```{r fig.height=0.3*14}
+blank_space()
 ```
+
+$\lambda^* =$ ____________________
 
 `r nq(3, 0, extra = 0.35 + 3 * 0.55 + 0.3)`
 
 **3b.** Start at $\lambda = 2$ and take three Newton steps, using your
-exact derivatives from 1a. Keep at least three decimal places.
+rule from 3a and your exact derivatives from 1a. Keep at least three
+decimal places.
 
 ```{r newton-table, fig.width=6.2, fig.height=0.35+3*0.55}
 blank_table(
@@ -189,8 +231,8 @@ blank_space()
 `r nq(5, 10)`
 
 **3c.** Now start at $\lambda = 7$ and take one step. What went wrong?
-Sketch the NLL curve and the parabola Newton's method used at
-$\lambda = 7$ to explain why, and suggest one way to fix it.
+Sketch $\text{NLL}'(\lambda)$ and the straight line Newton's method used
+at $\lambda = 7$ to explain why, and suggest one way to fix it.
 
 ```{r fig.height=0.3*10}
 blank_space()
@@ -202,10 +244,11 @@ blank_lines(3)
 
 `r nq(5, 5)`
 
-**3d.** *(If you have time.)* `optim()`'s derivative-based methods
-don't know the exact derivatives. Take one Newton step from
-$\lambda = 2$ using your finite-difference estimates from 2a (centered)
-and 2b instead. How close is it to your first step in 3b?
+**3d.** *(If you have time.)* Real optimizers usually don't know the
+exact derivatives and use finite-difference estimates instead. By hand,
+take one Newton step from $\lambda = 2$ using your estimates from 2a
+and 2b in place of the exact derivatives. How close is it to your first
+step in 3b? Based on 2a, how could you make it closer?
 
 ```{r fig.height=0.3*5}
 blank_space()

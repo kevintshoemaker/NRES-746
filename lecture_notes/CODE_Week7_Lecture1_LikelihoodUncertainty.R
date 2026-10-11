@@ -1,10 +1,19 @@
 
 #  NRES 746, Week 7, Lecture 1: How sure are we? -----------------------------
-#  Uncertainty from the shape of the likelihood.
-#  Run section by section in RStudio (use the outline to jump around).
-#  Needs the 'emdbook' package for the last section.
+#  Section numbers match the lecture notes. Needs the 'emdbook' package for
+#  the last section.
 
-# Pika data and the NLL function ---------------------------------------------
+# WOD: Reading the Interval (~8 min) -------------------------------------------
+#  [BOARD] go over 1a-2a on the chytrid NLL curve
+
+# 1. Big picture (~3 min) ------------------------------------------------------
+#  [BOARD] workflow loop
+
+# 2. Questions about the reading (~4 min) --------------------------------------
+#  [BOARD] park answers in the corner
+
+# 3. Curvature is information (~6 min) -----------------------------------------
+#  [CODE] 6 plots vs. 24 plots
 
 haypiles <- c(2, 5, 3, 0, 4, 4)   # active haypiles in six talus plots
 n_plots <- length(haypiles)
@@ -15,9 +24,43 @@ nll_pois <- function(lambda, y) {
 }
 
 lambda_grid <- seq(0.01, 8, by = 0.01)
-lik_vals <- sapply(lambda_grid, function(l) prod(dpois(haypiles, l)))
 
-# Bayesian preview: prior x likelihood ---------------------------------------
+haypiles_24 <- rep(haypiles, 4)   # same mean, four times the data
+dnll_6 <- sapply(lambda_grid, nll_pois, y = haypiles) - nll_pois(3, haypiles)
+dnll_24 <- sapply(lambda_grid, nll_pois, y = haypiles_24) - nll_pois(3, haypiles_24)
+lr_cut <- qchisq(0.95, df = 1) / 2   # 3.84 / 2 = 1.92
+
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(lambda_grid, dnll_6, type = "l", lwd = 2, xlim = c(0.5, 7), ylim = c(0, 6),
+     xlab = "lambda (haypiles per plot)", ylab = "NLL minus its minimum")
+lines(lambda_grid, dnll_24, lwd = 2, lty = 2)
+abline(h = lr_cut, col = "red")
+legend("topright", c("6 plots", "24 plots"), lwd = 2, lty = c(1, 2),
+       bty = "n", cex = 0.8)
+
+# 4. Likelihood ratio interval (~7 min) ----------------------------------------
+#  [BOARD] where the 1.92 cutoff comes from -> [CODE]
+
+lr_cut
+
+# the interval ends are where NLL(lambda) - NLL(MLE) = 1.92
+f_cut <- function(l, y) nll_pois(l, y) - nll_pois(mean(y), y) - lr_cut
+lr_int <- c(uniroot(f_cut, c(0.5, 3), y = haypiles)$root,
+            uniroot(f_cut, c(3, 8), y = haypiles)$root)
+lr_int_24 <- c(uniroot(f_cut, c(1, 3), y = haypiles_24)$root,
+               uniroot(f_cut, c(3, 6), y = haypiles_24)$root)
+round(rbind(plots_6 = lr_int, plots_24 = lr_int_24), 2)
+
+# 5. Wrap (~1 min) -------------------------------------------------------------
+#  [BOARD] workflow loop
+
+# Discussion (~7 min) ----------------------------------------------------------
+#  [DISCUSS]
+
+# Not covered Oct. 5: moved to Wednesday and Lab 6 -----------------------------
+
+# Bayesian preview: prior x likelihood (moved to Wednesday)
+lik_vals <- sapply(lambda_grid, function(l) prod(dpois(haypiles, l)))
 
 # posterior = likelihood * prior / (area under likelihood * prior)
 step <- diff(lambda_grid)[1]
@@ -49,41 +92,10 @@ lambda_grid[which.max(post_info)]   # posterior mode with the informative prior
 
 # flat prior: posterior is Gamma(shape = sum(y) + 1, rate = n)
 cred_int <- qgamma(c(0.025, 0.975), shape = sum(haypiles) + 1, rate = n_plots)
-round(cred_int, 2)
-
-# Curvature is information: 6 plots vs. 24 plots ----------------------------
-
-haypiles_24 <- rep(haypiles, 4)   # same mean, four times the data
-dnll_6 <- sapply(lambda_grid, nll_pois, y = haypiles) - nll_pois(3, haypiles)
-dnll_24 <- sapply(lambda_grid, nll_pois, y = haypiles_24) - nll_pois(3, haypiles_24)
-lr_cut <- qchisq(0.95, df = 1) / 2   # 3.84 / 2 = 1.92
-
-par(mar = c(4, 4.5, 0.5, 0.5))
-plot(lambda_grid, dnll_6, type = "l", lwd = 2, xlim = c(0.5, 7), ylim = c(0, 6),
-     xlab = "lambda (haypiles per plot)", ylab = "NLL minus its minimum")
-lines(lambda_grid, dnll_24, lwd = 2, lty = 2)
-abline(h = lr_cut, col = "red")
-legend("topright", c("6 plots", "24 plots"), lwd = 2, lty = c(1, 2),
-       bty = "n", cex = 0.8)
-
-# Likelihood ratio interval ---------------------------------------------------
-
-lr_cut
-
-# the interval ends are where NLL(lambda) - NLL(MLE) = 1.92
-f_cut <- function(l, y) nll_pois(l, y) - nll_pois(mean(y), y) - lr_cut
-lr_int <- c(uniroot(f_cut, c(0.5, 3), y = haypiles)$root,
-            uniroot(f_cut, c(3, 8), y = haypiles)$root)
-lr_int_24 <- c(uniroot(f_cut, c(1, 3), y = haypiles_24)$root,
-               uniroot(f_cut, c(3, 6), y = haypiles_24)$root)
-round(rbind(plots_6 = lr_int, plots_24 = lr_int_24), 2)
-
 round(rbind(likelihood_ratio = lr_int, bayes_flat_prior = cred_int), 2)
 
-# Quadratic approximation and the Hessian -------------------------------------
-
-# NLL(lambda) ~ NLL(MLE) + 0.5 * NLL''(MLE) * (lambda - MLE)^2
-# SE = 1 / sqrt(NLL''(MLE))
+# Quadratic approximation and the Hessian (moved to Lab 6)
+# NLL(lambda) ~ NLL(MLE) + 0.5 * NLL''(MLE) * (lambda - MLE)^2; SE = 1 / sqrt(NLL''(MLE))
 fit <- optim(par = 2, fn = nll_pois, y = haypiles, method = "Brent",
              lower = 0.01, upper = 20, hessian = TRUE)
 fit$par
@@ -103,8 +115,7 @@ abline(v = wald_int, lty = 3, col = "blue")
 legend(x = 4.5, y = 1.3, c("true NLL", "quadratic"), lwd = 2, lty = c(1, 2),
        cex = 0.8, col = c("black", "blue"), bty = "n")
 
-# Two parameters: slice vs. profile (Bolker's tadpole data) -------------------
-
+# Two parameters: slice vs. profile, Bolker's tadpole data (moved to Lab 6)
 library(emdbook)
 data(ReedfrogFuncresp)
 initial_n <- ReedfrogFuncresp$Initial
@@ -151,8 +162,7 @@ legend(x = 0.63, y = 1.1, c("slice", "profile"), lwd = 2, lty = c(2, 1),
        cex = 0.8, seg.len = 1.2, col = c("purple", "darkgreen"), bty = "n")
 par(mfrow = c(1, 1))
 
-# Hessian matrix -> variance-covariance matrix ---------------------------------
-
+# Hessian matrix -> variance-covariance matrix (moved to Lab 6)
 vcov_tad <- solve(tad_fit$hessian)
 round(sqrt(diag(vcov_tad)), 4)   # standard errors of a and h
 round(cov2cor(vcov_tad), 2)      # correlation between the two estimates

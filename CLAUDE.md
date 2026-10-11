@@ -310,8 +310,9 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
    routine ones.
 2. **Lecture, ~30-35 min.** Core content delivery. **Open with the big
    picture** before any details or math: where today's topic sits in the
-   course arc (e.g. the THEORY -> MODEL -> DATA -> COMPARE loop below, or
-   the "deterministic function + probability distribution = likelihood
+   course arc (e.g. which box of the PROBLEM -> THEORIES -> MODELS ->
+   FIT -> COMPARE -> REVISE workflow below it sits in, or the
+   "deterministic function + probability distribution = likelihood
    -> fit" thread), what question it lets us answer that we couldn't
    before, and how it connects to the last lecture and this week's lab.
    Students asked for more of this in a mid-semester poll, so budget a
@@ -536,18 +537,29 @@ what students already did that week, rather than repeating it or
 contradicting it.
 
 **Companion R scripts** (`CODE_Week<N>_Lecture<M>_<Topic>.R`, posted
-to WebCampus for students) follow the lecture's outline: one
-subheading per lecture section, numbered to match the NOTES file
-(e.g. `# 3. Worked example: ... ----`), with that section's podium
-bullets as short comment lines directly below the subheading and the
-code after. This lets the script double as a podium cheat sheet and
-makes it easy to cross-reference the notes mid-lecture. Include the
-discussion prompts as a closing comment section. Comment blocks
-directly under these subheadings are an allowed exception to the
-no-comment-stacking rule. Run the script end to end before handing it
-back. See `lecture_notes/CODE_Week8_Lecture1_PriorsAndPosteriors.R`
-(and `CODE_Week7_Lecture2_BayesianInference.R`; the Week 7 Lecture 1
-script predates this format).
+to WebCampus for students; the instructor runs them live in lecture)
+are a **skeleton of the outline, not a copy of the notes**. Keep them
+to:
+
+- a one- or two-line title block (title, packages needed);
+- one subheading per podium section, numbered and worded to match the
+  NOTES Part 2 headings, with its time budget
+  (e.g. `# 2. Germination, two priors (~10 min) ----`), including the
+  WOD/take-home debrief and the Discussion;
+- directly under each subheading, **one cue line** saying whether to
+  go to the board or run code, in order: `#  [BOARD] <what to
+  sketch> -> [CODE]`, `#  [CODE]`, `#  [DISCUSS]`. Put
+  `#  [PAUSE] <short question>` right after the code a discussion
+  pause depends on;
+- the code, with ordinary sparse comments (equations, a line above
+  each function). No podium bullets, rationale, discussion prompt
+  text, or comments that give away a pause's answer.
+
+Sections with no code still get their subheading and cue line, so the
+outline shows where the lecture is. Material planned but not taught
+goes under a final `# Not covered <date>: moved to ... ----` heading.
+Run the script end to end before handing it back. See
+`lecture_notes/CODE_Week8_Lecture2_Optimization.R`.
 
 **After a lecture is given ("as taught" updates).** When the
 instructor reports what a lecture actually covered:
@@ -587,18 +599,49 @@ titles/margins, and computed values that came out anticlimactic (e.g. a
 brute-force p-value that rounds to exactly 0 with too few reps; bump
 `reps` rather than leave it).
 
-## Framing the modeling/scientific process: Popperian, not data-first or Bayesian-default
+## Framing the modeling/scientific process: problem-first, Popperian, not data-first or Bayesian-default
 
 Whenever course material presents "the scientific process" or the
 general modeling workflow (e.g. Bolker's Figure 1.5, section 1.6,
-printed p. 27 -- PDF page 35 in `bolker_book/emdbook.pdf`), default to a
-Popperian/hypothetico-deductive framing rather than a data-first or
-strictly Bayesian one:
+printed p. 27 -- PDF page 35 in `bolker_book/emdbook.pdf`), use this
+workflow (adopted Oct. 2026, first taught in Week 8 Lecture 2; earlier
+lectures used a shorter THEORY -> MODEL -> DATA -> COMPARE loop, and
+don't need retrofitting):
 
-$$\text{THEORY/QUESTION} \to \text{CANDIDATE MODEL(S)} \to
-  \text{confront with DATA (fit)} \to \text{COMPARE} \to \text{repeat}$$
+$$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
+  \to \text{COMPARE} \to \text{REVISE} \circlearrowleft$$
 
-"repeat" loops back to revising or rejecting the **theory**, not just
+- **PROBLEM:** what do we need to know (often a management or
+  conservation question)? Written down first, so "relevance" can be
+  judged later.
+- **THEORIES:** candidate explanations or conjectures (multiple working
+  hypotheses, Chamberlin).
+- **MODELS:** a data-generating model for each theory (deterministic
+  function + probability distribution, i.e. process + noise).
+- **FIT:** confront each model with data (likelihood, optimization,
+  Bayesian inference, MCMC).
+- **COMPARE:** goodness of fit, predictive ability, and relevance to
+  the problem; eliminate (falsify) or down-weight poor models.
+- **REVISE:** loop back to the problem statement and the theories.
+- **Side arrow, MODELS -> DATA -> FIT (study design):** the candidate
+  models should determine what data to collect (e.g. power analysis
+  by simulation). Drawn as a dashed box above the main row.
+
+Use the full labeled schematic when introducing it or revisiting it in
+depth, and the one-line version for a routine big-picture opening.
+In a NOTES file, draw it with the `draw_workflow()` helper in
+`NOTES_Week8_Lecture2_Optimization.Rmd` (copy it into the file's setup
+chunk; `highlight = "FIT"` etc. shades the box the lecture sits in).
+Give that figure chunk `dev = "png", dpi = 250`: the default pdf
+device renders the hyphens in "data-generating" and "down-weight" as
+long minus signs.
+Each lecture's big-picture opening should say which box today's
+material belongs to: bestiary, distributions, and simulation are
+MODELS; likelihood, optimization, Bayes, and MCMC are FIT; likelihood
+ratio tests, AIC, Bayesian model selection, predictive checks, and
+cross-validation are COMPARE.
+
+"REVISE" loops back to the **problem and the theories**, not just
 re-tuning parameters. Bolker's own figure nominally puts "collect data"
 second (right after "ask ecological questions"), but his footnote on
 p. 26 says this is a concession to the book assuming a dataset already
@@ -606,13 +649,17 @@ in hand, not a claim that data should precede the question -- so a
 theory-first reading is truer to his own stated ideal, not a deviation
 from it.
 
-"COMPARE" does double duty and should be unpacked as such rather than
-left vague: (1) *goodness of fit* -- does the model's prediction
-resemble the data at all, and (2) *comparison against rivals, including
-the null* -- does this candidate earn its keep over a simpler
-competitor. A model that survives both is **corroborated**, not
-proven; one that doesn't is **falsified** and should be revised or
-discarded. Prefer this survive/corroborate-vs-falsify vocabulary over
+"COMPARE" should be unpacked rather than left vague: (1) *goodness of
+fit* -- does the model's prediction resemble the data at all;
+(2) *predictive ability and comparison against rivals, including the
+null* -- does this candidate earn its keep over a simpler competitor,
+on these data and on new data; and (3) *relevance* -- does it answer
+the problem we started with (a judgment call, not a statistic; present
+it that way so students don't hunt for a number). A model that
+survives is **corroborated**, not proven; one that doesn't is
+**falsified** and should be revised or discarded. "Down-weighting"
+(AIC weights, model averaging) ranks the survivors; it doesn't make
+the top model true. Prefer this survive/corroborate-vs-falsify vocabulary over
 "prove"/"confirm" language whenever the material touches hypothesis
 testing, model selection, or the frequentist/likelihood/Bayesian
 framework tour (Bolker 1.4) later in the semester.

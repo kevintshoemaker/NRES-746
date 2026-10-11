@@ -1,18 +1,32 @@
 
 #  NRES 746, Week 8, Lecture 1: Priors and posteriors -------------------------
-#  A worked Beta-binomial example, summaries, and common sticking points.
-#  Run section by section in RStudio (use the outline to jump around).
 #  Section numbers match the lecture notes. No extra packages needed.
 
-# 1. Big picture and recap ----------------------------------------------------
-#  THEORY -> MODEL(S) -> DATA (fit) -> COMPARE -> repeat
-#  Posterior ~ likelihood x prior
-#  Beta(alpha, beta) prior + k of n -> Beta(alpha + k, beta + n - k)
-#  Today: how much does the prior matter, and what do we report?
+# WOD debrief: tortoise analysts (~8 min) --------------------------------------
+#  [BOARD] collect likelihood sketches -> [CODE] reveal
 
-# 2. Worked example: germination with two priors ------------------------------
-#  30 of 40 seeds germinate; supplier records: 120 of 200
-#  Flat: Beta(1, 1) -> Beta(31, 11); supplier: Beta(121, 81) -> Beta(151, 91)
+survived <- 21
+collared <- 30
+wod_priors <- list(A = c(2, 2), B = c(46, 4), C = c(10, 10))
+s_seq <- seq(0.001, 0.999, length.out = 500)
+
+par(mfrow = c(3, 1), mar = c(4, 4, 1.5, 0.5))
+for (an in names(wod_priors)) {
+  pr <- wod_priors[[an]]
+  po <- pr + c(survived, collared - survived)
+  plot(s_seq, dbeta(s_seq, po[1], po[2]), type = "l", lwd = 2, ylim = c(0, 12),
+       xlab = "Annual survival probability", ylab = "Density",
+       main = paste0("Analyst ", an, ": posterior mean ", round(po[1] / sum(po), 2)))
+  lines(s_seq, dbeta(s_seq, pr[1], pr[2]), lwd = 2, col = "grey60")
+  lines(s_seq, dbeta(s_seq, survived + 1, collared - survived + 1),
+        lwd = 2, lty = 2, col = "darkorange")   # the reveal: shared likelihood
+}
+par(mfrow = c(1, 1))
+
+# 1. Big picture and recap (~3 min) -------------------------------------------
+#  [BOARD] workflow loop; Beta + binomial -> Beta
+
+# 2. Germination, two priors (~10 min) -----------------------------------------
 
 k <- 30
 n <- 40
@@ -54,10 +68,8 @@ post_two_steps <- (prior_info + c(k, n - k)) + c(k, n - k)   # 40 seeds, then 40
 post_one_step <- prior_info + c(2 * k, 2 * (n - k))         # 80 seeds at once
 rbind(post_two_steps, post_one_step)
 
-# 3. Summarizing a posterior --------------------------------------------------
-#  Point estimates: mean (usual), median, mode (= MLE with a flat prior)
-#  Credible interval: central quantiles, or HPD (shortest 95% interval)
-#  "95% probability p is in here" is allowed
+# 3. Summarizing a posterior (~4 min) ------------------------------------------
+#  [CODE]
 
 summ <- rbind(
   flat = c(mean = beta_mean(post_flat),
@@ -87,13 +99,8 @@ draws_flat <- rbeta(1e5, post_flat[1], post_flat[2])
 round(rbind(central = summ["flat", c("lower95", "upper95")],
             hpd = hpd(draws_flat)), 3)
 
-# 4. Where new Bayesians get stuck --------------------------------------------
-#  (a) likelihood is not the posterior (needs prior, rescaling)
-#  (b) flat isn't flat on every scale (callback; covered Week 7 Wednesday)
-#  (c) priors: report them; prior sensitivity analysis
-#  (d) Bayes is not the same as MCMC (germination needed none)
-#  (e) credible interval is not a confidence interval
-#  (f) posterior is conditional on the model; still check and compare
+# 4. Where new Bayesians get stuck (~8 min) ------------------------------------
+#  [BOARD] list (a)-(f); [CODE] for (a), (b), (e)
 
 # (a) area under the nest likelihood is not 1
 integrate(function(p) p^3 * (1 - p), 0, 1)
@@ -115,16 +122,12 @@ haypiles <- c(2, 5, 3, 0, 4, 4)
 nll_pois <- function(lambda) -sum(dpois(haypiles, lambda, log = TRUE))
 f_cut <- function(l) nll_pois(l) - nll_pois(mean(haypiles)) - qchisq(0.95, 1) / 2
 lr_int <- c(uniroot(f_cut, c(0.5, 3))$root, uniroot(f_cut, c(3, 8))$root)
-cred_int <- qgamma(c(0.025, 0.975), shape = sum(haypiles) + 1,
-                   rate = length(haypiles))   # posterior Gamma(19, 6)
+cred_int <- qgamma(c(0.025, 0.975), shape = sum(haypiles) + 1,      
+                   rate = length(haypiles))   # posterior Gamma(19, 6)  NOTE: flat, improper prior
 round(rbind(likelihood_ratio = lr_int, bayes_flat_prior = cred_int), 2)
 
-# 5. Why Bayesian methods are so widely used ----------------------------------
-#  Direct probability statements; posterior -> next prior
-#  Derived quantities: compute for each posterior draw (LD50 = -a/b in Lab 6)
-#  Hierarchical models (later); hidden quantities (occupancy, infection status)
-#  Small samples: no Hessian approximation (chytrid Wald interval goes negative)
-#  Costs: priors, computation, convergence checks
+# 5. Why Bayesian methods are so widely used (~5 min) --------------------------
+#  [BOARD] reasons and costs -> [CODE] derived quantities
 
 # derived quantity: posterior for the odds of germination, p / (1 - p)
 odds_draws <- draws_flat / (1 - draws_flat)
@@ -135,14 +138,8 @@ hist(odds_draws, breaks = 60, freq = FALSE, col = "grey80", border = "white",
 # probability statements come straight from the draws
 mean(draws_flat > 0.6)   # P(germination rate > 0.6 | data, flat prior)
 
-# 6. Return to the big picture ------------------------------------------------
-#  Same model, same likelihood; multiply by a prior, read off the posterior
-#  Conjugate = add counts; many parameters = MCMC (Week 9)
-#  Take-home WOD (Newton's method by hand) due Wednesday: optim() opened up
+# 6. Return to the big picture (~1 min) ----------------------------------------
+#  [BOARD] workflow loop; hand out Newton take-home
 
-# Discussion ------------------------------------------------------------------
-#  1. Supplier prior: posterior mean 0.62; flat prior: 0.74. Manager says
-#     "keep the supplier's numbers out of my estimate." Reasonable? What
-#     would you report to them?
-#  2. Bayesian interval for the LD50? Which approach for ten parameters?
-#  3. Week 7 pikas [1.8, 4.6]: "95% chance the density is in here"? Can you say yes?
+# Discussion (~8 min) ----------------------------------------------------------
+#  [DISCUSS]

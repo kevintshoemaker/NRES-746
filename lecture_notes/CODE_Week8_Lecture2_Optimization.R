@@ -1,14 +1,9 @@
 
 #  NRES 746, Week 8, Lecture 2: Optimization ----------------------------------
-#  How optimizers search an NLL surface, and how they fail.
-#  Run section by section in RStudio (use the outline to jump around).
 #  Section numbers match the lecture notes. Needs the emdbook package.
 
-# 0. Take-home debrief: Newton's method by hand -------------------------------
-#  Pika NLL(lambda) = 6 lambda - 18 log(lambda); MLE = 3
-#  Newton: lambda_new = lambda - NLL'/NLL''
-#  From 2: 2 -> 2.667 -> 2.963 -> 3.000; from 7: overshoots to -2.33
-#  Fixes: shorter steps, better start, bounds, log scale
+# 0. Take-home debrief (~8 min) ----------------------------------------------
+#  [BOARD] students' Newton steps; collect fixes -> [CODE]
 
 nll_pika <- function(lambda) 6 * lambda - 18 * log(lambda)
 d1_pika <- function(lambda) 6 - 18 / lambda
@@ -28,11 +23,8 @@ for (i in seq_len(4)) {
   print(exp(theta))
 }
 
-# 1. Big picture --------------------------------------------------------------
-#  THEORY -> MODEL(S) -> DATA (fit) -> COMPARE -> repeat
-#  Fit = find the lowest point of the NLL surface
-#  Myxomatosis titers, grade 1 (27 rabbits), Gamma(shape, scale)
-#  Grids don't scale: 30 values x 10 parameters = 30^10 evaluations
+# 1. Big picture: the workflow (~5 min) ----------------------------------------
+#  [BOARD] full workflow, first time -> [CODE] myxo surface
 
 library(emdbook)
 titer <- subset(MyxoTiter_sum, grade == 1)$titer
@@ -66,31 +58,27 @@ points(fit_nm$par[1], fit_nm$par[2], pch = 4, cex = 1.5, lwd = 2)
 hist(titer, freq = FALSE, main = "", xlab = "Titer")
 curve(dgamma(x, shape = fit_nm$par[1], scale = fit_nm$par[2]), add = TRUE, lwd = 2)
 
-# 2. Newton's method in more than one dimension -------------------------------
-#  Slope -> gradient g (vector); curvature -> Hessian H (matrix, Lab 6)
-#  theta_new = theta - H^-1 g; in R, solve(H, g)
-#  Good start: fast. Bad start: lurches, NLL can go up
-#  BFGS: gradient only, builds an approximate Hessian (mle2() default)
-#  One parameter: optimize()
+# 2. Newton in 2D (~10 min) ----------------------------------------------------
+#  [BOARD] gradient, Hessian, Newton update -> [CODE]
 
-# central finite differences: f'(x) ~ [f(x+h) - f(x-h)] / 2h, per parameter
-grad_fd <- function(f, p, h = 1e-4 * abs(p)) {
+# central differences: f'(x) ~ [f(x + delta) - f(x - delta)] / (2 delta)
+grad_fd <- function(f, p, delta = 1e-4 * abs(p)) {
   sapply(seq_along(p), function(i) {
-    e <- replace(numeric(length(p)), i, h[i])
-    (f(p + e) - f(p - e)) / (2 * h[i])
+    e <- replace(numeric(length(p)), i, delta[i])
+    (f(p + e) - f(p - e)) / (2 * delta[i])
   })
 }
 
 # matrix of second derivatives (the Hessian), by finite differences
-hess_fd <- function(f, p, h = 1e-3 * abs(p)) {
+hess_fd <- function(f, p, delta = 1e-3 * abs(p)) {
   k <- length(p)
   H <- matrix(0, k, k)
   for (i in seq_len(k)) {
     for (j in seq_len(k)) {
-      ei <- replace(numeric(k), i, h[i])
-      ej <- replace(numeric(k), j, h[j])
+      ei <- replace(numeric(k), i, delta[i])
+      ej <- replace(numeric(k), j, delta[j])
       H[i, j] <- (f(p + ei + ej) - f(p + ei - ej) - f(p - ei + ej) +
-                    f(p - ei - ej)) / (4 * h[i] * h[j])
+                    f(p - ei - ej)) / (4 * delta[i] * delta[j])
     }
   }
   H
@@ -127,11 +115,10 @@ cmp <- rbind(
 )
 colnames(cmp) <- c("shape", "scale", "nll", "n_evals", "convergence")
 round(cmp, 4)
+#  [PAUSE] is the BFGS fit done?
 
-# 3. Derivative-free: Nelder-Mead simplex -------------------------------------
-#  Keep k + 1 points (a triangle for 2 parameters); move the worst one
-#  Reflect; if best yet, expand; if still bad, contract; else shrink
-#  optim() default; slower than BFGS but not fooled by bumps or kinks
+# 3. Nelder-Mead (~10 min) -----------------------------------------------------
+#  [BOARD] sketch triangle moves -> [CODE]
 
 # hand-coded Nelder-Mead for two parameters; stores every simplex
 nelder_mead <- function(f, start, step, n_iter = 80) {
@@ -183,17 +170,15 @@ plot_surface()
 for (i in 1:30) polygon(nm$history[[i]], border = move_cols[nm$moves[i]], lwd = 1.5)
 legend("topright", names(move_cols), col = move_cols, lwd = 2, bty = "n")
 
-# shape and scale are strongly correlated: mean = shape x scale is what's well determined
+# correlation between shape and scale; Gamma mean = shape x scale
 vc <- solve(optimHess(fit_nm$par, nll_gamma))
 cov2cor(vc)
 prod(fit_nm$par)
 mean(titer)
+#  [PAUSE] what can these data tell us?
 
-# 4. Stochastic global search: simulated annealing ----------------------------
-#  Downhill methods find the valley they start in (Bolker Fig. 7.1, 7.4.4)
-#  Random step; if worse by delta, accept with probability exp(-delta / T)
-#  Start hot (explore), cool down (settle)
-#  Keep T = 1, never cool, keep every point -> MCMC (Week 9)
+# 4. Simulated annealing (~8 min; rest to Week 9) -----------------------------
+#  [BOARD] two valleys; acceptance rule -> [CODE]
 
 accept_tab <- outer(c(10, 1, 0.1), c(0.5, 2, 10),
                     function(temp, delta) exp(-delta / temp))
@@ -238,27 +223,18 @@ lines(sa$track[, "shape"], sa$track[, "scale"], col = adjustcolor("darkorange", 
 plot(sa$track[, "nll"], type = "l", log = "y", xlab = "Step", ylab = "Current NLL")
 par(mfrow = c(1, 1))
 
-# optim's built-in annealer, default settings (always reports convergence = 0)
+# optim's built-in annealer, default settings
 set.seed(746)
 fit_sann <- optim(c(20, 0.05), nll_gamma, method = "SANN")
 fit_sann[c("par", "value", "counts", "convergence")]
+#  [PAUSE] is SANN broken?
 
-# 5. Return to the big picture ------------------------------------------------
-#  Grid: simple, hard to fool, doesn't scale
-#  Newton/BFGS: fast near the answer; Nelder-Mead: robust; annealing: escapes valleys
-#  Always: check $convergence, try several starts, look at the surface
+# 5. Wrap (~1 min) -------------------------------------------------------------
+#  [BOARD] point at the FIT box
 
 # If time: reparameterize ------------------------------------------------------
-#  Fit mean and shape (scale = mean / shape): same minimum, no correlation
 
 nll_mean_shape <- function(p) nll_gamma(c(p[2], p[1] / p[2]))
 fit_ms <- optim(c(7, 20), nll_mean_shape)
 fit_ms$par
 cov2cor(solve(optimHess(fit_ms$par, nll_mean_shape)))
-
-# Discussion pauses -----------------------------------------------------------
-#  1. Same start: Nelder-Mead NLL 37.667 (convergence 0); BFGS 37.670
-#     (convergence 1). Is the BFGS fit done? What would you do?
-#  2. corr(shape, scale) = -0.995. What can these data tell us, and what can't they?
-#  3. SANN with defaults: NLL 40.77 after 10,000 evaluations, convergence 0.
-#     Nelder-Mead: 37.67 in 147. Is SANN broken? Trust convergence = 0?

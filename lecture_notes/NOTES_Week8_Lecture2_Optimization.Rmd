@@ -42,6 +42,13 @@ podium copy.
 | Lecture, with three short discussion pauses | ~40 min |
 | Separate discussion period | none |
 
+**New workflow framing.** Section 1 introduces the revised scientific
+workflow (PROBLEM $\to$ THEORIES $\to$ MODELS $\to$ FIT $\to$ COMPARE
+$\to$ REVISE, with a study-design side arrow from MODELS to DATA). Draw
+it in full once today; later lectures can use the one-line version.
+To make room, section 1 grows to ~5 min and Nelder-Mead drops to
+~10 min.
+
 **Pacing.** This is a full period by design. Core: sections 0-3 and
 the start of section 4 (the rules and the acceptance probability).
 Whatever of section 4 doesn't fit opens Week 9 Monday, where it leads
@@ -89,24 +96,24 @@ nll_gamma <- function(p) {
   -sum(dgamma(titer, shape = p[1], scale = p[2], log = TRUE))
 }
 
-# central finite differences: f'(x) ~ [f(x+h) - f(x-h)] / 2h, per parameter
-grad_fd <- function(f, p, h = 1e-4 * abs(p)) {
+# central differences: f'(x) ~ [f(x + delta) - f(x - delta)] / (2 delta)
+grad_fd <- function(f, p, delta = 1e-4 * abs(p)) {
   sapply(seq_along(p), function(i) {
-    e <- replace(numeric(length(p)), i, h[i])
-    (f(p + e) - f(p - e)) / (2 * h[i])
+    e <- replace(numeric(length(p)), i, delta[i])
+    (f(p + e) - f(p - e)) / (2 * delta[i])
   })
 }
 
 # matrix of second derivatives (the Hessian), by finite differences
-hess_fd <- function(f, p, h = 1e-3 * abs(p)) {
+hess_fd <- function(f, p, delta = 1e-3 * abs(p)) {
   k <- length(p)
   H <- matrix(0, k, k)
   for (i in seq_len(k)) {
     for (j in seq_len(k)) {
-      ei <- replace(numeric(k), i, h[i])
-      ej <- replace(numeric(k), j, h[j])
+      ei <- replace(numeric(k), i, delta[i])
+      ej <- replace(numeric(k), j, delta[j])
       H[i, j] <- (f(p + ei + ej) - f(p + ei - ej) - f(p - ei + ej) +
-                    f(p - ei - ej)) / (4 * h[i] * h[j])
+                    f(p - ei - ej)) / (4 * delta[i] * delta[j])
     }
   }
   H
@@ -132,35 +139,108 @@ f3 <- function(v) formatC(v, format = "f", digits = 3)
 Run this as a discussion, not a solution walkthrough. Key in
 `wod/answer_keys/WOD_Week8_Lecture1_NewtonByHand_Key.Rmd`.
 
+- **3a (deriving the update).** Ask a student to put their $\lambda^*$
+  on the board: $\lambda^* = \lambda - \text{NLL}'/\text{NLL}''$, from
+  setting the straight-line slope $\text{NLL}'(\lambda) +
+  \text{NLL}''(\lambda)(\lambda^* - \lambda)$ to zero. Note that a
+  straight-line slope means a parabola-shaped NLL, so each step jumps
+  to the bottom of a parabola. Dividing by the curvature sets the step
+  size.
 - **3b (Newton from $\lambda = 2$).** Ask for the guesses: 2, 2.667,
   2.963, 3.000. Ask how fast the error shrank: 1, 0.33, 0.037, 0.0005.
   Each error is roughly the square of the last. That speed near the
   answer is the appeal of derivative-based methods.
 - **3c (start at $\lambda = 7$).** Ask who got a negative number
-  ($-2.33$) and why. Far from the MLE the NLL is nearly straight, so
-  the matching parabola is very wide and its bottom is past zero.
+  ($-2.33$) and why. Far from the MLE the slope $\text{NLL}'$ levels
+  off, so the straight line drawn at 7 is shallow and doesn't cross
+  zero until past $\lambda = 0$.
   Collect fixes on the board: shorter steps (halve until the NLL
   improves), better starting values, bounds, fitting on the log
   scale. Newton on $\theta = \log\lambda$ from 7 goes 3.95, 3.11, 3.002:
   no overshoot.
-- **2b and 3d (finite differences).** The second-difference formula is
-  how `optim(..., hessian = TRUE)` got the Hessian in Lab 6. A Newton
-  step built from finite-difference estimates (2.69) lands almost where
-  the exact one does (2.67), so an optimizer doesn't need calculus.
+- **2a, 2b, and 3d (finite differences).** A forward difference with
+  step $\Delta$ is really the slope at the chord's midpoint (2a: the
+  forward estimate at 2 matches the exact slope at 2.25). Taking that
+  idea twice gives the second-difference formula, which is how
+  `optim(..., hessian = TRUE)` got the Hessian in Lab 6. A Newton step
+  built from the forward slope (2.44) heads the right way but falls
+  short of the exact step (2.67); a smaller $\Delta$ (`optim()` uses
+  0.001) or a centered slope (2.69) fixes it. An optimizer doesn't need
+  calculus.
 
 Landing point: *every fix students proposed is built into a real
 optimizer.* Today: what those optimizers do in more than one
 dimension.
 
-## 1. Big picture (~3 min)
+## 1. Big picture: the workflow, and where today sits (~5 min)
 
-Loop on the board:
+**New framing, introduced today.** Earlier lectures opened with a
+four-step loop (THEORY $\to$ MODEL $\to$ DATA $\to$ COMPARE). From
+today on, use this fuller version. Draw it on the board once in full;
+later lectures can use the one-line form and point at a box.
 
-$$\text{THEORY} \to \text{MODEL(S)} \to \text{DATA (fit)} \to \text{COMPARE} \to \text{repeat}$$
+```{r workflow-helper, echo=FALSE}
+# scientific workflow schematic; 'highlight' shades one box (e.g. "FIT")
+draw_workflow <- function(highlight = NULL, cex = 0.8) {
+  boxes <- c("PROBLEM", "THEORIES", "MODELS", "FIT", "COMPARE")
+  subs <- c("what do we\nneed to know?", "candidate\nexplanations",
+            "data-generating\n(process + noise)", "confront each\nwith data",
+            "fit, prediction,\nrelevance")
+  x <- seq(1, 9, by = 2)
+  y <- 2
+  w <- 0.8
+  h <- 0.55
+  shade <- function(lab) if (!is.null(highlight) && lab == highlight) "grey80" else "white"
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 10), ylim = c(-0.2, 4), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_along(boxes)) {
+    rect(x[i] - w, y - h, x[i] + w, y + h, col = shade(boxes[i]), lwd = 1.5)
+    text(x[i], y + 0.18, boxes[i], font = 2, cex = cex)
+    text(x[i], y - 0.22, subs[i], cex = cex * 0.75)
+  }
+  arrows(x[-5] + w, y, x[-1] - w, y, length = 0.08, lwd = 1.5)
+  rect(6 - 0.7, 3.2 - 0.35, 6 + 0.7, 3.2 + 0.35, col = shade("DATA"), lty = 2, lwd = 1.5)
+  text(6, 3.28, "DATA", font = 2, cex = cex)
+  text(6, 3.0, "study design", cex = cex * 0.75)
+  arrows(x[3], y + h, 6 - 0.7, 3.2, length = 0.08, lty = 2, lwd = 1.2)
+  arrows(6 + 0.7, 3.2, x[4], y + h, length = 0.08, lty = 2, lwd = 1.2)
+  segments(x[5], y - h, x[5], 0.4, lwd = 1.5)
+  segments(x[5], 0.4, x[1], 0.4, lwd = 1.5)
+  arrows(x[c(1, 2)], 0.4, x[c(1, 2)], y - h, length = 0.08, lwd = 1.5)
+  text(6, 0.15, "REVISE the problem and theories; drop or down-weight poor models",
+       cex = cex * 0.85, font = 3)
+}
+```
 
-- Today is the "fit" arrow. Fitting means finding the lowest point of
-  the NLL surface. Every method today is a strategy for searching that
-  surface without evaluating it everywhere.
+```{r workflow-fig, echo=FALSE, fig.width=6.5, fig.height=2.6, dev="png", dpi=250}
+draw_workflow("FIT")
+```
+
+- **PROBLEM** first: what do we need to know? Writing it down first is
+  what lets us later ask whether a model is *relevant*, not just
+  whether it fits.
+- **THEORIES:** candidate explanations, more than one where possible
+  (multiple working hypotheses).
+- **MODELS:** each theory becomes a data-generating model, a
+  deterministic function plus a probability distribution (Weeks 3-5).
+- **DATA (side arrow):** the models tell us what data to collect and
+  how much (the Week 6 power analysis by simulation).
+- **FIT:** confront each model with the data (likelihood, Bayes).
+- **COMPARE:** does it fit, does it predict, does it answer the
+  problem? Poor models are dropped (falsified) or down-weighted. The
+  survivors are corroborated, not proven.
+- **REVISE:** loop back to the problem and the theories, not just the
+  parameters.
+
+**Today is the FIT box.** Fitting means finding the lowest point of
+the NLL surface. Every method today is a strategy for searching that
+surface without evaluating it everywhere, and every discussion pause
+today is about not trusting a fit blindly before moving on to COMPARE.
+
+**Sticking point.** Students may hear "down-weight" as "pick the
+winner and call it true." Head that off: weighting ranks the models
+that survived; it says nothing about models nobody proposed.
+
 - **Today's data.** Virus titers (log$_{10}$ virus load) in 27 rabbits
   infected with the most virulent grade of myxomatosis (Bolker's
   example). Model: Gamma(shape, scale). Two parameters, so we can still
@@ -225,15 +305,18 @@ legend("topright", c("start (40, 0.2)", "start (20, 0.05)"), lwd = 2,
 - From (40, 0.2), Newton reaches the minimum in about six steps.
 - From (20, 0.05), it lurches across the valley, the NLL goes *up* on
   one step, and after eight steps it still isn't done. Same lesson as
-  3c on the take-home: the parabola is a good guide near the minimum
-  and a bad one far from it.
+  3c on the take-home: the straight-line slope (a parabola-shaped NLL)
+  is a good guide near the minimum and a bad one far from it.
 - **Why not always use Newton?** It needs the full Hessian at every
   step: for $k$ parameters, about $k^2$ second derivatives, each costing
   several NLL evaluations by finite differences.
 - **BFGS** (`method = "BFGS"`, a "quasi-Newton" method) computes only
   the gradient. It builds up an approximate Hessian from how the
   gradient changes from step to step. This is the workhorse for smooth
-  surfaces (and `mle2()`'s default).
+  surfaces (and `mle2()`'s default). If you can write the first
+  derivatives as a function, pass them through `optim()`'s `gr`
+  argument: no finite differences, so faster and more stable (Bolker
+  p. 301; footnoted on the take-home).
 - **One parameter?** Use `optimize()`, which brackets the minimum and
   narrows in. `optim()`'s default warns if you give it one parameter.
 
@@ -269,7 +352,7 @@ log(shape) and log(scale) instead converges in
 values). Watch for students treating "the numbers look close" as
 "converged."
 
-## 3. Derivative-free: Nelder-Mead simplex (~12 min)
+## 3. Derivative-free: Nelder-Mead simplex (~10 min)
 
 **The idea.** No slopes at all. Keep $k + 1$ points (a triangle for two
 parameters), and keep moving the worst one. Sketch on the board:
@@ -486,6 +569,8 @@ distribution. That's MCMC (the Metropolis algorithm), Monday's topic.
 
 ## 5. Return to the big picture (~1 min)
 
+- Point at the FIT box. A fit we can't trust can't be compared, so
+  checking convergence comes before COMPARE.
 - Fitting = searching the NLL surface. Grids are simple and hard to
   fool but don't scale.
 - Derivative-based (Newton, BFGS): fast near the answer, can misbehave
@@ -530,18 +615,35 @@ profile around the answer.
 
 ## 0. Take-home debrief (~8 min)
 
+- 3a: student puts $\lambda^* = \lambda - \text{NLL}'/\text{NLL}''$ on board (line through current slope hits 0)
 - 3b: 2 $\to$ 2.667 $\to$ 2.963 $\to$ 3.000; error 1, 0.33, 0.037, 0.0005
-- 3c: from 7 $\to$ $-2.33$. Why? Flat NLL $\to$ wide parabola
+- 3c: from 7 $\to$ $-2.33$. Why? NLL$'$ levels off $\to$ shallow line crosses 0 far left
 - Board: fixes (shorter steps, better start, bounds, log scale)
 - Log scale from 7: 3.95, 3.11, 3.002
-- 2b: $[f(x+h) - 2f(x) + f(x-h)]/h^2$ = Lab 6 Hessian
+- 2a: forward slope at 2 = true slope at 2.25 (chord midpoint)
+- 2b: $[f(x+\Delta) - 2f(x) + f(x-\Delta)]/\Delta^2$ = Lab 6 Hessian
+- 3d: forward slope $\to$ 2.44 vs. 2.67; smaller $\Delta$ fixes it
 - **Every fix you proposed is built into real optimizers**
 
 \newpage
 
-## 1. Big picture (~3 min)
+## 1. Big picture: new workflow (~5 min)
 
-- Loop: THEORY $\to$ MODEL $\to$ **DATA (fit)** $\to$ COMPARE
+**Draw on board in full (first time):**
+
+```{r podium-workflow, echo=FALSE, fig.width=6.5, fig.height=2.6, dev="png", dpi=250}
+draw_workflow("FIT")
+```
+
+- PROBLEM first $\to$ lets us judge *relevance* later
+- MODELS = process + noise; side arrow: models decide what DATA to collect
+- COMPARE: fit, prediction, relevance; drop or down-weight
+- Down-weight $\neq$ "winner is true"; survivors are corroborated
+- REVISE problem + theories, not just parameters
+- **Today = FIT box.** Don't trust a fit blindly before COMPARE
+
+\newpage
+
 - Fit = find the bottom of the NLL surface
 - Myxo titers, 27 rabbits, Gamma(shape, scale)
 - MLE (`r f2(fit_nm$par[1])`, `r f3(fit_nm$par[2])`), NLL `r f3(fit_nm$value)`
@@ -577,7 +679,7 @@ lines(path_bad, type = "o", pch = 19, cex = 0.6, col = "darkorange", lwd = 2)
 
 \newpage
 
-## 3. Nelder-Mead (~12 min)
+## 3. Nelder-Mead (~10 min)
 
 - Sketch triangle: reflect, expand, contract, shrink
 - No derivatives; tumbles downhill, crawls along valleys
@@ -619,6 +721,7 @@ plot(sa$track[, "nll"], type = "l", log = "y", xlab = "Step", ylab = "Current NL
 
 ## 5. Wrap (~1 min)
 
+- Point at FIT box: untrusted fit $\to$ can't COMPARE
 - Grid / Newton-BFGS / Nelder-Mead / annealing: speed vs. robustness
 - Check convergence; several starts; look at the surface
 - Monday: $T = 1$, keep every point $\to$ MCMC
