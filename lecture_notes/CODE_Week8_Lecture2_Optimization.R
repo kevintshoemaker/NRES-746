@@ -230,7 +230,7 @@ fit_sann[c("par", "value", "counts", "convergence")]
 #  [PAUSE] is SANN broken?
 
 # 5. Wrap (~1 min) -------------------------------------------------------------
-#  [BOARD] point at the FIT box
+#  [BOARD] point at the FIT box; hand out optional Curvature by Hand WOD
 
 # If time: reparameterize ------------------------------------------------------
 

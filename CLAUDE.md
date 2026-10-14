@@ -969,10 +969,11 @@ record is `CourseSchedule.csv`.
     debrief, then lecture with three short discussion pauses (no
     separate discussion beat). Myxomatosis Gamma example: Newton/BFGS,
     Nelder-Mead, start of simulated annealing.
-- **Unused WOD, shelved.** `wod/WOD_Week7_Lecture2_CurvatureByHand.Rmd`
-  (and key) was never handed out; students have not seen it. The
-  Newton take-home absorbed its pika part. Its chytrid Wald interval
-  part is a candidate for Lab 7 (a contrast with a credible interval).
+- **Curvature by Hand WOD.** Planned for Week 7 but never used there;
+  renamed `wod/WOD_Week8_Lecture2_CurvatureByHand.Rmd` (and key) and
+  handed out Wed., Oct. 14 as an **optional take-home, not collected**.
+  Don't assume every student did it. Its chytrid Wald interval part
+  (2d) is still a good contrast with a credible interval in Lab 7.
 - **Coming later (Week 9):** Monday finishes simulated annealing
   (whatever didn't fit Wednesday) and turns it into MCMC. The Week 8
   notes' "if time" section (Gamma reparameterization, Bolker 7.4
