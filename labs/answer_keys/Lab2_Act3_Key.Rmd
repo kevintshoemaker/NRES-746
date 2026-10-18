@@ -1,59 +1,223 @@
 ---
-title: "Lab 2, Act 3 -- Answer Key"
+title: "Lab 2, Act 3"
 subtitle: "How much should you trust the 'best' fit?"
-author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+author: "NRES 746"
 date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 4.5)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
 
+# Data ---------------------------------
 frogs <- read.csv("../../data/ReedfrogSizepred.csv")
+
+# Point estimates from Act 1 and Act 2 ---------------------------------
 ricker <- function(x, a, b) a * x * exp(-b * x)
 flex_ricker <- function(x, a, p, c) a * x^c * exp(-c * x / p)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
 ```
 
-## Part 1: Plan the bootstrap
-
-**1a.** Similar resolution (50-60 values per parameter) for 3 parameters:
-
-```{r grid-size-3d}
-60^3
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
 ```
 
-Roughly 200,000 combinations -- three orders of magnitude more than Act 1's 2D grid, and each
-one requires evaluating the SSR at 15 points. Still technically possible but slow and wasteful;
-this is the motivation for `optim()`. (Some students may estimate using 50 instead of 60 --
-either order of magnitude, ~125,000-200,000, is an acceptable answer.)
+```{r key-values, include=FALSE, cache=TRUE}
+fit_ricker <- function(x, y) {
+  ssr <- function(par) sum((y - par[1]*x*exp(-par[2]*x))^2)
+  optim(c(1, 0.15), ssr)$par
+}
+fit_flex_ricker <- function(x, y) {
+  ssr <- function(par) {
+    a <- par[1]; p <- par[2]; c <- par[3]
+    if (p <= 0 || c <= 0 || a <= 0) return(1e10)
+    pred <- a * x^c * exp(-c * x / p)
+    if (any(!is.finite(pred))) return(1e10)
+    sum((y - pred)^2)
+  }
+  starts <- list(c(1e-6, 12, 8), c(0.01, 12, 3), c(1, 15, 2))
+  best <- NULL
+  for (s in starts) {
+    fit <- optim(s, ssr, control = list(maxit = 2000))
+    if (is.null(best) || fit$value < best$value) best <- fit
+  }
+  best$par
+}
+set.seed(123)
+nboot <- 300
+n <- nrow(frogs)
+ricker_boot <- matrix(NA, nboot, 2)
+flex_boot <- matrix(NA, nboot, 3)
+for (i in seq_len(nboot)) {
+  idx <- sample(seq_len(n), size = n, replace = TRUE)
+  ricker_boot[i, ] <- fit_ricker(frogs$TBL[idx], frogs$Kill[idx])
+  flex_boot[i, ] <- fit_flex_ricker(frogs$TBL[idx], frogs$Kill[idx])
+}
+ricker_peak <- 1 / ricker_boot[, 2]
+flex_peak <- flex_boot[, 2]
+flex_shape <- flex_boot[, 3]
+f1 <- function(v) formatC(v, format = "f", digits = 1)
+med_iqr <- function(v) c(f1(median(v)), paste(f1(quantile(v, c(0.25, 0.75))), collapse = " to "))
+```
 
-**1b.** A correct plain-English bootstrap algorithm should include:
+\ans{\textbf{Answer key.} Answers are in magenta. Bootstrap numbers come from one run (300 replicates); yours will differ a little.}
 
-1. Set the number of bootstrap replicates (e.g. 200+).
-2. For each replicate: draw a sample of 15 observations, *with replacement*, from the full set
-   of 15 raw tank observations (pooled, not stratified by tank size).
-3. Refit both models (`fit_ricker()` and `fit_flex_ricker()`) to that resampled data, using the
-   resampled $x$ and $y$ vectors as input.
-4. Store the fitted parameters from both models for that replicate.
-5. After all replicates are done, look at the distribution (e.g. median, IQR, histogram) of the
-   stored parameter values for each model.
 
-Common gaps: forgetting "with replacement" (without it, every resample is identical to the
-original data and there's nothing to learn), or resampling the 5 tank-size groups instead of
-the 15 raw observations.
+## Picking up where we left off
 
-**1c.** No fixed correct prediction -- this is meant to be tested, not answered from theory.
-A reasonable prediction is that the simpler, 2-parameter Ricker will be more stable (fewer
-parameters, less room to swing), and that's *partly* right -- but the actual result (below) is
-more nuanced than "simple model = stable, complex model = unstable."
+Across Act 1 and Act 2 you found several "best" curves: Act 1's grid search gave something close to the best possible 2-parameter Ricker fit ($a=1$, $b=0.15$); Act 2's flexible Ricker, once truly optimized, fit far better on paper -- but its winning parameters ($a\approx4\times10^{-19}$, $p=12.52$, $c\approx29$) don't look anything like a natural, hand-picked guess (we haven't talked about overfitting yet, but this kind of result 'smells' like overfitting!). So far, every SSR you've computed has been calculated against the 5 tank-size means. From here on we'll work directly with the 15 raw tank observations instead, and compute SSR at the individual-tank level -- the more standard approach, and one that will matter once we start resampling.
 
-## Part 2: Run the bootstrap
+```{r recap-curve, fig.height=3.2, fig.width=5.5}
+set.seed(1)
+x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
+     xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
+     pch = 21, bg = "grey70", cex = 1.4)
+curve(ricker(x, 1, 0.15), from = 5, to = 40, lwd = 2, col = "steelblue", add = TRUE)
+curve(flex_ricker(x, 3.68e-19, 12.52, 28.72), from = 5, to = 40, lwd = 2, col = "darkorange", add = TRUE, n = 500)
+grid()
+legend("topright", legend = c("Ricker (Act 1)", "Flexible Ricker (Act 2)"),
+       col = c("steelblue", "darkorange"), lwd = 2, bty = "n")
+```
 
-```{r fit-functions}
+Today's question: how much should you actually trust either of these "best" parameter sets? A single fit only tells you what happened to work for the data you happened to collect. Bootstrapping asks a sharper question: if you'd collected slightly different data (which you would, by chance, if you repeated the experiment), how much would your best-fit parameters move around? We'll compare the plain Ricker against the flexible Ricker -- not Holling IV, since its obviously over-fitted just from looking at the curve (that dramatic spike). Flexible Ricker's problem is sneakier: the curve itself looked perfectly reasonable, and nothing seems terribly off unless you scrutinize the actual parameter values. That's the kind of model fragility bootstrapping is good at catching.
+
+**Try this on paper first, before you open a laptop or start typing code.** Part 1 and the checkpoint that follows work best this way -- resist the urge to jump straight to R or an AI assistant.
+
+## Part 1: Plan the bootstrap (individual, ~15 min)
+
+**1a.** Act 1's grid search checked about 2,300 combinations of $(a,b)$ for the plain Ricker. If you wanted similar resolution (roughly 50-60 values per parameter) for the flexible Ricker's 3 parameters, about how many combinations would a comparable grid need?
+
+\ans{about $60^3 = 216{,}000$ (125,000 to 200,000 is fine)}
+
+Is a grid search still a practical way to find the best fit here? (the answer is probably obvious, but it's an important concept so let's spell it out here!) \ans{Not really: about 100 times more work than Act 1's grid, and it grows fast with every added parameter.}
+
+For situations like this, R has a general-purpose numerical optimizer, `optim()`: give it a starting guess and a function to minimize (like your SSR function), and it searches nearby values and adjusts step by step until it can't improve further. It's much faster than a grid, but it can settle into a bad valley depending on where it starts. Below we'll use two ready-made, AI-generated functions, `fit_ricker()` and `fit_flex_ricker()`. Both take two arguments, in this order: a vector of TBL values (`x`) and a vector of Kill counts (`y`), the same length as `x` and paired with it position-by-position (the $i$-th entry of `y` is the observed kill count for the $i$-th entry of `x`) -- the same shape as `frogs$TBL` and `frogs$Kill`, or a resampled version of them. Both functions return the best-fit parameters for whatever `x`/`y` pair you hand them; `fit_flex_ricker()` tries a few different starting points and keeps the best result, to guard against that same problem.
+
+**1b. Design the bootstrap.** Working from the two fitting functions described above, write out -- in plain English, step by step -- the algorithm for bootstrapping the fitted parameters of each model, resampling from all 15 raw tank observations pooled together (not grouped by size). Think about: what you're resampling from, what has to happen at each replicate, what you need to store, and how many times you repeat the whole thing.
+
+\ans{Choose a number of replicates (e.g. 200 or more). For each replicate: draw 15 observations *with replacement* from the 15 raw (TBL, Kill) pairs, keeping each pair together; fit both models to the resampled $x$ and $y$; store both sets of fitted parameters. At the end, summarize the stored values (median, IQR, histogram) for each parameter.}
+
+**1c. Predict before you run anything.** Which model do you expect to show a tighter (more consistent) spread of fitted parameters across bootstrap replicates: the plain Ricker, or the flexible Ricker? Why?
+
+\ans{Open-ended. A common (reasonable) prediction is the plain Ricker, since it has fewer parameters to swing around.}
+
+## Checkpoint: finalize your plan (~5 min)
+
+Reread your algorithm from 1b and your prediction from 1c. Would your plan actually work if you started typing it up right now? Revise anything that's incomplete or unclear before you move on -- this is your last checkpoint before writing any code.
+
+\ans{Open-ended.}
+
+## Part 2: Run the bootstrap (~20-25 min)
+
+Type the two fitting functions below into your R script, then implement your bootstrap plan.
+
+```
+# x: vector of TBL values.  y: vector of Kill counts, same length as x,
+# paired position-by-position (e.g. frogs$TBL / frogs$Kill, or a resampled
+# version of them with the same length).  Both functions return a vector
+# of best-fit parameters: fit_ricker() -> c(a, b); fit_flex_ricker() -> c(a, p, c)
 fit_ricker <- function(x, y) {
   ssr <- function(par) sum((y - par[1]*x*exp(-par[2]*x))^2)
   optim(c(1, 0.15), ssr)$par
@@ -77,78 +241,65 @@ fit_flex_ricker <- function(x, y) {
 }
 ```
 
-```{r bootstrap, cache=TRUE}
-set.seed(123)
+**2a.** Implement your bootstrap: resample all 15 raw observations with replacement, refit both models to each resample using the functions above, and store the results. Run at least 200 replicates (should take well under a minute).
+
+\ansbegin
+
+```
 nboot <- 300
-n <- nrow(frogs)
 ricker_boot <- matrix(NA, nboot, 2)
 flex_boot <- matrix(NA, nboot, 3)
-
 for (i in seq_len(nboot)) {
-  idx <- sample(seq_len(n), size = n, replace = TRUE)
-  bx <- frogs$TBL[idx]; by <- frogs$Kill[idx]
-  ricker_boot[i, ] <- fit_ricker(bx, by)
-  flex_boot[i, ] <- fit_flex_ricker(bx, by)
+  idx <- sample(1:15, size = 15, replace = TRUE)
+  ricker_boot[i, ] <- fit_ricker(frogs$TBL[idx], frogs$Kill[idx])
+  flex_boot[i, ] <- fit_flex_ricker(frogs$TBL[idx], frogs$Kill[idx])
 }
-
-ricker_peak <- 1 / ricker_boot[, 2]
-flex_peak <- flex_boot[, 2]
-flex_shape <- flex_boot[, 3]
 ```
 
-**2b. Summary table** (exact numbers will vary slightly by random seed and replicate count --
-this is one run of 300 replicates, seed 123; students' numbers should be in the same ballpark):
+\ansend
 
-```{r summary-table}
-summarize <- function(v) c(median = median(v), quantile(v, c(0.25, 0.75)))
-rbind(
-  `Ricker peak (1/b)`          = summarize(ricker_peak),
-  `Flexible Ricker peak (p)`   = summarize(flex_peak),
-  `Flexible Ricker shape (c)`  = summarize(flex_shape)
+**2b.** Summarize the spread. For each parameter below, record the median and the interquartile range (IQR) -- the span from the 25th to the 75th percentile, covering the middle half of your bootstrap values (R's `quantile()` or `IQR()` functions will get you there): the plain Ricker's peak location ($1/b$), and the flexible Ricker's peak location ($p$) and shape parameter ($c$).
+
+```{r fill-param-table, fig.height=0.35+3*0.5, fig.width=5.5}
+blank_table(
+  headers = list("Parameter", "Median", "IQR"),
+  body = list(
+    c("Ricker peak (1/b)", med_iqr(ricker_peak)),
+    c("Flexible Ricker peak (p)", med_iqr(flex_peak)),
+    c("Flexible Ricker shape (c)", med_iqr(flex_shape))
+  ),
+  col_widths = c(1.8, 1, 1),
+  cex = 0.9,
+  ans = rep(list(c(FALSE, TRUE, TRUE)), 3)
 )
 ```
 
-| Parameter | Median | IQR |
-|:---|:---:|:---:|
-| Ricker peak ($1/b$) | $\approx6.4$ | roughly 5.6 to 7.3 |
-| Flexible Ricker peak ($p$) | $\approx13.0$ | roughly 12.6 to 13.4 |
-| Flexible Ricker shape ($c$) | $\approx20$-21 | roughly 18.5 to 22 |
+**2c.** Make two histograms: one of the plain Ricker's bootstrapped peak locations ($1/b$, one value per replicate -- about 200 numbers total), and a separate one of the flexible Ricker's bootstrapped peak locations ($p$). `hist()` works fine for either; just hand it the vector of peak-location values you stored during the bootstrap.
 
-Worth noting for grading: `fit_flex_ricker()`'s $a$ values span an enormous range across
-replicates (from around $10^{-22}$ to double digits) -- if a student reports median/IQR for $a$
-too, expect it to look bizarre. That's expected and part of the lesson, not an error.
+Each histogram shows the full *distribution* of "best" answers your bootstrap turned up, not just the single median you recorded in 2b. A narrow, tall histogram means the model landed on nearly the same peak location almost every time, regardless of which 15 observations happened to get resampled -- a stable, trustworthy estimate. A wide, spread-out histogram means the answer depended heavily on the luck of the resample -- an estimate you should be more skeptical of.
 
-**2c. Histograms:**
-
-```{r histograms, fig.height=3.5}
-par(mfrow = c(1, 2))
+```{r ans-histograms, fig.height=2.8, fig.width=6.5}
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 0.5))
 hist(ricker_peak, breaks = 20, main = "Ricker peak (1/b)", xlab = "mm",
-     xlim = c(0, 15), col = "steelblue")
-abline(v = 12, col = "red", lwd = 2, lty = 2)
+     xlim = c(0, 15), col = adjustcolor(ans_col, 0.4), border = ans_col)
+abline(v = 12, lwd = 2, lty = 2)
 hist(flex_peak, breaks = 20, main = "Flexible Ricker peak (p)", xlab = "mm",
-     xlim = c(0, 15), col = "darkorange")
-abline(v = 12, col = "red", lwd = 2, lty = 2)
+     xlim = c(0, 15), col = adjustcolor(ans_col, 0.4), border = ans_col)
+abline(v = 12, lwd = 2, lty = 2)
 ```
 
-**Did the plain Ricker's bootstrapped peak locations cluster near 12 mm?** No -- the Ricker
-histogram is fairly narrow (a stable estimate) but centered around 6-7 mm, nowhere near the
-data's actual peak at 12 mm. It's precise and consistently wrong. The flexible Ricker's peak
-location, by contrast, clusters tightly right around 12-13 mm -- correctly located *and*
-reasonably stable, at least for this one parameter.
+Did the plain Ricker's bootstrapped peak locations cluster anywhere near 12 mm, where the data actually peaks?
 
-**2d.** This is the payoff question, and the honest answer resists a simple "model X wins."
-Two things are both true and worth drawing out explicitly:
+\ans{No. The Ricker peak estimates are fairly tight but centered around `r round(median(ricker_peak), 1)` mm, far from 12 mm: consistent but consistently wrong. The flexible Ricker's peak clusters near `r round(median(flex_peak), 1)` mm.}
 
-- The plain Ricker is **precise but biased**: its bootstrap distribution is fairly tight, but
-  it's tight around the wrong answer. You could trust its consistency, but not its accuracy.
-- The flexible Ricker's *peak location* ($p$) is both roughly accurate and reasonably stable --
-  but its *shape* parameters ($a$ and $c$, which control how narrow/tall the peak is) are wildly
-  unstable across resamples. So it's more trustworthy for "where is the peak" than for "what does
-  the curve look like away from the peak," or for extrapolating to sizes outside the observed
-  range.
+**2d.** Did the results match your prediction in 1c? Which model would you actually trust more, and for what -- predicting the peak location, or predicting the overall shape of the curve? Is it possible for a model to be reliable about one of those and not the other? Is one of these clearly the better model to use going forward, or does it depend on what you actually want to do with it?
 
-So: neither model is simply "the better one" -- it depends on what the model needs to be used
-for. This is a natural place to introduce (or preview) the bias-variance tradeoff by name if it
-hasn't come up yet in lecture.
+\ans{Partly. The plain Ricker is precise but biased (tight around the wrong peak). The flexible Ricker's peak location is accurate and fairly stable, but its shape parameters ($a$, $c$) swing wildly between resamples, so trust it for where the peak is, not for the curve's shape away from the peak. A model can be reliable for one purpose and not another; which to use depends on the question.}
 
-**Reflection.** No fixed answer -- use this to catch muddiest points before Wednesday's lecture.
+---
+
+## Reflection (~5 min)
+
+Please take a minute to reflect on any areas of confusion ("muddiest points") or topics you want to review or dust off going forward.
+
+\ans{Open-ended.}

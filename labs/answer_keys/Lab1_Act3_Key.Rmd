@@ -1,0 +1,246 @@
+---
+title: "Lab 1, Act 3"
+subtitle: "Does the evidence actually support our candidate?"
+author: "NRES 746"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# Data ---------------------------------
+frogs <- read.csv("../../data/ReedfrogSizepred.csv")
+mn <- aggregate(Kill ~ TBL, data = frogs, FUN = mean)
+
+# Candidate Ricker curve (from Act 2) ---------------------------------
+a <- 0.9; b <- 1/12
+ricker <- function(x, a, b) a * x * exp(-b * x)
+pred_ricker <- round(ricker(mn$TBL, a, b), 2)
+grand_mean <- round(mean(frogs$Kill), 2)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+```
+
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
+
+```{r key-values, include=FALSE}
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+obs_mean <- c(1, 4, 0, 0.33, 0)
+tbl <- c(9, 12, 21, 25, 37)
+# rows of an SSR table: observed, predicted, residual, squared residual, then the total
+ssr_rows <- function(pred) {
+  res <- obs_mean - pred
+  rows <- lapply(1:5, function(i) c(tbl[i], f2(obs_mean[i]), f2(pred[i]), f2(res[i]), f2(res[i]^2)))
+  c(rows, list(c("", "", "", "SSR:", f2(sum(res^2)))))
+}
+pred_r <- round(ricker(tbl, a, b), 2)
+ssr_ricker <- sum((obs_mean - pred_r)^2)
+ssr_null <- sum((obs_mean - 1.07)^2)
+ssr_fun <- function(p) sum((obs_mean - ricker(tbl, p[1], p[2]))^2)
+best <- optim(c(0.9, 1 / 12), ssr_fun)
+ans_ricker <- c(rep(list(c(FALSE, FALSE, FALSE, TRUE, TRUE)), 5), list(c(FALSE, FALSE, FALSE, FALSE, TRUE)))
+ans_null <- c(rep(list(c(FALSE, FALSE, TRUE, TRUE, TRUE)), 5), list(c(FALSE, FALSE, FALSE, FALSE, TRUE)))
+```
+
+\ans{\textbf{Answer key.} Answers are in magenta.}
+
+
+## Picking up where we left off
+
+In Act 1, your group diagnosed the tadpole data as hump-shaped and picked the Ricker function as your top candidate. In Act 2, you put specific numbers on it ($a=0.9$, $b=1/12$) and derived its peak, $x^*=12$ mm. Today we put that candidate on trial: does it actually predict the real data well, or does it just *look* plausible?
+
+```{r candidate-curve, fig.height=3.2, fig.width=5.5}
+set.seed(1)
+x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
+     xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
+     pch = 21, bg = "grey70", cex = 1.4)
+curve(ricker(x, a, b), from = 5, to = 40, lwd = 2, col = "steelblue", add = TRUE)
+grid()
+```
+
+## Part 1: Does the shape earn its keep? (individual, ~10-15 min)
+
+A model earns its keep by predicting better than a "dumb" baseline. One simple way to score any model: for each data point, compute the **residual** (observed $-$ predicted), square it (so overshoots and undershoots both count against the model, and big misses count extra and add up the squares. Smaller total = better fit. This total is often called the **sum of squared residuals (SSR)**.
+
+**Model 1: our Ricker candidate.** Using $a=0.9$, $b=1/12$ from Act 2, fill in the residuals, squared residuals, and total:
+
+```{r fill-ricker-table, fig.height=0.35+6*0.5, fig.width=6.5}
+blank_table(
+  headers = list("TBL (mm)", "Observed mean", "Ricker predicted", "Residual", "Squared residual"),
+  body = ssr_rows(pred_r),
+  col_widths = c(1, 1.1, 1.1, 1, 1.2),
+  bold_rows = 6,
+  ans = ans_ricker
+)
+```
+
+**Model 2: the "null" model.** The simplest possible model: ignore tadpole size entirely, and always predict the overall average. First, find that average (using either Act 1's data table or the mean of the five group means):
+
+$\bar{y} =$ \ans{$16/15 \approx 1.07$}
+
+Now fill in the rest of the table yourself:
+
+```{r fill-null-table, fig.height=0.35+6*0.5, fig.width=6.5}
+blank_table(
+  headers = list("TBL (mm)", "Observed mean", "Null predicted", "Residual", "Squared residual"),
+  body = ssr_rows(rep(1.07, 5)),
+  col_widths = c(1, 1.1, 1.1, 1, 1.2),
+  bold_rows = 6,
+  ans = ans_null
+)
+```
+
+**Compare.** Which model has the smaller (better) SSR -- the Ricker curve, or the null model that ignores body size entirely? Is this what you expected, given Acts 1 and 2?
+
+\ans{The null model: SSR `r f2(ssr_null)` vs. `r f2(ssr_ricker)` for the Ricker candidate. (Surprising, given how plausible the hump looked.)}
+
+What does this latest result mean for the tadpole predation model (predation as a function of size)? What do you take away from this result?
+
+\ans{The hump shape may still be right; these particular parameter values are not. A candidate shape is only as good as its parameters, so we need a way to choose them from the data (fitting).}
+
+---
+
+## Part 2: Find a better fit (group, ~20-25 min)
+
+The Act 2 candidate ($a=0.9$, $b=1/12$) was chosen to give a clean critical point, not to fit well! As a group, see if you can do better: try different values of $a$ and $b$ in the Ricker function and drive the SSR down below both models from Part 1.
+
+$$y = a\,x\,e^{-bx}$$
+
+For each candidate $(a, b)$, compute predicted $y$ at all five TBL values (9, 12, 21, 25, 37), then the residuals, squared residuals, and SSR -- same procedure as Part 1. Use the space below for your group's scratch work:
+
+
+
+Record your group's attempts here (add more rows if you need them):
+
+```{r fill-attempt-table, fig.height=0.35+4*0.5, fig.width=5}
+blank_table(
+  headers = list("Attempt", expression(a), expression(b), "SSR"),
+  body = list(
+    list("e.g. 1", "1.5", "0.15", f2(ssr_fun(c(1.5, 0.15)))),
+    list("2", "2", "0.2", f2(ssr_fun(c(2, 0.2)))),
+    list("3", "1", "0.15", f2(ssr_fun(c(1, 0.15)))),
+    list("4", "", "", "")
+  ),
+  ans = rep(list(c(FALSE, TRUE, TRUE, TRUE)), 4)
+)
+```
+
+**Your group's best result:**
+
+$a =$ \ans{about `r f2(best$par[1])`} &nbsp;&nbsp;&nbsp;&nbsp; $b =$ \ans{about `r f2(best$par[2])`} &nbsp;&nbsp;&nbsp;&nbsp; SSR $=$ \ans{about `r f2(best$value)` (the lowest possible for the Ricker; anything below the null's `r f2(ssr_null)` is an improvement)}
+
+We'll compare best-SSR results across groups at the end of class -- lowest SSR wins.
+
+---
+
+## Group discussion and revision (~5 min)
+
+Compare your results with the rest of the class -- whose best-fit $(a,b)$ won, and how much did that improve on the Act 2 candidate? Feel free to revise any of your answers above based on the discussion (it's fine to cross out and rewrite -- I like to see your thinking evolve).
+
+Please take a minute to record any changes you made and any new insights gained during the group discussion. You can also use this space to reflect on any areas of confusion ("muddiest points") or topics you want to review or dust off going forward.
+
+\ans{Open-ended.}

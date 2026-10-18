@@ -1,69 +1,146 @@
 ---
-title: "Week 8, Lecture 1 WOD: Answer Key"
-subtitle: "How Much Did the Prior Matter?"
-author: "NRES 746, Instructor Answer Key (not for student distribution)"
-date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+  - \usepackage{needspace}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 2.6)
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
 ```
 
-```{r compute, include=FALSE}
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
+
+\ans{\textbf{Answer key.} Answers are in magenta.}
+
+
+**NRES 746, Week 8, Lecture 1: How Much Did the Prior Matter?**
+
+
+**Instructions:** Work alone on Part 1 (about 4 minutes), then compare
+with a neighbor for Part 2. Keep laptops closed.
+
+## The study
+
+A biologist radio-tracks juvenile desert tortoises at one site and
+records which ones survive the year. Three analysts estimate annual
+survival from the **same data**, but each chooses a different prior:
+
+- **Analyst A** uses a weak prior centered on 0.5.
+- **Analyst B** uses earlier estimates from juveniles raised in a
+  predator-proof pen.
+- **Analyst C** uses an estimate from a severe drought year at another
+  site.
+
+Each panel shows one analyst's prior (grey) and posterior (black). The
+likelihood, which is the same in all three panels, is not shown.
+
+```{r prior-post-panels, fig.width=6.5, fig.height=5.6}
+s_seq <- seq(0.001, 0.999, length.out = 500)
 survived <- 21
 collared <- 30
 priors <- list(A = c(2, 2), B = c(46, 4), C = c(10, 10))
-beta_mean <- function(ab) ab[1] / sum(ab)
-tab <- t(sapply(priors, function(pr) {
+par(mfrow = c(4, 1), mar = c(2.8, 4, 1.3, 0.5), mgp = c(1.8, 0.5, 0))
+for (an in names(priors)) {
+  pr <- priors[[an]]
   po <- pr + c(survived, collared - survived)
-  c(prior_worth = sum(pr), prior_mean = beta_mean(pr), post_mean = beta_mean(po),
-    lower = qbeta(0.025, po[1], po[2]), upper = qbeta(0.975, po[1], po[2]))
-}))
-r2 <- function(v) formatC(v, format = "f", digits = 2)
+  plot(NA, xlim = c(0, 1), ylim = c(0, 12), xaxs = "i", yaxs = "i",
+       xlab = "Annual survival probability", ylab = "Density",
+       main = paste("Analyst", an), cex.main = 1, font.main = 1)
+  abline(v = seq(0, 1, 0.1), col = "grey90")
+  lines(s_seq, dbeta(s_seq, pr[1], pr[2]), lwd = 2.5, col = "grey60")
+  lines(s_seq, dbeta(s_seq, po[1], po[2]), lwd = 2.5)
+  if (an == "A") {
+    legend("topleft", c("prior", "posterior"), lwd = 2.5,
+           col = c("grey60", "black"), bty = "n", cex = 0.9)
+  }
+  box()
+}
+plot(NA, xlim = c(0, 1), ylim = c(0, 12), xaxs = "i", yaxs = "i", yaxt = "n",
+     xlab = "Annual survival probability", ylab = "",
+     main = "Your sketch: the shared likelihood", cex.main = 1, font.main = 1)
+abline(v = seq(0, 1, 0.1), col = "grey90")
+box()
 ```
 
-Each item repeats the handout's question, then gives the answer, a
-short rationale, and mistakes to watch for. 2a is open-ended and gets
-a sample answer. All three panels are Beta-binomial (the setup from
-Week 7 Wednesday) with the same data, 21 of 30 tracked juveniles
-surviving, so the shared likelihood peaks at 0.70. Students don't see
-the data or any of these numbers.
 
-| Analyst | Prior | Prior worth (tortoises) | Prior mean | Posterior mean | 95% credible interval |
-|:--------|:-------------|:------:|:------:|:------:|:----------------:|
-| A | Beta(2, 2) | `r tab["A", "prior_worth"]` | `r r2(tab["A", "prior_mean"])` | `r r2(tab["A", "post_mean"])` | `r r2(tab["A", "lower"])` to `r r2(tab["A", "upper"])` |
-| B | Beta(46, 4) | `r tab["B", "prior_worth"]` | `r r2(tab["B", "prior_mean"])` | `r r2(tab["B", "post_mean"])` | `r r2(tab["B", "lower"])` to `r r2(tab["B", "upper"])` |
-| C | Beta(10, 10) | `r tab["C", "prior_worth"]` | `r r2(tab["C", "prior_mean"])` | `r r2(tab["C", "post_mean"])` | `r r2(tab["C", "lower"])` to `r r2(tab["C", "upper"])` |
+## Part 1: Find the likelihood (individual)
 
-A Beta($\alpha$, $\beta$) prior is "worth" about $\alpha + \beta$
-animals, against 30 tracked juveniles in the data.
+**1a.** Sketch the shared likelihood on the bottom panel (the height
+doesn't matter; get its peak and width roughly right). Which analyst's
+panel did you rely on most, and why?
 
-Use the debrief to lead into the germination example: the supplier
-prior there is worth 200 seeds against 40 seeds of data, a stronger
-prior relative to the data than Analyst B's.
+\ans{A curve peaking near 0.70, about as wide as Analyst A's posterior (dashed magenta below). Rely on Analyst A: with a nearly flat prior, A's posterior is almost the likelihood itself.}
 
-## Part 1: Find the likelihood
-
-**1a.**
-
-> Sketch the shared likelihood on the bottom panel (the height doesn't
-> matter; get its peak and width roughly right). Which analyst's panel
-> did you rely on most, and why?
-
-**Answer.** A curve peaking near 0.70 and about as wide as Analyst A's
-posterior (roughly 0.5 to 0.85). Rely on Analyst A: with a nearly flat
-prior, A's posterior is almost the likelihood itself.
-
-```{r key-likelihood}
-s_seq <- seq(0.001, 0.999, length.out = 500)
+```{r ans-likelihood, fig.width=6.5, fig.height=2.4}
 par(mar = c(4, 4, 0.5, 0.5))
 plot(s_seq, dbeta(s_seq, survived + 1, collared - survived + 1), type = "l",
-     lwd = 2.5, lty = 2, col = "darkorange", ylim = c(0, 12),
+     lwd = 2.5, lty = 2, col = ans_col, ylim = c(0, 12), xaxs = "i", yaxs = "i",
      xlab = "Annual survival probability", ylab = "Density")
 for (an in names(priors)) {
   po <- priors[[an]] + c(survived, collared - survived)
@@ -71,79 +148,20 @@ for (an in names(priors)) {
   text(po[1] / sum(po), max(dbeta(s_seq, po[1], po[2])) + 0.7, an)
 }
 legend("topleft", c("shared likelihood (rescaled)", "posteriors A, B, C"),
-       lwd = c(2.5, 1.5), lty = c(2, 1), col = c("darkorange", "black"),
-       bty = "n", cex = 0.8)
+       lwd = c(2.5, 1.5), lty = c(2, 1), col = c(ans_col, "black"), bty = "n", cex = 0.8)
 ```
 
-**Why.** The posterior is a compromise between prior and likelihood.
-When the prior is nearly flat it barely pulls, so the posterior is
-close to the rescaled likelihood. The other two panels check the
-sketch: B's posterior sits between its prior (near 0.92) and 0.70,
-and C's sits between its prior (0.50) and 0.70.
 
-**Watch for.** Averaging the three posteriors (that bakes in B's and
-C's priors). Drawing the likelihood at B's posterior peak because B's
-curve is the tallest and narrowest. Students who use B or C should
-still notice the likelihood must sit on the far side of the posterior
-from that analyst's prior.
+**1b.** Rank the three analysts' results from most to least dependent
+on their choice of prior. Give a one-line reason for each.
 
-**1b.**
+\ans{B (most): pulled far toward 0.92; its prior is worth 50 tortoises vs. 30 in the data. C: pulled partway toward 0.50 (prior worth 20). A (least): nearly matches the likelihood (prior worth 4).}
 
-> Rank the three analysts' results from most to least dependent on
-> their choice of prior. Give a one-line reason for each.
 
-**Answer.** B (most), then C, then A (least).
+## Part 2: Which number? (with a neighbor)
 
-- **B:** posterior pulled far from the likelihood toward 0.92; its
-  prior is worth more than the data (50 vs. 30 tortoises).
-- **C:** posterior pulled partway toward 0.50; a moderate prior (worth
-  20).
-- **A:** posterior nearly matches the likelihood; a weak prior (worth
-  4).
+**2a.** The three posterior means for annual survival are 0.68 (A), 0.84
+(B), and 0.62 (C). A manager needs one survival rate for a population
+model. What would you tell them, and what would you report?
 
-**Why.** Every analyst used the same data, so the differences among
-posteriors come entirely from the priors. How far each posterior sits
-from the likelihood measures how much its prior mattered.
-
-**Watch for.** Ranking by posterior width. B's posterior is the
-narrowest, but that narrowness comes from the prior, not from more
-data (all three had the same data).
-
-## Part 2: Which number?
-
-**2a.**
-
-> The three posterior means for annual survival are 0.68 (A), 0.84 (B),
-> and 0.62 (C). A manager needs one survival rate for a population
-> model. What would you tell them, and what would you report?
-
-**Sample answer.** Don't use Analyst B's result. Its prior comes from
-juveniles in a predator-proof pen, and predation is a major cause of
-juvenile death in the wild, so the pen tells us little about this site.
-Report Analyst A's posterior (mean `r r2(tab["A", "post_mean"])`, 95%
-credible interval `r r2(tab["A", "lower"])` to
-`r r2(tab["A", "upper"])`) as the main estimate, and note that a
-drought-year prior (C) pulls it down to `r r2(tab["C", "post_mean"])`.
-Say plainly that 30 juveniles aren't enough to make the choice of prior
-irrelevant.
-
-**Why.** The same data give posterior means from
-`r r2(tab["C", "post_mean"])` to `r r2(tab["B", "post_mean"])`, a
-spread that could decide whether a population model projects growth or
-decline (juvenile survival drives recruitment). That is a prior
-sensitivity analysis, and the right response is to report it and
-justify the prior, not hide it. Whether a prior is defensible is an
-ecological question about where it came from, not a statistical one.
-
-**Watch for.** The handout deliberately doesn't ask whether the pen
-prior is realistic; let students raise it. If nobody does, ask "where
-did each analyst's prior come from, and does that population resemble
-this one?" before giving the answer. Other common answers:
-
-- "Use B, it's the most certain." B's narrow interval comes from its
-  prior, which is the least relevant one.
-- "Average the three." Averaging doesn't fix an unjustified prior; it
-  just lets the pen data in at a third of the weight.
-- "Use C to be cautious." Reasonable only if this was a drought year
-  at a site like C's; otherwise it's a different kind of irrelevant
-  prior. A good answer can mention C as a sensitivity check.
+\ans{Sample answer: don't use B, since a predator-proof pen says little about survival in the wild. Report A (mean `r round(23 / 34, 2)`, 95\% credible interval `r round(qbeta(0.025, 23, 11), 2)` to `r round(qbeta(0.975, 23, 11), 2)`), and note that a drought-year prior (C) pulls it down to 0.62; 30 tortoises aren't enough to make the prior irrelevant.}

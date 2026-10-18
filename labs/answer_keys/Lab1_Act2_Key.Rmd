@@ -1,0 +1,301 @@
+---
+title: "Lab 1, Act 2"
+subtitle: "Turning a candidate shape into a testable equation"
+author: "NRES 746"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# Data ---------------------------------
+frogs <- read.csv("../../data/ReedfrogSizepred.csv")
+
+# Candidate Ricker curve ---------------------------------
+a <- 0.9; b <- 1/12
+ricker <- function(x, a, b) a * x * exp(-b * x)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+```
+
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
+
+\ans{\textbf{Answer key.} Answers are in magenta.}
+
+
+## Picking up where we left off
+
+In Act 1, your group probably diagnosed the tadpole predation data as **hump-shaped** and named the Ricker function, $y = a\,x\,e^{-bx}$, as a plausible candidate. Today we make that candidate concrete: we'll pick specific numbers for $a$ and $b$, evaluate the function, and use calculus to find exactly where it peaks -- then check whether that matches what you eyeballed last time.
+
+Before we get there, a quick warm-up on logarithms and exponents. Logarithms and exponents will be our friends all semester, since they are central not only to the deterministic functions we work with, but also working with probabilities and likelihoods.
+
+## Part 1: Log & exponent warm-up (individual, ~10-15 min)
+
+**Useful rules:**
+
+$$\log(xy) = \log x + \log y \qquad\qquad \log\!\left(\frac{x}{y}\right) = \log x - \log y \qquad\qquad \log(x^k) = k\log x$$
+
+$$e^{\ln x} = x \qquad\qquad \ln(e^x) = x \qquad\qquad \ln x \approx 2.303 \times \log_{10} x$$
+
+**1a. Apply the rules.** Simplify each:
+
+$\log_{10}(4) + \log_{10}(25) =$ \ans{$\log_{10}(100) = 2$}
+
+$\log_{10}(1000) - \log_{10}(10) =$ \ans{$3 - 1 = 2$}
+
+$\log_{10}(2^{10}) =$ \ans{$10 \times 0.301 = 3.01$} &nbsp;&nbsp;(you'll need $\log_{10}(2) \approx 0.301$)
+
+**1b. Solve for x:**
+
+$4^x = 64 \;\Rightarrow\; x =$ \ans{3} &nbsp;&nbsp;&nbsp;&nbsp; $3^x = 81 \;\Rightarrow\; x =$ \ans{4} &nbsp;&nbsp;&nbsp;&nbsp; $10^x = 0.001 \;\Rightarrow\; x =$ \ans{$-3$}
+
+$e^x = 20 \;\Rightarrow\; x =$ \ans{$\ln 20 \approx 3.00$}
+
+**1c. Linearizing an exponential decay.** This is the trick that will let us fit exponential-type models with plain linear regression later this semester. Take natural logs of both sides of $y = a e^{-bx}$ and simplify using the rules above. Show your work:
+
+\ans{$\ln y = \ln\left(a e^{-bx}\right) = \ln a + \ln\left(e^{-bx}\right) = \ln a - bx$}
+
+$\ln y =$ \ans{$\ln a - bx$}
+
+What form is this, as a function of $x$? What do the slope and intercept correspond to, in terms of $a$ and $b$?
+
+\ans{A straight line in $x$: intercept $\ln a$, slope $-b$.}
+
+Now check your answer against a small numeric example: $y = 10\,e^{-0.5x}$ (so $a=10$, $b=0.5$). Fill in the table below.
+
+*Useful values:* $e^{-1} \approx 0.368$, &nbsp; $e^{-2} \approx 0.135$, &nbsp; $e^{-3} \approx 0.050$, &nbsp; $\ln(10) \approx 2.303$
+
+```{r fill-log-table, fig.height=0.35+4*0.5, fig.width=4}
+blank_table(
+  headers = list(expression(x), expression(y), expression(ln(y))),
+  body = list(
+    list("0", "10", "2.303"),
+    list("2", "3.68", "1.303"),
+    list("4", "1.35", "0.303"),
+    list("6", "0.50", "-0.697")
+  ),
+  ans = rep(list(c(FALSE, TRUE, TRUE)), 4)
+)
+```
+
+Compute the change in $\ln(y)$ each time $x$ increases by 2: \ans{$-1$ each time}. Does it match what you predicted for the slope above? \ans{Yes: slope $-b = -0.5$ per unit of $x$, so $-1$ per 2 units.}
+
+## Part 2: Derive properties of the Ricker function (individual, ~20-25 min)
+
+**Step 1: Today's candidate.** Let's put specific numbers on the Ricker shape from Act 1:
+
+$$y = a\,x\,e^{-bx}, \qquad a = 0.9, \qquad b = \frac{1}{12} \text{ mm}^{-1}$$
+
+(These are illustrative, chosen to [very!] roughly match the pattern you saw. This is not a formal fit - we'll learn how to actually fit a curve to data soon!)
+
+```{r candidate-curve, fig.height=3.4, fig.width=5.5}
+set.seed(1)
+x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
+     xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
+     pch = 21, bg = "grey70", cex = 1.4)
+curve(ricker(x, a, b), from = 5, to = 40, lwd = 2, col = "steelblue", add = TRUE)
+grid()
+```
+
+**Step 2: Evaluate by hand.** Using $a=0.9$ and $b=1/12$, compute $y$ at three tadpole sizes. *Useful values:* $e^{-0.5}\approx 0.607$, $e^{-1}\approx 0.368$, $e^{-2}\approx 0.135$.
+
+$y(6) =$ \ans{$0.9 \times 6 \times e^{-0.5} \approx 5.4 \times 0.607 \approx 3.28$}
+
+
+
+$y(12) =$ \ans{$0.9 \times 12 \times e^{-1} \approx 10.8 \times 0.368 \approx 3.97$}
+
+
+
+$y(24) =$ \ans{$0.9 \times 24 \times e^{-2} \approx 21.6 \times 0.135 \approx 2.92$}
+
+
+
+Does this curve appear to approximate the hump shaped relationship observed in the data? \ans{Roughly: it rises to a peak near 12 mm and then falls, but it falls too slowly (it predicts about 3 kills at 24 mm, where the data show about 0).}
+
+**Step 3: Take the derivative.** Find $dy/dx$ for $y = a\,x\,e^{-bx}$. This is a *product* of two pieces of $x$, so you'll need the product rule together with the chain rule for the exponential term.
+
+*Reminders:* $\dfrac{d}{dx}(uv) = u'v + uv'$ &nbsp;&nbsp;&nbsp;&nbsp; $\dfrac{d}{dx}\,e^{g(x)} = g'(x)\,e^{g(x)}$
+
+Show your work:
+
+\ans{With $u = ax$ and $v = e^{-bx}$: $u' = a$, $v' = -b\,e^{-bx}$, so $\dfrac{dy}{dx} = a e^{-bx} - abx\,e^{-bx}$.}
+
+$\dfrac{dy}{dx} =$ \ans{$a\,e^{-bx}(1 - bx)$}
+
+Compute the derivative at $x=0$:
+
+
+
+$\left.\dfrac{dy}{dx}\right|_{x=0} =$ \ans{$a\,e^{0}(1 - 0) = a$} &nbsp;&nbsp; What does this tell you about the meaning of the parameter $a$ in the Ricker equation?
+
+\ans{$a$ is the initial slope: how fast kills rise with size for the smallest tadpoles.}
+
+**Step 4: Find the critical point.** Set $dy/dx = 0$ and solve for the critical point $x^*$, using our candidate's $b = 1/12$. (Hint: think about which factor(s) in your derivative could actually equal zero.)
+
+Show your work:
+
+\ans{$a\,e^{-bx}(1 - bx) = 0$. Since $a\,e^{-bx}$ is never zero, $1 - bx = 0$, so $x^* = 1/b = 12$.}
+
+$x^* =$ \ans{12} mm
+
+**Step 5: Interpret.** In a sentence, what does $x^*$ mean ecologically?
+
+\ans{The tadpole size at which predation is highest (the most vulnerable size).}
+
+How do you know $x^*$ is a peak and not a valley? (Hint: you could use the second derivative test but you don't need to!)
+
+\ans{The derivative is positive below 12 mm and negative above it (or: $y(6)$ and $y(24)$ are both lower than $y(12)$).}
+
+If you were to compute the second derivative at the critical point, would it be positive or negative?
+
+\ans{Negative.}
+
+## Part 3: A first taste of integration (individual, ~8-12 min)
+
+Calculus has two main tools: derivatives (rates of change, which we just used to find a peak) and **integrals** (accumulation -- adding up a rate over some interval to get a total. Basically just the analog of summation for continuous functions). We'll use this idea much more when we work with continuous probability distributions.
+
+**Worked example.** Suppose -- just for this simple example, forget the Ricker curve -- that dragonfly larvae capture tadpoles at a *constant* rate of $r = 2$ tadpoles/day for the entire $T=3$-day trial. The total number killed is rate $\times$ time:
+
+$$\text{Total killed} = r \times T = 2 \times 3 = 6 \text{ tadpoles}$$
+
+```{r constant-rate, fig.height=2.6, fig.width=4.5}
+plot(NA, xlim = c(0, 3), ylim = c(0, 3), xlab = "Time (days)",
+     ylab = "Capture rate (tadpoles/day)", xaxt = "n", yaxt = "n")
+axis(1, at = 0:3); axis(2, at = 0:3)
+polygon(c(0, 3, 3, 0), c(0, 0, 2, 2), col = "grey85", border = NA)
+segments(0, 2, 3, 2, lwd = 2)
+box()
+```
+
+Geometrically, that's just the **area of the shaded rectangle**: base (time) $\times$ height (rate). "Area under the rate curve = cumulative total" is exactly the idea behind integration -- we'll just need it for curves that aren't flat lines.
+
+**Your turn.** Now suppose the capture rate isn't constant -- it ramps up *linearly*, from 0 tadpoles/day at $t=0$ to 2 tadpoles/day at $t=3$ (dragonflies take some time to find the tadpoles). Sketch this rate on the blank axes below, shade the region representing the total killed, and compute the total using the area of a triangle.
+
+```{r linear-rate-blank, fig.height=2.6, fig.width=4.5}
+plot(NA, xlim = c(0, 3), ylim = c(0, 3), xlab = "Time (days)",
+     ylab = "Capture rate (tadpoles/day)", xaxt = "n", yaxt = "n")
+axis(1, at = 0:3); axis(2, at = 0:3)
+abline(v = 0:3, col = "grey85"); abline(h = 0:3, col = "grey85")
+polygon(c(0, 3, 3), c(0, 0, 2), col = adjustcolor(ans_col, 0.3), border = NA)
+segments(0, 0, 3, 2, lwd = 2, col = ans_col)
+box()
+```
+
+$\text{Total killed} =$ \ans{$\tfrac12 \times 3 \times 2 = 3$ tadpoles}
+
+---
+
+## Group discussion and revision (~5 min)
+
+Compare your work with your group -- especially your derivative and critical point $x^*$. Feel free to revise any of your answers above based on the group discussion (it's fine to cross out and rewrite -- I like to see your thinking evolve).
+
+Please take a minute to record any changes you made and any new insights gained during the group discussion. You can also use this space to reflect on any areas of confusion ("muddiest points") or topics you want to review or dust off going forward.
+
+One additional discussion point: do you think you could find better-fitting parameters for the Ricker function than the ones we guessed above? How would you find the best parameter values??
+
+\ans{Open-ended. Yes: search over $(a, b)$ for the values that make the curve's predictions closest to the observed kills (e.g. smallest sum of squared differences), by a grid search or an optimizer.}

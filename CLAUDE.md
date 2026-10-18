@@ -862,17 +862,25 @@ a lab's Acts are finalized, for grading or for a TA who wasn't in the
 room for the design discussion. Build one once a lab's Acts are
 stable, not while they're still being drafted.
 
-**Key format (lab or WOD; adopted Oct. 18, 2026).** The instructor
-grades from the key on screen, not on paper, and wants to scan it
-fast. So a key is **the full text of the handout, with only the
-answers added, in magenta**:
+**Keys are posted to students (from Oct. 18, 2026).** WOD keys go up
+on WebCampus so students check their own work (the instructor no
+longer reads every WOD submission). Lab keys go up after graded labs
+are returned; the instructor still grades labs from the key on
+screen. So keys are student-facing: the writing-style rules apply,
+the banner is just "**Answer key.** Answers are in magenta." (no "not
+for student distribution"), and an Act that was never handed out
+(e.g. Lab 4 Act 3) gets no posted key, so it stays reusable.
+
+**Key format (lab or WOD; adopted Oct. 18, 2026).** A key is **the
+full text of the handout, with only the answers added, in magenta**,
+so it can be scanned fast on screen:
 
 - Start from a copy of the handout's `.Rmd`, keeping its text,
   headers, tables, and figures, and its order, so any part can be
   cross-referenced at a glance. Drop the name/group line and the
   `blank_lines()`/`blank_space()`/`nq()` answer space; put the answer
   where the blank was. Add one magenta line at the top: "**Answer
-  key** (not for student distribution). Answers are in magenta."
+  key.** Answers are in magenta."
 - **Answers only**: the correct answer, or a couple of alternative
   correct answers. No "Why," no "Watch for," no common mistakes, no
   explanation. For open-ended items, a one-line sample answer (or
@@ -892,8 +900,8 @@ answers added, in magenta**:
 - Name and location as before; knit to PDF.
 
 See `wod/answer_keys/WOD_Week5_Lecture2_WritingTheLikelihood_Key.Rmd`.
-Older keys use an earlier question / Answer / Why / Watch for layout;
-convert them only when asked.
+Every WOD needs a key now (students self-check), so build one with
+each new WOD.
 
 ## Calibrating difficulty and level
 
@@ -1047,10 +1055,13 @@ record is `CourseSchedule.csv`.
   AI-assisted part was skipped; the instructor wants to try an AI
   live-coding demo in a later lecture. Act 3 was never used, so its
   raw-scale vs. log-scale analyst comparison is free to reuse.
-- **Open item.** The Lab 4 Act 1 key's 1b-continued answer names only
-  constant variance; grading suggested it should also accept
-  linearity (and normality) as violated assumptions. Not yet changed;
-  offer the edit if Lab 4 comes up again.
+- **Answer keys (Oct. 18).** Every WOD (Weeks 1-8) and every lab
+  Act that was handed out (Labs 1-7) now has a key in the
+  full-text magenta format, ready to post. New keys were built for
+  the five WODs and three Lab 1 Acts that had none. Lab 4 Act 3 (never
+  handed out) keeps its old-format key and should not be posted. The
+  Lab 4 Act 1 key's 1b-continued answer now accepts linearity and
+  normality as well as constant variance.
 - **Framing to keep:** Hessian (quadratic approximation) intervals are
   the practical default for multiparameter models; profile intervals
   are the check when it matters (Bolker's cautions still apply).

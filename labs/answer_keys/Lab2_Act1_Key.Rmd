@@ -1,130 +1,229 @@
 ---
-title: "Lab 2, Act 1 -- Answer Key"
+title: "Lab 2, Act 1"
 subtitle: "From guess-and-check to systematic search"
-author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+author: "NRES 746"
 date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 4.5)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
 
+# Data ---------------------------------
 frogs <- read.csv("../../data/ReedfrogSizepred.csv")
 mn <- aggregate(Kill ~ TBL, data = frogs, FUN = mean)
-xs <- mn$TBL; obs <- mn$Kill
 
 ricker <- function(x, a, b) a * x * exp(-b * x)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
 ```
 
-This key follows the same section structure as the student handout. Questions with a single
-correct numeric or derived answer are answered directly; open-ended items (predictions,
-reflections, group discussion) are given sample answers/discussion points rather than a fixed
-"correct" response -- use these to gauge whether a student's reasoning is on track, not as an
-exact-match rubric.
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
 
-## Part 1: Plan the search
-
-**1a. Propose a search range.** Any range that comfortably brackets the previous week's guesses
-is reasonable -- e.g. $a$ from 0 to 3, $b$ from 0 to 0.5. Students don't need to land on the
-"official" range used later in the handout ($a\in[0.1,3]$, $b\in[0.02,0.40]$); the point is
-practicing the habit of proposing a plausible range from prior knowledge before searching.
-
-Combinations: for a range roughly this size, checking every 0.05 in $a$ and every 0.01 in $b$
-gives on the order of a few thousand combinations. For the record, the official range used later
-gives an exact count:
-
-```{r grid-size}
+```{r key-values, include=FALSE}
+f2 <- function(v) formatC(v, format = "f", digits = 2)
 avals <- seq(0.1, 3, by = 0.05)
 bvals <- seq(0.02, 0.40, by = 0.01)
-length(avals) * length(bvals)
-```
-
-**Is a grid search still practical?** Yes -- 2,301 combinations is trivial for a computer
-(milliseconds), even though it would be absurd to do by hand.
-
-**1b. Design the algorithm.** A correct plain-English answer should include all of the
-following steps:
-
-1. Define a list (or range) of candidate $a$ values and a list of candidate $b$ values.
-2. Set up storage for the SSR computed at every combination (e.g. a grid/matrix with one
-   row per $a$ value and one column per $b$ value).
-3. For every combination of $a$ and $b$: compute the Ricker function's predicted values at
-   the five tank sizes, compute the residuals (observed minus predicted), square them, and
-   sum them to get the SSR for that combination. Store it.
-4. After all combinations have been checked, find the smallest stored SSR and report the
-   $(a,b)$ combination that produced it.
-
-Common gaps to watch for: forgetting that the *same* five data points get re-evaluated at
-every combination (not just once), or not being explicit about what gets stored (some
-students describe finding the best answer without describing how they'd search for it in
-the stored results).
-
-## Part 2: Implement the grid search
-
-Actual implementation (either an explicit double loop or a vectorized `outer()` call will
-converge on the same answer):
-
-```{r grid-search}
-ssr_grid <- outer(avals, bvals, Vectorize(function(a, b) sum((obs - ricker(xs, a, b))^2)))
+ssr_grid <- outer(avals, bvals, Vectorize(function(a, b) sum((mn$Kill - ricker(mn$TBL, a, b))^2)))
 best_idx <- which(ssr_grid == min(ssr_grid), arr.ind = TRUE)
 a_best <- avals[best_idx[1, 1]]
 b_best <- bvals[best_idx[1, 2]]
-ssr_best <- ssr_grid[best_idx]
-c(a = a_best, b = b_best, SSR = ssr_best)
+ssr_best <- min(ssr_grid)
 ```
 
-**Results:** best-fit $a=1$, $b=0.15$, SSR $=6.74$. (If a student computed SSR against the 15
-raw individual observations instead of the 5 tank-size means, they'll get the same $(a,b)$ but a
-larger SSR, $\approx 24.9$ -- see the note on this in Act 2. Either is correct as long as they
-used it consistently.)
+\ans{\textbf{Answer key.} Answers are in magenta.}
 
-**Heatmap/contour check.** The minimum should sit comfortably inside the grid, not pinned to an
-edge. Plotting raw SSR is misleading here: it ranges from 6.74 at the best fit up to over 7,600
-at the worst corner of the grid, so a linear color/contour scale crushes the entire
-good-fitting region into a single flat color and only shows structure in the worst corner --
-the "doesn't look good" symptom this plot has if you build it the naive way. Plotting
-`log(ssr_grid)` instead compresses that huge range and reveals the actual shape of the valley
-around the minimum:
 
-```{r heatmap}
-log_ssr <- log(ssr_grid)
-image(avals, bvals, log_ssr, col = hcl.colors(30, "YlOrRd", rev = TRUE),
-      xlab = "a", ylab = "b", main = "log(SSR) surface")
-contour(avals, bvals, log_ssr, add = TRUE, nlevels = 12)
-points(a_best, b_best, pch = 4, cex = 2, lwd = 2)
+## Picking up where we left off
+
+Last week (Act 3) you tried a few guesses for the $(a, b)$ parameters of the Ricker function by hand, recorded each one's SSR in a table, and tried to find a combination that best fit the tadpole data. That approach works, but it only samples a few scattered points out of a huge space of possible parameter combinations -- there could easily be a much better combination nobody in the room happened to try.
+
+Today we replace guess-and-check with **grid search**: an algorithm that computes SSR at every combination of $a$ and $b$ across a fine grid, and picks out the best one automatically. This is a preview of something you'll do again in a few weeks -- once we replace "sum of squared residuals" with "likelihood".
+
+**Before you do anything else: close your laptop and put your phone away.** Part 1 and the group check-in that follows are pen-and-paper only.
+
+## Part 1: Plan the search (individual, ~15 min)
+
+**1a. Propose a search range.** Based on last week's guesses, propose a reasonable range to search over for $a$ and for $b$ (order-of-magnitude is fine -- you're not committing to anything precise just yet):
+
+$a$ from \ans{0 (any range that brackets last week's guesses is fine, e.g. $a$ from 0 to 3)} to \ans{3} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; $b$ from \ans{0} to \ans{0.5}
+
+Roughly how many $(a,b)$ combinations would that range contain if you checked every $0.05$ for $a$ and every $0.01$ for $b$ (a rough estimate is fine)? \ans{a few thousand (the official range below has `r format(length(avals) * length(bvals), big.mark = ",")`)}
+
+That's a lot of predictions and SSR calculations to run by hand. This is a job for a computer, not a pencil.
+
+**1b. Design the algorithm.** Working from your range in 1a, write out (in plain English) the algorithm you'd need to check every combination of $a$ and $b$ and find the best one. Don't write R code; describe the procedure the way you'd explain it to someone who has never programmed. Think about: what you need to keep track of as you go, what gets recomputed at every single combination, and how you identify the winner once you've checked them all.
+
+\ans{Make a list of candidate $a$ values and a list of candidate $b$ values, and a table to store one SSR per $(a, b)$ combination. For every combination: compute the Ricker prediction at each of the five tank sizes, subtract from the observed means, square, and sum to get the SSR; store it. When every combination has been checked, find the smallest stored SSR and report the $(a, b)$ that produced it.}
+
+## Group check-in: finalize your pseudocode, then choose your path (group, ~10 min)
+
+Compare your pseudocode with your group and agree on a single, correct version.
+
+Your group must now pick **one** of the two paths below for turning this pseudocode into working code. Both are equally valid; discuss and decide as a group before opening any laptops.
+
+- **Path A (AI-assisted):** write a prompt describing your pseudocode and have an AI assistant generate the R code.
+- **Path B (self-coded):** write the R code yourselves, using R's documentation and each other, but no AI tools.
+
+Our group is using: &nbsp;&nbsp; Path A (AI-assisted) &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; Path B (self-coded) &nbsp;&nbsp; *(circle one)*
+
+---
+
+**Laptops open now.** Complete only the section below that matches your group's chosen path.
+
+---
+
+## Part 2A: AI-assisted path (laptops, ~15-20 min)
+
+Use the official search range for the rest of today's lab: $a =$ `seq(0.1, 3, by = 0.05)`, $b =$ `seq(0.02, 0.40, by = 0.01)`.
+
+Write a prompt to an AI assistant describing your group's pseudocode and asking it to write R code that: (1) runs the grid search over the ranges above, (2) reports the best-fit $(a,b)$ and its SSR, and (3) produces a heatmap and/or contour plot of the SSR surface across the grid. 
+
+**Notes on the prompt you used and any changes you had to make to get the AI to do the right thing** (don't provide the code it returned -- we're interested in your prompt and the results, not the AI's implementation. Also, no need to re-write your pseudocode above- if that worked as a prompt, just say that and move on!):
+
+\ans{Open-ended.}
+
+**Results.** Best-fit $a=$ \ans{`r a_best`} &nbsp;&nbsp; $b=$ \ans{`r b_best`} &nbsp;&nbsp; SSR $=$ \ans{`r f2(ssr_best)`}
+
+Look at the heatmap/contour plot. Is the minimum comfortably inside your search range, or pinned against an edge? (If it's at an edge, that's a sign the range needs to extend further.)
+
+\ans{Comfortably inside the range (a closed contour loop surrounds the minimum). Plot $\log(\text{SSR})$: raw SSR spans 6.7 to over 7,000, which hides the valley.}
+
+**Reflection.** This is open ended, but take a minute to reflect on what you just did. How much faster was the AI than you would have been (working alone or with your group)? Do you think you 'missed out' on some important learning by choosing the AI path? Can you think of ways of using AI to boost both productivity and learning? 
+
+\ans{Open-ended.}
+
+## Part 2B: Self-coded path (laptops, ~15-20 min)
+
+Use the official search range for the rest of today's lab: $a =$ `seq(0.1, 3, by = 0.05)`, $b =$ `seq(0.02, 0.40, by = 0.01)`.
+
+Translate your group's pseudocode into working R code yourselves (R's built-in help, documentation, stackOverflow and other human-generated websites, and your neighbors are fair game; AI tools are not). Run the grid search, find the best-fit $(a,b)$ and its SSR, and produce a heatmap or contour plot of the SSR surface (`image()` or `contour()` both work well).
+
+\ansbegin
+
+```{r ans-grid-code, echo=TRUE, eval=FALSE, highlight=FALSE}
+avals <- seq(0.1, 3, by = 0.05)
+bvals <- seq(0.02, 0.40, by = 0.01)
+ssr_grid <- matrix(NA, length(avals), length(bvals))
+for (i in seq_along(avals)) {
+  for (j in seq_along(bvals)) {
+    pred <- ricker(mn$TBL, avals[i], bvals[j])
+    ssr_grid[i, j] <- sum((mn$Kill - pred)^2)
+  }
+}
+best <- which(ssr_grid == min(ssr_grid), arr.ind = TRUE)
+c(avals[best[1]], bvals[best[2]], min(ssr_grid))
+image(avals, bvals, log(ssr_grid))
+contour(avals, bvals, log(ssr_grid), add = TRUE)
 ```
 
-A closed contour loop should appear around the marked best fit -- that closed shape *is* the
-valley: a student whose plot instead looks like solid color with contour lines bunched only in
-one corner has plotted raw SSR rather than log(SSR), which is worth flagging as a common
-pitfall, not a sign their grid search itself is wrong.
+\ansend
 
-**AI-assisted / self-coded reflection questions** are open-ended by design -- there's no fixed
-answer. Good responses typically note that the AI path was faster for getting *working syntax*
-but that the algorithmic thinking (Part 1) still had to happen first; weaker responses treat the
-AI as having done the whole task, which is a good prompt for follow-up discussion.
+**Results.** Best-fit $a=$ \ans{`r a_best`} &nbsp;&nbsp; $b=$ \ans{`r b_best`} &nbsp;&nbsp; SSR $=$ \ans{`r f2(ssr_best)`}
 
-**Does the best-fit curve peak where expected?** No. Plotting it shows the answer clearly:
+Look at the heatmap/contour plot. Is the minimum comfortably inside your search range, or pinned against an edge? (If it's at an edge, that's a sign the range needs to extend further.)
 
-```{r peak-check, fig.height=3.5}
+\ans{Comfortably inside the range (see the closed contour around the $\times$).}
+
+```{r ans-heatmap, fig.width=5, fig.height=3.6}
+par(mar = c(4, 4, 0.5, 0.5))
+image(avals, bvals, log(ssr_grid), col = hcl.colors(30, "YlOrRd", rev = TRUE),
+      xlab = "a", ylab = "b")
+contour(avals, bvals, log(ssr_grid), add = TRUE, nlevels = 12)
+points(a_best, b_best, pch = 4, cex = 2, lwd = 2, col = ans_col)
+```
+
+**Reflection.** What part of turning your pseudocode into working R gave your group the most trouble? How did you resolve it (R documentation, trial and error, asking a neighbor, the TA)?
+
+\ans{Open-ended.}
+
+---
+
+Quickly plot your best-fit curve over the data with `curve()`. Does it peak where you expected, around 12 mm? If instead it looks like it's just settling near the cluster of low points rather than rising to meet the one high point, that's not a bug in your code -- with only five aggregated data points, three of them at or near zero, minimizing raw SSR doesn't always chase a peak. Hang onto that observation; it'll matter in Act 2.
+
+\ans{No: the best-fit curve peaks around 7 mm and declines, settling near the low points rather than rising to the 12 mm spike.}
+
+```{r ans-best-curve, fig.height=3.2, fig.width=5.5}
 set.seed(1)
 x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+par(mar = c(4, 4.5, 0.5, 0.5))
 plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
      xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
      pch = 21, bg = "grey70", cex = 1.4)
-curve(ricker(x, a_best, b_best), from = 5, to = 40, lwd = 2, col = "steelblue", add = TRUE)
+curve(ricker(x, a_best, b_best), from = 5, to = 40, lwd = 2, col = ans_col, add = TRUE)
 grid()
 ```
 
-The curve declines from the left edge rather than rising to meet the spike at 12 mm. With only
-five aggregated data points, three of them at or near zero, minimizing SSR pulls the curve
-toward the many low points rather than chasing the one high one -- not a bug, a real feature of
-fitting a rigid 2-parameter shape to sparse, spiky data. This sets up Act 2.
+## Group discussion and revision (~5 min)
 
-**Group discussion.** No fixed answer -- the point is for students to reconcile any differences
-in $(a,b)$ across paths (should be identical or nearly so, since grid search is deterministic)
-and flag their own muddiest points.
+Compare your results with a different group (maybe one that took the *other* path) and compare best-fit results. Since a grid search is deterministic, you should land on the same (or very nearly the same) $(a,b)$ regardless of path -- if you didn't, discuss why (different search range, a bug, floating-point differences in how the grid landed on the true optimum).
+
+Feel free to revise any of your answers above based on this discussion (it's fine to cross out and rewrite -- I like to see your thinking evolve).
+
+Optionally: please take a minute to record any changes you made and any new insights gained during the group discussion. You can also use this space to reflect on any areas of confusion ("muddiest points") or topics you want to review or dust off going forward.
+
+\ans{Open-ended. Both paths should give $a = `r a_best`$, $b = `r b_best`$.}

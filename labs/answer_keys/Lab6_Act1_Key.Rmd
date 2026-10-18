@@ -1,17 +1,50 @@
 ---
-title: "Lab 6, Act 1: Answer Key"
-subtitle: "Reading the Surface"
-author: "NRES 746, Instructor Answer Key (not for student distribution)"
+title: "Lab 6, Act 1: Reading the Surface"
+subtitle: "How much do fumigation trials tell us about a lethal dose?"
+author: "NRES 746"
 date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+  - \usepackage{needspace}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 3.5)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
 
 beetles <- read.csv("../../data/BeetleFumigation.csv")
 x <- beetles$log10_dose
@@ -22,189 +55,255 @@ nll_ab <- function(a, b, xx = x) {
   -sum(dbinom(killed, size = n_exposed, prob = plogis(a + b * xx), log = TRUE))
 }
 fit <- optim(c(-60, 34), function(p) nll_ab(p[1], p[2]), method = "BFGS",
-             hessian = TRUE, control = list(maxit = 1000, reltol = 1e-12))
+             control = list(maxit = 1000, reltol = 1e-12))
 fit_c <- optim(c(1, 34), function(p) nll_ab(p[1], p[2], x - 1.8), method = "BFGS",
                hessian = TRUE, control = list(reltol = 1e-12))
+lr_cut <- qchisq(0.95, df = 1) / 2
+```
+
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
+
+```{r key-values, include=FALSE}
+fit_h <- optim(c(-60, 34), function(p) nll_ab(p[1], p[2]), method = "BFGS",
+               hessian = TRUE, control = list(maxit = 1000, reltol = 1e-12))
+fit_ch <- optim(c(1, 34), function(p) nll_ab(p[1], p[2], x - 1.8), method = "BFGS",
+                hessian = TRUE, control = list(reltol = 1e-12))
 a_hat <- fit$par[1]
 b_hat <- fit$par[2]
-lr_cut <- qchisq(0.95, df = 1) / 2
-
 b_seq <- seq(26, 43, by = 0.005)
 prof_b <- sapply(b_seq, function(b) optimize(function(a) nll_ab(a, b), c(-95, -30))$objective)
 slice_b <- sapply(b_seq, function(b) nll_ab(a_hat, b))
 prof_int <- range(b_seq[prof_b <= fit$value + lr_cut])
 slice_int <- range(b_seq[slice_b <= fit$value + lr_cut])
-
-# centered Hessian as printed in the handout
-h_aa <- 58.5; h_ab <- -1.26; h_bb <- 0.145
-se1_c <- 1 / sqrt(h_bb)
-r_c <- -h_ab / sqrt(h_aa * h_bb)
+se1_c <- 1 / sqrt(0.145)
+r_c <- 1.26 / sqrt(58.5 * 0.145)
 se2_c <- se1_c / sqrt(1 - r_c^2)
 b_used <- round(b_hat, 2)
 int1_c <- b_used + c(-1, 1) * 1.96 * se1_c
 int2_c <- b_used + c(-1, 1) * 1.96 * se2_c
-
-# uncentered values as printed in 2b
 se1_u <- 1 / sqrt(185)
 se2_u <- se1_u / sqrt(1 - 0.99968^2)
 int1_u <- b_used + c(-1, 1) * 1.96 * se1_u
 int2_u <- b_used + c(-1, 1) * 1.96 * se2_u
-se_exact <- sqrt(diag(solve(fit$hessian)))[2]
-r_exact_u <- cov2cor(solve(fit$hessian))[1, 2]
-r_exact_c <- cov2cor(solve(fit_c$hessian))[1, 2]
+r_exact_u <- cov2cor(solve(fit_h$hessian))[1, 2]
+r_exact_c <- cov2cor(solve(fit_ch$hessian))[1, 2]
 ld50_log <- -a_hat / b_hat
-
 f2 <- function(v, d = 2) formatC(v, format = "f", digits = d)
 ```
 
-Each item repeats the handout's question, then gives the answer, a
-short rationale, and mistakes to watch for. Questions with one correct
-answer are answered directly. Open-ended items (the "which is honest"
-part of 1a, the explanation in 1b, the judgment part of 2a, and the last
-part of 2b) get sample answers or discussion points instead. All
-numbers are computed in R when this file is knitted.
+\ans{\textbf{Answer key.} Answers are in magenta.}
 
-Model: killed$_i \sim \text{Binomial}(n_i, p_i)$ with
-$\log\frac{p_i}{1-p_i} = a + b x_i$, $x_i$ = log10 dose. MLEs:
-$\hat a = `r f2(a_hat)`$, $\hat b = `r f2(b_hat)`$. The whole Act is
-pen and paper; students read values off the printed figures and use a
-calculator for Part 2.
 
-## Part 1: The likelihood surface
+## The scenario
 
-**1a.**
+Flour beetles (*Tribolium confusum*) infest stored grain, and fumigants
+are a standard control. In a classic toxicology experiment, batches of
+about 60 beetles were exposed to one of eight concentrations of carbon
+disulphide gas, and the number killed in each batch was recorded
+(Bliss 1935). Dose-response experiments like this one are used across
+agriculture, environmental chemistry, pharmacology, and ecotoxicology.
+Here are the observed measurements:
 
-> Estimate two intervals for $b$ by eye from the figure (rough values
-> are fine). The **slice** interval: hold $a$ at $\hat a$ and find the
-> range of $b$ that stays inside the thick curve. The **profile**
-> interval: the full range of $b$ values the thick curve reaches. Which
-> interval is honest, and why?
->
-> Slice: ____ to ____ Profile: ____ to ____
+```{r beetle-data}
+beetle_tab <- data.frame(
+  x = sprintf("%.4f", x),
+  mgl = sprintf("%.1f", 10^x),
+  n = n_exposed,
+  k = killed
+)
+knitr::kable(beetle_tab, align = "cccc",
+             col.names = c("log10 dose, x", "Dose (mg/L)", "Beetles exposed", "Beetles killed"))
+```
 
-**Answer.** Slice: about `r f2(slice_int[1])` to `r f2(slice_int[2])`
-(by eye, "about 34.3, basically a single point" is a full-credit
-answer). Profile: about `r f2(prof_int[1], 1)` to
-`r f2(prof_int[2], 1)` (anything from roughly 28-29 to 40-41 is fine).
-The profile interval is the honest one.
+A standard model is logistic in log dose. The probability that a beetle
+exposed to log dose $x$ dies is
+$$p(x) = \frac{1}{1 + e^{-(a + b x)}}, \qquad\text{equivalently}\qquad
+\log\frac{p(x)}{1 - p(x)} = a + b x,$$
+and the number killed at each dose is binomial with that probability.
+The MLEs are $\hat a = `r round(fit$par[1], 1)`$ and
+$\hat b = `r round(fit$par[2], 1)`$:
 
-**Why.** The slice asks how far $b$ can move with $a$ frozen at
-$\hat a$. Because the valley is so thin and tilted, $b$ can barely move
-before the fit gets much worse. But $a$ is uncertain too; if $b$
-changes, $a$ can change with it and the fit stays good. The profile lets
-$a$ adjust for every value of $b$, which is what the extreme top and
-bottom points of the thick curve represent.
+```{r beetle-fit, fig.width=5, fig.height=2.8}
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(x, killed / n_exposed, pch = 16, ylim = c(0, 1), xlim = c(1.68, 1.9),
+     xlab = "log10 dose, x", ylab = "Proportion killed")
+curve(plogis(fit$par[1] + fit$par[2] * x), add = TRUE, lwd = 2)
+```
 
-**Watch for.** Reading the slice as the width of the whole ellipse
-along some diagonal. Students who say the slice is honest "because it
-uses the best $a$" have missed that $\hat a$ is itself uncertain; this is
-the misconception to target in the group discussion.
+**What dose kills half the beetles, and how uncertain is that
+estimate?** This Act works on the second half of that question,
+using the shape of the likelihood.
 
-**1b.**
+Please keep laptops closed for this Act (a calculator or phone is fine).
 
-> The intercept $a$ is the log-odds of death at what dose (as $x$, and
-> in mg/L)? Use your answer to explain why the valley is a long, thin
-> diagonal: why does every good fit with a steeper slope also need a more
-> negative intercept?
 
-**Answer.** $a$ is the log-odds of death at $x = 0$, a dose of
-$10^0 = 1$ mg/L, far below the tested doses (49-77 mg/L). Every good fit
-has to pass through roughly 50% mortality near the middle of the data
-($x \approx `r f2(ld50_log)`$). A line that stays near that point but gets
-steeper must drop further by the time it reaches $x = 0$, so a larger
-$b$ needs a more negative $a$.
+## Part 1: The likelihood surface (individual, ~20 min)
 
-**Why.** At the LD50, $a + b\,x_{50} = 0$, so $a = -b\,x_{50}$. Along
-the valley, a change in $b$ is matched by a change in $a$ about
-$`r f2(ld50_log)`$ times as large in the opposite direction, which is
-the slope of the thick curve on the figure. Because $x = 0$ is so far
-from the data, a tiny change in $b$ swings $a$ a long way, which is why
-the valley is so long and thin.
+The figure shows the negative log-likelihood (NLL) over $(a, b)$, minus
+its minimum. The thick curve connects parameter pairs whose NLL is 1.92
+above the minimum (the likelihood-ratio cutoff from Monday's lecture).
+The dot is the MLE.
 
-**Watch for.** Answering "at the lowest dose tested." Some students say
-"$a$ has no biological meaning" and stop; push them to say where
-$x = 0$ is relative to the data. A good group-discussion prompt: if we
-measured dose so that $x = 0$ fell in the middle of the data, what would
-the surface look like? (Part 2 answers this.)
+```{r surface-ab, fig.width=6.5, fig.height=4.2}
+a_grid <- seq(-76, -46, length.out = 301)
+b_grid <- seq(27, 42, length.out = 301)
+z_ab <- outer(a_grid, b_grid, Vectorize(function(a, b) nll_ab(a, b))) - fit$value
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(NA, xlim = range(a_grid), ylim = range(b_grid), xaxs = "i", yaxs = "i",
+     xlab = "Intercept, a", ylab = "Slope, b")
+abline(v = seq(-76, -46, by = 2), h = seq(27, 42, by = 1), col = "grey85")
+contour(a_grid, b_grid, z_ab, levels = lr_cut, lwd = 2.5, drawlabels = FALSE, add = TRUE)
+points(fit$par[1], fit$par[2], pch = 16, cex = 1.1)
+abline(h = prof_int, col = ans_col, lty = 2, lwd = 1.5)
+segments(a_hat, slice_int[1], a_hat, slice_int[2], col = ans_col, lwd = 4)
+box()
+```
 
-## Part 2: Curvature with two parameters
 
-**2a.**
+**1a.** Estimate two intervals for $b$ by eye from the figure (rough
+values are fine). The **slice** interval: hold $a$ at $\hat a$ and find
+the range of $b$ that stays inside the thick curve. The **profile**
+interval: the full range of $b$ values the thick curve reaches. Which
+interval is honest, and why?
 
-> Compute $\text{SE}_1$, $r$, and $\text{SE}_2$, and the approximate 95%
-> interval $\hat b \pm 1.96\,\text{SE}$ for each (use
-> $\hat b = `r b_used`$). Which do you think better characterizes our
-> uncertainty about $b$, and why? Relate your answer to Part 1.
+Slice: \ans{`r f2(slice_int[1])`} to \ans{`r f2(slice_int[2])` (essentially the single point 34.3)} \qquad Profile: \ans{`r f2(prof_int[1], 1)`} to \ans{`r f2(prof_int[2], 1)` (roughly 28-29 to 40-41 is fine; both marked in magenta)}
 
-**Answer.**
-$\text{SE}_1 = 1/\sqrt{0.145} = `r f2(se1_c)`$;
-$r = 1.26/\sqrt{58.5 \times 0.145} = `r f2(r_c, 3)`$;
-$\text{SE}_2 = `r f2(se1_c)`/\sqrt{1 - `r f2(r_c, 3)`^2} = `r f2(se2_c)`$.
-Intervals: `r f2(int1_c, 1)[1]` to `r f2(int1_c, 1)[2]` using
-$\text{SE}_1$; `r f2(int2_c, 1)[1]` to `r f2(int2_c, 1)[2]` using
-$\text{SE}_2$. $\text{SE}_2$ is the better description of uncertainty:
-its interval is close to the profile interval from 1a
-(`r f2(prof_int[1], 1)` to `r f2(prof_int[2], 1)`).
+\ans{The profile. The slice treats $a$ as known; the profile lets $a$ adjust to each $b$, which is what the uncertainty in $b$ really is when $a$ is also unknown.}
 
-**Why.** $\text{SE}_1$ uses only the curvature along the $b$ axis, with
-$a'$ held fixed: it is the quadratic version of the slice.
-$\text{SE}_2$ accounts for the fact that $a'$ can shift to compensate
-when $b$ moves, as the profile does. The correction factor
-$1/\sqrt{1 - r^2}$ is always at least 1, so ignoring the correlation can
-only make us overconfident. (For two parameters, $\text{SE}_2$ is what
-`sqrt(diag(solve(H)))` returns; with the unrounded Hessian it is
-`r f2(se_exact)`.)
 
-**Watch for.** Sign of $r$: $H_{ab}$ is negative, so $r$ is positive
-(`r f2(r_c, 3)`). Getting the sign wrong doesn't change $\text{SE}_2$
-because $r$ is squared, but it's worth checking. Students who pick
-$\text{SE}_1$ "because it's simpler" or "because it's smaller, so more
-precise" are the ones to talk to: smaller isn't better if it ignores real
-uncertainty.
+**1b.** The intercept $a$ is the log-odds of death at what dose (as $x$,
+and in mg/L)? Use your answer to explain why the valley is a long, thin
+diagonal: why does every good fit with a steeper slope also need a more
+negative intercept?
 
-**2b.**
+\ans{$a$ is the log-odds of death at $x = 0$, i.e. 1 mg/L, far below the tested doses (49 to 77 mg/L). Every good fit must pass near 50\% mortality in the middle of the data ($x \approx `r f2(ld50_log)`$), so a steeper line pivoting around that point must drop further by $x = 0$: larger $b$ needs a more negative $a$.}
 
-> For the original, uncentered fit, $H_{bb} = 185$ and $r = -0.99968$.
-> Compute both standard errors and their intervals again. Compare them
-> with your slice and profile intervals from 1a, and with your answers
-> to 2a. Centering didn't change the fitted curve, so what did it
-> change?
 
-**Answer.** $\text{SE}_1 = 1/\sqrt{185} = `r f2(se1_u, 4)`$, interval
-`r f2(int1_u)[1]` to `r f2(int1_u)[2]`. $\text{SE}_2 =
-`r f2(se1_u, 4)`/\sqrt{1 - 0.99968^2} = `r f2(se2_u)`$, interval
-`r f2(int2_u, 1)[1]` to `r f2(int2_u, 1)[2]`. The $\text{SE}_1$ interval
-matches the slice from 1a; the $\text{SE}_2$ interval is close to the
-profile, and $\text{SE}_2$ is essentially the same as in 2a.
+## Part 2: Curvature with two parameters (individual, ~20 min)
 
-Centering changed the **shape and tilt of the surface** (correlation
-`r f2(r_exact_u, 4)` before, `r f2(r_exact_c, 2)` after) and the meaning
-of the intercept ($a'$ is the log-odds of death at $x = 1.8$, about 63
-mg/L, inside the data). It did not change the fitted curve, the maximum
-likelihood, $\hat b$, or the honest uncertainty in $b$.
+With one parameter, $\text{SE} = 1/\sqrt{\text{curvature}}$. With two
+parameters, `optim(..., hessian = TRUE)` returns the
+**Hessian**, a $2 \times 2$ table of second derivatives of the NLL at
+the MLE:
+$$H = \begin{pmatrix} H_{aa} & H_{ab} \\ H_{ab} & H_{bb} \end{pmatrix}.$$
+The diagonal entries are the curvature along each parameter's axis. The
+off-diagonal entry $H_{ab}$ measures how the slope in one direction
+changes as you move in the other direction (the tilt of the valley).
 
-**Why.** $\text{SE}_1$ depends on how the model is written (it
-changes by a factor of about `r round(se2_u / se1_u)` here), so it
-can't be a property of what the data say about $b$. $\text{SE}_2$ and the
-profile describe the same quantity either way. The inflation factor
-$1/\sqrt{1 - r^2} \approx `r round(1 / sqrt(1 - 0.99968^2))`$ is the
-numerical version of the near-point slice in 1a.
+Now **center** the dose: let $x' = x - 1.8$ and fit
+$\log\frac{p}{1-p} = a' + b x'$. This describes the same set of
+curves (with $a' = a + 1.8\,b$), so the fitted curve and $\hat b$ don't
+change. Here is the new surface:
 
-**Watch for.** Rounding $r$ to $-0.9997$ or $-1$ before squaring: with
-$r = -0.9997$, $\text{SE}_2$ comes out near 3.0; with $r = -1$ it's
-undefined. Worth pointing out that when estimates are this correlated,
-the arithmetic becomes touchy, which is one practical reason to center.
-Some students will also say centering "made $b$ more precise"; it didn't,
-it only made $\text{SE}_1$ less misleading.
+```{r surface-centered, fig.width=5, fig.height=3}
+ac_grid <- seq(0.5, 1.45, length.out = 201)
+bc_grid <- seq(26, 43, length.out = 201)
+z_c <- outer(ac_grid, bc_grid, Vectorize(function(a, b) nll_ab(a, b, x - 1.8))) - fit_c$value
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(NA, xlim = range(ac_grid), ylim = range(bc_grid), xaxs = "i", yaxs = "i",
+     xlab = "Centered intercept, a'", ylab = "Slope, b")
+abline(v = seq(0.5, 1.45, by = 0.05), h = seq(26, 43, by = 1), col = "grey85")
+contour(ac_grid, bc_grid, z_c, levels = lr_cut, lwd = 2.5, drawlabels = FALSE, add = TRUE)
+points(fit_c$par[1], fit_c$par[2], pch = 16, cex = 1.1)
+box()
+```
 
-**Discussion point (optional).** A thin, tilted valley is also hard for
-optimizers to walk down, so centering or rescaling predictors often
-helps fitting as well. This comes back when we cover optimization.
+For the centered fit, `optim()` reports (rows and columns in the order
+$a'$, $b$):
+$$H = \begin{pmatrix} 58.5 & -1.26 \\ -1.26 & 0.145 \end{pmatrix}.$$
 
-## Group discussion and revision
 
-No fixed answer. The most useful disagreements are likely to be in 1b
-(what $a$ means and why it trades off with $b$) and in 2a (why the
-smaller standard error isn't the better one). Look for reflections that
-connect the slice/profile picture in Part 1 to $\text{SE}_1$/$\text{SE}_2$
-in Part 2.
+Here are two candidate standard errors for $\hat b$:
+$$\text{SE}_1 = \frac{1}{\sqrt{H_{bb}}}
+\qquad\qquad
+\text{SE}_2 = \frac{1}{\sqrt{H_{bb}}} \times \frac{1}{\sqrt{1 - r^2}},
+\quad\text{where } r = \frac{-H_{ab}}{\sqrt{H_{aa} H_{bb}}}.$$
+$\text{SE}_1$ uses only $b$'s own curvature, $H_{bb}$, and ignores the
+off-diagonal entry. $\text{SE}_2$ uses the
+off-diagonal entry $H_{ab}$ through $r$.
+
+**2a.** Compute $\text{SE}_1$, $r$, and $\text{SE}_2$, and the
+approximate 95% interval $\hat b \pm 1.96\,\text{SE}$ for each (use
+$\hat b = `r round(fit$par[2], 2)`$). Which do you think better
+characterizes our uncertainty about $b$, and why? Relate your answer to
+Part 1.
+
+\ansbegin
+
+$\text{SE}_1 = 1/\sqrt{0.145} = `r f2(se1_c)`$; \quad $r = 1.26/\sqrt{58.5 \times 0.145} = `r f2(r_c, 3)`$; \quad $\text{SE}_2 = `r f2(se1_c)`/\sqrt{1 - `r f2(r_c, 3)`^2} = `r f2(se2_c)`$
+
+\ansend
+
+$\text{SE}_1 =$ \ans{`r f2(se1_c)`} \quad $r =$ \ans{`r f2(r_c, 3)`} \quad $\text{SE}_2 =$ \ans{`r f2(se2_c)`}
+
+Interval using $\text{SE}_1$: \ans{`r f2(int1_c[1], 1)`} to \ans{`r f2(int1_c[2], 1)`} \qquad Using $\text{SE}_2$: \ans{`r f2(int2_c[1], 1)`} to \ans{`r f2(int2_c[2], 1)`}
+
+\ans{$\text{SE}_2$: its interval is close to the profile interval from 1a (`r f2(prof_int[1], 1)` to `r f2(prof_int[2], 1)`). $\text{SE}_1$ ignores the trade-off between $a'$ and $b$, like the slice.}
+
+
+**2b.** For the original, uncentered fit, $H_{bb} = 185$ and
+$r = -0.99968$. Compute both standard errors and their intervals again.
+Compare them with your slice and profile intervals from 1a, and with
+your answers to 2a. Centering didn't change the fitted curve, so what
+did it change?
+
+\ansbegin
+
+$\text{SE}_1 = 1/\sqrt{185} = `r f2(se1_u, 4)`$; \quad $\text{SE}_2 = `r f2(se1_u, 4)`/\sqrt{1 - 0.99968^2} = `r f2(se2_u)`$
+
+\ansend
+
+$\text{SE}_1 =$ \ans{`r f2(se1_u, 4)`} \quad $\text{SE}_2 =$ \ans{`r f2(se2_u)`}
+
+Interval using $\text{SE}_1$: \ans{`r f2(int1_u[1])`} to \ans{`r f2(int1_u[2])`} \qquad Using $\text{SE}_2$: \ans{`r f2(int2_u[1], 1)`} to \ans{`r f2(int2_u[2], 1)`}
+
+\ans{$\text{SE}_1$ now matches the (far too narrow) slice; $\text{SE}_2$ matches the profile and is essentially the same as in 2a. Centering changed the shape and tilt of the surface (correlation `r f2(r_exact_u, 4)` before, `r f2(r_exact_c, 2)` after) and the meaning of the intercept ($a'$ = log-odds of death at $x = 1.8$, about 63 mg/L). It didn't change the fitted curve, $\hat b$, or the real uncertainty in $b$.}
+
+
+## Group discussion and revision (~10 min)
+
+Compare your answers with your group, especially your explanation in 1b
+and your answer to 2a, and revise as needed. Record any changes you
+made, new insights, and any "muddiest points" or topics you want to
+review.
+
+\ans{Open-ended.}

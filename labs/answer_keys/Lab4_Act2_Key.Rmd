@@ -1,355 +1,454 @@
 ---
-title: "Lab 4, Act 2 -- Answer Key"
+title: "Lab 4, Act 2"
 subtitle: "How much monitoring is enough?"
-author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+author: "NRES 746"
 date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+  - \usepackage{needspace}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 4)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
 
-N0 <- 1000
-pobs <- 0.02
-lambda <- 0.75^(1/25)
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
 ```
 
-This Act is a group activity throughout Part 2, so expect one shared set of answers and one
-shared R script per group rather than individual variation -- grade the group's packet(s) and
-script together. Part 1 stays individual-first, so some variation there is expected and fine.
-Questions with a single correct numeric answer are answered directly; open-ended items
-(1a's real-world question, 1c's reasoning, 1d's predictions, the Reflection) get discussion
-points rather than a fixed rubric. Every number below comes from the four functions exactly as
-specified in the handout, so a group's own numbers should land close to these (Monte Carlo
-noise aside).
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
 
-## Part 1: Plan the pieces
-
-**1a.** Not detected on a single person-day: $1 - 0.02 = 0.98$. Not detected across $k$
-independent person-days: $0.98^k$. So:
-$$q(k) = 1 - 0.98^k$$
-
-```{r part1a}
+```{r key-values, include=FALSE, cache=TRUE}
 detect_prob <- function(k, pobs = 0.02) 1 - (1 - pobs)^k
-detect_prob(3)
-```
-
-$q(3) \approx 0.0588$, matching the check value.
-
-*Real-world differences between "5 observers, 1 day" and "1 observer, 5 days" (open-ended).*
-Good answers name at least one of: a single observer working 5 days might get better at reading
-sign/habitat as the days go on (learning), while 5 observers on 1 day bring more independent
-eyes but no time to adapt; weather or animal activity can vary day to day, so spreading effort
-over multiple days hedges against one bad day, while concentrating it in one day risks a single
-unlucky day wasting the whole bout; animals might become wary of repeated visits (habituation or
-avoidance) if the same day is revisited, which a single-day multi-observer bout avoids entirely.
-The formula treats all of this as irrelevant because it only assumes each person-day is an
-independent, identical 2% trial -- any of the above would violate that independence or identical-
-probability assumption.
-
-**1b.**
-$$N_t = N_0 \lambda^t = 1000 \times \left(0.75^{1/25}\right)^t$$
-
-```{r part1b}
 true_abundance <- function(t, N0 = 1000, lambda = 0.75^(1/25)) N0 * lambda^t
-true_abundance(c(0, 25))
-```
-
-$N_{25} = 750$, matching the check value (a clean number since $\lambda^{25} = 0.75$ exactly).
-
-**1c.** **Binomial**, with size $N_t$ and probability $q(k)$: $I_t \sim \text{Binomial}(N_t, q(k))$.
-Reasoning: at year $t$ there are $N_t$ animals present (a fixed number of "trials," conditional
-on $N_t$), each independently detected or not with the same probability $q(k)$, and the survey
-count is the number of "successes" out of those $N_t$ trials -- exactly the setup the binomial
-was built for (same reasoning as the Week 5 WOD's nest-fate example, just with $N_t$ trials
-instead of one).
-
-**Common mistake to watch for:** proposing a Poisson here. Poisson is a reasonable answer if a
-group treats $N_t$ as unknown/large and $q(k)$ as small (the usual binomial-to-Poisson limit),
-and should get credit if they explain that reasoning -- but the more direct, exact answer, given
-that $N_t$ is already known in this simulation, is binomial.
-
-**1d.** *Two predictions (no fixed answer -- these are hunches to test in 2f).*
-
-- **$k$ vs. $s$:** either direction is a reasonable guess, and a good answer just needs a
-  reason ("more effort per bout should give a cleaner count," or "more surveys give the
-  regression more points to work with"). The actual finding from 2f: in most of the design space
-  the group will explore, $k$ and $s$ matter by *comparable* amounts, not one dominating the
-  other. For instance, starting from $k=2, s=1$ (power $\approx 0.66$), doubling $k$ to 4 raises
-  power to about $0.92$ (+0.26), while doubling $s$ to 2 lowers it to about $0.38$ ($-0.28$) --
-  almost symmetric. (For instructor reference, not something groups need to derive: with $q(k)$
-  small, the delta-method variance of a log count scales roughly as $1/k$, while
-  $S_{tt}$ -- and hence $\text{Var}(\hat b)$ -- scales roughly as $1/s$, so the two enter the
-  precision of $\hat b$ in a similar way.) Give full credit for a reasoned guess in either
-  direction; the point of 1d is committing to a prediction before simulating, not getting it right.
-- **False-decline rate at $\lambda=1$:** should **not** be exactly 5%. The rule requires the
-  slope to be negative *and* significant. Under a truly flat population, a two-sided test is
-  significant about 5% of the time, split roughly evenly between "significantly negative" and
-  "significantly positive" slopes -- so requiring *both* negative and significant should roughly
-  halve the false-decline rate to around 2.5%. A simulation check confirms this:
-
-```{r part1d-null-check}
 simulate_counts <- function(t_survey, k, N0 = 1000, lambda = 0.75^(1/25), pobs = 0.02) {
-  N_t <- true_abundance(t_survey, N0, lambda)
-  rbinom(length(t_survey), size = round(N_t), prob = detect_prob(k, pobs))
+  rbinom(length(t_survey), size = round(true_abundance(t_survey, N0, lambda)),
+         prob = detect_prob(k, pobs))
 }
 detect_decline <- function(t_survey, counts, alpha = 0.05) {
-  m <- lm(log(counts) ~ t_survey)
-  s <- summary(m)$coefficients[2, ]
+  s <- summary(lm(log(counts) ~ t_survey))$coefficients[2, ]
   unname(s[1] < 0 && s[4] <= alpha)
 }
-set.seed(14)
-t1 <- seq(1, 25, by = 1)
-mean(replicate(3000, detect_decline(t1, simulate_counts(t1, k = 3, lambda = 1))))
-```
-
-About 2%, in line with the halved-5% reasoning above. **Common mistake to watch for:** a group
-that predicts exactly 5% is forgetting the rule has two conditions, not one -- worth connecting
-back to why 2d's decision rule needed both.
-
-## Group check-in
-
-No fixed answer -- the point is to reconcile 1a-1c and agree on both 1d predictions (even if the
-predictions turn out wrong later) before opening laptops.
-
-## Part 2: Build, test, and search
-
-This section is graded as one shared group product: one filled-in result per item (from any
-group member's packet) plus the group's single emailed R script. All four functions below are
-given in full, both as a reference for checking a group's script and as a reference
-implementation for reproducing every number in this key.
-
-```{r part2-functions}
-detect_prob <- function(k, pobs = 0.02) {
-  1 - (1 - pobs)^k
-}
-
-true_abundance <- function(t, N0 = 1000, lambda = 0.75^(1/25)) {
-  N0 * lambda^t
-}
-
-simulate_counts <- function(t_survey, k, N0 = 1000, lambda = 0.75^(1/25), pobs = 0.02) {
-  N_t <- true_abundance(t_survey, N0, lambda)
-  q <- detect_prob(k, pobs)
-  rbinom(length(t_survey), size = round(N_t), prob = q)
-}
-
-detect_decline <- function(t_survey, counts, alpha = 0.05) {
-  m <- lm(log(counts) ~ t_survey)
-  s <- summary(m)$coefficients[2, ]
-  unname(s[1] < 0 && s[4] <= alpha)
-}
-```
-
-**2a.** `detect_prob(3)` $= 0.0588$ (from 1a).
-
-**2b.** `true_abundance(0)` $= 1000$ (from 1b). As a **vector call**,
-`true_abundance(c(0, 25))` should return $1000$ and $750$ *together*, confirming the function
-handles a whole vector of years, not just one at a time -- essential, since `simulate_counts()`
-hands it the full `t_survey` vector in 2c.
-
-**Common mistake to watch for:** a `true_abundance()` written with an `if (length(t) == 1)`
-branch, or one that otherwise only tested against single years, can look correct on the two
-scalar checks above and still break (or silently return a recycled single value) once it's
-handed a 25-element `t_survey` vector inside `simulate_counts()`. The vector check is what
-catches this before it causes a confusing downstream bug.
-
-**2c.** A representative run (`t_survey = seq(1, 25, by = 1)`, `k = 3`):
-
-```{r part2c}
-set.seed(11)
-simulate_counts(seq(1, 25, by = 1), k = 3)
-```
-
-Counts should trend downward (from around 60-70 early on to around 40-50 by year 25) and stay
-far below the true abundance ($N_0=1000$ falling to $N_{25}=750$) -- detection probability at
-$k=3$ is under 6%, so only a small fraction of the population is ever counted. The output should
-also be a **vector of 25 counts**: `length(simulate_counts(seq(1, 25, by = 1), k = 3))` $= 25$,
-matching `length(t_survey)`.
-**Common mistake to watch for:** a group whose counts *don't* trend downward at all, whose
-counts are implausibly close to the true abundance, or whose output is a single recycled number
-rather than 25 distinct values, likely has `detect_prob()` or `true_abundance()` wired in
-backwards, has a `true_abundance()` that isn't actually vectorized (see 2b), or forgot to round
-`N_t` before passing it to `rbinom()`'s `size` argument (which requires an integer and silently
-truncates otherwise).
-
-**2d.**
-
-```{r part2d}
-set.seed(12)
-t1 <- seq(1, 25, by = 1)
-mean(replicate(300, detect_decline(t1, simulate_counts(t1, k = 3))))
-mean(replicate(300, detect_decline(t1, simulate_counts(t1, k = 3, lambda = 1))))
-```
-
-Under the real decline, `detect_decline()` should return `TRUE` a clear majority of the time
-(roughly 80% at $k=3$, $s=1$ -- see 2e/2f); under $\lambda=1$ it should return `TRUE` only rarely
-(around 2-3%, matching 1d). **Common mistake to watch for:** a `detect_decline()` that checks
-only the $p$-value (forgetting the sign of the slope) will falsely detect a decline roughly twice
-as often under the null as it should (closer to 5% than 2.5%), since it also counts significant
-*increases* as "detected declines."
-
-**2e.**
-
-```{r part2e}
-estimate_power <- function(k, s, R = 1000, lambda = 0.75^(1/25), alpha = 0.05,
-                            N0 = 1000, pobs = 0.02) {
+estimate_power <- function(k, s, R = 1000, lambda = 0.75^(1/25), alpha = 0.05) {
   t_survey <- seq(1, 25, by = s)
-  mean(replicate(R, {
-    counts <- simulate_counts(t_survey, k, N0, lambda, pobs)
-    detect_decline(t_survey, counts, alpha)
-  }))
+  mean(replicate(R, detect_decline(t_survey, simulate_counts(t_survey, k, lambda = lambda), alpha)))
 }
+set.seed(11)
+ex_counts <- simulate_counts(1:25, k = 3)
+set.seed(12)
+pow_k3s1 <- estimate_power(3, 1, R = 1000)
 set.seed(14)
 fd_rate <- estimate_power(3, 1, R = 3000, lambda = 1)
-fd_rate
-sqrt(fd_rate * (1 - fd_rate) / 3000)   # Monte Carlo SE
-```
-
-False-decline rate $\approx 0.02$-$0.03$, consistent with 1d's halved-5% prediction.
-
-**2f.**
-
-```{r part2f-grid, fig.width=6, fig.height=4}
 set.seed(746)
 grid <- expand.grid(k = 1:15, s = 1:5)
 grid$power <- mapply(estimate_power, grid$k, grid$s, MoreArgs = list(R = 1000))
+grid$cost <- with(grid, sapply(s, function(ss) length(seq(1, 25, by = ss))) * (2000 + 200 * k))
+ok <- grid[grid$power >= 0.75, ]
+top3 <- head(ok[order(ok$cost), ], 3)
+set.seed(999)
+top3$power5k <- mapply(estimate_power, top3$k, top3$s, MoreArgs = list(R = 5000))
+top3$mc_se <- sqrt(top3$power5k * (1 - top3$power5k) / 5000)
+top3 <- top3[order(top3$cost), ]
+# environmental noise: N_t = N_{t-1} lambda exp(eps), eps ~ Normal(0, 0.05)
+estimate_power_env <- function(k, s, R = 2000, lambda = 0.75^(1/25), sd_env = 0.05) {
+  t_survey <- seq(1, 25, by = s)
+  mean(replicate(R, {
+    N_t <- 1000 * exp(cumsum(log(lambda) + rnorm(25, 0, sd_env)))[t_survey]
+    counts <- rbinom(length(t_survey), round(N_t), detect_prob(k))
+    detect_decline(t_survey, counts)
+  }))
+}
+set.seed(748)
+pow_env <- estimate_power_env(top3$k[2], top3$s[2])
+set.seed(750)
+fd_env <- estimate_power_env(top3$k[2], top3$s[2], lambda = 1)
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+f3 <- function(v) formatC(v, format = "f", digits = 3)
+f4 <- function(v) formatC(v, format = "f", digits = 4)
+```
 
+\ans{\textbf{Answer key.} Answers are in magenta. Simulation results come from one run; yours will differ slightly.}
+
+
+## Picking up where we left off
+
+In Act 1 you built and validated a simple log-scale regression tool: fit a
+straight line to the *log* counts, and the slope estimate comes out
+unbiased, with a spread that matched a formula you checked against your
+own simulation. Now we put that tool to work on the question the
+agency actually cares about: what does it take to run a monitoring
+program that reliably catches a real decline, without spending more
+than it has to?
+
+## The design problem
+
+The true abundance in year 0 is $N_0 = 1000$ (assume it is known). Each
+animal present is detected independently with probability 0.02 per
+person-day of searching. A monitoring **bout** uses $k$ person-days of
+total search effort (say, 3 observers for 1 day, or 1 observer for 3
+days -- see 1a for why these are treated the same), repeated every $s$
+years ($s = 1, 2, 3, 4$, or $5$), starting in year 1, for as long as
+they fit within the 25-year window ($t = 1, 1+s, 1+2s, \ldots \le 25$).
+Costs are \$200 per person-day, plus \$2,000 to mount each field
+expedition, regardless of its length.
+
+Each bout produces one count index, $I_t$. A decline is **detected** if a
+straight-line fit of $\log(I_t)$ on $t$ (the same analysis as Act 1)
+gives a negative slope with a two-sided $p$-value at or below 0.05. The
+management goal is to have **at least a 75% chance of detecting a
+decline of 25% or more over 25 years.**
+
+**What is the cheapest design that meets the goal, and how sure are we?**
+
+This Act has a lot of code to write, so you are **encouraged to use an
+AI assistant throughout Part 2**. But you will build and test one small
+function at a time rather than asking for the whole thing at once, and
+you'll check each piece yourself before trusting it. Part 1 is still
+worth doing on paper first: resist the urge to open a laptop or an AI
+assistant until you've thought each piece through.
+
+
+## Part 1: Plan the pieces (individual, ~18 min)
+
+We're going to build the simulation out of four small functions, one
+piece of the problem at a time. Work out what each piece should do
+before you write any code.
+
+**1a.** A single animal is detected during a bout if *at least one* of
+the $k$ independent person-days of search finds it, each with
+probability 0.02. What is the probability it is **not** detected on a
+single person-day? Use that to write a formula for $q(k)$, the
+probability it **is** detected somewhere during the whole bout.
+
+\ans{Not detected on one person-day: $1 - 0.02 = 0.98$; on all $k$: $0.98^k$. So $q(k) = 1 - 0.98^k$ ($q(3) \approx 0.0588$).}
+
+
+Check your formula: $q(3)$ should come out to about $0.059$.
+
+Notice $q(k)$ depends only on the *total* person-days $k$, not on how
+they're split between observers and days - 3 observers for 1 day and 1
+observer for 3 days give the same $q$. What might make those two designs
+differ in the real world, even though the formula treats them
+identically?
+
+\ans{E.g. one observer may learn the site over several days; weather or animal activity varies day to day, so spreading effort hedges against one bad day; animals may react to repeated visits. Any of these breaks the "independent, identical 2\% trials" assumption.}
+
+
+**1b.** Using the same model as Act 1 ($\lambda = 0.75^{1/25}$, so a 25%
+decline compounds smoothly over 25 years), write the formula for the
+true expected abundance at year $t$, starting from $N_0 = 1000$.
+
+\ans{$N_t = N_0\lambda^t = 1000\left(0.75^{1/25}\right)^t$ \quad ($N_{25} = 750$)}
+
+Check: $N_{25}$ should come out to a clean $750$.
+
+
+**1c.** At year $t$, the true abundance is $N_t$ and each of those
+animals is detected independently with probability $q(k)$ (from 1a).
+What probability distribution would you use to generate the *number of
+animals actually counted* in that year's survey? Why that one? 
+
+\ans{Binomial: $I_t \sim \text{Binomial}(N_t, q(k))$. A fixed number of animals ($N_t$), each detected independently with the same probability, and we count the successes. (Poisson is acceptable as an approximation, since $q$ is small.)}
+
+
+**1d.** Two quick predictions, before you build anything:
+
+- Do you expect a **bigger bout** (larger $k$) or **more frequent
+  surveys** (smaller $s$) to matter more for catching the decline?
+- If the population were actually **stable** (no decline at all), would
+  you expect this test to falsely detect a decline exactly 5% of the
+  time? More often? Less often? 
+
+\ans{Open-ended for $k$ vs. $s$ (they turn out to matter by comparable amounts). False declines: less than 5\%, about 2.5\%, because the rule needs a negative slope *and* significance; half of the 5\% significant results are increases.}
+
+
+## Group check-in: finalize your plan (~5 min)
+
+Compare your three pieces (1a-1c) and your two predictions (1d) with
+your group. Agree on one version of each before opening any laptops.
+
+---
+
+**Laptops open now.** From here on, Part 2 is a full group effort.
+Feel free to divide and conquer- not everyone needs to write out every
+answer: if one groupmate's packet has a result filled in, that's fine to
+stand for the whole group, and the rest of you can leave that spot
+blank. (The Reflection section at the very end is the one exception -- answer
+that individually, in your own words.) You are encouraged to use an AI
+assistant throughout Part 2 - there's a lot of code to write today.
+Build and test one function at a time; don't move on to the next piece
+until the current one checks out. **Turn in one R script per group**
+with all the code you worked out together (most groups will build this
+with an AI assistant, and that's expected), in addition to your written
+packets -- one member should email the script to the instructor, with
+everyone in your group listed on the email. [Note: I don't usually want to 
+see your AI-generated code but this time is an exception!]
+
+---
+
+
+## Part 2: Build, test, and search (laptops, AI encouraged, ~55 min)
+
+For each piece below, build the function as a group (an AI assistant is
+a good way to get a working draft quickly), then run the check
+described and **record the result** in the space provided. You do not
+need to write any code by hand- your group's script covers that (see
+above).
+
+
+**2a. Detection probability.** Build `detect_prob(k, pobs = 0.02)`,
+implementing your formula from 1a.
+
+`detect_prob(3) =` \ans{`r f4(detect_prob(3))`} (should be about $0.0588$)
+
+
+**2b. Abundance trajectory.** Build
+`true_abundance(t, N0 = 1000, lambda = 0.75^(1/25))`, implementing your
+formula from 1b. It needs to accept a whole vector of years at once, not
+just one at a time since that's how you'll call it in 2c and beyond.
+
+`true_abundance(0) =` \ans{1000} (should be $1000$)
+
+`true_abundance(c(0, 25)) =` \ans{1000, 750} (should return $1000$ and $750$
+*together*, as one vector)
+
+
+**2c. Simulated counts.** Build
+`simulate_counts(t_survey, k, N0 = 1000, lambda = 0.75^(1/25), pobs = 0.02)`,
+which returns one simulated count per year in `t_survey`. It should call
+your functions from 2a and 2b inside it rather than recomputing those
+formulas from scratch. Run it a few times with
+`t_survey = seq(1, 25, by = 1)` and `k = 3`, and check that the output
+is a **vector of 25 counts** (its `length()` should match
+`length(t_survey)`) -- not a single recycled number, which is what
+you'd get if 2b's function silently failed on a vector of years.
+
+Do the counts trend downward over time and stay well below the true
+abundance (detection is far from perfect)?
+
+\ans{Yes: e.g. `r paste(ex_counts[c(1, 2, 3)], collapse = ", ")`, \ldots, `r paste(ex_counts[c(24, 25)], collapse = ", ")`: noisy, trending down, and far below the true abundance (under 6\% detected).}
+
+
+**2d. Decision rule.** Build
+`detect_decline(t_survey, counts, alpha = 0.05)`, implementing the
+decision rule from the design problem above (a negative slope *and* a
+$p$-value at or below `alpha`); it should return `TRUE` or `FALSE`.
+
+Run `simulate_counts()` under the real decline ($\lambda = 0.75^{1/25}$)
+several times: how often did `detect_decline()` return `TRUE`?
+\ans{most of the time (about `r round(100 * pow_k3s1)`\%)} &nbsp;&nbsp; Run it with $\lambda = 1$ (no decline) several
+times: how often `TRUE`? \ans{rarely (about 2 to 3\%)}
+
+
+**2e. Power, and a validation check.** Combine 2c and 2d into
+`estimate_power(k, s, R = 1000, lambda = 0.75^(1/25), alpha = 0.05)`:
+build the survey years from `s` (`seq(1, 25, by = s)`), run `R`
+replicates, and return the fraction where a decline was detected. Before
+trusting it, set $\lambda = 1$ and estimate the false-decline rate for
+$k = 3$, $s = 1$.
+
+False-decline rate at $\lambda = 1$: \ans{`r f3(fd_rate)` (Monte Carlo SE `r f3(sqrt(fd_rate * (1 - fd_rate) / 3000))`)}
+
+Does this roughly match your prediction in 1d?
+
+\ans{Yes: about 2.5\%, roughly half of 5\%.}
+
+
+**2f. The design space.** Estimate the power for $k = 1, \ldots, 15$ and
+$s = 1, \ldots, 5$ (1,000 replicates per design is enough). Plot power
+against $k$, with one line per $s$ and a horizontal line at 0.75.
+Describe the pattern. Did your 1d prediction (whether $k$ or $s$
+mattered more) hold up?
+
+\ans{Power rises with $k$ for every $s$, and every curve shifts right as $s$ grows: annual surveys pass 0.75 around $k = 3$; every-5-year surveys never do by $k = 15$. $k$ and $s$ matter by roughly comparable amounts.}
+
+```{r ans-power-grid, fig.width=6, fig.height=3.6}
+par(mar = c(4, 4, 0.5, 0.5))
 plot(NA, xlim = c(1, 15), ylim = c(0, 1), xlab = "k (person-days per bout)",
      ylab = "Estimated power")
 abline(h = 0.75, lty = 2, col = "grey40")
 for (ss in 1:5) {
   d <- grid[grid$s == ss, ]
-  lines(d$k, d$power, col = ss, lwd = 2)
-  points(d$k, d$power, col = ss, pch = 16, cex = 0.6)
+  lines(d$k, d$power, col = ans_col, lwd = 2, lty = ss)
 }
-legend("bottomright", legend = paste("s =", 1:5), col = 1:5, lwd = 2, bty = "n", cex = 0.8)
+legend("bottomright", legend = paste("s =", 1:5), col = ans_col, lty = 1:5, lwd = 2, bty = "n", cex = 0.8)
 ```
 
-**Pattern to expect:** power rises with $k$ for every survey interval $s$, and every curve shifts
-down and to the right as $s$ increases -- annual surveys ($s=1$) cross the 0.75 line around
-$k=3$, while every-5-year surveys ($s=5$) haven't reached it even at $k=15$. As discussed in
-1d, $k$ and $s$ trade off at roughly comparable rates through most of this grid (neither
-dominates outright), though $s=1$ is clearly the most power-efficient interval on its own.
 
-**2g.**
+**2g. Cost and recommendation.** Compute the cost of every design in
+your grid ($200 per person-day, $2,000 per expedition, however many
+bouts the design uses over 25 years). Among designs with estimated power
+at or above 0.75, find the cheapest few, and re-check your top 2-3
+candidates with 5,000 replicates each (Monte Carlo error matters most
+right near a threshold).
 
-```{r part2g-candidates}
-cost_of <- function(k, s, nyears = 25) length(seq(1, nyears, by = s)) * (2000 + 200 * k)
-grid$cost <- mapply(cost_of, grid$k, grid$s)
-ok <- grid[grid$power >= 0.75, ]
-ok <- ok[order(ok$cost), ]
-head(ok, 6)
+```{r candidates-table, fig.height=0.35+3*0.5, fig.width=5.5}
+blank_table(
+  headers = list("k", "Interval s", "Cost ($)", "Power (5,000 reps)", "MC SE"),
+  body = lapply(1:3, function(i) c(top3$k[i], top3$s[i], format(top3$cost[i], big.mark = ","),
+                                    f3(top3$power5k[i]), f3(top3$mc_se[i]))),
+  col_widths = c(0.8, 1, 1, 1.5, 0.9),
+  cex = 0.85,
+  ans = rep(list(rep(TRUE, 5)), 3)
+)
 ```
 
-```{r part2g-recheck}
-top3 <- head(ok, 3)
-set.seed(999)
-top3$power_recheck <- mapply(estimate_power, top3$k, top3$s, MoreArgs = list(R = 5000))
-top3$mc_se <- sqrt(top3$power_recheck * (1 - top3$power_recheck) / 5000)
-top3
-```
+Which design do you recommend, and why that one rather than the
+cheapest one that just squeaked past 0.75? (If you're curious whether
+this recommendation would change if the analysis were done on the raw
+counts instead of the log counts, that's what the optional Act
+3 explores.)
 
-| k | s | Cost | Power (re-checked) | MC SE |
-|---|---|------|---------------------|-------|
-| 10 | 4 | \$28,000 | $\approx 0.76$ | $\approx 0.004$-$0.006$ |
-| 11 | 4 | \$29,400 | $\approx 0.80$-$0.81$ | $\approx 0.004$-$0.006$ |
-| 7  | 3 | \$30,600 | $\approx 0.74$-$0.75$ | $\approx 0.004$-$0.006$ |
+\ans{$k = `r top3$k[2]`$, $s = `r top3$s[2]`$ (\$`r format(top3$cost[2], big.mark = ",")`): it clears 0.75 with a margin of several Monte Carlo SEs. The cheapest design sits right at the threshold, so its true power could plausibly be below 0.75. (Recommending the cheapest is defensible if you re-checked it and say why you're comfortable with the margin.)}
 
-**This is the payoff of the "re-check with more replicates" instruction.** The cheapest design
-from the 1,000-replicate grid ($k=10, s=4$, \$28,000) sits *right on* the 0.75 threshold; a high-
-precision check (R = 10,000) puts it at about 0.764 -- it does clear the bar, but with almost no
-margin. The third-cheapest candidate ($k=7, s=3$, \$30,600) looked like it cleared 0.75 in the
-1,000-replicate grid (0.753) but drops to about **0.743 -- below threshold** -- under a
-high-precision re-check. That's not Monte Carlo bad luck resolving itself; it's a genuine case
-where the coarse grid estimate was on the wrong side of the line.
 
-**Recommended design: $k=11$, $s=4$ (\$29,400).** It costs \$1,400 more than the cheapest
-candidate but clears 0.75 with real margin (power $\approx 0.80$-$0.81$, several Monte Carlo
-standard errors above the threshold), rather than sitting on the boundary where the "true" power
-could plausibly be under 0.75. **Grading note:** a group that recommends $k=10, s=4$ isn't
-necessarily wrong -- it's a defensible "minimum cost that clears the bar" choice -- but full
-credit requires them to have actually re-checked it with more replicates and to say something
-about why they're comfortable (or not) with how close to the threshold it sits. A group that
-skips the re-check step entirely and just reports the 1,000-replicate numbers should be asked to
-go back and do it -- that's the whole point of 2g's instruction.
+**If you finish early: environmental noise.** So far the only randomness
+in the abundance trajectory is sampling (detection) error. Real
+populations also experience year-to-year shocks that *persist*, such as
+a drought year that reduces the population, which the next year starts
+from. Modify `true_abundance()` so that
+$N_t = N_{t-1}\,\lambda\,e^{\varepsilon_t}$ with
+$\varepsilon_t \sim \text{Normal}(0, 0.05)$, and then rerun (i) the power
+of your recommended design and (ii) the false-decline rate when
+$\lambda = 1$. What happened, and which assumption from Act 1 is no
+longer true? What does this suggest about the kind of statistical model
+you would want for real monitoring data?
 
-**If you finish early (environmental noise).**
+Power with environmental noise: \ans{about `r f2(pow_env)`} &nbsp;&nbsp; False-decline rate
+when $\lambda = 1$: \ans{about `r f2(fd_env)`}
 
-```{r part2h-env}
-true_abundance_env <- function(t, N0 = 1000, lambda = 0.75^(1/25), sd_env = 0.05) {
-  maxt <- max(t)
-  eps <- rnorm(maxt, 0, sd_env)
-  logN <- log(N0) + cumsum(rep(log(lambda), maxt) + eps)
-  c(N0, exp(logN))[t + 1]
-}
-simulate_counts_env <- function(t_survey, k, N0 = 1000, lambda = 0.75^(1/25),
-                                 pobs = 0.02, sd_env = 0.05) {
-  N_t <- true_abundance_env(t_survey, N0, lambda, sd_env)
-  rbinom(length(t_survey), size = round(N_t), prob = detect_prob(k, pobs))
-}
-estimate_power_env <- function(k, s, R = 2000, lambda = 0.75^(1/25), alpha = 0.05, sd_env = 0.05) {
-  t_survey <- seq(1, 25, by = s)
-  mean(replicate(R, {
-    counts <- simulate_counts_env(t_survey, k, lambda = lambda, sd_env = sd_env)
-    detect_decline(t_survey, counts, alpha)
-  }))
-}
-set.seed(748)
-estimate_power_env(11, 4)       # power with environmental noise, recommended design
-set.seed(750)
-estimate_power_env(11, 4, lambda = 1)   # false-decline rate with environmental noise
-```
+\ans{Power drops and false declines jump: persistent shocks make consecutive years' deviations correlated, so the independence assumption from Act 1 fails, and a run of bad years looks like a trend. Real monitoring data need a model that handles temporal autocorrelation (e.g. a state-space or time-series model).}
 
-For the recommended design, power with environmental noise drops from about 0.80 to roughly
-**0.50**, and the false-decline rate rises from about 2-3% to roughly **15%**. The assumption
-from Act 1 that's now violated is **independence of the year-to-year noise terms** -- Act 1's
-model had $\varepsilon_t$ drawn independently every year, but persistent shocks mean this year's
-deviation carries into next year's abundance, so consecutive counts are correlated rather than
-independent. This is exactly why the false-decline rate roughly quintuples: a single bad
-(or good) run of years now looks like a real trend to a method that assumes independent noise.
-The takeaway worth drawing out: real monitoring data plausibly needs a model that accounts for
-this kind of temporal autocorrelation (a preview of time-series/state-space content later in the
-course), not just more replicate surveys of the same naive model.
 
-## Reflection
+## Reflection (~8 min)
 
-No fixed answers for R1-R4 -- these are individual (per the house note at the top of the Act)
-and should be graded for engagement, not a specific "correct" response. A few things worth
-recognizing as strong answers:
+**R1.** Summarize your recommended design, its cost, and its estimated
+power. Which assumption of the simulation would you worry about most,
+and how would you find out whether it matters?
 
-- **R1:** names the actual recommended design and cost, and identifies a real assumption (e.g.,
-  independent detection across person-days, no environmental persistence, known and constant
-  $N_0$) rather than a generic "the model could be wrong."
-- **R2:** written for a non-technical reader -- no jargon like "power," "$p$-value," or
-  "Monte Carlo" without a plain-language gloss.
-- **R3:** no single correct answer, but a strong response recognizes *why* grid search is
-  reasonable here specifically, rather than either defending or dismissing it in the abstract:
-  the design space is small (75 combinations of $k$ and $s$) and both variables are naturally
-  discrete -- you can't run "3.7 person-days" or survey "every 2.3 years" -- so exhaustive search
-  is cheap and directly respects the real decision space. Grid search also produces the whole
-  power surface (2f's plot), which is useful for seeing trade-offs and explaining the
-  recommendation to a non-technical stakeholder, not just a single "optimal" point.
+\ans{Open-ended (name the design, cost, power, and a specific assumption, e.g. independent detection, no environmental persistence, known $N_0$).}
 
-  For "better ways," reasonable answers include: an adaptive/staged search that runs every grid
-  point cheaply first and only re-checks the near-threshold candidates with many more
-  replicates (this is literally what 2g already does, just not generalized into a search
-  strategy); exploiting that power is roughly monotonic in both $k$ and $s$ to search more
-  cleverly (e.g., something like a binary search along each row instead of evaluating every
-  cell); or a numerical optimizer such as `optim()` if $k$ and $s$ were treated as continuous
-  and then rounded, though for a search space this small that adds complexity without an
-  obvious payoff. Worth surfacing explicitly: grid search stops being practical once the design
-  space grows past a couple of dimensions (adding, say, survey season or number of sites would
-  make the grid explode combinatorially), which is when a smarter method actually earns its
-  keep. **Common misconception to watch for:** claiming grid search is "obviously worse" than
-  some other named method without weighing that claim against the size and discreteness of
-  *this* particular design space -- there is no universally better search method, only one
-  better suited to a given problem's dimensionality and structure.
 
-- **R4:** names something concrete the group had to fix or push back on (a wrong argument order,
-  a forgotten `round()`, an AI-suggested $s$ range that didn't match the handout's), not just
-  "it worked great."
+**R2.** In three or four sentences, explain your recommendation to the
+agency's director, who has no statistical training.
+
+\ans{Open-ended (no jargon such as "power" or "$p$-value" without a plain-language gloss).}
+
+
+**R3.** Is the grid-search a reasonable approach for finding an optimal solution? Can you think of any better ways to optimize the experimental design in this case?
+
+\ans{Reasonable here: only 75 designs, and $k$ and $s$ are naturally whole numbers, and the grid shows the whole power surface. Better: check every design cheaply, then re-run only those near 0.75 with many replicates; or use that power rises steadily with $k$ (and falls with $s$) to search each row more cleverly. Grids stop being practical as more design variables are added.}
+
+
+**R4.** How did you use an AI assistant while building your four
+functions? What did you have to check, correct, or re-prompt for?
+
+\ans{Open-ended.}

@@ -1,222 +1,250 @@
 ---
-title: "Lab 3, Act 1: Answer Key"
+title: "Lab 3, Act 1"
 subtitle: "Trusting a positive detection"
-author: "NRES 746, Instructor Answer Key (not for student distribution)"
+author: "NRES 746"
 date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 4)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
 
-p_s <- 1e-4    # prevalence
-sens <- 0.98   # sensitivity
-fpr <- 0.01    # false positive rate
-n_events <- 1e5
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
 
-flag_s <- n_events * p_s * sens
-flag_not <- n_events * (1 - p_s) * fpr
-ppv_count <- round(flag_s) / (round(flag_s) + round(flag_not))
-ppv_formula <- (p_s * sens) / (p_s * sens + (1 - p_s) * fpr)
-p_s_b <- 0.01
-ppv_b <- (p_s_b * sens) / (p_s_b * sens + (1 - p_s_b) * fpr)
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
 
-f3 <- function(v, d = 3) formatC(v, format = "f", digits = d)
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
 ```
 
-Each item repeats the handout's question, then gives the answer, a
-short rationale, and mistakes to watch for. Questions with one correct
-answer are answered directly. Open-ended items (1c, 2c, 3b, and the
-group discussion) get sample answers or discussion points instead. All
-numbers are computed in R when this file is knitted.
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
 
-This Act is discovery-based (no formula is given up front), so expect
-more variation in *how* students reach a correct answer than in later
-Acts. Rates used throughout: prevalence = 0.0001, sensitivity = 0.98,
-false positive rate = 0.01.
+\ans{\textbf{Answer key.} Answers are in magenta.}
 
-## Part 1: Count your way to an answer
 
-**1a.**
+## The scenario
 
-> Suppose the cameras log $N = 100{,}000$ trigger events over a season.
-> Fill in the table below using only the rates given above. Every blank
-> cell is just one of those rates applied to a total you already know.
-> Round to the nearest whole number.
+A regional wildlife agency is monitoring a rare forest carnivore using
+motion-triggered camera traps. Most trigger events aren't the target
+species at all (deer, rabbits, blowing branches, and hikers set off the
+cameras far more often than the target animal). To keep field
+biologists from having to review every single image by eye, the agency
+uses an automated image classifier that flags each trigger event as
+either "target species detected" or not.
 
-**Answer.**
+The classifier isn't perfect. For this exercise, suppose:
 
-```{r freq-table, echo=FALSE}
-species <- n_events * p_s
-not_species <- n_events * (1 - p_s)
-tab <- data.frame(
-  row = c("Actually the species", "Not the species", "Total"),
-  flagged = round(c(flag_s, flag_not, flag_s + flag_not)),
-  not_flagged = round(c(species - flag_s, not_species - flag_not,
-                        n_events - flag_s - flag_not)),
-  total = c(species, not_species, n_events)
+```{r params-table}
+params <- data.frame(
+  Quantity = c("Prevalence: fraction of all trigger events that are actually the target species",
+               "Sensitivity: P(flagged | actually the species)",
+               "False positive rate: P(flagged | not the species)"),
+  Value = c("1 in 10,000 (0.0001)", "0.98", "0.01")
 )
-knitr::kable(tab, col.names = c("", "Flagged", "Not flagged", "Total"),
-             format.args = list(big.mark = ","), align = "lccc")
+knitr::kable(params, col.names = c("Quantity", "Value"))
 ```
 
-**Why.** Flagged species events = 10 $\times$ 0.98 = 9.8 $\approx$ 10.
-Flagged non-species events = 99,990 $\times$ 0.01 = 999.9 $\approx$
-1,000. The "not flagged" cells are what's left in each row.
+That sounds like a pretty good classifier, since it catches 98% of true
+detections and only mistakenly flags a "background" image not
+containing the species 1% of the time. **If the classifier flags an
+image, how worried should the field team be that it's a false alarm?**
 
-**Watch for.** Applying the false positive rate to the 10 species
-events, or the sensitivity to the 99,990 non-species events. Rows that
-don't add up to their totals.
+You haven't been given a formula for this yet, but let's see if we can figure it out together!
 
-**1b.**
+## Part 1: Count your way to an answer (individual, ~10 min)
 
-> Of the images the classifier *flagged*, what fraction are actually the
-> target species? No formula needed; just use the counts in your
-> completed table.
+Formulas are easier to trust once you've built one yourself. Start
+instead with plain counting. Suppose the cameras log $N=100{,}000$
+trigger events over a season.
 
-**Answer.** $10 / 1{,}010 \approx `r f3(ppv_count, 4)`$, about 1%.
+**1a.** Fill in the table below using only the rates given above. Every
+blank cell is just one of those rates applied to a total you already
+know (e.g., how many of the 10 true-species events do you expect the
+classifier to flag, given its sensitivity?). Round to the nearest whole
+number.
 
-**Why.** The denominator is everything in the "Flagged" column (true
-and false alarms together); the numerator is the true detections in
-that column.
+```{r fill-freq-table, fig.height=0.35+3*0.5, fig.width=5.5}
+blank_table(
+  headers = list("", "Flagged", "Not flagged", "Total"),
+  body = list(
+    list("Actually the species", "10", "0", "10"),
+    list("Not the species", "1,000", "98,990", "99,990"),
+    list("Total", "1,010", "98,990", "100,000")
+  ),
+  col_widths = c(1.6, 1, 1.1, 0.9),
+  cex = 0.85,
+  ans = rep(list(c(FALSE, TRUE, TRUE, FALSE)), 3)
+)
+```
 
-**Watch for.** Dividing by 10 (the species total) instead of by 1,010
-(the flagged total), which gives 0.98, the sensitivity. That's the
-central confusion of this Act: $P(\text{flagged} \mid \text{species})$
-is not $P(\text{species} \mid \text{flagged})$.
+**1b.** Of the images the classifier *flagged*, what fraction are
+actually the target species? No formula needed -- just use the counts
+in your completed table.
 
-**1c.**
+\ans{$10/1{,}010 \approx 0.0099$, about 1\%.}
 
-> Is this number close to what you expected, given how good the
-> classifier's sensitivity and false-positive rate sounded at the
-> start? In a sentence or two, what would you tell the field team about
-> how to handle a single flagged image?
+**1c.** Is this number close to what you expected, given how good the
+classifier's sensitivity and false-positive rate sounded at the start?
+In a sentence or two, what would you tell the field team about how to
+handle a single flagged image?
 
-**Sample answer.** No, about 1% is far lower than the 98% and 1% rates
-suggest. A single flagged image is almost always a false alarm, so the
-team should look for confirmation (a second independent detection,
-tracks, scat, or a person checking the image) before acting on it.
+\ans{No, far lower than the 98\% and 1\% rates suggest. A single flagged image is almost always a false alarm, so confirm it (a second detection, sign, or a person checking the image) before acting.}
 
-**Why.** False alarms come from the huge pool of non-species events;
-even a 1% false positive rate applied to 99,990 events swamps the 10
-real ones.
+## Part 2: Turn your counting into a general recipe (individual, ~10 min)
 
-**Watch for.** Answers that call the classifier "bad." Its error rates
-are fine; the problem is how rare the species is. Saying so here sets
-up 3b.
+Your table only works for exactly 100,000 events. Let's turn the same
+reasoning into something that works for *any* number of events.
 
-## Part 2: Turn your counting into a general recipe
+**2a.** Rewrite the two counts you used in 1b -- the number of flagged
+images that are truly the species, and the total number of flagged
+images -- as expressions using $N$ and the rates given at the top
+(prevalence, sensitivity, false positive rate), instead of plugged-in
+numbers.
 
-**2a.**
+\ans{True flags: $N \times \text{prevalence} \times \text{sensitivity}$. \quad All flags: $N \times \text{prevalence} \times \text{sensitivity} + N \times (1 - \text{prevalence}) \times \text{false positive rate}$.}
 
-> Rewrite the two counts you used in 1b (the number of flagged images
-> that are truly the species, and the total number of flagged images)
-> as expressions using $N$ and the rates given at the top (prevalence,
-> sensitivity, false positive rate), instead of plugged-in numbers.
+**2b.** Divide your two expressions from 2a to reconstruct the fraction
+from 1b. $N$ should appear in both the top and bottom -- cancel it out.
+What are you left with?
 
-**Answer.**
+\ansbegin
 
-- Flagged and truly the species: $N \times \text{prevalence} \times \text{sensitivity}$.
-- All flagged: $N \times \text{prevalence} \times \text{sensitivity} + N \times (1 - \text{prevalence}) \times \text{false positive rate}$.
+$$\text{PPV} = \frac{\text{prev} \times \text{sens}}{\text{prev} \times \text{sens} + (1 - \text{prev}) \times \text{FPR}} = \frac{0.0001 \times 0.98}{0.0001 \times 0.98 + 0.9999 \times 0.01} \approx 0.0097$$
 
-**Why.** Each count is "how many events are in that row" times "the
-chance an event in that row gets flagged," as in the table.
+\ansend
 
-**Watch for.** Leaving out the $(1 - \text{prevalence})$ factor, i.e.
-applying the false positive rate to all $N$ events. With prevalence this
-small the number barely changes, so ask the student which events can
-produce a false alarm.
+**2c.** State your result from 2b as a general rule, in your own words
+or symbols: given a classifier's sensitivity, false-positive rate, and
+the prevalence of the thing it's looking for, how do you compute the
+chance that a flagged event is real?
 
-**2b.**
+\ans{Chance a flag is real = true flags / all flags, with true flags = prevalence $\times$ sensitivity and false flags = $(1 - \text{prevalence}) \times$ false positive rate. (This is Bayes' rule.)}
 
-> Divide your two expressions from 2a to reconstruct the fraction from
-> 1b. $N$ should appear in both the top and bottom; cancel it out. What
-> are you left with?
+## Part 3: Try it somewhere else (individual, ~5 min)
 
-**Answer.**
-$$\text{PPV} = \frac{\text{prevalence} \times \text{sensitivity}}
-{\text{prevalence} \times \text{sensitivity} + (1 - \text{prevalence}) \times \text{false positive rate}}
-= `r f3(ppv_formula, 4)`$$
+A second survey site monitors the same species with the *same*
+classifier (same sensitivity and false-positive rate), but the species
+is well-established there rather than rare: prevalence $=0.01$ (1 in
+100 trigger events), instead of the original site's 1 in 10,000.
 
-**Why.** $N$ multiplies every term, so it cancels. The value differs
-slightly from 1b (`r f3(ppv_count, 4)`) only because 1a rounded 9.8 and
-999.9 to whole numbers.
+**3a.** Using your recipe from Part 2 (or a fresh counting table, if
+you'd rather), find this second site's PPV -- the chance that a flagged
+image is real.
 
-**Watch for.** Students who think the 0.0097 vs. 0.0099 difference
-means an error. Cancelling a rate instead of $N$. Stalling while trying
-to recall "the formula" instead of generalizing their own Part 1
-arithmetic.
+\ans{$\dfrac{0.01 \times 0.98}{0.01 \times 0.98 + 0.99 \times 0.01} \approx 0.497$, about 50\%.}
 
-**2c.**
+**3b.** Same classifier, same sensitivity, same false-positive rate, but a different answer. What does comparing these two sites tell you about how much those two classifier properties matter versus how common (prevalent) the thing you're looking for actually is? We haven't talked about it yet, but feel free to use the term "base rate" to describe the prevalence (e.g., of the target predator) and speculate on how your findings today relate to a common logical fallacy known as the "base rate fallacy". 
 
-> State your result from 2b as a general rule, in your own words or
-> symbols: given a classifier's sensitivity, false-positive rate, and
-> the prevalence of the thing it's looking for, how do you compute the
-> chance that a flagged event is real?
+\ans{The classifier didn't change, but the chance a flag is real went from about 1\% to about 50\%: the base rate matters as much as the classifier's accuracy. The base rate fallacy is judging a positive result by the test's accuracy alone, ignoring how rare the target is.}
 
-**Sample answer.** "The chance a flag is real equals the true flags
-divided by all flags, where true flags = prevalence $\times$
-sensitivity and false flags = (1 $-$ prevalence) $\times$ false
-positive rate." Any wording or notation that captures the 2b formula is
-correct.
+## Group discussion and revision (~5 min)
 
-**Why.** This is Bayes' rule (the positive predictive value), which
-students built here before seeing its name in lecture.
+Compare your Part 2 recipe and your Part 3 answer with your group.
+Does everyone's recipe agree once you strip away notation differences?
+If not, find where they diverge.
 
-**Watch for.** A rule that restates the 1b numbers instead of
-generalizing them.
+Feel free to revise any of your answers above based on the discussion.
 
-## Part 3: Try it somewhere else
+Please take a minute to record any changes you made and any new
+insights gained during the group discussion. You can also use this
+space to reflect on any areas of confusion ("muddiest points") or
+topics you want to review or dust off.
 
-**3a.**
-
-> A second survey site uses the same classifier, but prevalence is
-> 0.01 (1 in 100 trigger events). Using your recipe from Part 2 (or a
-> fresh counting table), find this second site's PPV.
-
-**Answer.** PPV $= \dfrac{0.01 \times 0.98}{0.01 \times 0.98 + 0.99 \times 0.01} = `r f3(ppv_b, 3)`$, about 50%.
-
-**Why.** Prevalence is 100 times higher, so true flags (0.0098) are now
-about as common as false flags (0.0099).
-
-**Watch for.** Changing the sensitivity or false positive rate too (the
-handout says they're the same). Students who use a counting table get
-the same answer (980 true flags vs. 990 false flags out of 100,000).
-
-**3b.**
-
-> Same classifier, same sensitivity, same false-positive rate, but a
-> different answer. What does comparing these two sites tell you about
-> how much those two classifier properties matter versus how common
-> (prevalent) the thing you're looking for actually is? Feel free to
-> use the term "base rate" and speculate on how your findings relate to
-> the "base rate fallacy."
-
-**Sample answer.** The classifier's properties didn't change, yet the
-chance a flag is real went from about 1% to about 50%. Prevalence (the
-base rate) matters as much as the classifier's accuracy. The base rate
-fallacy is judging a positive result by the test's accuracy alone and
-ignoring how rare the target is.
-
-**Why.** When the target is rare, almost every event is a non-target
-event, so even a small false positive rate produces far more false
-flags than true ones.
-
-**Watch for.** Concluding that the classifier "works better" at the
-second site. Give full credit for any reasonable connection to the base
-rate fallacy, even if loosely stated.
-
-## Group discussion and revision
-
-> Compare your Part 2 recipe and your Part 3 answer with your group.
-> Does everyone's recipe agree once you strip away notation
-> differences? If not, find where they diverge. Record any changes,
-> new insights, and muddiest points.
-
-**Discussion points.** No fixed answer. Look for students who found the
-sensitivity-vs-PPV confusion in their own or a groupmate's work, or
-who reconciled different notations for the same recipe.
+\ans{Open-ended.}

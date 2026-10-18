@@ -1,258 +1,231 @@
 ---
-title: "Week 5, Lecture 1 WOD: Answer Key"
-subtitle: "Choosing a Data-Generating Model"
-author: "NRES 746, Instructor Answer Key (not for student distribution)"
-date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+  - \usepackage{needspace}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6.5, fig.height = 3)
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each)
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
 ```
 
-Each item repeats the handout's question, then gives the answer, a
-short rationale, and mistakes to watch for. Most items here have more
-than one defensible answer, so the Answer gives the model the data
-were simulated from (the "truth") plus acceptable variants. All numbers
-are computed in R when this file is knitted.
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
 
-Whatever a student picks, look for: (1) a function whose shape matches
-the figure and respects the response's range; (2) a distribution that
-fits the data type (count, 0/1, positive continuous); (3) the noise
-parameter named, or a note that there isn't one; (4) two lines written
-as expected value plus noise around it.
+\ans{\textbf{Answer key.} Answers are in magenta.}
 
-```{r generate-data}
-# reproduces the handout's simulated data (same seed and order of draws)
+
+**NRES 746 -- Week 5, Lecture 1: Choosing a Data-Generating Model**
+
+&nbsp;
+
+
+&nbsp;
+
+**Instructions:** Work alone for about 8-10 minutes, then compare with a
+neighbor. Several of these have more than one defensible answer, so
+argue for your choice where you and your neighbor disagree. You do not need to estimate any parameter values. 
+
+## The study system
+
+Suppose a state wildlife agency runs a long-term monitoring program for greater sage-grouse in a Great Basin study area. For each data set below, propose a **data-generating model**: a deterministic function for the *expected value* of the response (which can be as simple as a constant, if nothing predicts it) and a probability distribution for the noise around that expected value. Write each
+model as a deterministic line and a stochastic line, for example
+$\mu_i = a + b x_i$ and $Y_i \sim \text{Normal}(\mu_i, \sigma)$, where $\mu_i$ is the expected value of $Y_i$. Write the distribution with
+its mean set to $\mu_i$ where you can, and name any other parameter it needs
+to describe the spread (like $\sigma$ for the normal). If you are not sure how
+to set the mean for your distribution, write "mean $= \mu_i$" anyway and note
+which parameter controls the spread.
+
+NOTE: the expected value is not necessarily a *parameter* of the stochastic distribution (although it is for the normal and Poisson distributions). Don't worry about that right now- just think of the deterministic function as modeling the expected value and the stochastic distribution as a way to describe the unpredictable variability (spread) in the response.  
+
+Here's your grab bag (Bolker Ch. 3 and 4). Use any of these, in any combination:
+
+- **Deterministic functions (for the expected value):** linear, quadratic, power law, negative
+  exponential, Ricker, Michaelis-Menten, logistic
+- **Distributions (for the noise):** Bernoulli/binomial, Poisson, negative binomial,
+  uniform, normal, lognormal, gamma, exponential, beta
+
+```{r data-figure, fig.width=6.5, fig.height=1.75}
 set.seed(746)
+
 yr <- 0:19
-lek_mu <- 55 * exp(-0.06 * yr)
-lek <- rnbinom(20, mu = lek_mu, size = 8)
+lek <- rnbinom(20, mu = 55 * exp(-0.06 * yr), size = 8)
+
 cover <- runif(80, 5, 45)
-p_true <- plogis(-2.5 + 0.1 * cover)
-nest <- rbinom(80, 1, p_true)
+nest <- rbinom(80, 1, plogis(-2.5 + 0.1 * cover))
+
 forb <- runif(60, 2, 30)
-mass_mu <- 350 * forb / (5 + forb)
-mass <- rgamma(60, shape = 25, rate = 25 / mass_mu)
-```
+mass <- rgamma(60, shape = 25, rate = 25 / (350 * forb / (5 + forb)))
 
-```{r truth-figure, echo=FALSE, fig.height=2.6}
 par(mfrow = c(1, 3), mar = c(4, 4, 2.2, 0.8), mgp = c(2.4, 0.7, 0), cex = 0.75)
-plot(yr + 1, lek, pch = 16, xlab = "Year of monitoring", ylab = "Peak male count",
-     main = "Data set 1", ylim = c(0, 75))
-lines(yr + 1, lek_mu, col = "red", lwd = 2)
-plot(cover, jitter(nest, amount = 0.04), pch = 16, yaxt = "n", xlab = "Sagebrush cover (%)",
-     ylab = "", main = "Data set 2", ylim = c(-0.15, 1.15))
+plot(yr + 1, lek, pch = 16, xlab = "Year of monitoring",
+     ylab = "Peak male count", main = "Data set 1", ylim = c(0, 65))
+plot(cover, jitter(nest, amount = 0.04), pch = 16, yaxt = "n",
+     xlab = "Sagebrush cover (%)", ylab = "", main = "Data set 2",
+     ylim = c(-0.15, 1.15))
 axis(2, at = c(0, 1), labels = c("failed", "hatched"))
-o <- order(cover); lines(cover[o], p_true[o], col = "red", lwd = 2)
-plot(forb, mass, pch = 16, xlab = "Forb cover (%)", ylab = "Chick mass at 3 weeks (g)",
-     main = "Data set 3")
-o <- order(forb); lines(forb[o], mass_mu[o], col = "red", lwd = 2)
+plot(forb, mass, pch = 16, xlab = "Forb cover (%)",
+     ylab = "Chick mass at 3 weeks (g)", main = "Data set 3")
 ```
 
-Red lines: the true expected values.
+## Part 1: Data set 1 -- lek counts
 
-## Part 1: Data set 1, lek counts
+Each spring, biologists count the males displaying at a lek (a
+traditional breeding display ground). The plot shows the peak count at
+one lek over 20 years. Counts trend downward at roughly a constant
+percentage per year, and the scatter around that trend is large.
 
-**1a.**
+Expected value: \ans{negative exponential} &nbsp; Noise distribution: \ans{negative binomial}
 
-> The plot shows the peak count at one lek over 20 years. Counts trend
-> downward at roughly a constant percentage per year, and the scatter
-> around that trend is large. Expected value: ____ Noise distribution:
-> ____. Write your model.
+**1a.** Write your model.
 
-**Answer (truth).** Negative exponential expected value, negative
-binomial noise:
-$$\mu_t = N_0 e^{-rt} \qquad Y_t \sim \text{NegBin}(\text{mean} = \mu_t,\ \text{size} = k)$$
-(Simulated with $N_0 = 55$, $r = 0.06$, $k = 8$.)
+\ansbegin
 
-**Why.** A constant *percentage* decline is what an exponential does:
-$\mu_{t+1}/\mu_t = e^{-r}$ every year. The noise parameter is $k$,
-with variance $\mu_t + \mu_t^2/k$.
+$$\mu_t = N_0 e^{-rt}, \qquad Y_t \sim \text{NegBin}(\text{mean} = \mu_t,\ \text{size} = k)$$
 
-**Watch for.**
+(The data were simulated with $N_0 = 55$, $r = 0.06$, $k = 8$.)
 
-- A straight line, $\mu_t = a - bt$, which eventually goes negative.
-  Acceptable over the observed range if the student notes this.
-- A Ricker, Michaelis-Menten, or logistic function (wrong shape for a
-  steady decline).
-- A negative binomial with no $k$.
+\ansend
 
-**1b.**
+**1b.** Why this distribution? 
 
-> Why this distribution?
+\ans{Counts are discrete and non-negative (Poisson or negative binomial), and the scatter is too large for a Poisson.}
 
-**Answer.** Counts are discrete and non-negative, which points to
-Poisson or negative binomial. The scatter is too large for a Poisson,
-so negative binomial.
+## Part 2: Data set 2 -- nest fate
 
-**Why.** A Poisson's variance equals its mean. These counts are far
-more spread out than that:
+Crews monitor 80 nests. Each nest either hatches at least one egg
+(success) or fails. Crews also measure the percent sagebrush cover
+around each nest. Nests in denser cover look more likely to succeed. (The expected
+value of a 0/1 response is the probability of success, and a probability
+can never go below 0 or above 1, however much cover a nest has.)
 
-```{r lek-dispersion}
-mean((lek - lek_mu)^2 / lek_mu)              # about 1 under a Poisson
-mean(abs(lek - lek_mu) > 2 * sqrt(lek_mu))   # about 0.05 under a Poisson
-```
+Expected value: \ans{logistic} &nbsp; Noise distribution: \ans{Bernoulli}
 
-**Watch for.**
+**2a.** Write your model.
 
-- Poisson with no comment on the spread. Poisson *with* a note that
-  the scatter looks too big is a good answer.
-- Normal with constant $\sigma$: defensible for counts this large, but
-  its noise won't shrink as the mean falls.
+\ansbegin
 
-## Part 2: Data set 2, nest fate
+$$p_i = \frac{1}{1 + e^{-(a + b\,\text{cover}_i)}}, \qquad Y_i \sim \text{Bernoulli}(p_i)$$
 
-**2a.**
-
-> Each nest either hatches at least one egg (success) or fails. Nests
-> in denser cover look more likely to succeed. (The expected value of a
-> 0/1 response is the probability of success, and a probability can
-> never go below 0 or above 1, however much cover a nest has.)
-> Expected value: ____ Noise distribution: ____. Write your model.
-
-**Answer (truth).** Logistic expected value, Bernoulli noise:
-$$p_i = \frac{1}{1 + e^{-(a + b\,\text{cover}_i)}} \qquad Y_i \sim \text{Bernoulli}(p_i)$$
 (Simulated with $a = -2.5$, $b = 0.1$.)
 
-**Why.** The logistic rises with cover but stays between 0 and 1, as a
-probability must. There's no separate noise parameter: the variance,
-$p_i(1 - p_i)$, is set by the mean.
+\ansend
 
-**Watch for.**
+**2b.** Why this distribution? 
 
-- A straight line with no comment on the bounds. It fits the observed
-  range but leaves [0, 1] when extrapolated:
+\ans{The response is a single success/failure (0 or 1) for each nest.}
 
-```{r nest-linear}
-predict(lm(nest ~ cover), data.frame(cover = c(0, 60)))
-```
+## Part 3: Data set 3 -- chick mass
 
-- Adding a $\sigma$ to a Bernoulli model.
-- Applying the function to the 0/1 outcome itself instead of to $p_i$.
-- Acceptable variant: Michaelis-Menten with asymptote at most 1
-  (bounded and increasing).
+Crews weigh chicks at 3 weeks of age and record the percent forb cover
+at the brood-rearing site (forbs host the insects chicks eat). Mass
+rises with forb cover, but the gains shrink at high cover. Mass is
+always positive.
 
-**2b.**
+Expected value: \ans{Michaelis-Menten} &nbsp; Noise distribution: \ans{gamma (lognormal also works)}
 
-> Why this distribution?
+**3a.** Write your model.
 
-**Answer.** The response takes only two values, 0 or 1. The Bernoulli
-is the distribution for a single success/failure trial.
+\ansbegin
 
-**Why.** A normal, gamma, or Poisson can't put all its probability on
-0 and 1.
+$$\mu_i = \frac{a\,\text{forb}_i}{b + \text{forb}_i}, \qquad Y_i \sim \text{Gamma}(\text{mean} = \mu_i,\ \text{shape} = \alpha)$$
 
-**Watch for.** A binomial with $N = 80$. The nests are 80 separate
-Bernoulli trials, not one experiment with 80 trials. (Binomial with
-size 1 is fine.)
+(Simulated with $a = 350$ g, $b = 5$\%, $\alpha = 25$.)
 
-## Part 3: Data set 3, chick mass
+\ansend
 
-**3a.**
+**3b.** Why this distribution? 
 
-> Mass rises with forb cover, but the gains shrink at high cover. Mass
-> is always positive. Expected value: ____ Noise distribution: ____.
-> Write your model.
+\ans{Mass is continuous and positive, and its spread grows with the mean, which a gamma with constant shape does.}
 
-**Answer (truth).** Michaelis-Menten expected value, gamma noise:
-$$\mu_i = \frac{a\,\text{forb}_i}{b + \text{forb}_i} \qquad Y_i \sim \text{Gamma}(\text{mean} = \mu_i,\ \text{shape} = \alpha)$$
-(Simulated with $a = 350$ g, $b = 5$%, $\alpha = 25$.)
 
-**Why.** Michaelis-Menten rises and levels off ("gains shrink"): $a$
-is the asymptotic mass and $b$ the cover at half of $a$. Any
-saturating function in the grab bag is acceptable (e.g. a power law
-with exponent below 1).
+**3c. If time.** If your distribution's own parameters are not the mean, work
+out how to express them using $\mu_i$. (For a gamma with shape $\alpha$ and
+scale $s$, the mean is $\alpha s$. What scale gives a mean of $\mu_i$, and what
+does the shape do to the noise?)
 
-**Watch for.**
+\ans{Scale $s = \mu_i/\alpha$. Then $\text{Var}(Y_i) = \alpha s^2 = \mu_i^2/\alpha$: a larger shape means less noise relative to the mean (coefficient of variation $1/\sqrt{\alpha}$).}
 
-- A Ricker (hump) or a straight line: wrong shape.
-- Worth raising: Michaelis-Menten predicts zero mass at zero forb
-  cover, which isn't biologically realistic, though it doesn't matter
-  over the observed range.
 
-**3b.**
+## Part 4: If time -- a fourth data set
 
-> Why this distribution?
+Telemetry crews record how far each radio-collared hen moves between
+consecutive daily locations (meters). Most daily moves are short (a
+typical hen moves 100-200 m), but a few days involve moves of more than
+a kilometer. There is no predictor in this data set.
 
-**Answer.** Mass is continuous and positive, and its spread grows with
-the mean. A gamma with fixed shape has exactly that property.
+**4.** What would you use for the expected value, and which distribution
+for the noise? Does the expected value need to depend on a predictor at
+all? Explain.
 
-**Why.** Residual spread rises with the mean while the relative spread
-(coefficient of variation) stays roughly constant (the truth is
-$1/\sqrt{25} = 0.2$):
-
-```{r mass-spread}
-bins <- cut(forb, c(0, 8, 16, 30))
-res <- mass - mass_mu
-rbind(sd = tapply(res, bins, sd), cv = tapply(res / mass_mu, bins, sd))
-```
-
-**Watch for.**
-
-- Lognormal: also acceptable (positive, spread proportional to mean).
-- Normal with constant $\sigma$: defensible here, since masses are far
-  from zero, but ask whether the spread grows with the mean.
-- Poisson: mass is continuous, not a count.
-
-**3c (if time).**
-
-> If your distribution's own parameters are not the mean, work out how
-> to express them using $\mu_i$. (For a gamma with shape $\alpha$ and
-> scale $s$, the mean is $\alpha s$. What scale gives a mean of
-> $\mu_i$, and what does the shape do to the noise?)
-
-**Answer.** $s = \mu_i/\alpha$. Then
-$\text{Var}(Y_i) = \alpha s^2 = \mu_i^2/\alpha$, so the coefficient of
-variation is $1/\sqrt{\alpha}$: a larger shape means less relative
-noise.
-
-**Why.** Set $\alpha s = \mu_i$ and solve. Checking by simulation:
-
-```{r gamma-check}
-alpha <- 25; mu <- 200
-y <- rgamma(1e5, shape = alpha, scale = mu / alpha)
-c(mean = mean(y), cv = sd(y) / mean(y), one_over_sqrt_alpha = 1 / sqrt(alpha))
-```
-
-**Watch for.** Confusing scale and rate (R's `rgamma()` takes either;
-rate $= 1/$scale $= \alpha/\mu_i$). Bolker writes the shape as $a$;
-accept any consistent notation.
-
-## Part 4: If time, a fourth data set
-
-**4.**
-
-> Telemetry crews record how far each radio-collared hen moves between
-> consecutive daily locations (meters). Most daily moves are short (a
-> typical hen moves 100-200 m), but a few days involve moves of more
-> than a kilometer. There is no predictor in this data set. What would
-> you use for the expected value, and which distribution for the
-> noise? Does the expected value need to depend on a predictor at all?
-> Explain.
-
-**Answer.** A **constant** expected value, $\mu_i = \mu$, with a
-positive, right-skewed distribution: exponential, gamma, or lognormal.
-
-**Why.** With no predictor, the expected value is just a constant (an
-intercept-only model is still a model). Distances are positive and a
-few are very long, so the distribution needs a long right tail. With a
-mean near 250 m, all three candidates match the description:
-
-```{r hen-candidates}
-mu <- 250
-cv <- 1.5; s_ln <- sqrt(log(1 + cv^2)); m_ln <- log(mu) - s_ln^2 / 2
-data.frame(
-  dist = c("exponential", "gamma, shape 0.8", "lognormal, CV 1.5"),
-  median_m = round(c(qexp(0.5, 1 / mu), qgamma(0.5, 0.8, scale = mu / 0.8), exp(m_ln))),
-  p_over_1km = round(c(pexp(1000, 1 / mu, lower.tail = FALSE),
-                       pgamma(1000, 0.8, scale = mu / 0.8, lower.tail = FALSE),
-                       plnorm(1000, m_ln, s_ln, lower.tail = FALSE)), 3))
-```
-
-**Watch for.** A normal (symmetric, allows negative distances, no long
-tail); a Poisson (distance is continuous); "no predictor, so no model."
+\ans{A constant expected value ($\mu_i = \mu$; no predictor needed) with a positive, right-skewed distribution: exponential, gamma, or lognormal.}

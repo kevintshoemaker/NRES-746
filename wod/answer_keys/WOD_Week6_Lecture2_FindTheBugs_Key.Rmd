@@ -1,75 +1,103 @@
 ---
-title: "Week 6, Lecture 2 WOD: Answer Key"
-subtitle: "Find the Bugs"
-author: "NRES 746, Instructor Answer Key (not for student distribution)"
-date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, error = TRUE)
-```
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
 
-Each item repeats the handout's question, then gives the answer, a
-short rationale, and mistakes to watch for. Both buggy functions are
-run below, so the symptoms described are real R output. The corrected
-`detect_prob()` matches the Lab 4, Act 2 key and is built live in
-today's demo. `sim_detect()` is a stand-alone stand-in with the same
-loop pattern as the demo's `estimate_power()`.
-
-```{r fixed-functions, include=FALSE}
-detect_prob <- function(k, pobs = 0.02) 1 - (1 - pobs)^k
-simulate_counts <- function(t_survey, k, N0 = 1000, lambda = 0.75^(1/25)) {
-  N_t <- N0 * lambda^t_survey
-  rbinom(length(t_survey), size = round(N_t), prob = detect_prob(k))
-}
-detect_decline <- function(t_survey, counts, alpha = 0.05) {
-  s <- summary(lm(log(counts) ~ t_survey))$coefficients[2, ]
-  unname(s[1] < 0 && s[4] <= alpha)
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
 }
 ```
 
-## Part 1: Find and fix
-
-**1a.**
-
-> `detect_prob()`: circle the bug, write the corrected line, and say
-> what would go wrong if you ran the buggy version.
-
-**Answer.** `1 - pobs^k` should be `1 - (1 - pobs)^k`.
-
-**Why.** An animal is missed on one person-day with probability
-$1 - p_{obs}$, and missed on all $k$ days with probability
-$(1 - p_{obs})^k$. The buggy line uses the chance of being *detected*
-every day instead. The result is a detection probability near 1, so
-the simulated counts would be close to the true abundance:
-
-```{r bug1}
-detect_prob_bug <- function(k, pobs = 0.02) 1 - pobs^k
-c(buggy = detect_prob_bug(3), fixed = detect_prob(3))
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
 ```
 
-**Watch for.** Writing `(1 - pobs)^k` without the leading `1 -`. That
-is the probability of being missed, not detected.
+\ans{\textbf{Answer key.} Answers are in magenta.}
 
-**1b.**
 
-> `sim_detect()`: circle the bug, write the corrected line, and say what
-> would go wrong if you ran the buggy version.
+**NRES 746, Week 6, Lecture 2: Find the Bugs**
 
-**Answer.** `detected <- n_det > 0` should be
-`detected[i] <- n_det > 0`.
 
-**Why.** Without the index, each pass through the loop overwrites the
-whole vector with a single `TRUE` or `FALSE`. After the loop,
-`detected` holds only the last survey, so the result is always exactly
-0 or 1 instead of about $1 - 0.6^3 = 0.784$:
+**Instructions:** Work alone for about 3 minutes, then compare with a
+neighbor. Keep laptops closed.
 
-```{r bug2}
-sim_detect_bug <- function(R = 1000, visits = 3, p = 0.4) {
+## The code
+
+Here are two short functions, possibly written with AI help. The first
+comes from today's live-coding problem (finishing Lab 4's toad
+monitoring design).
+
+- `detect_prob(k)`: one person-day of searching detects an animal with
+  probability `pobs`, so `k` person-days should detect it with
+  probability $1 - (1 - p_{obs})^k$.
+- `sim_detect(R)`: should simulate `R` surveys of a site where the frog
+  from Lab 5 is present (3 visits per survey, detection probability
+  0.4 per visit) and return the fraction of surveys with at least one
+  detection.
+
+Each function below contains **exactly one bug**. Both run without an
+error, but give wrong answers.
+
+```{r buggy-code, echo=TRUE, eval=FALSE}
+detect_prob <- function(k, pobs = 0.02) {
+  1 - pobs^k
+}
+
+sim_detect <- function(R = 1000, visits = 3, p = 0.4) {
   detected <- logical(R)
   for (i in seq_len(R)) {
     n_det <- rbinom(1, size = visits, prob = p)
@@ -77,43 +105,25 @@ sim_detect_bug <- function(R = 1000, visits = 3, p = 0.4) {
   }
   mean(detected)
 }
-sim_detect <- function(R = 1000, visits = 3, p = 0.4) {
-  detected <- logical(R)
-  for (i in seq_len(R)) {
-    n_det <- rbinom(1, size = visits, prob = p)
-    detected[i] <- n_det > 0
-  }
-  mean(detected)
-}
-set.seed(3)
-replicate(8, sim_detect_bug())
-c(fixed = sim_detect(), exact = 1 - 0.6^3)
 ```
 
-**Watch for.** Students who fix it by moving `mean()` inside the loop.
-That still keeps only one replicate's result.
+## Part 1: Find and fix (individual, ~3 min)
 
-## Part 2: Catch it next time
+For each function, circle the bug on the code above, write the
+corrected line, and say what would go wrong if you ran the buggy
+version.
 
-> For one of the bugs, what quick check (one line of code and the
-> answer you'd expect) would have caught it?
+**1a.** `detect_prob()`
 
-**Sample answers (either is fine).**
+\ans{Fix: \texttt{1 - (1 - pobs)\^{}k}. The buggy version, $1 - p_{obs}^k$, returns nearly 1 for any effort (e.g. 0.9996 for $k = 2$), so detection looks almost certain.}
 
-- **1a:** `detect_prob(1)` should return `0.02` (one day of effort
-  should equal `pobs`).
-- **1b:** `sim_detect()` should come out near
-  $1 - (1 - 0.4)^3 = 0.784$, the same formula as 1a. At minimum, it
-  should never be exactly 0 or 1.
+**1b.** `sim_detect()`
 
-**Why.** Good checks use cases where you already know the answer: an
-edge case (`k = 1`) or an exact answer the simulation should
-approximate. Students who notice that 1a's formula gives 1b's exact
-answer have made a nice connection: a simulation can be checked
-against math whenever the math is available.
-These are the same kinds of checks to demand from AI-written code in
-today's demo.
+\ans{Fix: \texttt{detected[i] <- n\_det > 0}. The buggy version overwrites the whole vector every survey, so it returns only the last survey's result (exactly 0 or 1).}
 
-**Watch for.** "Run it and see if the answer looks reasonable." Bug 1a
-gives counts that look plausible unless you know what to expect. A
-check needs a specific expected value.
+## Part 2: Catch it next time (with a neighbor, ~2 min)
+
+**2.** For one of the bugs, what quick check (one line of code and the
+answer you'd expect) would have caught it?
+
+\ans{E.g. \texttt{detect\_prob(1)} should return 0.02 (one day = \texttt{pobs}); or \texttt{sim\_detect()} should be near $1 - 0.6^3 = 0.784$, never exactly 0 or 1.}

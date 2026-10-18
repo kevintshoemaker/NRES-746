@@ -1,222 +1,209 @@
 ---
-title: "Week 8, Lecture 2 WOD: Answer Key"
-subtitle: "Curvature by Hand (optional take-home)"
-author: "NRES 746, Instructor Answer Key (not for student distribution)"
-date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+  - \usepackage{needspace}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 3)
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a code block
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
 ```
 
-```{r compute, include=FALSE}
-haypiles <- c(2, 5, 3, 0, 4, 4)
-curv_pois <- function(y) sum(y) / mean(y)^2
-curv_6 <- curv_pois(haypiles)
-curv_24 <- curv_pois(rep(haypiles, 4))
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
 
+```{r key-values, include=FALSE}
 curv_binom <- function(k, n) n / ((k / n) * (1 - k / n))
-wald <- function(k, n) k / n + c(-1, 1) * qnorm(0.975) / sqrt(curv_binom(k, n))
 se_3 <- 1 / sqrt(curv_binom(12, 30))
 se_30 <- 1 / sqrt(curv_binom(120, 300))
-wald_chytrid <- wald(2, 20)
-
+wald_chytrid <- 0.1 + c(-1, 1) * qnorm(0.975) / sqrt(curv_binom(2, 20))
 nll_chytrid <- function(p) -dbinom(2, 20, p, log = TRUE)
 f_cut <- function(p) nll_chytrid(p) - nll_chytrid(0.1) - 2
 range_chytrid <- c(uniroot(f_cut, c(1e-6, 0.1))$root, uniroot(f_cut, c(0.1, 0.9))$root)
 ```
 
-Each item repeats the handout's question, then gives the answer, a
-short rationale, and mistakes to watch for. Questions with one correct
-answer are answered directly. Open-ended items (the "have you seen
-this before" part of 2c, the second half of 2d, and 3b) get discussion
-points instead. All numbers are computed in R when this file is
-knitted.
+\ans{\textbf{Answer key.} Answers are in magenta.}
 
-This WOD is optional and not collected (handed out Wed., Oct. 14, after it
-went unused in Week 7). Use the key for questions or post it. If a few
-minutes open up, 2d is the part worth going over in class.
+
+**NRES 746, Week 8, Lecture 2: Curvature by Hand (optional take-home)**
+
+
+**Optional practice; you don't need to turn it in.** Try Parts 1 and
+2 on paper before you open a laptop. Part 3 uses R.
+
+## Putting it in context
+
+In Week 7 we saw that the curvature of the negative log-likelihood
+(NLL) at its minimum measures how much the data tell us about a
+parameter. For a parameter $\theta$ with MLE $\hat\theta$:
+
+$$\text{SE}(\hat\theta) \approx \frac{1}{\sqrt{\text{NLL}''(\hat\theta)}}
+\qquad \text{approximate 95\% interval: } \hat\theta \pm 1.96\,\text{SE}$$
+
+`optim(..., hessian = TRUE)` estimates $\text{NLL}''(\hat\theta)$
+numerically. Here you find it with calculus, for two models you already
+know. (Part 1 starts where the Newton's method take-home did, then goes
+on to the standard error.)
+
 
 ## Part 1: Pika haypiles (Poisson)
 
-**1a.**
+The Week 7 pika data: active haypiles in six talus plots, 2, 5, 3, 0, 4,
+4, modeled as Poisson with mean $\lambda$. Dropping terms that don't
+involve $\lambda$,
 
-> Find $\text{NLL}'(\lambda)$ and $\text{NLL}''(\lambda)$, where
-> $\text{NLL}(\lambda) = n\lambda - \left(\sum y_i\right)\log\lambda$.
+$$\text{NLL}(\lambda) = n\lambda - \left(\sum_{i=1}^{n} y_i\right)\log\lambda$$
 
-**Answer.** $\text{NLL}'(\lambda) = n - \dfrac{\sum y_i}{\lambda}$ and
-$\text{NLL}''(\lambda) = \dfrac{\sum y_i}{\lambda^2}$.
+**1a.** Find $\text{NLL}'(\lambda)$ and $\text{NLL}''(\lambda)$.
 
-**Why.** $\frac{d}{d\lambda}\log\lambda = 1/\lambda$, and
-$\frac{d}{d\lambda}\lambda^{-1} = -\lambda^{-2}$; the two minus signs
-cancel. $\sum y_i$ is a constant (the data are fixed).
+\ans{$\text{NLL}'(\lambda) = n - \dfrac{\sum y_i}{\lambda}$, \qquad $\text{NLL}''(\lambda) = \dfrac{\sum y_i}{\lambda^2}$}
 
-**Watch for.** Treating $\sum y_i$ as something to differentiate.
-Sign errors: $\text{NLL}''$ must be positive (the NLL has a minimum).
-Students who differentiate the log-likelihood instead get
-$-\sum y_i/\lambda^2$, which is fine as long as they flip the sign
-before taking the square root.
 
-**1b.**
+**1b.** Evaluate $\text{NLL}''(\hat\lambda)$ at $\hat\lambda = 3$ for
+the six plots, and again for 24 plots with the same mean (each count
+appearing four times). Give the SE for each.
 
-> Evaluate $\text{NLL}''(\hat\lambda)$ at $\hat\lambda = 3$ for the six
-> plots, and again for 24 plots with the same mean. Give the SE for
-> each.
 
-**Answer.** 6 plots: $18/9 = `r curv_6`$, SE $= 1/\sqrt{2} \approx
-`r round(1 / sqrt(curv_6), 2)`$. 24 plots: $72/9 = `r curv_24`$, SE
-$= 1/\sqrt{8} \approx `r round(1 / sqrt(curv_24), 2)`$.
 
-**Why.** Plug $\sum y_i$ (18 or 72) and $\lambda = 3$ into 1a. The
-first matches the `optim()` Hessian shown in the Week 7 Monday lecture.
+6 plots: $\text{NLL}''(\hat\lambda) =$ \ans{$18/9 = 2$}, SE = \ans{$1/\sqrt2 \approx 0.71$} \qquad
+24 plots: $\text{NLL}''(\hat\lambda) =$ \ans{$72/9 = 8$}, SE = \ans{$1/\sqrt8 \approx 0.35$}
 
-**Watch for.** Using $\sum y_i = 18$ for the 24-plot case. Reporting
-the curvature as the SE (forgetting $1/\sqrt{\cdot}$).
 
-**1c.**
+**1c.** Substitute $\hat\lambda = \bar{y} = \sum y_i / n$ into your
+$\text{NLL}''$ and simplify to get a general formula for
+$\text{SE}(\hat\lambda)$ in terms of $\hat\lambda$ and $n$. What happens
+to the SE when $n$ quadruples?
 
-> Substitute $\hat\lambda = \bar y$ into your $\text{NLL}''$ and
-> simplify to a general formula for $\text{SE}(\hat\lambda)$. What
-> happens to the SE when $n$ quadruples?
+\ans{$\text{NLL}''(\hat\lambda) = \dfrac{n\hat\lambda}{\hat\lambda^2} = \dfrac{n}{\hat\lambda}$, so $\text{SE}(\hat\lambda) = \sqrt{\hat\lambda/n}$. Quadrupling $n$ halves the SE.}
 
-**Answer.** $\text{NLL}''(\hat\lambda) = \dfrac{n\hat\lambda}{\hat\lambda^2}
-= \dfrac{n}{\hat\lambda}$, so $\text{SE}(\hat\lambda) =
-\sqrt{\hat\lambda / n}$. Quadrupling $n$ halves the SE.
-
-**Why.** $\sum y_i = n\bar y = n\hat\lambda$. The SE scales as
-$1/\sqrt{n}$. (Since a Poisson variance equals its mean, this is the
-familiar $\sqrt{\text{variance}/n}$ standard error of a mean.)
-
-**Watch for.** Saying the SE drops by a factor of 4. That's the
-curvature (4 times steeper); the SE drops by $\sqrt 4 = 2$.
 
 ## Part 2: Frog detection (binomial)
 
-**2a.**
+In Lab 5, Act 1, you pooled three wetlands and heard the frog on $K = 12$
+of $N = 30$ visits, so $\hat p = 0.4$. Dropping the binomial
+coefficients,
 
-> Find $\text{NLL}''(p)$ for $\text{NLL}(p) = -K\log p - (N-K)\log(1-p)$.
+$$\text{NLL}(p) = -K\log p - (N - K)\log(1 - p)$$
 
-**Answer.**
-$\text{NLL}'(p) = -\dfrac{K}{p} + \dfrac{N-K}{1-p}$ and
-$\text{NLL}''(p) = \dfrac{K}{p^2} + \dfrac{N-K}{(1-p)^2}$.
+**2a.** Find $\text{NLL}''(p)$. (Watch the chain rule on $\log(1-p)$.)
 
-**Why.** $\frac{d}{dp}\log(1-p) = -\frac{1}{1-p}$ (chain rule); then
-$\frac{d}{dp}(1-p)^{-1} = (1-p)^{-2}$ (chain rule again, the two minus
-signs cancel). Both terms of $\text{NLL}''$ are positive.
+\ans{$\text{NLL}'(p) = -\dfrac{K}{p} + \dfrac{N-K}{1-p}$, \qquad $\text{NLL}''(p) = \dfrac{K}{p^2} + \dfrac{N-K}{(1-p)^2}$}
 
-**Watch for.** Dropping the chain-rule minus sign, which leaves
-$\frac{K}{p^2} - \frac{N-K}{(1-p)^2}$ (can go negative, a giveaway).
-The first derivative should match Lab 5 Act 1, 2a (with the sign
-flipped if they used the log-likelihood there).
 
-**2b.**
+**2b.** Evaluate $\text{NLL}''(\hat p)$ and the SE for your survey
+($K = 12$, $N = 30$) and for your colleague's survey ($K = 120$,
+$N = 300$). Check: one of your curvatures should be 125.
 
-> Evaluate $\text{NLL}''(\hat p)$ and the SE for $K = 12$, $N = 30$ and
-> for $K = 120$, $N = 300$. Check: one of your curvatures should be 125.
+\ans{Curvatures: $12/0.16 + 18/0.36 = `r curv_binom(12, 30)`$ (3 wetlands) and `r curv_binom(120, 300)` (30 wetlands).}
 
-**Answer.** 3 wetlands: $\text{NLL}'' = `r curv_binom(12, 30)`$,
-SE $\approx `r round(se_3, 3)`$. 30 wetlands:
-$\text{NLL}'' = `r curv_binom(120, 300)`$, SE $\approx
-`r round(se_30, 4)`$.
+3 wetlands: SE = \ans{$1/\sqrt{125} \approx `r round(se_3, 3)`$} \qquad 30 wetlands: SE = \ans{$1/\sqrt{1250} \approx `r round(se_30, 4)`$}
 
-**Why.** For 3 wetlands: $12/0.16 + 18/0.36 = 75 + 50 = 125$. Ten
-times the data gives ten times the curvature and an SE smaller by
-$\sqrt{10} \approx 3.2$, matching the narrower dashed curve in Lab 5
-Act 1, Part 3.
 
-**Watch for.** Arithmetic with $0.4^2$ and $0.6^2$. Students who got
-125 for the first may still forget to scale $K$ and $N$ together for the
-second.
+**2c.** Substitute $\hat p = K/N$ and simplify to get a general formula
+for $\text{SE}(\hat p)$. Have you seen this formula before?
 
-**2c.**
+\ans{$\text{NLL}''(\hat p) = \dfrac{N}{\hat p(1-\hat p)}$, so $\text{SE}(\hat p) = \sqrt{\dfrac{\hat p(1-\hat p)}{N}}$.}
 
-> Substitute $\hat p = K/N$ and simplify to a general formula for
-> $\text{SE}(\hat p)$. Have you seen this formula before?
+\ans{Yes: the standard error of a proportion from intro stats.}
 
-**Answer.** $\text{NLL}''(\hat p) = \dfrac{N}{\hat p(1-\hat p)}$, so
-$\text{SE}(\hat p) = \sqrt{\dfrac{\hat p(1-\hat p)}{N}}$. This is the
-standard error of a proportion from intro stats.
 
-**Why.** With $K = N\hat p$ and $N - K = N(1-\hat p)$:
-$\frac{N\hat p}{\hat p^2} + \frac{N(1-\hat p)}{(1-\hat p)^2} =
-\frac{N}{\hat p} + \frac{N}{1-\hat p} = \frac{N}{\hat p(1-\hat p)}$.
+**2d.** The Week 7 Monday WOD (*Reading the Interval*) had 2
+chytrid-positive frogs out of 20. Use your formula from 2c to build the
+approximate 95% interval, $\hat p \pm 1.96\,\text{SE}$. What's wrong
+with it? Compare it with the range you read off the NLL curve in that
+WOD.
 
-**Discussion point.** The "canned" formula from intro stats is the
-quadratic approximation to this likelihood. That's the payoff of the
-whole WOD: familiar formulas fall out of the curvature of a
-likelihood, and the same recipe works for models with no textbook
-formula.
+Interval: from \ans{`r round(wald_chytrid[1], 3)`} to \ans{`r round(wald_chytrid[2], 3)`}
 
-**Watch for.** Getting stuck on the common denominator in the last
-step; the algebra is short once $K$ and $N-K$ are rewritten in terms of
-$\hat p$.
+\ans{The lower end is a negative prevalence, which is impossible. The NLL-curve range from that WOD (about `r round(range_chytrid[1], 2)` to `r round(range_chytrid[2], 2)`) stays positive and is lopsided toward higher values.}
 
-**2d.**
-
-> The Week 7 Monday WOD (*Reading the Interval*) had 2 chytrid-positive
-> frogs out of 20. Build $\hat p \pm 1.96\,\text{SE}$. What's wrong with
-> it? Compare it with the range you read off the NLL curve in that WOD.
-
-**Answer.** SE $= \sqrt{0.1 \times 0.9 / 20} \approx
-`r round(1 / sqrt(curv_binom(2, 20)), 3)`$, so the interval is
-`r round(wald_chytrid[1], 3)` to `r round(wald_chytrid[2], 3)`. The
-lower end is a **negative prevalence**, which is impossible.
-The Week 7 WOD's 2-unit range was about `r round(range_chytrid[1], 2)` to
-`r round(range_chytrid[2], 2)`: entirely positive, and lopsided (longer
-on the high side).
-
-**Why.** The quadratic approximation is symmetric by construction, but
-this NLL curve isn't: $\hat p$ sits close to the boundary at 0, where
-the curve rises very steeply. With few positives the parabola is a poor
-stand-in for the real curve. The likelihood-based range follows the
-curve and so respects the boundary.
-
-**Watch for.** Students who report "0 to 0.23" without comment
-(truncating hides the problem rather than explaining it). Good answers
-connect this to the Week 7 Monday lecture: the Wald and likelihood-ratio
-intervals agree when the curve is close to a parabola (lots of data,
-$\hat p$ away from 0 or 1) and disagree here.
 
 ## Part 3: Check it in R
 
-**3a.**
+**Using AI:** the coding question below is labeled with a
+recommendation. Writing this one yourself is good practice for the
+labs.
 
-> *(Recommended: no AI.)* Write an NLL function for $K = 12$, $N = 30$
-> using `dbinom()`, and minimize it with `optim(..., method = "Brent",
-> lower = 0.001, upper = 0.999, hessian = TRUE)`. Does the Hessian match
-> 2b?
+**3a.** *(Recommended: no AI.)* Write an NLL function for the frog data
+in 2b ($K = 12$, $N = 30$) using `dbinom()`, and minimize it with
+`optim(..., method = "Brent", lower = 0.001, upper = 0.999, hessian = TRUE)`.
+Does the Hessian match your answer to 2b?
 
-**Answer.** About 125 (for example `r round(optim(0.5, function(p) -dbinom(12, 30, p, log = TRUE), method = "Brent", lower = 0.001, upper = 0.999, hessian = TRUE)$hessian[1, 1], 3)`). Yes, it matches.
+`optim()` Hessian: \ans{about 125 (yes, it matches 2b)}
 
-```{r key-3a}
-nll_frog <- function(p) -dbinom(12, size = 30, prob = p, log = TRUE)
-fit <- optim(0.5, nll_frog, method = "Brent", lower = 0.001, upper = 0.999,
-             hessian = TRUE)
-fit$par
-fit$hessian
-```
 
-**Why.** `optim()` approximates the second derivative by finite
-differences, so it agrees with the calculus up to small numerical error.
-The binomial coefficient term doesn't depend on $p$, so including it
-(via `dbinom()`) doesn't change the curvature.
+**3b.** Where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest?
 
-**Watch for.** Forgetting the minus sign (maximizing instead of
-minimizing gives the MLE at a boundary and a nonsense Hessian).
-Omitting `method = "Brent"`, which triggers a warning for
-one-parameter problems.
-
-**3b.**
-
-> Where did you use AI, if anywhere, and what did you have to check or
-> fix? If you didn't use it, what was hardest?
-
-**Answer (discussion points).** No single correct answer. Useful
-responses name a specific step (the chain rule in 2a, the algebra in 2c,
-setting up `optim()`). If several students say the algebra in 2c was
-hardest, a quick board walkthrough is worth the time.
+\ans{Open-ended.}

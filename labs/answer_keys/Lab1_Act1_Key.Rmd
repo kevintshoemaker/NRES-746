@@ -1,0 +1,226 @@
+---
+title: "Lab 1, Act 1"
+subtitle: "How does predation risk depend on tadpole size?"
+author: "NRES 746"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# Data ---------------------------------
+frogs <- read.csv("../../data/ReedfrogSizepred.csv")
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+```
+
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
+
+\ans{\textbf{Answer key.} Answers are in magenta.}
+
+
+## The scenario
+
+Vonesh and Bolker (2005) studied *Hyperolius spinigularis* tadpoles in Tanzania, which face a trade-off: hatching earlier means hatching smaller, and smaller tadpoles may be more vulnerable to predation by dragonfly larvae -- or they may be small enough to be ignored. To find out, they ran a field experiment: tadpoles of five different sizes were placed into tanks with a dragonfly predator, and after three days the researchers counted how many of the 10 tadpoles in each tank had been killed.
+
+The data below are real measurements from that experiment. Today we'll use them to practice the math and data-exploration tools you'll need throughout the semester. We'll start with the question a data analyst usually asks first: *what does the pattern look like?* [note: real science usually starts with a theory, leading to a testable hypothesis. So this is the first step of the typical data analysis workflow, but this really is the end of a process that begins with theory and conjectures!]
+
+```{r data-table}
+knitr::kable(frogs, col.names = c("Tadpole size, TBL (mm)", "Number killed (out of 10)"),
+             caption = "Vonesh & Bolker (2005) size-predation data")
+```
+
+
+## Part 1: Check data, visualize patterns (individual, ~5-8 mins)
+
+Below is the mean and variance of "number killed" for each of the five tank sizes (across the 3 replicate tanks per size).
+
+```{r summary-table}
+kv <- aggregate(Kill ~ TBL, data = frogs, FUN = function(x) paste(x, collapse = ", "))
+mn <- aggregate(Kill ~ TBL, data = frogs, FUN = mean)
+vr <- aggregate(Kill ~ TBL, data = frogs, FUN = var)
+tab <- data.frame(TBL = kv$TBL, Kill = kv$Kill, Mean = round(mn$Kill, 2), Var = round(vr$Kill, 2))
+knitr::kable(tab, col.names = c("TBL (mm)", "Kill values (3 tanks)", "Mean", "Variance"),
+             caption = "Summary statistics by tadpole size")
+```
+
+**1a. Spot-check.** Verify the mean and variance for the second row (TBL=12) by hand below, just to confirm where these numbers come from.
+
+\ans{Mean $= (3 + 4 + 5)/3 = 4$. \quad Variance $= \dfrac{(3-4)^2 + (4-4)^2 + (5-4)^2}{3 - 1} = 1$.}
+
+**1b.** Does body size (TBL) appear to matter for predation risk? Describe the pattern in the means across the five sizes.
+
+\ans{Yes. Kills peak at intermediate size (mean 4 at 12 mm), are lower for the smallest tadpoles (mean 1 at 9 mm), and are near zero for 21 mm and larger.}
+
+**1c.** Now compare the variances. Are they roughly similar across groups, or do some vary a lot more than others? Do you notice any relationship between a group's mean and its variance? Why do some groups have variance $=0$?
+
+\ans{Not similar. Groups with higher means tend to have higher variances (typical of counts). Groups at 21 and 37 mm have variance 0 because every tank had the same count (0 killed).}
+
+**1d. Sketch a histogram.** Using the full set of 15 individual tank counts (not the grouped means), sketch a histogram of "number killed" below, then describe its shape in a sentence or two.
+
+```{r blank-histogram, fig.height=4, fig.width=5}
+plot(NA, xlim = c(-0.5, 5.5), ylim = c(0, 10), xlab = "Number killed (out of 10)",
+     ylab = "Frequency", xaxt = "n", yaxt = "n")
+axis(1, at = 0:5)
+axis(2, at = 0:10)
+abline(v = seq(-0.5, 5.5, by = 1), col = "grey85")
+abline(h = 0:10, col = "grey85")
+kill_counts <- table(factor(frogs$Kill, levels = 0:5))
+rect(0:5 - 0.45, 0, 0:5 + 0.45, kill_counts, col = adjustcolor(ans_col, 0.35), border = ans_col)
+box()
+```
+
+Now briefly describe the shape of this histogram and record any thoughts that come to mind when you see a histogram that looks like this. 
+
+\ans{Strongly right-skewed: 9 of 15 tanks had 0 kills, with a thin tail out to 5. Not normal-looking; these are bounded counts with many zeros, which suggests a binomial-type model rather than a normal one.}
+
+## Part 2: Diagnose visually (individual, ~4 min)
+
+Below is a scatterplot of all 15 tanks: tadpole size (TBL) on the x-axis, number killed on the y-axis. (Points are jittered slightly left-right so overlapping tanks are visible.)
+
+```{r scatter, fig.height=3.2, fig.width=5.5}
+set.seed(1)
+x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+plot(x_j, frogs$Kill, xlim = c(5, 41), ylim = c(-0.3, 5.3),
+     xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
+     pch = 21, bg = "grey70", cex = 1.4)
+grid()
+```
+
+**Sketch a smooth curve by hand directly on the plot above**, showing what you think the underlying trend looks like (ignore tank-to-tank noise. Draw the *pattern*, not a connect-the-dots line).
+
+**Classify the pattern.** Circle whichever of these best describes what you drew:
+
+> monotonic increasing &nbsp;&nbsp;|&nbsp;&nbsp; monotonic decreasing &nbsp;&nbsp;|&nbsp;&nbsp; saturating (rises then flattens) &nbsp;&nbsp;|&nbsp;&nbsp; hump-shaped (rises then falls) &nbsp;&nbsp;|&nbsp;&nbsp; roughly flat / no clear trend
+
+\ans{Hump-shaped (sketch: a curve rising from about 1 kill at 9 mm to a peak near 12 to 15 mm, then falling to about 0 by 21 mm).}
+
+In 1-2 sentences, what ecological story might explain the pattern you circled? 
+
+\ans{Hump-shaped. Very small tadpoles may be ignored (not worth catching), large ones may be too big to handle (a size refuge), so intermediate sizes are most at risk.}
+
+## Part 3: Name some candidates
+
+Here's a quick reference gallery of function shapes that come up a lot in ecology and environmental science:
+
+```{r function-gallery, fig.height=3.6, fig.width=7}
+par(mfrow = c(2, 3), mar = c(2, 2, 2, 1))
+x <- seq(0.01, 10, length.out = 200)
+
+# Linear ---------------------------------
+plot(x, 1 + 0.5 * x, type = "l", lwd = 2, main = "Linear",
+     xlab = "", ylab = "", xaxt = "n", yaxt = "n")
+
+# Exponential decay ---------------------------------
+plot(x, 5 * exp(-0.4 * x), type = "l", lwd = 2, main = "Exponential decay",
+     xlab = "", ylab = "", xaxt = "n", yaxt = "n")
+
+# Saturating (Michaelis-Menten) ---------------------------------
+plot(x, 5 * x / (2 + x), type = "l", lwd = 2, main = "Saturating",
+     xlab = "", ylab = "", xaxt = "n", yaxt = "n")
+
+# Hump-shaped (Ricker) ---------------------------------
+plot(x, 3 * x * exp(-0.4 * x), type = "l", lwd = 2, main = "Hump-shaped (Ricker)",
+     xlab = "", ylab = "", xaxt = "n", yaxt = "n")
+
+# Sigmoid / logistic ---------------------------------
+plot(x, 5 / (1 + exp(-(x - 5))), type = "l", lwd = 2, main = "Sigmoid",
+     xlab = "", ylab = "", xaxt = "n", yaxt = "n")
+
+# U-shaped ---------------------------------
+plot(x, 0.15 * (x - 5)^2 + 0.5, type = "l", lwd = 2, main = "U-shaped",
+     xlab = "", ylab = "", xaxt = "n", yaxt = "n")
+```
+
+Each shape above comes from a general equation, with letters ($a$, $b$, ...) standing in for numbers we haven't chosen yet:
+
+| Linear | Exponential decay | Saturating |
+|:---:|:---:|:---:|
+| $y = a + bx$ | $y = ae^{-bx}$ | $y = \dfrac{ax}{b+x}$ |
+
+| Hump-shaped (Ricker) | Sigmoid | U-shaped |
+|:---:|:---:|:---:|
+| $y = axe^{-bx}$ | $y = \dfrac{a}{1+e^{-b(x-c)}}$ | $y = a(x-b)^2 + c$ |
+
+Which one of these shapes seem like the most plausible candidate for the tadpole data? Briefly say why you ruled out the others. What would it take to convince a skeptic that this shape, and not one of the others, is the right one?
+
+\ans{Hump-shaped (Ricker). Linear, exponential decay, saturating, and sigmoid curves can't rise and then fall; a U-shape bends the wrong way. To convince a skeptic: more sizes (especially between 12 and 21 mm and below 9 mm), a formal comparison of how well each candidate fits (later in the course), and successful predictions for new data.}
+
+**Now speculate.** Look at the equation for your top candidate. If you had to put actual numbers on its parameter(s) using the data you've seen today, where would you even start? You don't need to compute anything, just record your thoughts.
+
+\ans{Open-ended. One start: the Ricker peak is at $x = 1/b$, so a peak near 12 mm suggests $b \approx 1/12$; the peak height is $a/(be)$, so a peak of about 4 kills suggests $a \approx 4be \approx 0.9$.}
+
+
+## Group discussion and revision (~5 min)
+
+Compare your answers with your group. Feel free to revise any of your answers above based on the group discussion (it's fine to cross out and rewrite -- I like to see your thinking evolve). 
+
+Please take a minute to record any changes you made and any new insights gained during the group discussion. You can also use this space to reflect on any areas of confusion ("muddiest points") or topics you want to review or dust off for the upcoming labs.    
+
+\ans{Open-ended.}
+

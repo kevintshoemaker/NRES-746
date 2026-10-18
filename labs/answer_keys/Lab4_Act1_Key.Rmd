@@ -1,282 +1,440 @@
 ---
-title: "Lab 4, Act 1 -- Answer Key"
+title: "Lab 4, Act 1"
 subtitle: "If we knew the truth, would our trend analysis find it?"
-author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+author: "NRES 746"
 date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+  - \usepackage{needspace}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 4)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
 
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+```
+
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
+
+```{r key-values, include=FALSE}
 I0 <- 60
 sigma <- 0.2
-lambda <- 0.75^(1/25)
+lambda <- 0.75^(1 / 25)
 b <- log(lambda)
 tt_annual <- 1:25
 tt_every2 <- seq(1, 25, by = 2)
 Stt <- function(t) sum((t - mean(t))^2)
+sd_a <- sigma / sqrt(Stt(tt_annual))
+sd_e <- sigma / sqrt(Stt(tt_every2))
+# one simulated monitoring program: slope estimate and its 90% CI
+sim_one <- function(tt) {
+  idx <- I0 * exp(b * tt + rnorm(length(tt), 0, sigma))
+  m <- lm(log(idx) ~ tt)
+  c(bhat = unname(coef(m)["tt"]), confint(m, "tt", level = 0.9))
+}
+run_design <- function(tt, seed) {
+  set.seed(seed)
+  res <- t(replicate(2000, sim_one(tt)))
+  list(bhat = res[, 1], mean_b = mean(res[, 1]), sd_b = sd(res[, 1]),
+       coverage = mean(res[, 2] <= b & b <= res[, 3]))
+}
+res_a <- run_design(tt_annual, 4746)
+res_e <- run_design(tt_every2, 4747)
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+f3 <- function(v) formatC(v, format = "f", digits = 3)
+f4 <- function(v) formatC(v, format = "f", digits = 4)
+f5 <- function(v) formatC(v, format = "f", digits = 5)
 ```
 
-This key follows the same section structure as the student handout. Questions with a single
-correct numeric or derived answer are answered directly; open-ended items (interpretation,
-speculation, the plain-English procedure, reflections) are given sample answers and discussion
-points rather than a fixed rubric. Because Part 4 is a Monte Carlo experiment, every group's
-numbers will land somewhere in a range, not on an exact decimal -- the point of grading is
-whether their numbers are in the right ballpark and their reasoning about direction (more/less
-variable, does it agree) is sound, not exact-match precision.
+\ans{\textbf{Answer key.} Answers are in magenta. Simulation results come from one run; yours will differ slightly.}
 
-## Part 1: The model
 
-**1a.**
+## The scenario
 
-```{r part1a}
-lambda <- 0.75^(1/25)
-b <- log(lambda)
-c(lambda = lambda, b = b)
+A state wildlife agency is planning a long-term monitoring program for a
+rare, secretive toad in a remote Great Basin spring complex. The
+management goal is to detect a population decline of 25% or more over 25
+years. 
+
+Here is the 'truth' for this made-up scenario, which the analyst of real-world data never sees:
+each year a survey produces a count index (# individuals captured or observed in each survey)
+$I_t$ for years $t = 1, 2, \ldots, 25$. The population declines by the
+same proportion every year, and each year's count differs from the
+trend by a random multiplicative factor (proportional observation error). This scatter reflects noise in
+how well the survey captures the truth (weather, effort, or observer
+conditions can shift a whole year's count up or down together -- this is called "observation error"), not the
+population itself fluctuating (we could model this too- this is called "process error").  
+
+
+```{r truth-table}
+truth <- data.frame(
+  Quantity = c("Expected index in year 0",
+               "Total change from year 0 to year 25",
+               "Year-to-year scatter (SD of the log of the multiplicative factor)",
+               "Surveys"),
+  Value = c("I_0 = 60",
+            "-25% (falls to 75% of its year-0 value)",
+            "sigma = 0.2",
+            "one per year, t = 1, ..., 25")
+)
+knitr::kable(truth, col.names = c("Quantity", "Value"))
 ```
 
-$\lambda \approx 0.9886$, $b \approx -0.01151$. In words: the index falls by about 1.15% every
-single year, and compounding that for 25 years produces the overall 25% loss.
+The analyst (treating this as real-world data and not knowing the 'truth) sees only the 25 observed counts, fits a straight line to the *log*
+counts using `lm()`, and reports the slope with a 90% confidence
+interval. **Across many replicate monitoring programs, does that slope
+hit the truth on average, how variable is it, and does the interval
+contain the truth 90% of the time?**
 
-**1b.** Only the two **log-scale** curves are straight lines. On the log scale,
-$\log(\text{median}_t) = \log(I_0) + bt$, which is linear in $t$ with slope $b$. On the raw
-scale, $\text{median}_t = I_0\lambda^t$ is an exponential function of $t$, so both raw-scale
-curves are curved (concave up for the 25% decline, more sharply curved and flatter-looking for
-the steeper 90% decline).
+Please close your laptop. 
 
-```{r part1b-figure, fig.width=6.5, fig.height=2.6}
+Parts 1-3 and the group check-in that follows are pen-and-paper only- but feel free to use a calculator or use your phone as a calculator.
+
+
+## Part 1: The model (individual, ~9 min)
+
+**1a.** A decline of 25% over 25 years means the index value in year 25 is
+0.75 times the index value in year 0. If the index is multiplied by the same
+factor $\lambda$ every year, what is $\lambda$? Let $b = \ln \lambda$.
+What is $b$ (also known as intrinsic rate of exponential growth/decline)?
+
+\ans{$\lambda^{25} = 0.75$, so $\lambda = 0.75^{1/25}$ and $b = \ln(0.75)/25$.}
+
+$\lambda =$ \ans{`r f4(lambda)`} &nbsp;&nbsp;&nbsp;&nbsp; $b =$ \ans{`r formatC(b, format = "f", digits = 5)` (about 1.15\% decline per year)}
+
+
+
+**1b.** Sketch the trajectory of the index for a 25%
+decline and, as a dashed curve, for a 90% decline. Do this on the
+raw-scale axes at left, then again on the log-scale axes at right. Both
+start at $I_0 = 60$ in year 0 (the dot).
+
+```{r sketch-axes, fig.width=6.5, fig.height=2.6}
 par(mfrow = c(1, 2), mar = c(4, 4.5, 2, 1))
 plot(NA, xlim = c(0, 25), ylim = c(0, 80), xaxs = "i", yaxs = "i",
      xlab = "Year", ylab = "Median index", main = "Raw scale")
-curve(60 * 0.75^(x / 25), add = TRUE, lwd = 2)
-curve(60 * 0.10^(x / 25), add = TRUE, lwd = 2, lty = 2)
-points(0, 60, pch = 16, cex = 1.3)
+abline(v = seq(0, 25, 5), h = seq(0, 80, 10), col = "grey85")
+box(); points(0, 60, pch = 16, cex = 1.3)
+curve(60 * 0.75^(x / 25), add = TRUE, lwd = 2, col = ans_col)
+curve(60 * 0.10^(x / 25), add = TRUE, lwd = 2, lty = 2, col = ans_col)
+curve(60 * 0.75^(x / 25) * exp(0.2), add = TRUE, lty = 3, col = ans_col)
+curve(60 * 0.75^(x / 25) * exp(-0.2), add = TRUE, lty = 3, col = ans_col)
 plot(NA, xlim = c(0, 25), ylim = c(1, 4.5), xaxs = "i", yaxs = "i",
      xlab = "Year", ylab = "log(median index)", main = "Log scale")
-curve(log(60) + (log(0.75) / 25) * x, add = TRUE, lwd = 2)
-curve(log(60) + (log(0.10) / 25) * x, add = TRUE, lwd = 2, lty = 2)
-points(0, log(60), pch = 16, cex = 1.3)
+abline(v = seq(0, 25, 5), h = 1:4, col = "grey85")
+box(); points(0, log(60), pch = 16, cex = 1.3)
+curve(log(60) + (log(0.75) / 25) * x, add = TRUE, lwd = 2, col = ans_col)
+curve(log(60) + (log(0.10) / 25) * x, add = TRUE, lwd = 2, lty = 2, col = ans_col)
+curve(log(60) + (log(0.75) / 25) * x + 0.2, add = TRUE, lty = 3, col = ans_col)
+curve(log(60) + (log(0.75) / 25) * x - 0.2, add = TRUE, lty = 3, col = ans_col)
 ```
 
-**1b, continued.** A band of $\pm\sigma$ on the log scale is a constant-width pair of parallel
-lines (since $\sigma$ doesn't depend on $t$). Converted back to the raw scale, the band is the
-median times $e^{\pm 0.2}$ (about $\times 1.2$ and $\times 0.8$), which **shrinks in absolute
-width as the median shrinks** -- the band is a fixed *percentage* of the median, not a fixed
-number of animals.
+Which of your curves are straight lines, and why?
 
-```{r part1b-band}
-band <- function(median) {
-  c(lo = median * exp(-0.2), hi = median * exp(0.2),
-    width = median * (exp(0.2) - exp(-0.2)))
-}
-rbind(year0 = band(60), year25 = band(45))
-```
+\ans{Only the log-scale curves (magenta, above): $\log(\text{median}_t) = \log(I_0) + bt$ is linear in $t$. On the raw scale, $I_0\lambda^t$ is exponential, so both curves bend.}
 
-The raw-scale band is about 24.2 wide in year 0 (median 60) and only about 18.1 wide in year 25
-(median 45). Both widths are about 40% of the median ($e^{0.2} - e^{-0.2} \approx 0.40$), and
-18.1/24.2 = 0.75, the same ratio as the medians, confirming the band scales proportionally
-rather than staying fixed. A straight-line fit to the raw counts assumes the
-scatter around the line is the same size everywhere; the assumption being violated is
-**constant variance (homoscedasticity)** of the residuals. This is exactly the setup behind the
-optional Act 3's comparison of a raw-scale analyst and a log-scale analyst.
 
-**1c.** Full raw-scale model:
-$$I_t = \underbrace{I_0\,\lambda^t}_{\text{deterministic decline}} \cdot\ \underbrace{e^{\varepsilon_t}}_{\text{noise}} = I_0\,e^{bt}\,e^{\varepsilon_t} = I_0\,e^{bt+\varepsilon_t}, \qquad \varepsilon_t\sim\text{Normal}(0,\sigma)$$
-Taking logs of both sides:
+**1b, continued.** The scatter around the trend has the same spread on
+the log scale, $\sigma = 0.2$, every single year. On the log-scale axes, add a band of $\pm\sigma$ around your
+**25% decline** line: a pair of lines running parallel to it, each about
+0.2 log-units above and below (constant vertical distance apart the
+whole way across). Now sketch what that same band looks like (approximately) on the
+raw-scale axes once it's converted back (roughly: multiply the center point by
+$e^{0.2}\approx 1.2$ for the top and $e^{-0.2}\approx 0.8$ for the
+bottom). [note: technically the center point is the median, since the expectation of an exponentiated random variable is actually larger than the exponential of the expectation, by Jensen's inequality - but don't worry if you don't see that just yet]
+
+If we used the raw response (abundance index) in a linear regression, what assumption(s) might we be violating?
+
+\ans{Constant variance (homoscedasticity): on the raw scale the band (dotted, left) is about 24 units wide in year 0 and 18 in year 25, a fixed percentage of the median rather than a fixed width. Linearity (the raw trend is curved) and normality of residuals (the noise is lognormal) are also violated.}
+
+
+**1c.** In 1a you found $\lambda$ (with $b = \ln\lambda$) so that the
+population is multiplied by $\lambda$ every year, with no randomness --
+that per-year multiplication, applied $t$ times, is the **deterministic
+decline**: $\lambda^t$, equivalently $e^{bt}$. Combine it with a random
+multiplicative factor $e^{\varepsilon_t}$, $\varepsilon_t \sim
+\text{Normal}(0, \sigma)$, independent across years, to write the full
+model for the index $I_t$ on the raw scale: $I_0$ times the deterministic
+decline, times the random factor. Then take the log of both sides to get
+a model for $\log(I_t)$. Write out this model - does this model meet the basic assumptions of linear regression?
+
+\ansbegin
+
+$$I_t = I_0\,\lambda^t\,e^{\varepsilon_t} = I_0\,e^{bt + \varepsilon_t}, \qquad \varepsilon_t \sim \text{Normal}(0, \sigma)$$
 $$\log(I_t) = \log(I_0) + bt + \varepsilon_t$$
 
-The **log-scale** version meets the assumptions of ordinary linear regression: it's linear in
-$t$, and the noise $\varepsilon_t$ enters additively, independently, normally, and with
-constant variance $\sigma$ every year. The **raw-scale** version does not: the noise enters
-*multiplicatively* rather than additively, the mean function $I_0e^{bt}$ is nonlinear in $t$,
-and (from 1b) its variance is not constant. This is the entire reason the analyst regresses
-$\log(I_t)$ rather than $I_t$ -- it's the version that actually satisfies OLS's assumptions.
+Yes, on the log scale: linear in $t$, with additive, independent, normal errors of constant variance $\sigma^2$. (The raw-scale version is not.)
 
-**Common mistakes to watch for:** writing the raw-scale model as $I_0\lambda^t + \varepsilon_t$
-(additive noise on the raw scale) rather than $I_0\lambda^t\cdot e^{\varepsilon_t}$
-(multiplicative) -- that's a different, unrelated model, not what 1c describes; forgetting that
-$\lambda^t = e^{bt}$ and treating $\lambda^t$ and $e^{bt}$ as if they need separate terms in the
-log-transformed model (they're two ways of writing the same term, so $\log(\lambda^t) = bt$
-exactly).
+\ansend
 
-## Part 2: What should the simulation show?
 
-**2a.** Both designs should be centered at the **same** value, the true $b$ -- nothing about
-*which* years get surveyed changes whether the estimate is centered correctly, only how
-uncertain it is. (Full derivation isn't expected here, but for your own reference:
-$\hat b$ is a weighted average of the log counts with weights that sum to zero and to one when
-multiplied by $t$, regardless of which $t$'s are surveyed, so it's unbiased under any survey
-schedule.)
+## Part 2: What should the simulation show? (individual, ~8 min)
 
-The **every-other-year** design should give a **more variable** (wider-spread) set of $\hat b$
-values, because it uses only 13 data points instead of 25 -- fewer independent observations to
-average over, the same idea as the Week 4 WOD's $\text{Var}(\bar X)=\sigma^2/n$ shrinking as $n$
-grows. A good answer just needs this direction and the "more data, more precision" reasoning;
-Part 4C gives the exact formula and factor.
+The analyst regresses $z_t = \log(I_t)$ on $t$ and gets a slope estimate
+$\hat{b}$. Because the counts are random, every simulated monitoring
+program (replicate) gives a slightly different $\hat{b}$, even though the underlying
+trend is exactly the same every time -- $\hat{b}$ is itself a random
+variable, with its own distribution across replicate monitoring programs.
 
-**Common misconception to watch for:** "the same 25-year span is covered either way, so
-precision should be about the same" -- this misses that a regression slope's precision depends
-on the *number* of data points used to estimate it, not just the time span they cover. Give
-credit for correctly identifying annual as more precise even if the reasoning is incomplete;
-full credit for citing sample size (or, as a bonus insight, that spreading points out in time
-*also* helps precision, but not enough here to make up for having half as many).
 
-**2b.** No single correct sketch, but a good one shows both curves centered at the *same* point
-(near $b\approx-0.0115$), with the annual-survey curve taller and narrower and the
-every-other-year curve shorter and wider, and both roughly bell-shaped with the same total area
-underneath (each covers the axis at "1" of probability). For reference, here are the curves the
-formula in 4C would actually produce:
+**2a.** Suppose we simulate many replicate monitoring programs under two survey
+designs: (i) an annual survey ($t = 1, \ldots, 25$, 25 surveys) and (ii)
+a survey only every other year ($t = 1, 3, \ldots, 25$, 13 surveys). For
+each design, where would you expect the resulting values of $\hat{b}$,
+across many replicate monitoring programs, to be centered? Would you
+expect the two designs to have the same center? Which design do you
+expect to give a more variable (spread-out) set of $\hat{b}$ values, and
+how different do you expect the variation (standard error) to be? 
 
-```{r part2b-figure, fig.width=5.5, fig.height=2.6}
+\ans{Both centered on the true $b$ (the slope estimate is unbiased whichever years are surveyed). Every other year is more variable, since it uses 13 points instead of 25: about `r f2(sd_e / sd_a)` times the SD of the annual design (see 4C).}
+
+
+**2b.** On the axes below, sketch what you expect the *distribution* of
+$\hat{b}$ to look like under each design: a solid curve for annual
+surveys, a dashed curve for every-other-year surveys. Mark the true
+value $b$ (from 1a). You don't need exact numbers -- just show where
+each curve is centered and how wide or narrow it is, relative to the
+other. Remember that the area under each of these curves should be 1. 
+
+```{r bhat-axes, fig.width=5.5, fig.height=1.9}
 par(mar = c(4, 1, 1, 1))
-sd_a <- sigma / sqrt(Stt(tt_annual))
-sd_e <- sigma / sqrt(Stt(tt_every2))
-xs <- seq(-0.03, 0.01, length.out = 400)
-plot(xs, dnorm(xs, b, sd_a), type = "l", lwd = 2, yaxt = "n",
-     xlab = expression(hat(b)), ylab = "", ylim = c(0, max(dnorm(xs, b, sd_a))))
-lines(xs, dnorm(xs, b, sd_e), lwd = 2, lty = 2)
-abline(v = b, col = "grey50", lty = 3)
-legend("topleft", c("annual", "every other year"), lty = c(1, 2), lwd = 2, bty = "n", cex = 0.85)
+plot(NA, xlim = c(-0.03, 0.01), ylim = c(0, 1), yaxt = "n", xaxs = "i", yaxs = "i",
+     xlab = expression(hat(b)), ylab = "")
+abline(v = seq(-0.03, 0.01, 0.01), col = "grey85")
+peak <- dnorm(b, b, sd_a)
+curve(dnorm(x, b, sd_a) / peak, add = TRUE, lwd = 2, col = ans_col, n = 400)
+curve(dnorm(x, b, sd_e) / peak, add = TRUE, lwd = 2, lty = 2, col = ans_col, n = 400)
+abline(v = b, lty = 3)
+box()
 ```
 
-**2c.**
-$$\text{SE}(\widehat{\text{coverage}}) = \sqrt{\frac{p(1-p)}{R}} = \sqrt{\frac{0.9\times0.1}{R}} = \sqrt{\frac{0.09}{R}}$$
-Setting this $\le 0.01$ and solving for $R$:
 
-```{r part2c}
-R_needed <- 0.9 * 0.1 / 0.01^2
-R_needed
-```
+**2c.** In a moment you will estimate the coverage of the 90% interval
+as the fraction of $R$ simulated programs whose interval contains $b$.
+Treat each program/replicate as a Bernoulli trial with success probability
+$p = 0.9$. Using the rules for the variance of a mean (and the fact that the variance of a Bernoulli r.v. is p*(1-p)), what
+is the standard error of the estimated coverage, as a function of $R$?
+How large must $R$ be for that standard error to be less than or equal to 0.01?
 
-$R \ge 900$. The handout's default of 2,000 replicates clears this comfortably (expected MC SE
-at $R=2000$ is $\sqrt{0.09/2000}\approx 0.0067$).
+\ans{$\text{SE} = \sqrt{0.9 \times 0.1 / R} = \sqrt{0.09/R}$. \quad $\sqrt{0.09/R} \le 0.01 \Rightarrow R \ge 900$.}
 
-## Part 3: Plan the experiment
 
-**3.** No single correct wording, but a complete procedure should include, in some form:
+## Part 3: Plan the experiment (individual, ~3 min)
 
-1. Repeat many times (e.g., $R=2{,}000$):
-    a. Simulate one set of counts from the **known** data-generating model (using the *true*
-       $b$ and $\sigma$) for the survey years being tested.
-    b. Fit `lm(log(idx) ~ t)` to the simulated counts; extract the slope estimate $\hat b$ and its
-       90% confidence interval.
-    c. Record $\hat b$, and whether the interval contains the true $b$ (yes/no).
-2. After all $R$ replicates: compute the mean and SD of the $R$ recorded $\hat b$ values (bias
-   and variability), and the fraction of replicates whose interval contained the true $b$ (the
-   estimated coverage) -- compare that fraction to 90%.
+**3.** Recall the questions posed at the start: across many replicate
+monitoring programs, does the slope estimate $\hat{b}$ hit the truth
+($b$) on average, how variable is it, and does the 90% confidence
+interval contain the truth 90% of the time? Write, in plain English, the
+step-by-step procedure for a simulation experiment that answers these questions. Do
+not write R code- instead just write in plain English. State what gets repeated, what you keep track of on each
+repeat, and what you compute at the end.
 
-**Common omissions to watch for:** not being explicit that the *known* (true) $b$ and $\sigma$
-are what generate the fake data -- that's the entire point of a "if we knew the truth" check;
-forgetting to record whether each replicate's interval contains $b$ (needed for the coverage
-question); describing only a single simulated dataset rather than many repeated ones.
+\ans{Repeat many times (e.g. 2,000): simulate 25 years of counts from the model with the *true* $b$ and $\sigma$; fit \texttt{lm(log(count) \textasciitilde{} t)}; record $\hat b$ and whether its 90\% interval contains the true $b$. At the end: the mean of the $\hat b$ values (vs. $b$, for bias), their SD (variability), and the fraction of intervals containing $b$ (coverage, vs. 0.90). Repeat for the every-other-year design.}
 
-## Group check-in
 
-No fixed answer -- the point is to reconcile any disagreement in the 2a/2b speculation and
-agree on one plain-English procedure and target $R$ before splitting into paths.
+## Group check-in: finalize your plan, then choose your path (group, ~7 min)
 
-## Part 4A / Part 4B: Simulation results
+Compare your answers to Parts 2 and 3 with your group. Agree on one
+version of your speculation about $\hat{b}$'s distribution under each
+design, your sample-size calculation, and the plain-English procedure.
+Where you differ, argue it out.
 
-Both paths run the identical experiment, so expected results are the same regardless of path.
-Because this is Monte Carlo, every group's numbers will differ slightly; at the handout's
-$R=2{,}000$, expect something close to (one example run shown, with a fixed seed):
+Your group must now pick **one** of the two paths below for running the
+experiment. Both are equally valid; decide as a group before opening any
+laptops.
 
-```{r part4-example}
-sim_one <- function(tt, sigma, b, I0 = 60, level = 0.9) {
-  idx <- I0 * exp(b * tt + rnorm(length(tt), 0, sigma))
-  m <- lm(log(idx) ~ tt)
-  ci <- confint(m, "tt", level = level)
-  c(bhat = unname(coef(m)["tt"]), lo = ci[1], hi = ci[2])
-}
-run_design <- function(tt, sigma, b, R, seed) {
-  set.seed(seed)
-  res <- t(replicate(R, sim_one(tt, sigma, b)))
-  list(bhat = res[, "bhat"], mean_b = mean(res[, "bhat"]), sd_b = sd(res[, "bhat"]),
-       coverage = mean(res[, "lo"] <= b & b <= res[, "hi"]))
-}
-res_a <- run_design(tt_annual, sigma, b, R = 2000, seed = 4746)
-res_e <- run_design(tt_every2, sigma, b, R = 2000, seed = 4747)
-data.frame(
-  design = c("Annual", "Every other year"),
-  mean_bhat = c(res_a$mean_b, res_e$mean_b),
-  sd_bhat = c(res_a$sd_b, res_e$sd_b),
-  coverage = c(res_a$coverage, res_e$coverage)
-)
-```
+- **Path A (AI-assisted):** write a prompt describing your procedure and the model, and have an AI assistant generate the R code.
+- **Path B (self-coded):** write the R code yourselves, using R's documentation and each other, but no AI tools.
 
-```{r part4-figure, fig.width=6.5, fig.height=2.8}
+Our group is using: &nbsp;&nbsp; Path A (AI-assisted) &nbsp;&nbsp;&nbsp;&nbsp; / &nbsp;&nbsp;&nbsp;&nbsp; Path B (self-coded) &nbsp;&nbsp; *(circle one)*
+
+---
+
+**Laptops open now.** Complete only the section below that matches your
+group's chosen path.
+
+---
+
+
+## Part 4A: AI-assisted path (laptops, ~20 min)
+
+Use these settings: $I_0 = 60$, $\sigma = 0.2$, $b$ from 1a, and 2,000 simulated programs per design. The analysis is `lm()` of $\log(I_t)$ on $t$, with a 90% confidence interval for the slope from `confint()`.
+
+Write a prompt describing your group's procedure and asking the AI to write R code that (1) runs the experiment for annual surveys ($t = 1, \ldots, 25$), (2) reports the mean and SD of $\hat{b}$ and the estimated coverage of the 90% interval, (3) draws a histogram of the $\hat{b}$ values with the true $b$ marked and a normal curve (using the simulated mean and SD) overlaid, and (4) repeats the experiment for surveys every other year ($t = 1, 3, \ldots, 25$). **You don't need to submit your code for this path** -- just your prompt notes and results below.
+
+
+**Notes on the prompt you used and any changes you had to make to get the AI to do the right thing** (record your prompt and what happened, not the AI's code):
+
+\ans{Open-ended.}
+
+**Results, annual surveys.** Mean of $\hat{b}$ $=$ \ans{`r f5(res_a$mean_b)`} &nbsp;&nbsp; SD of $\hat{b}$ $=$ \ans{`r f5(res_a$sd_b)`}
+
+Coverage of the 90% interval $=$ \ans{`r f3(res_a$coverage)`} $\pm$ \ans{`r f3(sqrt(res_a$coverage * (1 - res_a$coverage) / 2000))`} (Monte Carlo standard error)
+
+**Results, every other year.** Mean of $\hat{b}$ $=$ \ans{`r f5(res_e$mean_b)`} &nbsp; SD of $\hat{b}$ $=$ \ans{`r f5(res_e$sd_b)`}
+
+
+How do the simulated results compare with your speculation in 2a and your sketch in 2b?
+
+\ans{Both centered on $b$; every other year about `r f2(res_e$sd_b / res_a$sd_b)` times as variable. Your numbers will differ slightly (Monte Carlo); coverage should be near 0.90 for both designs (every other year: `r f3(res_e$coverage)` here).}
+
+```{r ans-hists, fig.width=6.5, fig.height=2.6}
 par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
 hist(res_a$bhat, freq = FALSE, breaks = 30, main = "Annual", xlab = expression(hat(b)),
-     col = "grey90", border = "white")
-curve(dnorm(x, mean(res_a$bhat), sd(res_a$bhat)), add = TRUE, lwd = 2)
-abline(v = b, col = "red", lwd = 2, lty = 2)
+     col = adjustcolor(ans_col, 0.3), border = "white")
+curve(dnorm(x, mean(res_a$bhat), sd(res_a$bhat)), add = TRUE, lwd = 2, col = ans_col)
+abline(v = b, lwd = 2, lty = 2)
 hist(res_e$bhat, freq = FALSE, breaks = 30, main = "Every other year", xlab = expression(hat(b)),
-     col = "grey90", border = "white")
-curve(dnorm(x, mean(res_e$bhat), sd(res_e$bhat)), add = TRUE, lwd = 2)
-abline(v = b, col = "red", lwd = 2, lty = 2)
+     col = adjustcolor(ans_col, 0.3), border = "white")
+curve(dnorm(x, mean(res_e$bhat), sd(res_e$bhat)), add = TRUE, lwd = 2, col = ans_col)
+abline(v = b, lwd = 2, lty = 2)
 ```
 
-In both panels, the true $b$ (red dashed line) sits right at the center of the simulated
-distribution, and a normal curve fit to the simulated mean/SD tracks the histogram well -- both
-things Part 4C asks students to confirm quantitatively.
 
-**What to look for, both paths:** mean $\hat b$ close to the true $b\approx-0.0115$ for both
-designs (typically within about $\pm0.001$ at $R=2{,}000$); SD of $\hat b$ noticeably larger for
-every-other-year than annual (roughly 30-40% larger); coverage somewhere in the neighborhood of
-85-95% for both designs (the exact figure wobbles at $R=2{,}000$; see the MC SE from 2c). A
-coverage estimate far outside that range (below ~80% or above ~98%) usually means a bug, not
-bad luck -- see below.
+**Reflection.** Did the AI's first attempt do what your procedure said? How did your own understanding or lack of understanding of the model from Parts 1-2 affect your ability to get AI to do what you wanted? 
 
-**Common bugs to watch for (both paths, especially AI-generated code):**
+\ans{Open-ended.}
 
-- Passing survey-design arguments through `...` inside `replicate()`: `replicate()` wraps its
-  expression in its own closure, so `function(...) Sim(...)` used loosely inside `replicate()`
-  can silently drop or misroute arguments rather than erroring. Worth a spot check if results
-  look implausible (e.g., the index always near zero).
-- Calling `confint(m, level = 0.9)` without naming the coefficient (`"tt"` or `2`), which can
-  grab the intercept's interval instead of the slope's.
-- Rebuilding `tt` incorrectly for the every-other-year design (should be
-  `seq(1, 25, by = 2)`, 13 points) -- e.g., accidentally reusing the annual `tt` for both runs,
-  which would make the two designs' results identical.
-- Simulating on the raw scale and fitting `lm(idx ~ tt)` instead of `lm(log(idx) ~ tt)` -- this
-  silently answers a different question (the raw-scale analyst from the optional Act 3), not
-  this Act's.
 
-**Reflection prompts (4A/4B):** no fixed answer. A good AI-assisted reflection names a specific
-place their own understanding of Parts 1-3 caught something the AI got wrong or wrote
-ambiguously (e.g., which scale to simulate/fit on, or which coefficient's CI to use). A good
-self-coded reflection names a specific sticking point (`confint()` syntax, indexing the
-coefficient table, vectorizing `replicate()`) and how it got resolved.
+## Part 4B: Self-coded path (laptops, ~20 min)
 
-## Part 4C: Compare with the formula
+Use these settings: $I_0 = 60$, $\sigma = 0.2$, $b$ from 1a, and 2,000 simulated programs per design. The analysis is `lm()` of $\log(I_t)$ on $t$, with a 90% confidence interval for the slope from `confint()`.
 
-```{r part4c}
-Stt_annual <- Stt(tt_annual); Stt_e2 <- Stt(tt_every2)
-sd_annual <- sigma / sqrt(Stt_annual)
-sd_e2 <- sigma / sqrt(Stt_e2)
-c(annual = sd_annual, every_other_year = sd_e2, ratio = sd_e2 / sd_annual)
-```
+Write the R code for your group's procedure (R's built-in help, documentation, and human-written websites and neighbors are fair game; AI tools are not). Run the experiment for annual surveys ($t = 1, \ldots, 25$), then for surveys every other year ($t = 1, 3, \ldots, 25$). Draw a histogram of the $\hat{b}$ values for annual surveys with the true $b$ marked. **You don't need to write your code out by hand** -- one member should email your group's R script to the instructor, with everyone in your group listed on the email.
 
-Formula SD: annual $\approx 0.00555$, every-other-year $\approx 0.00741$ -- the every-other-year
-design is about **1.34 times** as variable as the annual design (matching the direction of the
-2a speculation, and giving it an exact number).
+**Results, annual surveys.** Mean of $\hat{b}$ $=$ \ans{`r f5(res_a$mean_b)`} &nbsp;&nbsp; SD of $\hat{b}$ $=$ \ans{`r f5(res_a$sd_b)`}
 
-**Do they agree?** A group's simulated SD (from `sd(bhat)` over $R=2{,}000$ replicates) should
-typically land within a few percent of the formula value -- the relative standard error of a
-sample SD from $n$ draws is about $1/\sqrt{2(n-1)}$, which is only about 1.6% at $n=2{,}000$, so
-a simulated SD within roughly $\pm5\%$ of the formula value (e.g. 0.0053 to 0.0058 for annual
-surveys) is a good match; within $\pm15\%$ is still plausibly Monte Carlo noise.
-A discrepancy much larger than that (e.g., off by a factor of 1.5 or more, or in the wrong
-direction) is much more likely to signal a bug than bad luck -- a good tell is rerunning the
-simulation with a different seed: pure Monte Carlo noise moves around between reruns, while a
-coding bug reproduces the same wrong answer every time.
+Coverage of the 90% interval $=$ \ans{`r f3(res_a$coverage)`} $\pm$ \ans{`r f3(sqrt(res_a$coverage * (1 - res_a$coverage) / 2000))`} (Monte Carlo standard error)
 
-## Group discussion and revision
+**Results, every other year.** Mean of $\hat{b}$ $=$ \ans{`r f5(res_e$mean_b)`} &nbsp; SD of $\hat{b}$ $=$ \ans{`r f5(res_e$sd_b)`}
 
-No fixed answer -- the point is for students to reconcile any real disagreement between their
-Monte Carlo results and the formula, and to record their own muddiest points.
+
+How do the simulated results compare with your speculation in 2a and your sketch in 2b?
+
+\ans{Both centered on $b$; every other year about `r f2(res_e$sd_b / res_a$sd_b)` times as variable (see the histograms under 4A). Your numbers will differ slightly.}
+
+
+**Reflection.** What part of turning your procedure into working R gave your group the most trouble? How did you resolve it?
+
+\ans{Open-ended.}
+
+
+## Part 4C: Compare with the formula (both paths, ~5 min)
+
+It turns out there is an exact formula for the
+sampling distribution of $\hat{b}$:
+
+$$\hat{b} \sim \text{Normal}\!\left(b,\ \frac{\sigma}{\sqrt{S_{tt}}}\right), \qquad S_{tt} = \sum_t (t - \bar{t})^2.$$
+
+In words: $\hat{b}$ is exactly unbiased (centered on the true $b$), and
+its standard deviation shrinks as $S_{tt}$ (how spread out the survey
+years are) grows. For our two designs, $S_{tt} = 1300$ for annual
+surveys and $S_{tt} = 728$ for every-other-year surveys.
+
+**4C.** Using $\sigma = 0.2$, compute the formula's SD of $\hat{b}$ for
+each design, and compare with your simulated (Monte Carlo) SD from your
+Results above.
+
+Annual: formula SD $=$ \ans{$0.2/\sqrt{1300} \approx `r f5(sd_a)`$} &nbsp;&nbsp; simulated SD $=$ \ans{about `r f5(res_a$sd_b)`}
+
+Every other year: formula SD $=$ \ans{$0.2/\sqrt{728} \approx `r f5(sd_e)`$} &nbsp;&nbsp; simulated SD $=$ \ans{about `r f5(res_e$sd_b)`}
+
+
+
+
+Do they agree well? If a formula SD and a simulated SD don't
+agree closely, is that more likely to be Monte Carlo error (not enough
+replicates) or a mistake somewhere in the simulation code? How could you
+tell the difference?
+
+\ans{Yes, within a few percent. Monte Carlo error shrinks with more replicates and changes from run to run; a bug gives the same wrong answer every rerun. So rerun with a different seed (or more replicates): a gap that persists is a bug.}
+
+---
+
+## Group discussion and revision (~5 min)
+
+Compare your results with a different group (ideally one that took the
+other path). Where the simulation disagreed with a prediction, find out
+why before moving on.
+
+Feel free to revise any of your answers above based on the discussion
+(cross out and rewrite; I like to see your thinking evolve).
+
+Please take a minute to record any changes you made and any new
+insights gained during the group discussion. You can also use this
+space to reflect on any areas of confusion ("muddiest points") or
+topics you want to review or dust off.
+
+\ans{Open-ended.}

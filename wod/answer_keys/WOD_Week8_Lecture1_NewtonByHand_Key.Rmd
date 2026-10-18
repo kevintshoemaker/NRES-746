@@ -1,20 +1,127 @@
 ---
-title: "Week 8, Lecture 1 WOD: Answer Key"
-subtitle: "Newton's Method by Hand (take-home)"
-author: "NRES 746, Instructor Answer Key (not for student distribution)"
-date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+  - \usepackage{needspace}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 3)
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# fill-in table drawn with base graphics so row height is controllable ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
 ```
 
-```{r compute, include=FALSE}
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+```
+
+```{r key-values, include=FALSE}
 nll <- function(l) 6 * l - 18 * log(l)
 d1 <- function(l) 6 - 18 / l
 d2 <- function(l) 18 / l^2
@@ -22,8 +129,7 @@ f <- round(nll(c(1.5, 2, 2.5)), 4)
 fwd <- (f[3] - f[2]) / 0.5
 ctr <- (f[3] - f[1]) / 1
 sec <- (f[3] - 2 * f[2] + f[1]) / 0.25
-
-steps <- matrix(NA, 3, 4, dimnames = list(NULL, c("guess", "slope", "curv", "next")))
+steps <- matrix(NA, 3, 4)
 l <- 2
 for (i in seq_len(3)) {
   steps[i, ] <- c(l, d1(l), d2(l), l - d1(l) / d2(l))
@@ -32,230 +138,178 @@ for (i in seq_len(3)) {
 from7 <- 7 - d1(7) / d2(7)
 fd_step <- 2 - fwd / sec
 ctr_step <- 2 - ctr / sec
-
-log_steps <- numeric(4)
-th <- log(7)
-for (i in seq_along(log_steps)) {
-  th <- th - (6 * exp(th) - 18) / (6 * exp(th))
-  log_steps[i] <- exp(th)
-}
 r4 <- function(v) formatC(v, format = "f", digits = 4)
 r3 <- function(v) formatC(v, format = "f", digits = 3)
 ```
 
-Each item repeats the handout's question, then gives the answer, a
-short rationale, and mistakes to watch for. All numbers are computed
-in R when this file is knitted.
+\ans{\textbf{Answer key.} Answers are in magenta.}
 
-Plan about 8 minutes at the start of Wednesday's class to go over this,
-focusing on 3b and 3c. 3c leads straight into the lecture: the fixes
-students propose there (smaller steps, better starting values, fitting
-on the log scale) are what real optimizers do.
+
+**NRES 746, Week 8, Lecture 1: Newton's Method by Hand (take-home)**
+
+
+**Bring this to class on Wednesday.** We'll start by going over it, and
+Wednesday's lecture picks up where it leaves off. Work on paper; a
+calculator is all you need.
+
+## Putting it in context
+
+Since Week 6 we've found MLEs with `optim()` without asking how it
+finds them. On Wednesday we open the black box. This WOD works through
+the core of one method, Newton's method, on a problem small enough to
+do by hand.
+
+The data are the Week 7 pika haypile counts from six talus plots: 2, 5,
+3, 0, 4, 4 (sum 18), modeled as Poisson with mean $\lambda$. Dropping
+terms that don't involve $\lambda$,
+
+$$\text{NLL}(\lambda) = 6\lambda - 18\log\lambda$$
+
 
 ## Part 1: Slope and curvature
 
-**1a.**
+**1a.** Find $\text{NLL}'(\lambda)$ and $\text{NLL}''(\lambda)$. Then
+set $\text{NLL}'(\lambda) = 0$ and solve for the MLE, $\hat\lambda$.
 
-> Find $\text{NLL}'(\lambda)$ and $\text{NLL}''(\lambda)$ for
-> $\text{NLL}(\lambda) = 6\lambda - 18\log\lambda$. Then set
-> $\text{NLL}'(\lambda) = 0$ and solve for the MLE, $\hat\lambda$.
+\ans{$\text{NLL}'(\lambda) = 6 - \dfrac{18}{\lambda}$, \quad $\text{NLL}''(\lambda) = \dfrac{18}{\lambda^2}$, \quad $6 - 18/\hat\lambda = 0 \Rightarrow \hat\lambda = 3$}
 
-**Answer.** $\text{NLL}'(\lambda) = 6 - \dfrac{18}{\lambda}$,
-$\text{NLL}''(\lambda) = \dfrac{18}{\lambda^2}$, and $\hat\lambda = 3$.
-
-**Why.** $\frac{d}{d\lambda}\log\lambda = 1/\lambda$ and
-$\frac{d}{d\lambda}\lambda^{-1} = -\lambda^{-2}$ (the two minus signs
-cancel). $6 - 18/\lambda = 0$ gives $\lambda = 18/6 = 3$, the sample
-mean.
-
-**Watch for.** A negative $\text{NLL}''$ (sign slip); the NLL has a
-minimum, so its curvature must be positive.
 
 ## Part 2: Slopes without calculus
 
-**2a.**
+`optim()` can't do calculus on its own.^[If you know the formula for
+the first derivatives, you can write it as an R function and pass it to
+`optim()` through the `gr` argument. Derivative-based methods such as
+`method = "BFGS"` then skip the finite differences, which makes them
+faster and more reliable (Bolker p. 301). `optim()` has no way to take
+second derivatives, but `nlm()` can use both.] By default it estimates
+slopes from NLL values at nearby points, using a **finite difference**: the slope of a straight
+line (a chord) between two points a fixed, small distance $\Delta$
+apart. Unlike the definition of a derivative, $\Delta$ never shrinks to
+zero, so the result is an approximation. The **forward difference**
+uses the current point and one step ahead:
 
-> Use the forward difference to estimate $\text{NLL}'(2)$ and compare
-> it with the exact value from 1a. Then find the exact
-> $\text{NLL}'(2.25)$. What do you notice?
+$$f'(x) \approx \frac{f(x + \Delta) - f(x)}{\Delta}$$
 
-**Answer.** Forward estimate: $(-1.4932 - (-0.4766))/0.5 = `r r4(fwd)`$.
-Exact $\text{NLL}'(2) = -3$. Exact $\text{NLL}'(2.25) = 6 - 18/2.25 =
--2$. The forward difference is a poor estimate of the slope at 2 but a
-very good estimate of the slope at 2.25.
+Here are NLL values at three points spaced $\Delta = 0.5$ apart:
 
-**Why.** The forward difference is the slope of the chord from 2 to
-2.5, and a chord's slope matches the curve's slope near the chord's
-middle (2.25), not at its left end. This is the idea 2b builds on.
+| $\lambda$ | 1.5 | 2.0 | 2.5 |
+|:---:|:---:|:---:|:---:|
+| $\text{NLL}(\lambda)$ | 1.7016 | $-0.4766$ | $-1.4932$ |
 
-**Watch for.** Sign errors from subtracting a negative number. Students
-who stop at "the estimate is off by about 1" without noticing the
-2.25 match: ask where on the chord its slope best matches the curve.
+**2a.** Use the forward difference to estimate $\text{NLL}'(2)$ and
+compare it with the exact value from 1a. Then find the exact
+$\text{NLL}'(2.25)$. What do you notice?
 
-**2b.**
+\ans{The forward difference is a poor estimate of the slope at 2 but a very good estimate of the slope at 2.25, the midpoint of the chord.}
 
-> Curvature is the slope of the slope: how fast the slope changes per
-> unit change in the parameter. The figure starts from a center point
-> $x$ and draws a backward difference (from $x$ back to $x - \Delta$)
-> and a forward difference (from $x$ to $x + \Delta$). Combine these two
-> slopes into a finite-difference approximation to $f''(x)$ that uses
-> only $f(x - \Delta)$, $f(x)$, and $f(x + \Delta)$. (What you noticed
-> in 2a may help you decide what to divide by.) Then use it to estimate
-> $\text{NLL}''(2)$ and compare with the exact value.
+Forward estimate: \ans{$(-1.4932 - (-0.4766))/0.5 = `r r4(fwd)`$} \qquad Exact $\text{NLL}'(2)$: \ans{$6 - 18/2 = -3$}
+\qquad Exact $\text{NLL}'(2.25)$: \ans{$6 - 18/2.25 = -2$}
 
-**Answer.**
-$$f''(x) \approx \frac{f(x + \Delta) - 2f(x) + f(x - \Delta)}{\Delta^2}$$
-Estimate: $(-1.4932 + 0.9532 + 1.7016)/0.25 = `r r4(sec)`$. Exact:
-$18/4 = 4.5$.
 
-**Why.** Forward difference minus backward difference is how much the
-slope changed; dividing by the distance over which it changed gives the
-change per unit of the parameter:
-$$\frac{1}{\Delta}\left[\underbrace{\frac{f(x+\Delta) - f(x)}{\Delta}}_{\text{forward}} - \underbrace{\frac{f(x) - f(x-\Delta)}{\Delta}}_{\text{backward}}\right]$$
-which simplifies to the formula above. The divisor is $\Delta$, not
-$2\Delta$, because of 2a: each chord's slope belongs to its midpoint,
-so the forward slope sits at $x + \Delta/2$, the backward slope at
-$x - \Delta/2$, and those are $\Delta$ apart (the arrow in the figure).
+**2b.** Curvature is the slope of the slope: how fast the slope changes
+per unit change in the parameter. The figure below starts from a center
+point $x$ and draws two chords: a **backward difference** (from $x$ back
+to $x - \Delta$) and a forward difference (from $x$ to $x + \Delta$).
+Combine these two slopes into a finite-difference approximation to
+$f''(x)$ that uses only $f(x - \Delta)$, $f(x)$, and $f(x + \Delta)$.
+(What you noticed in 2a may help you decide what to divide by.) Then
+use it to estimate $\text{NLL}''(2)$ and compare with the exact value.
 
-**Watch for.**
+```{r second-diff-schematic, fig.width=6, fig.height=2.8, dev="png", dpi=250}
+f_demo <- function(t) 0.35 * t^2
+x_pts <- c(1, 2, 3)
+par(mar = c(3.2, 1, 0.5, 1))
+curve(f_demo, 0.4, 3.5, lwd = 2, axes = FALSE, xlab = "", ylab = "",
+      ylim = c(-0.3, 4.3))
+axis(1, at = c(1, 1.5, 2, 2.5, 3), padj = 0.3,
+     labels = c(expression(x - Delta), expression(x - Delta/2), expression(x),
+                expression(x + Delta/2), expression(x + Delta)))
+points(x_pts, f_demo(x_pts), pch = 19)
+segments(x_pts[1], f_demo(x_pts[1]), x_pts[2], f_demo(x_pts[2]), lwd = 2,
+         col = "steelblue")
+segments(x_pts[2], f_demo(x_pts[2]), x_pts[3], f_demo(x_pts[3]), lwd = 2,
+         col = "darkorange")
+abline(v = c(1.5, 2.5), lty = 3, col = "grey50")
+text(1.45, 1.25, "backward difference\nfrom x", col = "steelblue", pos = 2,
+     cex = 0.85)
+text(2.55, 2.75, "forward difference\nfrom x", col = "darkorange", pos = 2,
+     cex = 0.85)
+text(3.4, f_demo(3.4), "f", pos = 4, font = 3)
+arrows(1.5, -0.15, 2.5, -0.15, code = 3, length = 0.07)
+text(2, -0.15, expression(Delta), pos = 3, cex = 0.9)
+```
 
-- Dividing the change in slope by $2\Delta$, reasoning that the three
-  points span $2\Delta$. Here that gives 2.32, half the right answer
-  (as does dividing by $\Delta$ instead of $\Delta^2$ overall). Send
-  them back to 2a: where does each chord's slope belong?
-- Treating the forward and backward differences as two estimates of
-  the *same* slope at $x$ and averaging them. That gives the first
-  derivative (the centered slope, `r r4(ctr)`), not the second.
-- Getting the right formula by "guessing the pattern." They should
-  still be able to show where $\Delta^2$ comes from.
+\ansbegin
+
+The two chord slopes are slopes at $x \pm \Delta/2$, which are $\Delta$ apart, so
+$$f''(x) \approx \frac{\frac{f(x+\Delta) - f(x)}{\Delta} - \frac{f(x) - f(x-\Delta)}{\Delta}}{\Delta} = \frac{f(x + \Delta) - 2f(x) + f(x - \Delta)}{\Delta^2}$$
+
+\ansend
+
+Estimate: \ans{$(-1.4932 + 0.9532 + 1.7016)/0.25 = `r r4(sec)`$} \qquad Exact: \ans{$18/4 = 4.5$}
+
 
 ## Part 3: Newton's method
 
-**3a.**
+The MLE is where the slope is zero: $\text{NLL}'(\lambda) = 0$. Newton's
+method finds that point by guessing and correcting. At the current
+guess $\lambda$, it pretends the slope $\text{NLL}'$ changes *linearly*
+across parameter space, starting at $\text{NLL}'(\lambda)$ and changing
+at a constant rate $\text{NLL}''(\lambda)$.
 
-> Under that linear approximation (the slope starts at
-> $\text{NLL}'(\lambda)$ and changes at a constant rate
-> $\text{NLL}''(\lambda)$), find the value $\lambda^*$ where the slope
-> reaches zero. Write $\lambda^*$ in terms of $\lambda$,
-> $\text{NLL}'(\lambda)$, and $\text{NLL}''(\lambda)$.
+**3a.** Under that linear approximation, find the value $\lambda^*$
+where the slope reaches zero. Write $\lambda^*$ in terms of $\lambda$,
+$\text{NLL}'(\lambda)$, and $\text{NLL}''(\lambda)$. (A sketch of
+$\text{NLL}'$ against $\lambda$ may help.) Your answer is Newton's
+update rule: $\lambda^*$ becomes the next guess.
 
-**Answer.**
-$$\lambda^* = \lambda - \frac{\text{NLL}'(\lambda)}{\text{NLL}''(\lambda)}$$
 
-**Why.** A straight line through the point
-$(\lambda, \text{NLL}'(\lambda))$ with slope $\text{NLL}''(\lambda)$
-is $\text{NLL}'(\lambda) + \text{NLL}''(\lambda)(\lambda^* - \lambda)$.
-Set it to zero and solve for $\lambda^*$. Equivalently, "rise over
-run": the line has to drop by $\text{NLL}'(\lambda)$ at a rate of
-$\text{NLL}''(\lambda)$ per unit, which takes a run of
-$\text{NLL}'/\text{NLL}''$, so $\lambda^* = \lambda - \text{NLL}'/\text{NLL}''$.
-Dividing by the curvature sets the step size: strong curvature means
-a small step, weak curvature a big one.
 
-**Watch for.** A plus sign instead of a minus (the step must go
-downhill: if the slope is negative, $\lambda$ should increase).
-Writing the line through the origin, $\text{NLL}''(\lambda)\,\lambda^*
-= 0$, instead of through the current point. Students who know the
-tangent-line form $y - y_0 = m(x - x_0)$ from Calc I get there fastest;
-for others, a sketch of $\text{NLL}'$ against $\lambda$ with the
-straight line through the current point usually unlocks it. In the
-debrief, point out that a straight-line slope is the same as a
-parabola-shaped NLL, so Newton's method is jumping to the bottom of
-that parabola.
+$\lambda^* =$ \ans{$\lambda - \dfrac{\text{NLL}'(\lambda)}{\text{NLL}''(\lambda)}$}
 
-**3b.**
 
-> Start at $\lambda = 2$ and take three Newton steps, using your exact
-> derivatives from 1a.
+**3b.** Start at $\lambda = 2$ and take three Newton steps, using your
+rule from 3a and your exact derivatives from 1a. Keep at least three
+decimal places.
 
-**Answer.**
+```{r newton-table, fig.width=6.2, fig.height=0.35+3*0.55}
+blank_table(
+  headers = list("Step", "Guess", "Slope, NLL'", "Curvature, NLL''", "Next guess"),
+  body = lapply(1:3, function(i) c(as.character(i), r4(steps[i, 1]), r4(steps[i, 2]),
+                                    r4(steps[i, 3]), r4(steps[i, 4]))),
+  col_widths = c(0.6, 1, 1.2, 1.4, 1.1),
+  row_height = 0.55,
+  ans = lapply(1:3, function(i) c(FALSE, i > 1, TRUE, TRUE, TRUE))
+)
+```
 
-| Step | Guess | Slope, NLL$'$ | Curvature, NLL$''$ | Next guess |
-|:---:|:---:|:---:|:---:|:---:|
-| 1 | `r r4(steps[1, 1])` | `r r4(steps[1, 2])` | `r r4(steps[1, 3])` | `r r4(steps[1, 4])` |
-| 2 | `r r4(steps[2, 1])` | `r r4(steps[2, 2])` | `r r4(steps[2, 3])` | `r r4(steps[2, 4])` |
-| 3 | `r r4(steps[3, 1])` | `r r4(steps[3, 2])` | `r r4(steps[3, 3])` | `r r4(steps[3, 4])` |
 
-**Why.** The distance to the MLE goes 1, 0.33, 0.037, 0.0005: each
-error is roughly the square of the one before. That fast ("quadratic")
-convergence near the answer is why derivative-based methods are
-popular.
 
-**Watch for.** Rounding $\lambda$ to 2.67 and carrying the rounding
-error forward (still converges, just more slowly). Plugging the new
-guess into the old curvature.
 
-**3c.**
+**3c.** Now start at $\lambda = 7$ and take one step. What went wrong?
+Sketch $\text{NLL}'(\lambda)$ and the straight line Newton's method used
+at $\lambda = 7$ to explain why, and suggest one way to fix it.
 
-> Now start at $\lambda = 7$ and take one step. What went wrong? Sketch
-> $\text{NLL}'(\lambda)$ and the straight line Newton's method used at
-> $\lambda = 7$ to explain why, and suggest one way to fix it.
+\ans{$\text{NLL}'(7) = `r r3(d1(7))`$, $\text{NLL}''(7) = `r r3(d2(7))`$, so the next guess is $`r r3(from7)`$: a negative Poisson mean, where the NLL isn't even defined. Far from the MLE, $\text{NLL}'$ levels off, so the straight line at 7 is shallow and crosses zero far to the left. Fixes: shorter steps (e.g. halve the step until the NLL improves), a better starting value, bounds, or fitting $\log\lambda$ instead.}
 
-**Answer.** $\text{NLL}'(7) = `r r3(d1(7))`$, $\text{NLL}''(7) =
-`r r3(d2(7))`$, so the next guess is
-$7 - `r r3(d1(7))`/`r r3(d2(7))` = `r r3(from7)`$. A Poisson mean
-can't be negative, and the NLL isn't even defined there.
-
-```{r key-overshoot}
+```{r ans-overshoot, fig.width=6, fig.height=3}
 l_seq <- seq(0.8, 10, length.out = 400)
 l_line <- seq(-4, 10, length.out = 400)
 par(mar = c(4, 4, 0.5, 0.5))
 plot(l_seq, d1(l_seq), type = "l", lwd = 2.5, xlim = c(-4, 10), ylim = c(-8, 5),
      xlab = expression(lambda), ylab = "Slope, NLL'")
-lines(l_line, d1(7) + d2(7) * (l_line - 7), lwd = 2, lty = 2, col = "darkorange")
+lines(l_line, d1(7) + d2(7) * (l_line - 7), lwd = 2, lty = 2, col = ans_col)
 abline(h = 0, v = 0, col = "grey60")
-points(c(7, from7, 3), c(d1(7), 0, 0), pch = 19, col = c("black", "darkorange", "black"))
+points(c(7, from7, 3), c(d1(7), 0, 0), pch = 19, col = c("black", ans_col, "black"))
 legend("bottomright", c("NLL'", "Newton's straight line at 7"), lwd = 2, lty = c(1, 2),
-       col = c("black", "darkorange"), bty = "n", cex = 0.8)
+       col = c("black", ans_col), bty = "n", cex = 0.8)
 ```
 
-**Why.** Far from the MLE the slope $\text{NLL}'$ levels off (small
-curvature), so the straight line Newton's method draws at 7 is very
-shallow and doesn't cross zero until $\lambda = -2.33$, outside the
-allowed range. (The
-true slope reaches zero at 3.) In general the update here simplifies to
-$\lambda_{\text{new}} = 2\lambda - \lambda^2/3$, which is negative for
-any start above 6.
 
-Acceptable fixes (any one):
+**3d.** *(If you have time.)* Real optimizers usually don't know the
+exact derivatives and use finite-difference estimates instead. By hand,
+take one Newton step from $\lambda = 2$ using your estimates from 2a
+and 2b in place of the exact derivatives. How close is it to your first
+step in 3b? Based on 2a, how could you make it closer?
 
-- **Shorter steps.** If a step makes the NLL worse or leaves the
-  allowed range, halve it and try again ("backtracking").
-- **Better starting values.** Start near a sensible guess, such as the
-  sample mean.
-- **Constraints.** Use a method that respects bounds (e.g.
-  `method = "L-BFGS-B"` with `lower = 0.001`).
-- **Fit on the log scale.** Optimize over $\theta = \log\lambda$, so
-  every value of $\theta$ gives a positive $\lambda$. Newton's method on
-  $\theta$ from $\lambda = 7$ gives $\lambda$ =
-  `r paste(r3(log_steps), collapse = ", ")`: no overshoot. (This one
-  comes up in Wednesday's lecture.)
-
-**Watch for.** Concluding Newton's method is "broken." It works well
-near the answer and badly far from it, which is why starting values
-matter for every optimizer.
-
-**3d.**
-
-> *(If you have time.)* Real optimizers usually don't know the exact
-> derivatives and use finite-difference estimates instead. By hand, take
-> one Newton step from $\lambda = 2$ using your estimates from 2a and 2b
-> in place of the exact derivatives. How close is it to your first step
-> in 3b? Based on 2a, how could you make it closer?
-
-**Answer.** $2 - (`r r4(fwd)`)/`r r4(sec)` = `r r4(fd_step)`$, versus
-`r r4(steps[1, 4])` with exact derivatives: the right direction, but
-a shorter step. To do better, use a smaller $\Delta$, or average the
-forward and backward differences from 2b (the same as the chord from
-1.5 to 2.5, centered on 2, slope `r r4(ctr)`), which gives
-`r r4(ctr_step)`.
-
-**Why.** The forward slope belongs to 2.25, not 2 (2a), so it
-understates how steep the NLL is at 2. Errors in the slope and
-curvature change where each step lands, not where the method stops
-($\text{NLL}' = 0$), so the method still converges. `optim()` uses a
-much smaller step ($\Delta = 0.001$ by default), so its estimates are
-far closer.
-
-**Watch for.** Reusing the exact slope from 1a with the estimated
-curvature (that mixes the two methods).
+\ans{$2 - (`r r4(fwd)`)/`r r4(sec)` = `r r4(fd_step)`$ vs. `r r4(steps[1, 4])` with exact derivatives: right direction, shorter step. Closer: a smaller $\Delta$, or the centered chord from 1.5 to 2.5 (slope `r r4(ctr)`), which gives `r r4(ctr_step)`.}

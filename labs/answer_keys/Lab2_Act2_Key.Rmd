@@ -1,125 +1,295 @@
 ---
-title: "Lab 2, Act 2 -- Answer Key"
+title: "Lab 2, Act 2"
 subtitle: "Could a different function fit the tadpole data better?"
-author: "NRES 746 -- Instructor Answer Key (not for student distribution)"
+author: "NRES 746"
 date: ""
 output:
   pdf_document: default
-  # word_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
-                       fig.width = 6, fig.height = 4.5)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
 
+# Data ---------------------------------
 frogs <- read.csv("../../data/ReedfrogSizepred.csv")
-mn <- aggregate(Kill ~ TBL, data = frogs, FUN = mean)
-xs <- mn$TBL; obs <- mn$Kill
 
+# Act 1's grid-search-optimized Ricker ---------------------------------
+a_rk <- 1; b_rk <- 0.15
 ricker <- function(x, a, b) a * x * exp(-b * x)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines) for equation manipulation /
+# show-your-work; pair with fig.height set to however much room is needed
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# draws a table with given headers/body for handwritten answers ("" = blank
+# cell); headers/values may be plotmath expressions for math; pair with
+# fig.height = header_height + nrow(body) * row_height
+blank_table <- function(headers, body, col_widths = NULL,
+                         header_height = 0.35, row_height = 0.5,
+                         cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
 ```
 
-## Part 1: Two new candidates
-
-**1a.** Setting $c=1$ in $y = a\,x^{c}\,e^{-cx/p}$ gives $y = a\,x\,e^{-x/p}$. Comparing this to
-the plain Ricker, $y = a\,x\,e^{-bx}$, the exponent terms match when $b = 1/p$ (equivalently
-$p = 1/b$) -- so the flexible Ricker is a real generalization: setting $c=1$ recovers the
-original Ricker, with $p$ playing the role of "peak location" wherever $1/b$ used to.
-
-**1b.** Differentiating $y = a\,x^{c}\,e^{-cx/p}$ with the product rule (treating $u = x^c$,
-$v = e^{-cx/p}$) and the chain rule for $v$:
-
-$$\frac{dy}{dx} = a\left[c\,x^{c-1}e^{-cx/p} + x^c e^{-cx/p}\left(-\frac{c}{p}\right)\right]
- = a\,c\,x^{c-1}e^{-cx/p}\left(1 - \frac{x}{p}\right)$$
-
-This is zero when $x=0$ (a trivial/edge case) or when $1 - x/p = 0$, i.e. $x = p$. So the
-critical point is at $x=p$, confirming $p$ is the peak location by construction.
-
-**Candidate 2 setup (Holling type IV).** $x^* = -2b/c$ for $b=115.09$, $c=-21.49$:
-
-```{r holling-peak}
-b_h <- 115.09; c_h <- -21.49
-x_star <- -2 * b_h / c_h
-x_star
+```{r key-helpers, include=FALSE}
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+# redraws blank_table() so cells flagged TRUE in `ans` use the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    font = if (i %in% bold_rows) 2 else 1,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
 ```
 
-**1c, second part.** As $x\to\infty$: the numerator's leading term is $ax^2$ and the
-denominator's leading term is also $x^2$, so $y \to ax^2/x^2 = a$ -- a finite, positive
-asymptote, *not* zero. This is different from the Ricker family, which decays all the way to
-zero as $x\to\infty$. (This is the point of the "heads-up" box in the handout: Bolker's
-parameterization of Holling type IV keeps a nonzero floor, unlike the more commonly cited
-Andrews/Monod-Haldane version.)
-
-**1d.** Correct R functions:
-
-```{r candidate-functions}
+```{r key-values, include=FALSE}
+f2 <- function(v) formatC(v, format = "f", digits = 2)
 flex_ricker <- function(x, a, p, c) a * x^c * exp(-c * x / p)
 holling4 <- function(x, a, b, c) a * x^2 / (b + c * x + x^2)
+mn <- aggregate(Kill ~ TBL, data = frogs, FUN = mean)
+ssr <- function(pred) sum((mn$Kill - pred)^2)
+ssr_vals <- c(ssr(ricker(mn$TBL, 1, 0.15)),
+              ssr(flex_ricker(mn$TBL, 3.68e-19, 12.52, 28.72)),
+              ssr(holling4(mn$TBL, 0.0329, 115.09, -21.49)))
 ```
 
-**Group prediction.** Open-ended -- there's no "correct" prediction here, since the point of 2d
-is that intuition (more parameters = better) is a trap. A thoughtful answer might reasonably
-guess Holling IV or flexible Ricker will look better since they have an extra parameter; the
-payoff comes from testing that prediction against what "better" actually means (lowest SSR vs.
-best-looking curve vs. most trustworthy model), not from getting it "right" in advance.
+\ans{\textbf{Answer key.} Answers are in magenta.}
 
-## Part 2: Implement and compare
 
-```{r plot-three, fig.height=3.8}
-a_rk <- 1; b_rk <- 0.15
-a_fr <- 3.68e-19; p_fr <- 12.52; c_fr <- 28.72
-a_h4 <- 0.0329; b_h4 <- 115.09; c_h4 <- -21.49
+## Picking up where we left off
 
+In Act 1 you built a grid search and found the parameters that minimize SSR for the 2-parameter Ricker function: $a=1$, $b=0.15$, SSR $=6.74$ -- better than any single hand guess (note: your SSR might differ if you used individual residuals instead of the aggregated residuals, but the overall result should be the same). But look closely at the curve below: it never really rises to meet the peak at 12 mm. With only five aggregated data points, three of them at or near zero, and just two parameters that jointly control the curve's peak location, height, and decay rate all at once, the Ricker family doesn't have enough flexibility to chase the one high point without doing worse everywhere else -- so the best fit solution works hard to fit the low points instead of tracking the peak. That's a limitation of the Ricker *shape*. And maybe that's a good reason to ask whether Ricker is even the right family to begin with!
+
+```{r recap-curve, fig.height=3.2, fig.width=5.5}
 set.seed(1)
 x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
 plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
      xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
      pch = 21, bg = "grey70", cex = 1.4)
 curve(ricker(x, a_rk, b_rk), from = 5, to = 40, lwd = 2, col = "steelblue", add = TRUE)
-curve(flex_ricker(x, a_fr, p_fr, c_fr), from = 5, to = 40, lwd = 2, col = "darkorange",
-      add = TRUE, n = 500)
-curve(holling4(x, a_h4, b_h4, c_h4), from = 5, to = 40, lwd = 2, col = "forestgreen",
-      add = TRUE, n = 500)
-legend("topright", legend = c("Ricker", "Flexible Ricker", "Holling IV"),
-       col = c("steelblue", "darkorange", "forestgreen"), lwd = 2, bty = "n")
+grid()
+legend("topright", legend = "Act 1 best-fit Ricker (SSR = 6.74)", col = "steelblue", lwd = 2, bty = "n")
 ```
 
-Holling IV's curve is the "dramatic spike" referenced later in Act 3 -- it's easy to miss on a
-default y-axis, so it's worth zooming in near $x=9$-$13$ if a student's plot looks flat.
+But finding the best Ricker doesn't tell us whether Ricker is even the right *family* of function to begin with. Today we'll meet two more candidates from the 'bestiary' and compare them against Ricker's best possible fit -- not against a guess.
 
-**2b. SSR table (5 tank-size means):**
+**Before you do anything else: close your laptop and put away your phone.** Part 1 and the group check-in that follows are pen-and-paper only -- no exceptions. You'll get clear instructions later in this handout for when it's time to open your laptop and use R.
 
-```{r ssr-table}
-ssr <- function(pred) sum((obs - pred)^2)
-c(
-  Ricker          = ssr(ricker(xs, a_rk, b_rk)),
-  FlexibleRicker  = ssr(flex_ricker(xs, a_fr, p_fr, c_fr)),
-  HollingIV       = ssr(holling4(xs, a_h4, b_h4, c_h4))
+## Part 1: Two new candidates (individual, ~15 min)
+
+**Candidate 1: a flexible Ricker.** Generalize the Ricker function by adding a shape exponent $c$, and reparameterize so the peak location $p$ is a parameter you can set directly (just like you might want to specify "the peak is at 12 mm" instead of "b = 0.15"):
+
+$$y = a\,x^{c}\,e^{-cx/p}$$
+
+**1a.** Check that this really is a generalization-- that is, that the standard Ricker can be 'recovered' from this function. If you set $c=1$, what does this formula reduce to, and how does $p$ relate to Ricker's parameter $b$?
+
+\ans{With $c = 1$: $y = a\,x\,e^{-x/p}$, the plain Ricker with $b = 1/p$ (so $p = 1/b$).}
+
+**1b.** Find $dy/dx$ for the flexible Ricker (product rule together with the chain rule for the exponential term -- same tools as Lab 1's Ricker derivative), and show that the critical point occurs at $x=p$, confirming $p$ really is the peak location.
+
+*Reminders:* $\dfrac{d}{dx}(uv) = u'v + uv'$ &nbsp;&nbsp;&nbsp;&nbsp; $\dfrac{d}{dx}\,e^{g(x)} = g'(x)\,e^{g(x)}$ &nbsp;&nbsp;&nbsp;&nbsp; $\dfrac{d}{dx}\,x^c = c\,x^{c-1}$
+
+Show your work:
+
+\ansbegin
+
+With $u = x^c$, $v = e^{-cx/p}$:
+$$\frac{dy}{dx} = a\left[c\,x^{c-1}e^{-cx/p} + x^c e^{-cx/p}\left(-\frac{c}{p}\right)\right] = a\,c\,x^{c-1}e^{-cx/p}\left(1 - \frac{x}{p}\right)$$
+For $x > 0$, only the last factor can be zero: $1 - x/p = 0$, so $x = p$.
+
+\ansend
+
+**Candidate 2: Holling type IV.** This one comes from the *rational-function* branch of the bestiary rather than the exponential branch -- originally used for predator functional responses, but we're borrowing it here purely for its shape:
+
+$$y = \frac{a\,x^2}{b + cx + x^2}, \qquad c < 0$$
+
+Its peak occurs at $x^* = -2b/c$.
+
+*A heads-up if you go looking this up on your own:* some other sources define "Holling type IV" with a plain $x$ in the numerator instead of $x^2$. That version behaves differently at large $x$ -- it declines all the way to zero instead of leveling off at $a$. We're using Bolker's version here, matching your assigned reading.
+
+**1c.** For $b=115.09$, $c=-21.49$, compute the peak location $x^*$:
+
+$x^* =$ \ans{$-2(115.09)/(-21.49) \approx `r round(-2 * 115.09 / -21.49, 2)`$ mm}
+
+Now use the same "throw out the lower-order terms" trick from Monday's lecture to figure out what this function does as $x\to\infty$ (hint: compare the highest powers of $x$ in the numerator and denominator). Is the answer the same as what happens to the Ricker family as $x\to\infty$?
+
+\ans{$y \to ax^2/x^2 = a$: it levels off at $a$ (a positive floor). Not the same: the Ricker family declines to 0.}
+
+**1d. Write the R functions.** Define both candidates as R functions below, following the same pattern as the `ricker` function (`x` first, then parameters). You're writing this by hand on paper, so it doesn't need to run yet -- just get the structure and syntax right.
+
+```
+flex_ricker <- function(x, a, p, c){
+  
+  
+}
+
+holling4 <- function(x, a, b, c){
+
+
+}
+```
+
+\ansbegin
+
+```
+flex_ricker <- function(x, a, p, c){
+  a * x^c * exp(-c * x / p)
+}
+
+holling4 <- function(x, a, b, c){
+  a * x^2 / (b + c * x + x^2)
+}
+```
+
+\ansend
+
+## Group check-in: finalize your functions (group, ~10 min)
+
+Compare your answers to 1a-1d with your group, and agree on a single, correct version of both functions -- this is the version you'll actually type in once laptops are open, so it needs to be right before you move on.
+
+As a group, also make a prediction: of the three candidates now on the table (Act 1's best-fit Ricker, flexible Ricker, Holling type IV), which do you expect to fit the tadpole data best, and why? You'll check this prediction shortly.
+
+\ans{Open-ended (any prediction with a reason).}
+
+---
+
+**Laptops open now.** Open R and type up your group's finalized functions. You already worked out the structure and syntax by hand -- this is just getting it running, so AI tools, `?help`, and a web search are all fair game for resolving any issues. As always, no pressure from me about whether or not to use AI tools, but you're welcome to go that direction if you'd like. 
+
+---
+
+## Part 2: Implement and compare (laptops, ~15-20 min)
+
+**2a.** Type up `flex_ricker` and `holling4` in an R script based on what your group wrote in 1d. Here are the actual fitted (SSR-minimizing) parameter values for each family, found the same way you found Act 1's Ricker optimum: $a=3.68\times10^{-19}$, $p=12.52$, $c=28.72$ for the flexible Ricker, and $a=0.0329$, $b=115.09$, $c=-21.49$ for Holling type IV. Plot all three candidates (Act 1's best-fit Ricker, flexible Ricker, Holling IV) overlaid on the tadpole data with `curve(..., add = TRUE)`. If one of these looks a little wild once it's plotted, that's not a bug in your code!
+
+```{r ans-three-curves, fig.height=3.4, fig.width=5.5}
+set.seed(1)
+x_j <- frogs$TBL + runif(nrow(frogs), -0.6, 0.6)
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(x_j, frogs$Kill, xlim = c(5, 40), ylim = c(-0.3, 5.3),
+     xlab = "Tadpole size, TBL (mm)", ylab = "Number killed (out of 10)",
+     pch = 21, bg = "grey70", cex = 1.4)
+curve(ricker(x, 1, 0.15), from = 5, to = 40, lwd = 2, col = ans_col, add = TRUE)
+curve(flex_ricker(x, 3.68e-19, 12.52, 28.72), from = 5, to = 40, lwd = 2, lty = 2,
+      col = ans_col, add = TRUE, n = 500)
+curve(holling4(x, 0.0329, 115.09, -21.49), from = 5, to = 40, lwd = 2, lty = 3,
+      col = ans_col, add = TRUE, n = 500)
+legend("topright", c("Ricker", "Flexible Ricker", "Holling IV"), lty = 1:3, lwd = 2,
+       col = ans_col, bty = "n")
+```
+
+**2b.** Compute the sum of squared residuals (SSR) for all three candidates at the five tank sizes (9, 12, 21, 25, 37 mm) -- your laptop's already open, so use R, a calculator app, Excel, whatever's fastest, rather than doing it by hand like Lab 1 Act 3. Record your results:
+
+```{r fill-ssr-table, fig.height=0.35+3*0.5, fig.width=5.5}
+blank_table(
+  headers = list("Candidate", "SSR"),
+  body = list(
+    list("Ricker (a=1, b=0.15, Act 1's best fit)", f2(ssr_vals[1])),
+    list("Flexible Ricker", f2(ssr_vals[2])),
+    list("Holling type IV", f2(ssr_vals[3]))
+  ),
+  col_widths = c(2.6, 1),
+  cex = 0.9,
+  ans = rep(list(c(FALSE, TRUE)), 3)
 )
 ```
 
-| Candidate | SSR |
-|:---|:---:|
-| Ricker ($a=1$, $b=0.15$) | 6.74 |
-| Flexible Ricker | 0.11 |
-| Holling type IV | 0.08 |
+**2c.** Which candidate looks best by eye, and which has the lowest SSR? Did this match your group's prediction?
 
-**2c.** By eye, the flexible Ricker (orange) looks the most reasonable -- a smooth hump that
-tracks the general shape of the data. Holling IV (green) has the *lowest* SSR of the three, but
-its curve is a narrow, biologically implausible spike. So "looks best" and "lowest SSR" point to
-*different* candidates here -- worth calling out explicitly if a student's answer conflates the
-two.
+\ans{By eye: the flexible Ricker (a smooth hump). Lowest SSR: Holling IV (`r f2(ssr_vals[3])`), whose curve is a narrow, implausible spike. "Looks best" and "lowest SSR" point to different candidates.}
 
-**2d.** The core idea students should land on: with only 5 data points and 3 free parameters,
-a curve family has very little left to constrain it (essentially 2 residual degrees of freedom),
-so it can nearly interpolate the data regardless of whether the resulting shape is a sensible
-model of the underlying process. Lowest SSR is not the same as "best model" -- a model that fits
-its own training data almost perfectly, especially one with many parameters relative to the data,
-should raise suspicion rather than confidence. What you'd want to check: how the fit holds up on
-data it wasn't fit to (out-of-sample performance), or how stable the fitted parameters are under
-resampling -- which is what Act 3 does next.
+**2d.** All three curves above are truly optimized this time. Nobody guessed any of these parameter values; each is the true SSR-minimizing fit for its family. And yet the lowest-SSR curve is probably not the one you'd point to as the best *model*. What's going on? (Hint: think about how many data points you have -- five, aggregated tank means -- versus how many free parameters each family gets to work with.) Does the lowest SSR always mean the best model? What would you want to check before trusting a model that fits its own training data almost perfectly?
 
-**Group discussion.** No fixed answer -- have students reconcile differing SSR values (should
-match closely if everyone used the given parameter values and the 5-point convention) and discuss
-their reasoning in 2d.
+\ans{With 5 data points and 3 free parameters, a flexible family can nearly pass through every point whether or not its shape makes biological sense (overfitting). Lowest SSR is not always the best model. Check how it predicts data it wasn't fit to, and how stable its parameters are when the data are resampled.}
+
+For Act 3, we're going back to the plain Ricker -- not because it won this comparison outright, but because a 2-parameter model is easier to reason about (and to bootstrap) than one flexible enough to bend itself into whatever shape the data demands. We'll ask a different question: how much should we actually trust the specific $(a,b)$ Act 1 found?
+
+---
+
+## Group discussion and revision (~5 min)
+
+Compare your answers with your group -- especially your SSR values and your reasoning in 2d. Feel free to revise any of your answers above based on the discussion (it's fine to cross out and rewrite -- I like to see your thinking evolve).
+
+Please take a minute to record any changes you made and any new insights gained during the group discussion. You can also use this space to reflect on any areas of confusion ("muddiest points") or topics you want to review or dust off going forward.
+
+\ans{Open-ended.}
