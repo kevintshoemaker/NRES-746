@@ -39,24 +39,29 @@ podium copy.
 | Beat | Time |
 |---|---|
 | Take-home WOD debrief (discussion) | ~8 min |
-| Lecture, with three short discussion pauses | ~40 min |
+| Lecture, with one short discussion pause (as taught) | ~40 min |
 | Separate discussion period | none |
+
+**As taught (Wed., Oct. 14).** The period got through section 2
+(Newton's method). Section 3 (Nelder-Mead simplex) and section 4
+(simulated annealing) were **not** covered, and neither was the "if
+time" section. (The instructor's report didn't detail sections 0-1 or
+the BFGS discussion pause; check before assuming students saw them.)
+Sections 3-4 moved to
+`NOTES_Week9_Lecture1_FromOptimizationToMCMC.Rmd` (and its script);
+the "if time" material (reparameterizing the Gamma, Bolker's fitting
+checklist) moved to Lab 7. Both are trimmed from this file and from
+`CODE_Week8_Lecture2_Optimization.R`. The optional *Curvature by Hand*
+WOD was handed out.
 
 **New workflow framing.** Section 1 introduces the revised scientific
 workflow (PROBLEM $\to$ THEORIES $\to$ MODELS $\to$ FIT $\to$ COMPARE
 $\to$ REVISE, with a study-design side arrow from MODELS to DATA). Draw
 it in full once today; later lectures can use the one-line version.
-To make room, section 1 grows to ~5 min and Nelder-Mead drops to
-~10 min.
 
-**Pacing.** This is a full period by design. Core: sections 0-3 and
-the start of section 4 (the rules and the acceptance probability).
-Whatever of section 4 doesn't fit opens Week 9 Monday, where it leads
-straight into MCMC (same acceptance rule). The "if time" section at the
-end (reparameterizing the Gamma, a fitting checklist) can go to Week 9
-or Lab 7. The three discussion pauses are short (~2 min each); if
-running behind, ask the question, take one answer, and give the
-landing point yourself.
+**Pacing.** The discussion pause is short (~2 min); if running
+behind, ask the question, take one answer, and give the landing point
+yourself.
 
 **Source material.** Bolker 7.1-7.2 (direct search, Newton's method,
 BFGS, Nelder-Mead, simulated annealing), 7.4.4 (multiple minima; the
@@ -81,8 +86,8 @@ over from the take-home for the one-dimensional case.
   example); handed out the Newton's method take-home.
 - **Tuesday:** group meetings on final project proposals (no lab).
 - **Today:** how optimizers work, and how they fail.
-- **Coming up:** Week 9 Monday picks up simulated annealing and turns
-  it into MCMC; Lab 7 on Bayesian inference.
+- **Coming up:** Week 9 Monday covers Nelder-Mead and simulated annealing, then turns annealing
+  into MCMC; Lab 7 on Bayesian inference.
 
 # Part 1: Lecture content
 
@@ -352,221 +357,6 @@ log(shape) and log(scale) instead converges in
 values). Watch for students treating "the numbers look close" as
 "converged."
 
-## 3. Derivative-free: Nelder-Mead simplex (~10 min)
-
-**The idea.** No slopes at all. Keep $k + 1$ points (a triangle for two
-parameters), and keep moving the worst one. Sketch on the board:
-
-- **Reflect** the worst point through the midpoint of the other two.
-- If that's the best point yet, **expand**: go twice as far.
-- If the reflection is still bad, **contract**: try halfway back.
-- If nothing works, **shrink** the whole triangle toward the best point.
-
-The triangle tumbles downhill, stretches out along valleys, and shrinks
-around the minimum. `optim()` stops when the vertices' NLL values are
-all within a small tolerance.
-
-```{r nelder-mead}
-# hand-coded Nelder-Mead for two parameters; stores every simplex
-nelder_mead <- function(f, start, step, n_iter = 80) {
-  simplex <- rbind(start, start + c(step[1], 0), start + c(0, step[2]))
-  vals <- apply(simplex, 1, f)
-  history <- vector("list", n_iter)
-  moves <- character(n_iter)
-  for (it in seq_len(n_iter)) {
-    o <- order(vals)
-    simplex <- simplex[o, ]
-    vals <- vals[o]
-    history[[it]] <- simplex
-    centroid <- colMeans(simplex[1:2, ])
-    refl <- centroid + (centroid - simplex[3, ])
-    f_r <- f(refl)
-    if (f_r < vals[1]) {
-      expd <- centroid + 2 * (centroid - simplex[3, ])
-      f_e <- f(expd)
-      if (f_e < f_r) {
-        simplex[3, ] <- expd; vals[3] <- f_e; moves[it] <- "expand"
-      } else {
-        simplex[3, ] <- refl; vals[3] <- f_r; moves[it] <- "reflect"
-      }
-    } else if (f_r < vals[2]) {
-      simplex[3, ] <- refl; vals[3] <- f_r; moves[it] <- "reflect"
-    } else {
-      contr <- centroid + 0.5 * (simplex[3, ] - centroid)
-      f_c <- f(contr)
-      if (f_c < vals[3]) {
-        simplex[3, ] <- contr; vals[3] <- f_c; moves[it] <- "contract"
-      } else {
-        simplex[2:3, ] <- (simplex[2:3, ] + rbind(simplex[1, ], simplex[1, ])) / 2
-        vals[2:3] <- apply(simplex[2:3, ], 1, f)
-        moves[it] <- "shrink"
-      }
-    }
-  }
-  list(best = simplex[which.min(vals), ], value = min(vals),
-       history = history, moves = moves)
-}
-nm <- nelder_mead(nll_gamma, c(20, 0.05), step = c(5, 0.02))
-round(c(shape = nm$best[1], scale = nm$best[2], nll = nm$value), 4)
-table(nm$moves)
-```
-
-```{r nm-fig, fig.width=5.5, fig.height=3.8}
-move_cols <- c(expand = "darkorange", reflect = "steelblue",
-               contract = "firebrick", shrink = "purple")
-par(mar = c(4, 4, 0.5, 0.5))
-plot_surface()
-for (i in 1:30) polygon(nm$history[[i]], border = move_cols[nm$moves[i]], lwd = 1.5)
-legend("topright", names(move_cols), col = move_cols, lwd = 2, bty = "n", cex = 0.8)
-```
-
-- The first 30 triangles are shown. Big expanding steps across the
-  contours, then contractions as it "turns the corner" into the valley,
-  then reflections and contractions crawling along the valley floor
-  (compare Bolker's Figure 7.5, p. 305).
-- `optim()`'s version needed `r fit_nm$counts[1]` NLL evaluations. BFGS
-  on the log scale needed `r fit_bfgs_log$counts[1]` (plus gradient
-  evaluations). Nelder-Mead is slower but doesn't care whether the
-  surface is smooth: bumps, kinks, and thresholds don't fool it the way
-  they fool a slope-based method.
-
-**Pause for discussion (~2 min).**
-
-```{r ridge-corr}
-vc <- solve(optimHess(fit_nm$par, nll_gamma))
-corr_ss <- cov2cor(vc)[1, 2]
-prod(fit_nm$par)   # shape x scale = Gamma mean
-mean(titer)
-```
-
-> Every method today crawled along the same long, curved valley.
-> Using the Hessian at the MLE (Lab 6), the estimated correlation
-> between shape and scale is `r f3(corr_ss)`. What does that say about
-> what these data can and can't tell us? (Hint: the mean of a Gamma is
-> shape $\times$ scale.)
-
-*Where to land:* along the valley floor, shape goes up and scale goes
-down while their product, the mean titer
-(`r f2(prod(fit_nm$par))`), barely changes. The data are very
-informative about the mean and much less about how it splits between
-shape and scale. That's what makes the valley long and narrow, and
-it's why optimizers creep along it. Callback: in Lab 6 Act 1, centering
-the dose at 1.8 removed the same kind of correlation between $a$ and
-$b$. Reparameterizing (fit mean and shape instead) is the fix here;
-it's in the "if time" section.
-
-## 4. Stochastic global search: simulated annealing (start; ~8 min)
-
-**The problem.** Everything so far goes downhill from the start. If
-the surface has more than one valley, a downhill method finds whichever
-valley it starts in. Sketch on the board: an NLL curve with a shallow
-valley near the start and a deeper one farther away (Bolker's Figure
-7.1). Bolker's own story (7.4.4, p. 323-325): in a published tadpole
-predation analysis, Nelder-Mead found one minimum; later, BFGS from
-the same start found a different, slightly better one.
-
-**The idea (Bolker p. 306).** Take random steps, and *sometimes accept
-a worse one*, so the search can climb out of a shallow valley. The name
-comes from metalworking: cooling metal slowly lets it settle into a
-low-energy state.
-
-1. From the current point, propose a random nearby point.
-2. If its NLL is lower, move there.
-3. If it's higher by $\Delta$, move there anyway with probability
-   $e^{-\Delta / T}$, where $T$ is the "temperature."
-4. Repeat, and lower $T$ every so often.
-
-```{r accept-table}
-accept_tab <- outer(c(10, 1, 0.1), c(0.5, 2, 10),
-                    function(temp, delta) exp(-delta / temp))
-dimnames(accept_tab) <- list(paste("T =", c(10, 1, 0.1)),
-                             paste("NLL worse by", c(0.5, 2, 10)))
-accept_show <- ifelse(accept_tab < 0.001, "<0.001",
-                      formatC(accept_tab, format = "f", digits = 3))
-noquote(accept_show)
-```
-
-- Hot ($T = 10$): most steps are accepted; the search wanders
-  widely. Cold ($T = 0.1$): it's almost pure downhill.
-- Start hot to explore, cool down to settle.
-
-```{r anneal}
-# simulated annealing: accept worse steps w.p. exp(-delta / temp); cool temp over time
-anneal <- function(f, start, step_sd, n_steps = 3000, temp0 = 10,
-                   cool = 0.9, every = 100) {
-  current <- start
-  f_current <- f(current)
-  best <- current
-  f_best <- f_current
-  temp <- temp0
-  track <- matrix(NA, n_steps, 4,
-                  dimnames = list(NULL, c("shape", "scale", "nll", "temp")))
-  for (i in seq_len(n_steps)) {
-    proposal <- current + rnorm(length(current), 0, step_sd)
-    f_prop <- f(proposal)
-    if (is.finite(f_prop) && runif(1) < exp(-(f_prop - f_current) / temp)) {
-      current <- proposal
-      f_current <- f_prop
-    }
-    if (f_current < f_best) {
-      best <- current
-      f_best <- f_current
-    }
-    track[i, ] <- c(current, f_current, temp)
-    if (i %% every == 0) temp <- temp * cool
-  }
-  list(best = best, value = f_best, track = track)
-}
-set.seed(746)
-sa <- anneal(nll_gamma, c(20, 0.05), step_sd = c(2, 0.005))
-round(c(shape = sa$best[1], scale = sa$best[2], nll = sa$value), 4)
-```
-
-```{r anneal-fig, fig.width=6.5, fig.height=3}
-par(mfrow = c(1, 2), mar = c(4, 4, 0.5, 0.5))
-plot_surface()
-lines(sa$track[, "shape"], sa$track[, "scale"], col = adjustcolor("darkorange", 0.5))
-plot(sa$track[, "nll"], type = "l", log = "y", xlab = "Step", ylab = "Current NLL")
-```
-
-- Left: the search drops into the valley within a few dozen steps, then
-  wanders up and down it (it keeps accepting slightly worse points).
-  Right: as $T$ falls, the wandering settles near the minimum.
-- Best point found: (`r f2(sa$best[1])`, `r f3(sa$best[2])`), NLL
-  `r f3(sa$value)`, after 3,000 evaluations (Nelder-Mead:
-  `r fit_nm$counts[1]`). Slow and imprecise on a one-valley surface; its
-  value is on surfaces with many valleys.
-
-**Pause for discussion (~2 min).**
-
-```{r sann}
-set.seed(746)
-fit_sann <- optim(c(20, 0.05), nll_gamma, method = "SANN")
-round(c(shape = fit_sann$par[1], scale = fit_sann$par[2], nll = fit_sann$value,
-        evals = unname(fit_sann$counts[1]),
-        convergence = fit_sann$convergence), 4)
-```
-
-> `optim()` has a built-in simulated annealer, `method = "SANN"`. With
-> its default settings it returns NLL `r f2(fit_sann$value)` after
-> `r format(fit_sann$counts[1], big.mark = ",")` evaluations, and
-> `convergence = 0`. Nelder-Mead found `r f2(fit_nm$value)` in
-> `r fit_nm$counts[1]`. Is SANN broken? Should you trust
-> `convergence = 0`?
-
-*Where to land:* not broken, but untuned. SANN runs a fixed number of
-steps and *always* reports `convergence = 0` (see `?optim`), so that
-code tells you nothing. Simulated annealing needs its temperature and
-step size tuned to the problem (Bolker p. 310). The usual practice: use
-a global method to find the right valley, then polish with Nelder-Mead
-or BFGS started from its answer. And whatever the method, try several
-starting points.
-
-**Bridge to Week 9.** Keep the acceptance rule, fix $T = 1$, never
-cool, and keep *every* point visited instead of only the best. The
-collection of points then forms a sample from the posterior
-distribution. That's MCMC (the Metropolis algorithm), Monday's topic.
-
 ## 5. Return to the big picture (~1 min)
 
 - Point at the FIT box. A fit we can't trust can't be compared, so
@@ -574,36 +364,12 @@ distribution. That's MCMC (the Metropolis algorithm), Monday's topic.
 - Fitting = searching the NLL surface. Grids are simple and hard to
   fool but don't scale.
 - Derivative-based (Newton, BFGS): fast near the answer, can misbehave
-  far from it. Derivative-free (Nelder-Mead): slower, robust to bumps.
-  Stochastic (simulated annealing): slowest, can escape local valleys.
+  far from it.
 - Whatever you use: check `$convergence`, try several starts, and
   look at the surface (or a profile) when something seems off.
 - Hand out *Curvature by Hand*
   (`wod/WOD_Week8_Lecture2_CurvatureByHand.Rmd`) as optional practice,
   not collected: it connects today's Hessian back to standard errors.
-
-## If time, or Week 9 / Lab 7
-
-**Reparameterize.** Fit the Gamma in terms of its mean and shape
-(scale = mean/shape, Bolker's parameterization for Gamma regressions):
-
-```{r reparam}
-nll_mean_shape <- function(p) nll_gamma(c(p[2], p[1] / p[2]))
-fit_ms <- optim(c(7, 20), nll_mean_shape)
-vc_ms <- solve(optimHess(fit_ms$par, nll_mean_shape))
-round(c(mean = fit_ms$par[1], shape = fit_ms$par[2], nll = fit_ms$value,
-        evals = unname(fit_ms$counts[1]),
-        corr = cov2cor(vc_ms)[1, 2]), 3)
-```
-
-Same minimum, correlation near zero, and a round valley instead of a
-banana.
-
-**Checklist when fitting (Bolker 7.4).** Test the NLL at the starting
-values (finite?). Check `$convergence`. Refit from the answer, and from
-a few other starts. Try a second method. Put parameters on comparable
-scales (log, or `control = list(parscale = ...)`). Plot a slice or
-profile around the answer.
 
 \newpage
 \large
@@ -682,50 +448,10 @@ lines(path_bad, type = "o", pch = 19, cex = 0.6, col = "darkorange", lwd = 2)
 
 \newpage
 
-## 3. Nelder-Mead (~10 min)
-
-- Sketch triangle: reflect, expand, contract, shrink
-- No derivatives; tumbles downhill, crawls along valleys
-- `optim()` default; `r fit_nm$counts[1]` evals
-
-```{r podium-nm, echo=FALSE, fig.width=5, fig.height=3}
-par(mar = c(4, 4, 0.5, 0.5))
-plot_surface()
-for (i in 1:30) polygon(nm$history[[i]], border = move_cols[nm$moves[i]], lwd = 1.5)
-```
-
-**Pause:** corr(shape, scale) = `r f3(corr_ss)`. What can the data tell us?
-
-- Mean = shape $\times$ scale = `r f2(prod(fit_nm$par))`: well determined; split isn't
-- Lab 6 centering; reparameterize (if time)
-
-\newpage
-
-## 4. Simulated annealing (~8 min; rest to Week 9)
-
-- Board: two valleys; downhill finds the nearest one
-- Bolker's tadpoles: NM and BFGS found different minima
-- Random step; worse by $\Delta$: accept w.p. $e^{-\Delta/T}$; cool $T$
-
-```{r podium-accept, echo=FALSE}
-noquote(accept_show)
-```
-
-```{r podium-anneal, echo=FALSE, fig.width=6, fig.height=2.6}
-par(mfrow = c(1, 2), mar = c(4, 4, 0.5, 0.5))
-plot_surface()
-lines(sa$track[, "shape"], sa$track[, "scale"], col = adjustcolor("darkorange", 0.5))
-plot(sa$track[, "nll"], type = "l", log = "y", xlab = "Step", ylab = "Current NLL")
-```
-
-**Pause:** SANN defaults: NLL `r f2(fit_sann$value)`, `r format(fit_sann$counts[1], big.mark = ",")` evals, conv 0. Broken?
-
-- Untuned; always reports 0. Find the valley, then polish with NM/BFGS
-
 ## 5. Wrap (~1 min)
 
 - Point at FIT box: untrusted fit $\to$ can't COMPARE
-- Grid / Newton-BFGS / Nelder-Mead / annealing: speed vs. robustness
+- Grid / Newton-BFGS: speed vs. robustness
 - Check convergence; several starts; look at the surface
 - Monday: $T = 1$, keep every point $\to$ MCMC
 - **Hand out optional Curvature by Hand WOD (not collected)**

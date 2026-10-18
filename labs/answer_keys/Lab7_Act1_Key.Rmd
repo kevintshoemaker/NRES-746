@@ -1,0 +1,265 @@
+---
+title: "Lab 7, Act 1: Running a Chain by Hand"
+subtitle: "How common is chytrid in this pond, and how sure can we be?"
+author: "NRES 746"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # answer colors are LaTeX-only
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+
+# draws a table; cells flagged TRUE in `ans` are drawn in the answer color
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && ans[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+
+# log posterior for 2 positives of 20 with a flat prior, shifted so its maximum is 0
+k <- 2
+n <- 20
+log_post <- function(p) {
+  if (p <= 0 || p >= 1) return(-Inf)
+  k * log(p) + (n - k) * log(1 - p) - (k * log(0.1) + (n - k) * log(0.9))
+}
+
+# Metropolis sampler for p; returns the chain
+metropolis <- function(start, step_sd, n_steps) {
+  chain <- numeric(n_steps)
+  current <- start
+  lp_current <- log_post(current)
+  n_accept <- 0
+  for (i in seq_len(n_steps)) {
+    proposal <- current + rnorm(1, 0, step_sd)
+    lp_prop <- log_post(proposal)
+    if (log(runif(1)) < lp_prop - lp_current) {
+      current <- proposal
+      lp_current <- lp_prop
+      n_accept <- n_accept + 1
+    }
+    chain[i] <- current
+  }
+  attr(chain, "accept_rate") <- n_accept / n_steps
+  chain
+}
+
+n_steps <- 2000
+set.seed(11); chain_a <- metropolis(0.10, 0.08, n_steps)
+set.seed(12); chain_b <- metropolis(0.90, 0.02, n_steps)
+set.seed(13); chain_c <- metropolis(0.10, 1.5, n_steps)
+set.seed(14); chain_d1 <- metropolis(0.02, 0.003, n_steps)
+set.seed(15); chain_d2 <- metropolis(0.45, 0.003, n_steps)
+
+burn <- 200
+keep_a <- chain_a[-seq_len(burn)]
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+f3 <- function(v) formatC(v, format = "f", digits = 3)
+
+# 1a: six hand steps, using table values rounded to 2 decimals
+jumps <- c(-0.08, 0.09, -0.07, -0.17, 0.04, -0.11)
+log_u <- c(-0.42, -0.85, -1.61, -0.30, -1.20, -2.05)
+lp_r <- function(p) round(log_post(p), 2)
+fmt_lp <- function(v) if (is.finite(v)) f2(v) else "-Inf"
+current <- 0.30
+steps <- vector("list", 6)
+for (i in seq_along(jumps)) {
+  proposal <- round(current + jumps[i], 2)
+  diff <- lp_r(proposal) - lp_r(current)
+  accept <- log_u[i] < diff
+  steps[[i]] <- list(current = current, proposal = proposal, diff = diff,
+                     accept = accept, record = if (accept) proposal else current)
+  if (accept) current <- proposal
+}
+records <- sapply(steps, `[[`, "record")
+accepted <- sapply(steps, `[[`, "accept")
+```
+
+\ans{\textbf{Answer key} (not for student distribution). Answers are in magenta.}
+
+## The scenario
+
+Chytrid fungus (*Batrachochytrium dendrobatidis*, or Bd) has driven
+steep declines of the Sierra Nevada yellow-legged frog. Field crews
+swab frogs' skin and test the swabs for Bd. At one high-elevation pond,
+**2 of 20 frogs tested positive**, the same numbers you saw in the
+Week 7 *Reading the Interval* WOD. Model the number of positives as
+binomial with unknown prevalence $p$, and give $p$ a flat prior,
+Beta(1, 1).
+
+The usual Wald interval, $\hat p \pm 1.96\sqrt{\hat p(1 - \hat p)/n}$,
+gives $0.10 \pm 0.13$, or $-0.03$ to $0.23$. A prevalence below zero
+makes no sense. In this Act you run Monday's Metropolis algorithm by
+hand, then judge some computer-run chains, to get a better answer.
+
+**What is the prevalence of Bd in this pond, and how uncertain is it?**
+
+Please keep laptops closed for this Act.
+
+## Part 1: Six steps of Metropolis (individual, ~20 min)
+
+The log posterior for these data is
+$$\log P(p \mid y) = 2\log p + 18\log(1 - p) + \text{constant}$$
+for $0 < p < 1$; outside that range the posterior is 0 (log posterior
+$-\infty$). The table lists it on a grid of $p$ values, shifted by a
+constant so the largest value is 0.
+
+```{r lookup}
+p_grid <- seq(0.01, 0.40, by = 0.01)
+lp_grid <- sapply(p_grid, log_post)
+cells <- paste0(f2(p_grid), ": ", f2(lp_grid))
+lookup <- matrix(cells, nrow = 10)
+knitr::kable(lookup, col.names = rep("p: log posterior", 4), align = "cccc")
+```
+
+The chain starts at $p = 0.30$. At each step, the proposal is the
+current value plus a random **jump**. The second column of random
+numbers is $\log u$, where $u$ is a uniform random number between 0 and
+1. Both are already drawn for you.
+
+**1a.** Run six steps. For each, find the proposal, look up both log
+posteriors, compute the difference (proposal minus current), decide
+whether to accept, and write down the value the chain records at that
+step.
+
+```{r trace-table, fig.height=3.6}
+jump_txt <- c("-0.08", "+0.09", "-0.07", "-0.17", "+0.04", "-0.11")
+rows <- lapply(1:6, function(i) {
+  s <- steps[[i]]
+  c(as.character(i), f2(s$current), jump_txt[i], f2(s$proposal),
+    fmt_lp(lp_r(s$current)), fmt_lp(lp_r(s$proposal)),
+    if (is.finite(s$diff)) sprintf("%+.2f", s$diff) else "-Inf",
+    f2(log_u[i]), if (s$accept) "yes" else "no", f2(s$record))
+})
+ans_flags <- lapply(1:6, function(i) {
+  c(FALSE, i > 1, FALSE, TRUE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE)
+})
+blank_table(c("Step", "Current", "Jump", "Proposal", "lp(curr.)", "lp(prop.)",
+              "Difference", "log u", "Accept?", "Record"),
+            rows, col_widths = c(0.6, 1, 0.9, 1, 1, 1, 1.1, 0.9, 1, 1),
+            row_height = 0.52, cex = 0.8, ans = ans_flags)
+```
+
+**1b.** A classmate's version of the algorithm writes down only the
+accepted proposals and skips the rows where the proposal was rejected.
+Write out their chain for your six steps. Why does their chain give the
+wrong picture of the posterior?
+
+\ans{Their chain: `r paste(f2(records[accepted]), collapse = ", ")` (vs. the full chain `r paste(f2(records), collapse = ", ")`). Rejections are how the chain piles up time at high-posterior values; dropping the repeats under-weights the peak, so their posterior is too spread out.}
+
+**1c.** The lookup table drops the binomial coefficient, the
+denominator of Bayes' rule, and a further constant. Would any of your
+accept/reject decisions change if those were put back in? Why or why
+not?
+
+\ans{No. Each decision uses only the difference of two log posteriors, and constants cancel in a difference.}
+
+## Part 2: Which chains can you trust? (individual, ~15 min)
+
+A computer ran four Metropolis chains on the same posterior, 2,000
+steps each, with different starting values and jump sizes. Chain D is
+two chains run side by side from different starting values.
+
+```{r traces, fig.height=6.4}
+par(mfrow = c(4, 1), mar = c(3, 4.5, 1.6, 0.5), mgp = c(2, 0.6, 0))
+plot_trace <- function(ch, label, col = "black") {
+  plot(ch, type = "l", ylim = c(0, 0.9), col = col, xlab = "", ylab = "p",
+       main = label, las = 1)
+}
+plot_trace(chain_a, "Chain A")
+plot_trace(chain_b, "Chain B")
+plot_trace(chain_c, "Chain C")
+plot_trace(chain_d1, "Chain D (two runs)", "steelblue")
+lines(chain_d2, col = "darkorange")
+mtext("Step", side = 1, line = 2, cex = 0.7)
+```
+
+**2a.** For each chain, would you use it to describe the posterior? If
+not, what went wrong, and what would you change?
+
+```{r trust-table, fig.height=3}
+blank_table(c("Chain", "Use it?", "What went wrong (if anything)?", "What would you change?"),
+            list(c("A", "Yes", "Nothing; mixes well", "Nothing"),
+                 c("B", "After burn-in", "Started far away (0.90)", "Drop first 150 to 200 steps"),
+                 c("C", "No", "Jumps too big; sticky",
+                   paste0("Smaller jumps (", round(100 * attr(chain_c, "accept_rate")), "% accepted)")),
+                 c("D", "No", "Jumps too small; runs never meet", "Bigger jumps; run longer")),
+            col_widths = c(0.5, 0.9, 2.4, 2.3), row_height = 0.65, cex = 0.85,
+            ans = rep(list(c(FALSE, TRUE, TRUE, TRUE)), 4))
+```
+
+**2b.** About how many steps of Chain B would you throw away before
+using it, and why?
+
+Steps to discard: \ans{about 150-200}
+
+\ans{It takes that long to move from its start (0.90) into the posterior (first below 0.3 at step `r which(chain_b < 0.3)[1]`).}
+
+**2c.** Here is Chain A after dropping its first `r burn` steps. The
+dashed lines mark its 2.5% and 97.5% quantiles.
+
+```{r hist-a, fig.width=5, fig.height=2.4}
+par(mar = c(4, 4.5, 0.5, 0.5))
+hist(keep_a, breaks = 40, freq = FALSE, main = "", xlab = "Prevalence, p",
+     ylab = "Density", col = "grey85", border = "grey60", xlim = c(0, 0.5))
+abline(v = quantile(keep_a, c(0.025, 0.975)), lty = 2, lwd = 2)
+curve(dbeta(x, 3, 19), add = TRUE, lwd = 2, col = ans_col)
+```
+
+Posterior mean `r f3(mean(keep_a))`; 95% credible interval
+`r f3(quantile(keep_a, 0.025))` to `r f3(quantile(keep_a, 0.975))`.
+
+How does this interval differ from the Wald interval ($-0.03$ to
+$0.23$), and why? With a flat prior, which named distribution should
+this histogram match? (Recall Week 8.)
+
+\ans{It stays above 0 and is lopsided (longer upper tail); the Wald interval is symmetric and crosses 0 because it assumes a parabola-shaped log-likelihood, which fails with few data near the $p = 0$ boundary. The histogram should match Beta(3, 19) (magenta curve; exact interval `r f3(qbeta(0.025, 3, 19))` to `r f3(qbeta(0.975, 3, 19))`).}
+
+## Group discussion and revision (~10 min)
+
+Compare your answers with your group, especially your table in 1a and
+your verdicts in 2a, and revise as needed. Record any changes you made,
+new insights, and any "muddiest points" or topics you want to review.
+
+\ans{Open-ended.}

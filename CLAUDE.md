@@ -351,6 +351,12 @@ Every M/W 50-minute lecture period follows the same three-beat shape:
    introduced it); (2) a lecture that derives something (e.g. the
    conjugacy algebra) fills its time with the derivation, so put the
    worked numerical example *first* or plan it for the next session.
+   Week 8 Lecture 2 (Oct. 14) followed the same pattern: planned as a
+   deliberately full period (take-home debrief, new workflow, Newton,
+   Nelder-Mead, start of simulated annealing), it got through Newton's
+   method only. Even a lecture with no WOD and no separate discussion
+   beat covers about two main methods in 50 minutes, so plan one
+   algorithm plus its worked example per ~15 min.
    Update this paragraph as the instructor reports how later lectures
    actually went.
 3. **Discussion, remaining time.** A short, open-ended prompt or question
@@ -380,7 +386,11 @@ allotted time, eating into lecture. Going forward:
 - An in-class WOD should be finishable in ~5-10 min *in practice*
   (apply the same timing multipliers as for labs, below): one or two
   focused parts, not a multi-page problem set. Cut parts rather than
-  squeeze work space.
+  squeeze work space. **A WOD planned at ~5 min takes ~10 min in
+  class**; budget the lecture period with the doubled figure.
+- Skipping the WOD is an option when a lecture needs the whole period
+  (Week 9 Monday had none, so Tuesday's lab could start without a
+  catch-up lecture).
 - Anything more involved, and especially anything with real coding
   (possibly AI-assisted), becomes a **take-home WOD**. Prefer the
   **Wednesday** slot for these, since students then have until the
@@ -437,14 +447,13 @@ WOD answer keys follow the same pattern as lab answer keys (see
 `labs/answer_keys/` under "Lab structure: two Acts" below): one file
 per WOD in `wod/answer_keys/`, named `WOD_Week<N>_Lecture<M>_
 <TopicInCamelCase>_Key.Rmd` (the full topic slug carried over from the
-source file, not shortened), same instructor-answer-key author line,
-same fixed-answer-vs-open-ended-discussion framing, and the same
-question / Answer / Why / Watch for layout for every sub-part. A WOD key is worth
-building any time a WOD ends on an unresolved teaser (e.g. the birthday
-problem in `WOD_Week3_Lecture2_ProbabilityPuzzle.Rmd`) -- walk through
-the full math for whenever the reveal happens in class, not just a
-one-line final answer. See
-`wod/answer_keys/WOD_Week3_Lecture2_ProbabilityPuzzle_Key.Rmd`.
+source file, not shortened), in the same format: the full handout
+text with answers in magenta (see "Key format" under "Lab structure:
+two Acts" below). A WOD key is worth building any time a WOD ends on
+an unresolved teaser (e.g. the birthday problem in
+`WOD_Week3_Lecture2_ProbabilityPuzzle.Rmd`); there, the answer to the
+teaser can show the key steps of the math, since it's walked through
+in class.
 
 ## Lecture notes documents (lecture_notes/)
 
@@ -454,11 +463,11 @@ dual-output rules elsewhere in this file don't apply to them (raw LaTeX
 like `\newpage` is fine). Each lecture period gets **one** `.Rmd` file,
 knit to PDF, containing two parts back to back:
 
-- **Part 1 (read beforehand, not used live):** full prose -- worked
-  examples with real, executed R code and rendered figures (not
-  student-style blanks), the rationale for why each example/order was
-  chosen, sticking points to flag, and explicit callbacks to that week's
-  WOD/Lab content. Normal font size. This is where the thinking lives.
+- **Part 1 (read beforehand, not used live):** concise prose -- worked
+  examples with numbers computed by hidden R chunks (not
+  student-style blanks), sticking points to flag, and callbacks to that
+  week's WOD/Lab content. Normal font size. Keep it short (see "Keep
+  NOTES files short" below).
 - **Part 2 (the podium copy, open/glanced at while actually teaching):**
   starts after a `\newpage` \+ `\large` (raw LaTeX -- switch font size
   mid-document rather than a second file). Very brief bullets, not
@@ -536,30 +545,46 @@ read the matching week's WOD/Lab handouts already built in
 what students already did that week, rather than repeating it or
 contradicting it.
 
-**Companion R scripts** (`CODE_Week<N>_Lecture<M>_<Topic>.R`, posted
-to WebCampus for students; the instructor runs them live in lecture)
-are a **skeleton of the outline, not a copy of the notes**. Keep them
-to:
+**Keep NOTES files short, with no visible R code** (from Week 9 on;
+earlier NOTES files ran long and showed code). Set `echo = FALSE`
+globally: hidden chunks compute the numbers quoted in the text and
+draw board-reference figures, but no code appears in the PDF. Part 1
+gives only what's needed to teach each section (key idea, board
+content, results to quote, one sticking point, where a pause should
+land), not extended rationale. Tag every section header in **both
+parts** with its mode: `[BOARD]`, `[R]`, or `[BOARD -> R]` (rendered
+with `$\to$`), so the instructor knows when to switch from the
+whiteboard to the script. See
+`NOTES_Week9_Lecture1_FromOptimizationToMCMC.Rmd`.
+
+**Companion R scripts: one per week**
+(`CODE_Week<N>_<TopicInCamelCase>.R`, from Week 9 on; Weeks 7-8 used
+one per lecture). Posted to WebCampus; the instructor runs them live
+for code demos and graphics. Structure:
 
 - a one- or two-line title block (title, packages needed);
-- one subheading per podium section, numbered and worded to match the
-  NOTES Part 2 headings, with its time budget
-  (e.g. `# 2. Germination, two priors (~10 min) ----`), including the
-  WOD/take-home debrief and the Discussion;
-- directly under each subheading, **one cue line** saying whether to
-  go to the board or run code, in order: `#  [BOARD] <what to
-  sketch> -> [CODE]`, `#  [CODE]`, `#  [DISCUSS]`. Put
+- a top-level header per session, e.g.
+  `# MONDAY, Oct. 19: <topic> ====` (Tuesday pre-lab only if there is
+  one; Wednesday's header goes in as a placeholder until it's built);
+- under each, one subheading per **R-demo** section, numbered and
+  worded to match the NOTES headings, with its time budget
+  (`# 4. Metropolis (~15 min) ----`). Board-only sections get no entry;
+- **only the code the instructor runs as a demo.** Code that exists
+  only to make a NOTES figure or quoted number (e.g. a sketch to copy
+  onto the board) stays in the NOTES file, not the script;
+- a brief comment on each major step ("trace plot, then histogram vs.
+  the exact posterior"), so the script reads on its own; equations in
+  comments where they say it better. Still no comment stacking. Put
   `#  [PAUSE] <short question>` right after the code a discussion
-  pause depends on;
-- the code, with ordinary sparse comments (equations, a line above
-  each function). No podium bullets, rationale, discussion prompt
-  text, or comments that give away a pause's answer.
+  pause depends on; no comments that give away a pause's answer.
 
-Sections with no code still get their subheading and cue line, so the
-outline shows where the lecture is. Material planned but not taught
-goes under a final `# Not covered <date>: moved to ... ----` heading.
-Run the script end to end before handing it back. See
-`lecture_notes/CODE_Week8_Lecture2_Optimization.R`.
+The NOTES file's hidden chunks repeat whatever demo code they need to
+quote numbers, with the same seeds and settings, so the two can't
+disagree; check the quoted numbers match the script's output. Material
+planned but not taught goes under a final
+`# Not covered <date>: moved to ... ----` heading. Run the script end
+to end before handing it back. See
+`lecture_notes/CODE_Week9_MCMCAndModelSelection.R`.
 
 **After a lecture is given ("as taught" updates).** When the
 instructor reports what a lecture actually covered:
@@ -720,8 +745,10 @@ itself -- budget accordingly rather than compressing any of it to fit.
 **Timing estimates have been too optimistic, especially for coding.**
 Through Lab 4, the per-part minute estimates written into Act handouts
 consistently ran short in practice, and no lab has gotten through all
-of its planned Acts (e.g. Lab 4 never reached Act 2's ~55-minute
-coding phase). Two kinds of work are the worst offenders:
+of its planned Acts (e.g. Lab 4 only got through Act 1; Act 2 was
+never handed out and was instead worked as a live-coding demo in Week 6
+Lecture 2, without the planned AI-assisted portion, and Act 3 was
+never used). Two kinds of work are the worst offenders:
 
 - **Math problems** (derivations, algebra, hand calculations) take
   noticeably longer than estimated. Students with a Calc II ceiling
@@ -835,36 +862,38 @@ a lab's Acts are finalized, for grading or for a TA who wasn't in the
 room for the design discussion. Build one once a lab's Acts are
 stable, not while they're still being drafted.
 
-Format: `author: "NRES 746, Instructor Answer Key (not for student
-distribution)"`, dual pdf/word output (pdf default, matching other lab
-docs), and a short opening paragraph noting that fixed-answer
-questions are answered directly while open-ended/discussion questions
-get a sample answer or discussion points rather than an exact-match
-rubric. Mirror the student handout's own section headers and lettered
-sub-parts exactly (so a grader can find "2c" in the key as fast as in
-the handout), and verify every numeric claim with real executed R code
-rather than restating it from memory.
+**Key format (lab or WOD; adopted Oct. 18, 2026).** The instructor
+grades from the key on screen, not on paper, and wants to scan it
+fast. So a key is **the full text of the handout, with only the
+answers added, in magenta**:
 
-Each sub-part in a key (lab or WOD) follows the same four-piece
-pattern, kept short:
+- Start from a copy of the handout's `.Rmd`, keeping its text,
+  headers, tables, and figures, and its order, so any part can be
+  cross-referenced at a glance. Drop the name/group line and the
+  `blank_lines()`/`blank_space()`/`nq()` answer space; put the answer
+  where the blank was. Add one magenta line at the top: "**Answer
+  key** (not for student distribution). Answers are in magenta."
+- **Answers only**: the correct answer, or a couple of alternative
+  correct answers. No "Why," no "Watch for," no common mistakes, no
+  explanation. For open-ended items, a one-line sample answer (or
+  "Open-ended."). The instructor will ask if more is needed.
+- Color via LaTeX in `header-includes`: `\usepackage{xcolor}`,
+  `\definecolor{ans}{RGB}{200,0,130}`,
+  `\newcommand{\ans}[1]{\textcolor{ans}{#1}}`, and
+  `\ansbegin`/`\ansend` (`\begingroup\color{ans}` / `\endgroup`) on
+  their own lines around display math or answer code chunks (give
+  those chunks `highlight = FALSE` so the code takes the color). In R
+  figures and `blank_table()` fills, use the same color
+  (`rgb(200, 0, 130, maxColorValue = 255)`). Pandoc here is 1.17, so
+  Lua filters and fenced divs aren't available; the colors are
+  PDF-only.
+- Compute every number with executed R code (inline `r` values), not
+  from memory.
+- Name and location as before; knit to PDF.
 
-1. **The original question, repeated** as a blockquote (the handout's
-   wording, with blanks shown as `____`), so the key can be read
-   without the handout beside it.
-2. **Answer.** The concise answer: a number, a formula, or one or two
-   sentences. For open-ended items, a sample answer or a short list of
-   acceptable points.
-3. **Why.** A brief rationale (a sentence or two, or the key step of a
-   derivation), not a full re-teaching.
-4. **Watch for.** Common mistakes specific to that question, folded in
-   right there rather than collected in a separate section.
-
-Prefer concise over exhaustive: a grader should be able to scan a
-sub-part in a few seconds. See
-`wod/answer_keys/WOD_Week5_Lecture2_WritingTheLikelihood_Key.Rmd` for
-the target format. (Keys built before this convention, e.g.
-`labs/answer_keys/Lab2_Act1_Key.Rmd` through Lab 4, don't repeat the
-question; no need to rework them unless asked.)
+See `wod/answer_keys/WOD_Week5_Lecture2_WritingTheLikelihood_Key.Rmd`.
+Older keys use an earlier question / Answer / Why / Watch for layout;
+convert them only when asked.
 
 ## Calibrating difficulty and level
 
@@ -925,11 +954,21 @@ question; no need to rework them unless asked.)
   materials numerically before writing them down, not just visually --
   don't assert two SSR conventions give the same fit, or that a model
   comparison is "fair," without actually running it and checking.
-- If a PDF you already sent the user won't re-knit ("I can't write on
-  file ... .pdf"), it's almost always a file lock from their viewer
-  having it open, not a content error. Render a scratch copy elsewhere
-  to confirm the content is fine, ask them to close the viewer, then
-  re-knit to the real path -- don't assume the Rmd itself is broken.
+- If a PDF won't re-knit ("I can't write on file ... .pdf"), it's a
+  file lock, not a content error. Two causes have come up: the
+  instructor's viewer (Acrobat) having it open, and a brief lock right
+  after the file is written (an indexer or sync service) that clears
+  within seconds. Retry the render a few times first. If it still
+  fails, copy the .Rmd into a scratch folder and render it there to
+  confirm the content (setting `output_dir`/`intermediates_dir` alone
+  wasn't enough), then ask the instructor to close the viewer and
+  re-knit to the real path. A failed render can delete the existing
+  PDF, so check it's still there afterward. Delete any leftover
+  `.log`/`.tex` files.
+- When editing `.Rmd` lines that contain LaTeX backslashes
+  (`\lambda`, `\to`, `\Delta`), use the Edit tool rather than `sed`:
+  shell `sed` substitutions have silently turned `\lambda` into
+  `ambda` and `\to` into a tab. Grep the rendered text afterward.
 - After rendering any HTML page for the website, check that every
   figure it references is tracked by git. `.gitignore` excludes
   `*_files/`, so a new page's figure folder is silently left out of the
@@ -948,37 +987,70 @@ question; no need to rework them unless asked.)
 
 ## Development status (update at the end of each thread)
 
-Snapshot as of Wed., Oct. 7, 2026 (end of Week 7; Week 8 built). The schedule of
+Snapshot as of Sun., Oct. 18, 2026 (end of Week 8). The schedule of
 record is `CourseSchedule.csv`.
 
-- **Built and taught through Week 7.** Week 7's two NOTES files carry
+- **Built and taught through Week 8.** Week 7's two NOTES files carry
   "as taught" notes. Lab 6 (Acts, keys, `NOTES_Lab6_LikelihoodIntervals.Rmd`)
   is done; the quadratic approximation/Hessian material lives in the
   Lab 6 notes, not a lecture.
-- **Week 8 (built, not yet taught).**
-  - Monday, Oct. 12: `NOTES_Week8_Lecture1_PriorsAndPosteriors.Rmd` and
-    script (germination example, sticking points, why Bayes is popular;
-    the optimization preview was cut, and flat priors on different
-    scales is a callback only, since Week 7 Wednesday covered it). In-class WOD
-    `WOD_Week8_Lecture1_HowMuchDidThePriorMatter.Rmd`. Take-home WOD
-    `WOD_Week8_Lecture1_NewtonByHand.Rmd`, handed out Monday, due
-    Wednesday. Both have keys.
+- **Week 8, as taught.**
+  - Monday, Oct. 12: `NOTES_Week8_Lecture1_PriorsAndPosteriors.Rmd`
+    and script (germination example, sticking points, why Bayes is
+    popular). In-class WOD `WOD_Week8_Lecture1_HowMuchDidThePriorMatter.Rmd`
+    (three analysts, same juvenile tortoise data, different priors;
+    the predator-proof-pen prior is left for students to question).
+    Take-home WOD `WOD_Week8_Lecture1_NewtonByHand.Rmd` (students
+    derive Newton's update themselves), due Wednesday. Both have keys.
+    No "as taught" report for Monday yet.
   - Tuesday: group meetings on final project proposals (no lab).
-  - Wednesday, Oct. 14: `NOTES_Week8_Lecture2_Optimization.Rmd` and
-    `CODE_Week8_Lecture2_Optimization.R`. No new WOD: ~8 min take-home
-    debrief, then lecture with three short discussion pauses (no
-    separate discussion beat). Myxomatosis Gamma example: Newton/BFGS,
-    Nelder-Mead, start of simulated annealing.
+  - Wednesday, Oct. 14: `NOTES_Week8_Lecture2_Optimization.Rmd` (carries
+    an "as taught" note). **Covered Newton's method; did not cover
+    Nelder-Mead (section 3), simulated annealing (section 4), or the
+    "if time" section.** First lecture to use the new workflow framing.
+    The optional *Curvature by Hand* WOD went out (see below).
+- **Week 9 (Oct. 19-21), in progress.** Agreed plan: Monday =
+  Nelder-Mead and simulated annealing (brief), then Metropolis, **no
+  WOD**; Tuesday = Lab 7, Bayesian inference with MCMC (Act 1 paper:
+  trace a Metropolis chain by hand and judge trace plots; Act 2: code
+  a Metropolis sampler, credible vs. Wald interval, e.g. the chytrid
+  case from *Curvature by Hand* 2d), with the Week 8 "if time"
+  material (Gamma reparameterization, Bolker 7.4 checklist) as the
+  explanation for the myxo banana mixing badly; Wednesday = model
+  selection (LRT, AIC; legacy LECTURE8 balsam fir example).
+  - Built: `NOTES_Week9_Lecture1_FromOptimizationToMCMC.Rmd` and the
+    weekly script `CODE_Week9_MCMCAndModelSelection.R` (Monday
+    section). Sections 3-4 and "if time" were trimmed from the Week 8
+    Lecture 2 notes and script.
+  - Built: Lab 7 (`labs/Lab7_Act1.Rmd`, `Lab7_Act2.Rmd`, both keys,
+    `NOTES_Lab7_BayesianMCMC.Rmd`, data `data/BdPondSurvey.csv`).
+    Act 1: one pond, 2 of 20 Bd-positive, six hand-traced Metropolis
+    steps plus four trace plots. Act 2: 12-pond survey (simulated,
+    presented as field data; P11 is Act 1's pond), logistic
+    infection vs. water temperature, own sampler; raw temperature
+    mixes badly, centering at 17 °C fixes it. Groups plan Act 2 Part 1
+    together in class (announced by the instructor, not in the
+    handout); coding can go home.
+  - Still to build: Wednesday notes plus the script's Wednesday
+    section, and a Wednesday WOD (a good take-home slot). Bolker's
+    7.4 fitting checklist is still unused.
+  - Ask the instructor how Week 8 Monday and the start of Wednesday
+    went (the take-home debrief, the workflow introduction, the BFGS
+    pause) before assuming students saw them.
 - **Curvature by Hand WOD.** Planned for Week 7 but never used there;
   renamed `wod/WOD_Week8_Lecture2_CurvatureByHand.Rmd` (and key) and
   handed out Wed., Oct. 14 as an **optional take-home, not collected**.
   Don't assume every student did it. Its chytrid Wald interval part
   (2d) is still a good contrast with a credible interval in Lab 7.
-- **Coming later (Week 9):** Monday finishes simulated annealing
-  (whatever didn't fit Wednesday) and turns it into MCMC. The Week 8
-  notes' "if time" section (Gamma reparameterization, Bolker 7.4
-  fitting checklist) goes to Week 9 or Lab 7. Lab 7 on Bayesian
-  inference.
+- **Lab 4 history.** Only Act 1 was handed out and graded. Act 2 was
+  worked as a live-coding demo in Week 6 Lecture 2, but the planned
+  AI-assisted part was skipped; the instructor wants to try an AI
+  live-coding demo in a later lecture. Act 3 was never used, so its
+  raw-scale vs. log-scale analyst comparison is free to reuse.
+- **Open item.** The Lab 4 Act 1 key's 1b-continued answer names only
+  constant variance; grading suggested it should also accept
+  linearity (and normality) as violated assumptions. Not yet changed;
+  offer the edit if Lab 4 comes up again.
 - **Framing to keep:** Hessian (quadratic approximation) intervals are
   the practical default for multiparameter models; profile intervals
   are the check when it matters (Bolker's cautions still apply).

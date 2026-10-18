@@ -1,0 +1,265 @@
+---
+title: "Lab 7, Act 2: Your Own Sampler"
+subtitle: "Is chytrid less common in warmer ponds?"
+author: "NRES 746, name: _______________   group: _____________________"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines); pair with fig.height
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+bd <- read.csv("../data/BdPondSurvey.csv")
+temp <- bd$water_temp_c
+swabbed <- bd$frogs_swabbed
+positive <- bd$bd_positive
+
+# log posterior: binomial likelihood + Normal(0, 10) priors on a and b
+log_post <- function(par, x = temp) {
+  sum(dbinom(positive, swabbed, plogis(par[1] + par[2] * x), log = TRUE)) +
+    sum(dnorm(par, 0, 10, log = TRUE))
+}
+check_diff <- log_post(c(1, -0.1)) - log_post(c(3, -0.2))
+```
+
+## The scenario
+
+The pond in Act 1 was one of 12 ponds the field crew surveyed in the
+same summer. At each pond they swabbed a sample of frogs and recorded
+the water temperature. Bd grows poorly in warm water, so managers want
+to know whether infection is less common in warmer ponds, and if so,
+by how much. Here are the survey results (the Act 1 pond is P11):
+
+```{r bd-data}
+knitr::kable(bd, align = "cccc",
+             col.names = c("Pond", "Water temp. (°C)", "Frogs swabbed", "Bd positive"))
+```
+
+```{r bd-plot, fig.width=5, fig.height=2.6}
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(temp, positive / swabbed, pch = 16, ylim = c(0, 1), las = 1,
+     xlab = "Water temperature (°C)", ylab = "Proportion Bd positive")
+```
+
+Use a logistic model: the number of positives at pond $i$ is binomial
+with $n_i$ frogs swabbed and infection probability $p_i$, where
+$$\log\frac{p_i}{1 - p_i} = a + b\,T_i$$
+and $T_i$ is the water temperature. Give both $a$ and $b$ a
+Normal(0, 10) prior (wide enough that the data do nearly all the work).
+You'll fit this model with your own Metropolis sampler.
+
+**How much does the chance of infection change with temperature, and
+how uncertain is that change?**
+
+Try Part 1 on paper first, before you open a laptop or start typing
+code.
+
+`r nq(3, 8)`
+
+## Part 1: Plan it on paper (~20 min)
+
+**1a.** Write the log posterior, $\log P(a, b \mid y)$, up to a
+constant. You can drop terms that don't depend on $a$ or $b$.
+
+```{r fig.height=0.3*8}
+blank_space()
+```
+
+`r nq(6, 9)`
+
+**1b.** In plain English (not R code), describe step by step how a
+Metropolis sampler for $(a, b)$ works: what you start with, how you
+propose a new pair, how you decide whether to accept it, and what you
+record at each step. Act 1 is a good guide, but now there are two
+parameters.
+
+```{r fig.height=0.3*9}
+blank_lines(9)
+```
+
+`r nq(3, 0)`
+
+## Checkpoint: finalize your plan (~5 min)
+
+Look back over 1a and 1b and fix anything that no longer looks right
+before you start coding.
+
+`r nq(12, 0, extra = 0.8)`
+
+## Part 2: Fit it (laptop, ~60 min)
+
+Each coding question is labeled with a recommendation:
+
+- **Recommended: no AI:** try to build this yourself. R's help pages,
+  web search, and classmates are fine.
+- **AI optional/encouraged:** the result matters, but writing this code
+  by hand isn't the point.
+
+After each one, circle how you actually used AI. Using AI never costs
+points; only undisclosed use does.
+
+**What to turn in:** your filled-in answers and your 2c figure as an
+image (upload in WebCampus). You don't need to submit your code.
+
+The data are in `BdPondSurvey.csv` (columns `pond`, `water_temp_c`,
+`frogs_swabbed`, `bd_positive`), on the course website:
+<https://kevintshoemaker.github.io/NRES-746/data/BdPondSurvey.csv>.
+You can read it straight from that link:
+
+```{r data-url, echo=TRUE, eval=FALSE}
+data_url <- "https://kevintshoemaker.github.io/NRES-746/data/BdPondSurvey.csv"
+bd <- read.csv(data_url)
+```
+
+Or paste the data into R directly:
+
+```{r data-code, echo=TRUE, eval=FALSE}
+water_temp_c  <- c(10.0, 12.3, 14.9, 15.8, 17.6, 17.9, 18.6, 18.8, 19.0, 20.5, 21.7, 22.1)
+frogs_swabbed <- c(21, 18, 23, 19, 18, 24, 16, 17, 23, 23, 20, 18)
+bd_positive   <- c(13, 12, 8, 9, 6, 8, 3, 5, 1, 6, 2, 1)
+```
+
+```{r data-code-check}
+# the pasted vectors above must match the CSV
+stopifnot(all.equal(temp, c(10.0, 12.3, 14.9, 15.8, 17.6, 17.9, 18.6, 18.8, 19.0, 20.5, 21.7, 22.1)),
+          all.equal(swabbed, c(21, 18, 23, 19, 18, 24, 16, 17, 23, 23, 20, 18)),
+          all.equal(positive, c(13, 12, 8, 9, 6, 8, 3, 5, 1, 6, 2, 1)))
+```
+
+`r nq(7, 3)`
+
+**2a.** *(Recommended: no AI.)* Write a function that returns the log
+posterior for `par = c(a, b)`. Check it: the log posterior at
+$(a, b) = (1, -0.1)$ minus the log posterior at $(3, -0.2)$ should be
+about `r round(check_diff, 2)`. (Why does this check work no matter
+which constants you dropped?)
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(9, 3)`
+
+**2b.** *(Recommended: no AI.)* Write your sampler from 1b. Run it for
+10,000 steps, starting at $(a, b) = (0, 0)$, with jumps drawn from
+Normal distributions with standard deviation 0.2 for $a$ and 0.05 for
+$b$. What fraction of proposals were accepted? Drop the first 1,000
+steps and report a 95% credible interval for $b$ (the 2.5% and 97.5%
+quantiles of the chain). Then run it again (no `set.seed()`, or a
+different seed) and report the interval from the second run.
+
+Acceptance rate: ________
+
+Run 1: ________ to ________ \qquad Run 2: ________ to ________
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(10, 4)`
+
+**2c.** *(AI optional/encouraged.)* Now **center** the temperature:
+use $T_i - 17$ in place of $T_i$ (17 °C is close to the average). This
+changes what $a$ means but not $b$. Run the sampler twice more with the
+same settings. Make one figure with the trace plot of $b$ from 2b
+(top) and from the centered run (bottom), and report the new results.
+Why did centering help? (Recall Lab 6, Act 1.)
+
+Acceptance rate: ________
+
+Run 1: ________ to ________ \qquad Run 2: ________ to ________
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(5, 3)`
+
+**2d.** *(AI optional/encouraged.)* Fit the centered model by maximum
+likelihood with `optim(..., hessian = TRUE)` (as in Lab 6) and report
+the Wald interval, $\hat b \pm 1.96\,\text{SE}$. Compare it with your
+credible interval from 2c.
+
+Wald interval for $b$: ________ to ________
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(3, 4)`
+
+**2e.** Where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest to get working?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(7, 3)`
+
+**If you finish early.** *(AI optional/encouraged.)* Every step of
+your centered chain gives a pair $(a, b)$, and so a predicted
+prevalence at any temperature. Compute the prevalence at 12 °C for
+each step after burn-in, and report its posterior mean and 95% credible
+interval.
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(8, 6)`
+
+## Reflection (~10 min)
+
+In Act 1, the Wald and credible intervals for one pond's prevalence
+disagreed sharply. How closely did they agree for $b$ here, and why
+might that be? What would you tell the managers about Bd and water
+temperature, in a sentence or two they could act on?
+
+Also record any changes you made, new insights, and any "muddiest
+points" or topics you want to review.
+
+```{r fig.height=0.3*6}
+blank_lines(6)
+```

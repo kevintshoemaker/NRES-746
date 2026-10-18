@@ -1,0 +1,431 @@
+---
+title: "Week 9, Lecture 1: From Optimization to MCMC"
+subtitle: "Instructor notes. Part 1: prep reading. Part 2: podium cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 5.5, fig.height = 3.4)
+```
+
+```{r compute}
+# values quoted in the notes; same seeds and settings as the R demos in
+# CODE_Week9_MCMCAndModelSelection.R
+library(emdbook)
+titer <- subset(MyxoTiter_sum, grade == 1)$titer
+nll_gamma <- function(p) {
+  if (any(p <= 0)) return(Inf)
+  -sum(dgamma(titer, shape = p[1], scale = p[2], log = TRUE))
+}
+fit_nm <- optim(c(20, 0.05), nll_gamma)
+set.seed(746)
+fit_sann <- optim(c(20, 0.05), nll_gamma, method = "SANN")
+
+k <- 30
+n <- 40
+log_post_germ <- function(p) {
+  if (p <= 0 || p >= 1) return(-Inf)
+  dbinom(k, n, p, log = TRUE)
+}
+metropolis <- function(log_post, start, step_sd, n_steps) {
+  chain <- matrix(NA, n_steps, length(start))
+  current <- start
+  lp_current <- log_post(current)
+  n_accept <- 0
+  for (i in seq_len(n_steps)) {
+    proposal <- current + rnorm(length(start), 0, step_sd)
+    lp_prop <- log_post(proposal)
+    if (log(runif(1)) < lp_prop - lp_current) {
+      current <- proposal
+      lp_current <- lp_prop
+      n_accept <- n_accept + 1
+    }
+    chain[i, ] <- current
+  }
+  attr(chain, "accept_rate") <- n_accept / n_steps
+  chain
+}
+set.seed(746)
+chain_germ <- metropolis(log_post_germ, 0.5, 0.1, 5000)
+set.seed(746)
+chain_myxo <- metropolis(function(p) -nll_gamma(p), c(20, 0.05), c(4, 0.01), 20000)
+ci_myxo <- apply(chain_myxo[-(1:2000), ], 2, quantile, c(0.025, 0.975))
+
+step_sds <- c(0.005, 0.1, 3)
+chains <- lapply(step_sds, function(s) {
+  set.seed(1)
+  metropolis(log_post_germ, 0.05, s, 1000)
+})
+acc <- sapply(chains, attr, "accept_rate")
+pm <- sapply(chains, mean)
+
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+f3 <- function(v) formatC(v, format = "f", digits = 3)
+pct <- function(v) paste0(round(100 * v), "%")
+```
+
+```{r sketch-helpers}
+# scientific workflow schematic; 'highlight' shades one box (e.g. "FIT")
+draw_workflow <- function(highlight = NULL, cex = 0.8) {
+  boxes <- c("PROBLEM", "THEORIES", "MODELS", "FIT", "COMPARE")
+  subs <- c("what do we\nneed to know?", "candidate\nexplanations",
+            "data-generating\n(process + noise)", "confront each\nwith data",
+            "fit, prediction,\nrelevance")
+  x <- seq(1, 9, by = 2)
+  y <- 2
+  w <- 0.8
+  h <- 0.55
+  shade <- function(lab) if (!is.null(highlight) && lab == highlight) "grey80" else "white"
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 10), ylim = c(-0.2, 4), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_along(boxes)) {
+    rect(x[i] - w, y - h, x[i] + w, y + h, col = shade(boxes[i]), lwd = 1.5)
+    text(x[i], y + 0.18, boxes[i], font = 2, cex = cex)
+    text(x[i], y - 0.22, subs[i], cex = cex * 0.75)
+  }
+  arrows(x[-5] + w, y, x[-1] - w, y, length = 0.08, lwd = 1.5)
+  rect(6 - 0.7, 3.2 - 0.35, 6 + 0.7, 3.2 + 0.35, col = shade("DATA"), lty = 2, lwd = 1.5)
+  text(6, 3.28, "DATA", font = 2, cex = cex)
+  text(6, 3.0, "study design", cex = cex * 0.75)
+  arrows(x[3], y + h, 6 - 0.7, 3.2, length = 0.08, lty = 2, lwd = 1.2)
+  arrows(6 + 0.7, 3.2, x[4], y + h, length = 0.08, lty = 2, lwd = 1.2)
+  segments(x[5], y - h, x[5], 0.4, lwd = 1.5)
+  segments(x[5], 0.4, x[1], 0.4, lwd = 1.5)
+  arrows(x[c(1, 2)], 0.4, x[c(1, 2)], y - h, length = 0.08, lwd = 1.5)
+  text(6, 0.15, "REVISE the problem and theories; drop or down-weight poor models",
+       cex = cex * 0.85, font = 3)
+}
+
+# board-sketch reference: Nelder-Mead moves for one triangle
+draw_simplex_moves <- function() {
+  par(mar = c(0, 0, 0, 0))
+  best <- c(3, 1); good <- c(4, 3); worst <- c(1, 2.6)
+  cen <- (best + good) / 2
+  refl <- cen + (cen - worst); expd <- cen + 2 * (cen - worst)
+  contr <- cen + 0.5 * (worst - cen)
+  plot(NA, xlim = c(0, 10), ylim = c(0, 3.6), asp = 1, axes = FALSE, xlab = "", ylab = "")
+  polygon(rbind(best, good, worst), lwd = 2)
+  polygon(rbind(best, good, refl), lty = 2, border = "steelblue")
+  segments(worst[1], worst[2], expd[1], expd[2], lty = 3, col = "grey50")
+  pts <- rbind(best, good, worst, refl, expd, contr)
+  points(pts, pch = 19, col = c(1, 1, 1, "steelblue", "darkorange", "firebrick"))
+  text(pts, c("best", "good", "worst", "reflect", "expand", "contract"),
+       pos = c(1, 3, 2, 4, 4, 1), cex = 0.8)
+}
+
+# board-sketch reference: an NLL curve with two valleys
+draw_two_valleys <- function() {
+  par(mar = c(1.5, 1.5, 0.5, 0.5), mgp = c(0.5, 0, 0))
+  curve(3 - 1.2 * exp(-(x - 2)^2 / 0.8) - 2.5 * exp(-(x - 7)^2 / 1.5) +
+          0.03 * (x - 5)^2, 0, 10, lwd = 2, xlab = "parameter", ylab = "NLL",
+        xaxt = "n", yaxt = "n", ylim = c(0.3, 3.6))
+  arrows(0.3, 3.4, 1.5, 2.3, length = 0.08, col = "darkorange", lwd = 2)
+  text(0.3, 3.4, "start", pos = 4, cex = 0.8)
+}
+```
+
+# How to prepare (for students)
+
+- **Big picture.** Last Wednesday we opened up `optim()` and saw how
+  Newton's method uses the slope and curvature of the NLL to step
+  toward the MLE. Today: two search methods that need no derivatives
+  (Nelder-Mead and simulated annealing), then a small change to
+  simulated annealing that turns it from a way to *find the best*
+  parameter values into a way to *sample the whole posterior
+  distribution*. That method, MCMC, is how most Bayesian models are fit.
+- **Read:** Bolker 7.2.3.2 and 7.2.4 (Nelder-Mead and simulated
+  annealing, printed p. 302-310) and 7.3 through 7.3.2 (MCMC, burn-in,
+  convergence, p. 310-315).
+- **Review:** Bayes' rule for parameters (posterior $\propto$
+  likelihood $\times$ prior) and the Beta-binomial germination example
+  from Week 8; the log rule $\log(a/b) = \log a - \log b$.
+- **Tuesday's lab** has you build and test your own MCMC sampler, so
+  bring questions from today.
+
+# Overview (instructor only)
+
+| Beat | Mode | Time |
+|---|---|---|
+| 1. Big picture | BOARD | ~4 min |
+| 2. Nelder-Mead | BOARD $\to$ R | ~7 min |
+| 3. Simulated annealing | BOARD $\to$ R | ~8 min |
+| 4. Metropolis | BOARD $\to$ R | ~15 min |
+| 5. Wrap | BOARD | ~2 min |
+| Discussion | R (reveal) | ~6 min |
+
+**No WOD today**, to leave room so Tuesday's lab can start without a
+long lecture. **BOARD** = whiteboard; **R** = switch to
+`CODE_Week9_MCMCAndModelSelection.R` (Monday section; numbers match).
+The script holds only the R demos; figures in these notes are board
+references only.
+
+**Where this came from.** Sections 2-3 are the Nelder-Mead and
+simulated annealing material planned for Week 8 Lecture 2 (Oct. 14),
+which only got through Newton's method. Both are trimmed to their core
+ideas. The shape-scale correlation pause and the reparameterization
+"if time" material from Week 8 become Lab 7 Act 2's centering step,
+where removing a strong parameter correlation fixes a badly mixing
+chain (the same reason the myxo banana mixes slowly).
+
+**If running behind,** skip the SANN pause in section 3 and the
+two-parameter myxo chain in section 4. Don't cut the discussion: it
+sets up Lab 7.
+
+# Part 1: Lecture content
+
+## 1. Big picture (~4 min) [BOARD]
+
+```{r workflow-fig, fig.width=6.5, fig.height=2.6, dev="png", dpi=250}
+draw_workflow("FIT")
+```
+
+- Workflow on the board (a quick version of the above); point at
+  **FIT**.
+- Recap: fitting = finding the bottom of the NLL surface. Newton and
+  BFGS use slopes; fast near the answer, can fail far from it.
+- Today, two questions: (1) how do we search when slopes are
+  unavailable or misleading? (2) For Bayesian fits, how do we get the
+  posterior when there are too many parameters for a grid and no
+  conjugate shortcut?
+- The answer to (2) grows out of the answer to (1).
+
+## 2. Nelder-Mead (~7 min) [BOARD $\to$ R]
+
+**Board.** Sketch one triangle (three points for two parameters) and
+its moves:
+
+```{r simplex-sketch, fig.width=4.5, fig.height=1.9}
+draw_simplex_moves()
+```
+
+- Reflect the worst point through the midpoint of the other two. Best
+  yet? Expand. Still bad? Contract. Nothing works? Shrink toward the
+  best point.
+- No derivatives: only compares NLL values.
+
+**R demo** (myxo Gamma surface from Week 8). The triangle expands
+across the contours, contracts as it turns into the valley, then crawls
+along the valley floor. `optim()`'s default is Nelder-Mead:
+`r fit_nm$counts[1]` NLL evaluations, NLL `r f3(fit_nm$value)`.
+
+**Point to land.** Slower than BFGS, but bumps, kinks, and
+thresholds in the NLL don't fool it.
+
+## 3. Simulated annealing (~8 min) [BOARD $\to$ R]
+
+**Board.** A curve with two valleys (Bolker's Figure 7.1). Any
+downhill method finds whichever valley it starts in.
+
+```{r valley-sketch, fig.width=4, fig.height=2}
+draw_two_valleys()
+```
+
+The rule (Bolker p. 306):
+
+1. Propose a random nearby point.
+2. Lower NLL: move there.
+3. Higher by $\Delta$: move there anyway with probability
+   $e^{-\Delta/T}$.
+4. Repeat; lower the "temperature" $T$ now and then.
+
+Hot: accepts most uphill steps and explores. Cold: almost pure
+downhill. Start hot, cool slowly.
+
+**R demo.** Acceptance table, then the annealer on the myxo surface:
+it finds the valley, wanders along it, settles as $T$ falls. About
+3,000 evaluations for what Nelder-Mead did in `r fit_nm$counts[1]`.
+
+**Pause (~1 min, skippable).** `optim(..., method = "SANN")` with
+defaults gives NLL `r f2(fit_sann$value)` after
+`r format(fit_sann$counts[1], big.mark = ",")` evaluations and
+`convergence = 0` (Nelder-Mead: `r f2(fit_nm$value)`). Broken?
+*Land:* untuned, not broken. SANN always reports 0. Use a global search
+to find the right valley, then polish with Nelder-Mead or BFGS.
+
+## 4. Metropolis (~15 min) [BOARD $\to$ R]
+
+**Key idea.** Keep the annealing rule but change three things, and
+the chain of visited points becomes a sample from the posterior.
+
+**Board, in three steps.**
+
+1. Fix $T = 1$ and never cool. The acceptance probability for an
+   uphill step becomes $e^{-(\text{NLL}_{new} - \text{NLL}_{old})} =
+   \mathcal{L}(\theta_{new}) / \mathcal{L}(\theta_{old})$.
+2. Swap the likelihood for the posterior:
+   $$P(\text{accept}) = \min\left(1,
+     \frac{P(\theta_{new} \mid y)}{P(\theta_{old} \mid y)}\right)$$
+3. Keep **every** step, not only the best one.
+
+Then write Bayes' rule into the ratio:
+$$\frac{P(\theta_{new} \mid y)}{P(\theta_{old} \mid y)} =
+  \frac{\mathcal{L}(\theta_{new})\, P(\theta_{new}) / P(y)}
+       {\mathcal{L}(\theta_{old})\, P(\theta_{old}) / P(y)}$$
+$P(y)$ cancels. Computing it is why Week 7 used a grid and Week 8
+relied on conjugacy; neither works with many parameters or arbitrary
+priors. Metropolis never needs it.
+
+**Why it lands on the posterior (board, 1 min).** Two values, $A$ and
+$B$, with $P(A \mid y) = 2\,P(B \mid y)$. From $B$, a proposal to $A$
+is always accepted; from $A$, a proposal to $B$ is accepted half the
+time. In the long run the chain sits at $A$ twice as often as at $B$.
+Same logic everywhere: time spent near $\theta$ $\propto$ posterior.
+
+**Sticking point.** A rejected proposal means *record the current
+value again*. Students often skip rejected steps; that throws away the
+extra weight the chain puts on high-posterior regions. Related: the
+chain is not supposed to converge to a point. Wandering is the goal.
+
+**R demo.**
+
+- Germination (30 of 40, flat prior; exact posterior Beta(31, 11)).
+  Start at 0.5, proposal sd 0.1, 5,000 steps. Acceptance
+  `r pct(attr(chain_germ, "accept_rate"))`. Chain mean
+  `r f3(mean(chain_germ))` vs. exact `r f3(31 / 42)`; 95% interval
+  `r f2(quantile(chain_germ, 0.025))`-`r f2(quantile(chain_germ, 0.975))`
+  vs. exact `r f2(qbeta(0.025, 31, 11))`-`r f2(qbeta(0.975, 31, 11))`.
+  The histogram matches the curve we already know.
+- Code note: compare on the log scale (`log(runif(1)) < lp_new -
+  lp_old`); the raw posterior for 27 observations can underflow.
+- Myxo Gamma, two parameters, flat priors, 20,000 steps: the cloud of
+  points fills the banana. 95% credible interval for shape:
+  `r round(ci_myxo[1, 1])` to `r round(ci_myxo[2, 1])` (first 2,000
+  steps dropped; say why in one line, and leave burn-in for the
+  discussion). This chain mixes slowly along the banana (other step
+  sizes shift the lower bound by several units); Lab 7 explains why.
+
+## 5. Wrap (~2 min) [BOARD]
+
+- Point at **FIT**. Grid, Newton/BFGS, Nelder-Mead, annealing: ways to
+  find the minimum. Metropolis: a way to sample the posterior.
+- Same engine (random proposal + acceptance rule); different goal.
+- Tomorrow: you build one and learn how to tell whether to trust it.
+
+## Discussion (~6 min) [R reveal]
+
+> Three labmates run Metropolis on the germination data (30 of 40,
+> flat prior; exact posterior mean `r f3(31 / 42)`). Same start
+> ($p = 0.05$), 1,000 steps each, different proposal sd:
+>
+> | proposal sd | accepted | chain mean |
+> |---|---|---|
+> | `r step_sds[1]` | `r pct(acc[1])` | `r f2(pm[1])` |
+> | `r step_sds[2]` | `r pct(acc[2])` | `r f2(pm[2])` |
+> | `r step_sds[3]` | `r pct(acc[3])` | `r f2(pm[3])` |
+>
+> The first labmate says theirs is best, since nearly every proposal
+> was accepted. Which chain would you trust? What would you check or
+> change?
+
+After a few minutes, show the three trace plots (script, Discussion
+section).
+
+*Where to land.* Tiny steps are almost always accepted but barely
+move: after 1,000 steps that chain is still climbing from 0.05 (it
+never finished burn-in). Huge steps are almost always rejected, so the
+chain sits still for long stretches; its mean is close by luck, from a
+few dozen distinct values. The middle chain mixes well. A high
+acceptance rate is not a quality score. Look at the trace plot, drop
+the burn-in, and tune the proposal width. Lab 7 picks up from here.
+
+\newpage
+\large
+
+# PART 2: PODIUM CHEAT SHEET
+
+\normalsize
+\textit{Terse on purpose. Detail: Part 1. R = Monday section of CODE\_Week9\_MCMCAndModelSelection.R.}
+\large
+
+**No WOD. Lecture ~36 min, discussion ~6 min. Behind? Skip SANN pause and myxo chain.**
+
+## 1. Big picture (~4 min) [BOARD]
+
+```{r podium-workflow, fig.width=6.5, fig.height=2.6, dev="png", dpi=250}
+draw_workflow("FIT")
+```
+
+- Workflow on board; point at **FIT**
+- Newton/BFGS: slopes; fast near answer, fail far away
+- Q1: search without slopes?
+- Q2: posterior with too many params for a grid, no conjugacy?
+- Q2's answer grows out of Q1's
+
+\newpage
+
+## 2. Nelder-Mead (~7 min) [BOARD $\to$ R]
+
+```{r podium-simplex, fig.width=4.5, fig.height=1.9}
+draw_simplex_moves()
+```
+
+- Reflect worst; best yet $\to$ expand; still bad $\to$ contract; else shrink
+- Compares NLL values only, no derivatives
+- **R:** triangles on myxo surface; `optim()` default, `r fit_nm$counts[1]` evals
+- Slower than BFGS; not fooled by bumps or kinks
+
+\newpage
+
+## 3. Simulated annealing (~8 min) [BOARD $\to$ R]
+
+```{r podium-valleys, fig.width=4, fig.height=2}
+draw_two_valleys()
+```
+
+- Downhill methods find the nearest valley
+- Random step; worse by $\Delta$: accept w.p. $e^{-\Delta/T}$; cool $T$
+- Hot explores, cold settles
+- **R:** acceptance table; annealer path; ~3,000 evals vs. `r fit_nm$counts[1]`
+
+**Pause (skippable):** SANN: NLL `r f2(fit_sann$value)`, conv 0. Broken?
+
+- Untuned; always 0. Find valley, then polish with NM/BFGS
+
+\newpage
+
+## 4. Metropolis (~15 min) [BOARD $\to$ R]
+
+1. $T = 1$: $e^{-\Delta \text{NLL}} = \mathcal{L}_{new}/\mathcal{L}_{old}$
+2. Posterior instead: accept w.p. $\min\left(1, \frac{P(\theta_{new} \mid y)}{P(\theta_{old} \mid y)}\right)$
+3. Keep **every** step
+
+- Write Bayes in the ratio: $P(y)$ **cancels**
+- $A$ vs. $B$, $A$ twice as probable: B$\to$A always, A$\to$B half $\Rightarrow$ 2:1 time
+- **Rejected = record current value again**
+- Not converging to a point; wandering is the goal
+
+**R:**
+
+- Germination: mean `r f3(mean(chain_germ))` vs. `r f3(31 / 42)`; accept `r pct(attr(chain_germ, "accept_rate"))`
+- Log scale comparison (underflow)
+- Myxo: cloud fills banana; shape `r round(ci_myxo[1, 1])`-`r round(ci_myxo[2, 1])`
+
+\newpage
+
+## 5. Wrap (~2 min) [BOARD]
+
+- **FIT**: optimizers find the minimum; Metropolis samples the posterior
+- Same engine, different goal
+- Tomorrow: build one, learn when to trust it
+
+## Discussion (~6 min) [R reveal]
+
+Start 0.05, 1,000 steps; exact mean `r f3(31 / 42)`:
+
+- sd `r step_sds[1]`: `r pct(acc[1])` accepted, mean `r f2(pm[1])`
+- sd `r step_sds[2]`: `r pct(acc[2])`, mean `r f2(pm[2])`
+- sd `r step_sds[3]`: `r pct(acc[3])`, mean `r f2(pm[3])`
+- "First is best: nearly all accepted." Trust which?
+
+**Then show trace plots.**
+
+- Tiny steps: never finished burn-in
+- Huge steps: stuck; close by luck
+- Acceptance $\neq$ quality; trace plot, burn-in, tune width $\to$ Lab 7

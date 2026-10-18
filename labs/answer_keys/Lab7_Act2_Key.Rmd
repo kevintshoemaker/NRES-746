@@ -1,0 +1,286 @@
+---
+title: "Lab 7, Act 2: Your Own Sampler"
+subtitle: "Is chytrid less common in warmer ponds?"
+author: "NRES 746"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # answer colors are LaTeX-only
+header-includes:
+  - \usepackage{xcolor}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{#1}}
+  - \newcommand{\ansbegin}{\begingroup\color{ans}}
+  - \newcommand{\ansend}{\endgroup}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+f3 <- function(v) formatC(v, format = "f", digits = 3)
+
+bd <- read.csv("../../data/BdPondSurvey.csv")
+temp <- bd$water_temp_c
+swabbed <- bd$frogs_swabbed
+positive <- bd$bd_positive
+
+# log posterior: binomial likelihood + Normal(0, 10) priors on a and b
+log_post <- function(par, x = temp) {
+  sum(dbinom(positive, swabbed, plogis(par[1] + par[2] * x), log = TRUE)) +
+    sum(dnorm(par, 0, 10, log = TRUE))
+}
+check_diff <- log_post(c(1, -0.1)) - log_post(c(3, -0.2))
+
+# Metropolis sampler; returns the chain (one row per step)
+metropolis <- function(start, step_sd, n_steps, x = temp) {
+  chain <- matrix(NA, n_steps, 2, dimnames = list(NULL, c("a", "b")))
+  current <- start
+  lp_current <- log_post(current, x)
+  n_accept <- 0
+  for (i in seq_len(n_steps)) {
+    proposal <- current + rnorm(2, 0, step_sd)
+    lp_prop <- log_post(proposal, x)
+    if (log(runif(1)) < lp_prop - lp_current) {
+      current <- proposal
+      lp_current <- lp_prop
+      n_accept <- n_accept + 1
+    }
+    chain[i, ] <- current
+  }
+  attr(chain, "accept_rate") <- n_accept / n_steps
+  chain
+}
+
+step_sd <- c(0.2, 0.05)
+burn <- seq_len(1000)
+raw_runs <- lapply(1:2, function(s) { set.seed(s); metropolis(c(0, 0), step_sd, 10000) })
+cen_runs <- lapply(1:2, function(s) { set.seed(s); metropolis(c(0, 0), step_sd, 10000, temp - 17) })
+ci_b <- function(ch) paste(f3(quantile(ch[-burn, "b"], c(0.025, 0.975))), collapse = " to ")
+# "\\%" because these values land inside raw LaTeX (\ans{}), where % starts a comment
+acc <- function(runs) paste0(round(100 * mean(sapply(runs, attr, "accept_rate"))), "\\%")
+
+nll <- function(par, x) -sum(dbinom(positive, swabbed, plogis(par[1] + par[2] * x), log = TRUE))
+fit <- optim(c(0, 0), nll, x = temp - 17, method = "BFGS", hessian = TRUE)
+wald <- fit$par[2] + c(-1, 1) * 1.96 * sqrt(solve(fit$hessian)[2, 2])
+
+set.seed(99)
+long <- metropolis(c(0, -0.25), step_sd, 2e5, temp - 17)[-burn, ]
+prev_12 <- plogis(long[, "a"] + long[, "b"] * (12 - 17))
+prev_22 <- plogis(long[, "a"] + long[, "b"] * (22 - 17))
+odds_drop <- 100 * (1 - exp(median(long[, "b"])))
+```
+
+\ans{\textbf{Answer key} (not for student distribution). Answers are in magenta. Interval values come from seeds 1 and 2; students' will differ slightly.}
+
+## The scenario
+
+The pond in Act 1 was one of 12 ponds the field crew surveyed in the
+same summer. At each pond they swabbed a sample of frogs and recorded
+the water temperature. Bd grows poorly in warm water, so managers want
+to know whether infection is less common in warmer ponds, and if so,
+by how much. Here are the survey results (the Act 1 pond is P11):
+
+```{r bd-data}
+knitr::kable(bd, align = "cccc",
+             col.names = c("Pond", "Water temp. (°C)", "Frogs swabbed", "Bd positive"))
+```
+
+```{r bd-plot, fig.width=5, fig.height=2.6}
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(temp, positive / swabbed, pch = 16, ylim = c(0, 1), las = 1,
+     xlab = "Water temperature (°C)", ylab = "Proportion Bd positive")
+```
+
+Use a logistic model: the number of positives at pond $i$ is binomial
+with $n_i$ frogs swabbed and infection probability $p_i$, where
+$$\log\frac{p_i}{1 - p_i} = a + b\,T_i$$
+and $T_i$ is the water temperature. Give both $a$ and $b$ a
+Normal(0, 10) prior (wide enough that the data do nearly all the work).
+You'll fit this model with your own Metropolis sampler.
+
+**How much does the chance of infection change with temperature, and
+how uncertain is that change?**
+
+Try Part 1 on paper first, before you open a laptop or start typing
+code.
+
+## Part 1: Plan it on paper (~20 min)
+
+**1a.** Write the log posterior, $\log P(a, b \mid y)$, up to a
+constant. You can drop terms that don't depend on $a$ or $b$.
+
+\ansbegin
+
+$$\log P(a, b \mid y) = \sum_{i=1}^{12}\left[k_i\log p_i + (n_i - k_i)\log(1 - p_i)\right]
+  - \frac{a^2}{200} - \frac{b^2}{200} + \text{const.}, \qquad p_i = \frac{1}{1 + e^{-(a + bT_i)}}$$
+
+\ansend
+
+**1b.** In plain English (not R code), describe step by step how a
+Metropolis sampler for $(a, b)$ works: what you start with, how you
+propose a new pair, how you decide whether to accept it, and what you
+record at each step. Act 1 is a good guide, but now there are two
+parameters.
+
+\ans{Start with a pair $(a, b)$ and its log posterior. Each step: add a random jump to each of $a$ and $b$; compute the proposal's log posterior; if $\log u <$ (proposal minus current), move to the proposal; either way, record the current pair. Afterward, drop the burn-in and summarize. (Updating $a$ and $b$ one at a time is also correct.)}
+
+## Checkpoint: finalize your plan (~5 min)
+
+Look back over 1a and 1b and fix anything that no longer looks right
+before you start coding.
+
+## Part 2: Fit it (laptop, ~60 min)
+
+Each coding question is labeled with a recommendation:
+
+- **Recommended: no AI:** try to build this yourself. R's help pages,
+  web search, and classmates are fine.
+- **AI optional/encouraged:** the result matters, but writing this code
+  by hand isn't the point.
+
+After each one, circle how you actually used AI. Using AI never costs
+points; only undisclosed use does.
+
+**What to turn in:** your filled-in answers and your 2c figure as an
+image (upload in WebCampus). You don't need to submit your code.
+
+The data are in `BdPondSurvey.csv` (columns `pond`, `water_temp_c`,
+`frogs_swabbed`, `bd_positive`), on the course website:
+<https://kevintshoemaker.github.io/NRES-746/data/BdPondSurvey.csv>.
+You can read it straight from that link:
+
+```{r data-url, echo=TRUE, eval=FALSE}
+data_url <- "https://kevintshoemaker.github.io/NRES-746/data/BdPondSurvey.csv"
+bd <- read.csv(data_url)
+```
+
+Or paste the data into R directly:
+
+```{r data-code, echo=TRUE, eval=FALSE}
+water_temp_c  <- c(10.0, 12.3, 14.9, 15.8, 17.6, 17.9, 18.6, 18.8, 19.0, 20.5, 21.7, 22.1)
+frogs_swabbed <- c(21, 18, 23, 19, 18, 24, 16, 17, 23, 23, 20, 18)
+bd_positive   <- c(13, 12, 8, 9, 6, 8, 3, 5, 1, 6, 2, 1)
+```
+
+**2a.** *(Recommended: no AI.)* Write a function that returns the log
+posterior for `par = c(a, b)`. Check it: the log posterior at
+$(a, b) = (1, -0.1)$ minus the log posterior at $(3, -0.2)$ should be
+about `r round(check_diff, 2)`. (Why does this check work no matter
+which constants you dropped?)
+
+\ansbegin
+
+```{r ans-2a, echo=TRUE, eval=FALSE, highlight=FALSE}
+log_post <- function(par, x = temp) {
+  p <- plogis(par[1] + par[2] * x)
+  sum(dbinom(positive, swabbed, p, log = TRUE)) + sum(dnorm(par, 0, 10, log = TRUE))
+}
+```
+
+\ansend
+
+\ans{Constants cancel in a difference.}
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+**2b.** *(Recommended: no AI.)* Write your sampler from 1b. Run it for
+10,000 steps, starting at $(a, b) = (0, 0)$, with jumps drawn from
+Normal distributions with standard deviation 0.2 for $a$ and 0.05 for
+$b$. What fraction of proposals were accepted? Drop the first 1,000
+steps and report a 95% credible interval for $b$ (the 2.5% and 97.5%
+quantiles of the chain). Then run it again (no `set.seed()`, or a
+different seed) and report the interval from the second run.
+
+\ansbegin
+
+```{r ans-2b, echo=TRUE, eval=FALSE, highlight=FALSE}
+metropolis <- function(start, step_sd, n_steps, x = temp) {
+  chain <- matrix(NA, n_steps, 2)
+  current <- start
+  lp_current <- log_post(current, x)
+  for (i in seq_len(n_steps)) {
+    proposal <- current + rnorm(2, 0, step_sd)
+    lp_prop <- log_post(proposal, x)
+    if (log(runif(1)) < lp_prop - lp_current) {
+      current <- proposal
+      lp_current <- lp_prop
+    }
+    chain[i, ] <- current
+  }
+  chain
+}
+```
+
+\ansend
+
+Acceptance rate: \ans{about `r acc(raw_runs)`}
+
+Run 1: \ans{`r ci_b(raw_runs[[1]])`} \qquad Run 2: \ans{`r ci_b(raw_runs[[2]])`}
+
+\ans{The two runs disagree (mostly the upper end).}
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+**2c.** *(AI optional/encouraged.)* Now **center** the temperature: use
+$T_i - 17$ in place of $T_i$ (17 °C is close to the average). This
+changes what $a$ means but not $b$. Run the sampler twice more with the
+same settings. Make one figure with the trace plot of $b$ from 2b
+(top) and from the centered run (bottom), and report the new results.
+Why did centering help? (Recall Lab 6, Act 1.)
+
+Acceptance rate: \ans{about `r acc(cen_runs)`}
+
+Run 1: \ans{`r ci_b(cen_runs[[1]])`} \qquad Run 2: \ans{`r ci_b(cen_runs[[2]])`}
+
+```{r ans-2c-fig, fig.height=3.6}
+par(mfrow = c(2, 1), mar = c(3.5, 4.5, 1.6, 0.5), mgp = c(2, 0.6, 0))
+plot(raw_runs[[1]][, "b"], type = "l", col = ans_col, ylim = c(-0.45, 0.05), las = 1,
+     xlab = "Step", ylab = "b", main = "Raw temperature")
+plot(cen_runs[[1]][, "b"], type = "l", col = ans_col, ylim = c(-0.45, 0.05), las = 1,
+     xlab = "Step", ylab = "b", main = "Centered temperature (T - 17)")
+```
+
+\ans{With raw temperature, $a$ is the log-odds at 0 °C, far from the data, so $a$ and $b$ trade off (correlation about `r f2(cor(raw_runs[[1]][-burn, ])[1, 2])`); independent jumps fall off the narrow ridge and the chain creeps. Centering makes the correlation about `r f2(cor(cen_runs[[1]][-burn, ])[1, 2])`, so the chain mixes well and runs agree.}
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+**2d.** *(AI optional/encouraged.)* Fit the centered model by maximum
+likelihood with `optim(..., hessian = TRUE)` (as in Lab 6) and report
+the Wald interval, $\hat b \pm 1.96\,\text{SE}$. Compare it with your
+credible interval from 2c.
+
+Wald interval for $b$: \ans{`r f3(wald[1])` to `r f3(wald[2])`}
+
+\ans{Nearly the same as the credible interval (long chain: `r f3(quantile(long[, "b"], 0.025))` to `r f3(quantile(long[, "b"], 0.975))`).}
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+**2e.** Where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest to get working?
+
+\ans{Open-ended.}
+
+**If you finish early.** *(AI optional/encouraged.)* Every step of
+your centered chain gives a pair $(a, b)$, and so a predicted
+prevalence at any temperature. Compute the prevalence at 12 °C for
+each step after burn-in, and report its posterior mean and 95% credible
+interval.
+
+\ans{Mean `r f2(mean(prev_12))`, 95\% interval `r f2(quantile(prev_12, 0.025))` to `r f2(quantile(prev_12, 0.975))` (use $12 - 17 = -5$ as the centered temperature).}
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+## Reflection (~10 min)
+
+In Act 1, the Wald and credible intervals for one pond's prevalence
+disagreed sharply. How closely did they agree for $b$ here, and why
+might that be? What would you tell the managers about Bd and water
+temperature, in a sentence or two they could act on?
+
+Also record any changes you made, new insights, and any "muddiest
+points" or topics you want to review.
+
+\ans{Closely: `r sum(swabbed)` frogs and no boundary near $b$, so the likelihood is nearly symmetric (Act 1 had 2 positives near $p = 0$). Managers: each 1 °C warmer is associated with about `r round(odds_drop)`\% lower odds of infection, from about `r round(100 * mean(prev_12))`\% infected at 12 °C to about `r round(100 * median(prev_22))`\% at 22 °C (an association across ponds, not proof of cause).}

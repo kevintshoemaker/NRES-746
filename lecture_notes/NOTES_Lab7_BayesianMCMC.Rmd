@@ -1,0 +1,212 @@
+---
+title: "Lab 7: Bayesian Inference with MCMC"
+subtitle: "Instructor notes. Part 1: prep reading. Part 2: podium/circulating cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 5.5, fig.height = 3.4)
+```
+
+```{r compute}
+# values quoted below; same seeds and settings as the Act keys
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+f3 <- function(v) formatC(v, format = "f", digits = 3)
+
+bd <- read.csv("../data/BdPondSurvey.csv")
+temp <- bd$water_temp_c
+swabbed <- bd$frogs_swabbed
+positive <- bd$bd_positive
+log_post <- function(par, x = temp) {
+  sum(dbinom(positive, swabbed, plogis(par[1] + par[2] * x), log = TRUE)) +
+    sum(dnorm(par, 0, 10, log = TRUE))
+}
+metropolis <- function(start, step_sd, n_steps, x = temp) {
+  chain <- matrix(NA, n_steps, 2)
+  current <- start
+  lp_current <- log_post(current, x)
+  n_accept <- 0
+  for (i in seq_len(n_steps)) {
+    proposal <- current + rnorm(2, 0, step_sd)
+    lp_prop <- log_post(proposal, x)
+    if (log(runif(1)) < lp_prop - lp_current) {
+      current <- proposal
+      lp_current <- lp_prop
+      n_accept <- n_accept + 1
+    }
+    chain[i, ] <- current
+  }
+  attr(chain, "accept_rate") <- n_accept / n_steps
+  chain
+}
+burn <- seq_len(1000)
+runs_raw <- lapply(1:2, function(s) { set.seed(s); metropolis(c(0, 0), c(0.2, 0.05), 10000) })
+runs_cen <- lapply(1:2, function(s) { set.seed(s); metropolis(c(0, 0), c(0.2, 0.05), 10000, temp - 17) })
+ci <- function(ch) paste(f2(quantile(ch[-burn, 2], c(0.025, 0.975))), collapse = " to ")
+nll <- function(par, x) -sum(dbinom(positive, swabbed, plogis(par[1] + par[2] * x), log = TRUE))
+fit <- optim(c(0, 0), nll, x = temp - 17, method = "BFGS", hessian = TRUE)
+wald <- fit$par[2] + c(-1, 1) * 1.96 * sqrt(solve(fit$hessian)[2, 2])
+check_diff <- log_post(c(1, -0.1)) - log_post(c(3, -0.2))
+acc_raw <- mean(sapply(runs_raw, attr, "accept_rate"))
+acc_cen <- mean(sapply(runs_cen, attr, "accept_rate"))
+```
+
+# How to prepare (for students)
+
+- **Big picture.** Monday turned simulated annealing into the
+  Metropolis algorithm, a way to draw samples from a posterior without
+  ever computing Bayes' denominator. In this lab you run a chain by
+  hand, learn to tell a trustworthy chain from an untrustworthy one,
+  and then write your own sampler for a two-parameter model of chytrid
+  fungus in frogs.
+- **Review:** the Metropolis acceptance rule from Monday's lecture
+  (and why a rejected step still gets recorded); the Beta-binomial
+  posterior from Week 8; the logistic model and centering a predictor
+  from Lab 6, Act 1.
+- **Read:** Bolker 7.3 through 7.3.2 (MCMC, burn-in, convergence,
+  printed p. 310-315).
+- **R skills:** writing a function, `for` loops, `rnorm()`,
+  `runif()`, storing results in a matrix row by row, `quantile()`.
+
+# Overview (instructor only)
+
+| Beat | Mode | Time |
+|---|---|---|
+| Opening | BOARD | ~10 min |
+| Act 1 (closed laptop) | paper | ~55 min |
+| Act 2 Part 1 + group plan check | paper | ~30 min |
+| Act 2 Part 2 (laptops) | laptop | rest of period; finish at home |
+
+**Goal for the period:** every group finishes Act 1, and every student
+leaves with an Act 2 plan their group has checked. Monday had no WOD,
+so the opening is short; skip it entirely if Monday's discussion
+(three germination chains) happened.
+
+**Group time for Act 2 (announce it; the handout doesn't say it).**
+Act 2 has to work as an individual take-home, so it has no group
+language. When a group finishes Act 1, have them do Act 2's Part 1
+(1a, 1b) on their own, then compare log posteriors and pseudocode as a
+group for ~10 min before opening laptops. Things to listen for: priors
+missing from 1a, a sign error turning it into an NLL, and pseudocode
+that records only accepted steps.
+
+**Data.** Act 1 is one pond (2 of 20, flat prior, posterior Beta(3,
+19)). Act 2 is a 12-pond survey that includes that pond (P11). The
+survey data are simulated (true $a = 2.2$, $b = -0.18$) and presented
+as field results. Keys: `labs/answer_keys/Lab7_Act1_Key.Rmd`,
+`Lab7_Act2_Key.Rmd`.
+
+**Where this came from.** The Week 8 "if time" idea (reparameterize
+to remove a strong parameter correlation) appears here as Act 2's
+centering step. Bolker's 7.4 fitting checklist isn't used; it could
+open Wednesday or a later lab.
+
+# Part 1: Lab content
+
+## Opening (~10 min) [BOARD]
+
+- One-line workflow; point at **FIT**.
+- Metropolis on the board, in log form: propose
+  $\theta^* = \theta + \text{jump}$; accept if
+  $\log u < \log P(\theta^* \mid y) - \log P(\theta \mid y)$; record
+  the current value either way.
+- Three things to check in any chain (only if Monday's discussion was
+  cut): burn-in (trend at the start), jumps too small (slow creep, near
+  100% accepted), jumps too big (flat stretches, few accepted). Runs
+  from different starts should agree.
+- Don't work an example with the lab's numbers. If students want one,
+  use Monday's germination data (30 of 40).
+
+## Act 1 [paper]
+
+**1a answer** (start 0.30):
+
+| Step | Proposal | Difference | Accept? | Record |
+|---|---|---|---|---|
+| 1 | 0.22 | +1.33 | yes | 0.22 |
+| 2 | 0.31 | $-1.52$ | no ($\log u = -0.85$) | 0.22 |
+| 3 | 0.15 | +0.78 | yes | 0.15 |
+| 4 | $-0.02$ | $-\infty$ | no | 0.15 |
+| 5 | 0.19 | $-0.39$ | yes ($\log u = -1.20$) | 0.19 |
+| 6 | 0.08 | +0.56 | yes | 0.08 |
+
+**Sticking point:** after the step 2 rejection, students start step 3
+from 0.31. Ask "where is the chain right now?"
+
+- **1b:** skipping rejections drops the repeats that weight the peak;
+  chain too spread out.
+- **1c:** constants cancel in the difference. That's Monday's $P(y)$
+  point again.
+- **2a:** A good; B fine after ~150 steps of burn-in; C jumps too big
+  (6% accepted, sticky); D jumps too small, two runs never meet.
+- **2c:** credible 0.03 to 0.30, lopsided, above 0; Wald $-0.03$ to
+  0.23. Histogram should match Beta(3, 19).
+
+## Act 2 [paper $\to$ laptop]
+
+- **2a check value:** `r f2(check_diff)` (a difference, so dropped
+  constants don't matter). A value of +`r f2(-check_diff)` means
+  they coded the negative log posterior.
+- **2b, raw temperature:** ~`r round(100 * acc_raw)`% accepted; two
+  runs give e.g. `r ci(runs_raw[[1]])` and `r ci(runs_raw[[2]])`. The
+  runs disagree, which is the point.
+- **2c, centered:** ~`r round(100 * acc_cen)`% accepted; runs agree
+  (`r ci(runs_cen[[1]])`, `r ci(runs_cen[[2]])`). Why: raw $a$ is the
+  log-odds at 0 °C, so $a$ and $b$ trade off (correlation about
+  $-0.97$); independent jumps fall off the ridge. Same as the Lab 6
+  beetle dose and Monday's myxo banana.
+- **2d:** Wald `r f2(wald[1])` to `r f2(wald[2])`; agrees with the
+  credible interval to ~0.01.
+- **Common bugs:** current log posterior not updated after an
+  acceptance (acceptance rate drifts toward 100%); storing only on
+  acceptance; `quantile()` over the whole matrix; same seed for both
+  runs.
+- **Reflection target:** many data and no boundary, so the intervals
+  agree; Act 1 had few data near $p = 0$, so they didn't.
+
+\newpage
+\large
+
+# PART 2: CIRCULATING CHEAT SHEET
+
+\normalsize
+\textit{Terse on purpose. Detail: Part 1 and the keys.}
+\large
+
+## Opening (~10 min) [BOARD]
+
+- Workflow; point at **FIT**
+- Accept if $\log u <$ lp(prop.) $-$ lp(curr.); **record either way**
+- If Monday's discussion was cut: burn-in, too small, too big, runs agree
+- Examples: germination (30 of 40) only, never the lab's numbers
+
+\newpage
+
+## Act 1 (~55 min) [paper]
+
+- Records: 0.22, 0.22, 0.15, 0.15, 0.19, 0.08
+- Step 3 starts from **0.22**, not 0.31
+- Step 4 ($-0.02$): reject, posterior 0
+- 1c: constants cancel
+- A good; B burn ~150; C too big (6%); D too small, runs apart
+- Credible 0.03-0.30 vs. Wald $-0.03$-0.23; Beta(3, 19)
+
+\newpage
+
+## Act 2 (rest of period) [paper $\to$ laptop]
+
+- **After Act 1:** Part 1 alone, then ~10 min group compare before laptops
+- Listen for: no priors; NLL sign; records only acceptances
+- 2a check: `r f2(check_diff)`
+- Raw: ~`r round(100 * acc_raw)`% accepted, runs disagree
+- Centered: ~`r round(100 * acc_cen)`%, runs agree, $b$ about `r ci(runs_cen[[1]])`
+- Wald `r f2(wald[1])` to `r f2(wald[2])`
+- Bugs: lp not updated; store only on accept; same seed twice
+- Unfinished? Finish at home
