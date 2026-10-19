@@ -77,13 +77,21 @@ nq <- function(lines, rows = 0, extra = 0) {
   knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
 }
 
-# log posterior for 2 positives of 20 with a flat prior, shifted so its maximum is 0
+# 2 positives of 20, Beta(2, 8) prior; log likelihood and log prior each
+# shifted so its maximum is 0 (at p = 0.1 and p = 1/8)
 k <- 2
 n <- 20
+prior_ab <- c(2, 8)
+log_lik <- function(p) k * log(p) + (n - k) * log(1 - p) - (k * log(0.1) + (n - k) * log(0.9))
+log_prior <- function(p) {
+  m <- (prior_ab[1] - 1) / (sum(prior_ab) - 2)
+  (prior_ab[1] - 1) * log(p / m) + (prior_ab[2] - 1) * log((1 - p) / (1 - m))
+}
 log_post <- function(p) {
   if (p <= 0 || p >= 1) return(-Inf)
-  k * log(p) + (n - k) * log(1 - p) - (k * log(0.1) + (n - k) * log(0.9))
+  log_lik(p) + log_prior(p)
 }
+post_ab <- prior_ab + c(k, n - k)
 
 # Metropolis sampler for p; returns the chain
 metropolis <- function(start, step_sd, n_steps) {
@@ -111,7 +119,7 @@ set.seed(15); chain_d2 <- metropolis(0.45, 0.003, n_steps)
 
 burn <- 200
 keep_a <- chain_a[-seq_len(burn)]
-f2 <- function(v) formatC(v, format = "f", digits = 2)
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)   # + 0 drops "-0.00"
 f3 <- function(v) formatC(v, format = "f", digits = 3)
 ```
 
@@ -120,15 +128,20 @@ f3 <- function(v) formatC(v, format = "f", digits = 3)
 Chytrid fungus (*Batrachochytrium dendrobatidis*, or Bd) has driven
 steep declines of the Sierra Nevada yellow-legged frog. Field crews
 swab frogs' skin and test the swabs for Bd. At one high-elevation pond,
-**2 of 20 frogs tested positive**, the same numbers you saw in the
-Week 7 *Reading the Interval* WOD. Model the number of positives as
-binomial with unknown prevalence $p$, and give $p$ a flat prior,
-Beta(1, 1).
+**2 of 20 frogs tested positive** (same numbers from
+Week 7's WOD). Model the number of positives as
+binomial with unknown prevalence $p$.
 
-The usual Wald interval, $\hat p \pm 1.96\sqrt{\hat p(1 - \hat p)/n}$,
+You also have prior information: earlier surveys of nearby ponds found
+Bd in about 20% of frogs. To use it without letting it overwhelm this
+pond's data, give $p$ a weak **Beta(2, 8)** prior: mean 0.2, and worth
+about as much information as 10 frogs (2 positive, 8 negative), half
+as many as you swabbed here.
+
+The usual Wald (Hessian-based) interval, $\hat p \pm 1.96\sqrt{\hat p(1 - \hat p)/n}$,
 gives $0.10 \pm 0.13$, or $-0.03$ to $0.23$. A prevalence below zero
 makes no sense. In this Act you run Monday's Metropolis algorithm by
-hand, then judge some computer-run chains, to get a better answer.
+hand, then judge some computer-run chains, to get a more sensible answer.
 
 **What is the prevalence of Bd in this pond, and how uncertain is it?**
 
@@ -138,29 +151,38 @@ Please keep laptops closed for this Act.
 
 ## Part 1: Six steps of Metropolis (individual, ~20 min)
 
-The log posterior for these data is
-$$\log P(p \mid y) = 2\log p + 18\log(1 - p) + \text{constant}$$
+The log posterior is the log likelihood plus the log prior (plus a
+constant):
+$$\log P(p \mid y) = \underbrace{2\log p + 18\log(1 - p)}_{\text{log likelihood}}
+ + \underbrace{\log p + 7\log(1 - p)}_{\text{log prior}} + \text{constant}$$
 for $0 < p < 1$; outside that range the posterior is 0 (log posterior
-$-\infty$). The table lists it on a grid of $p$ values, shifted by a
-constant so the largest value is 0.
+$-\infty$). The table lists the log likelihood and the log prior on a
+grid of $p$ values (each shifted by a constant so its largest value is
+0). Add them to get the log posterior.
 
 ```{r lookup}
 p_grid <- seq(0.01, 0.40, by = 0.01)
-lp_grid <- sapply(p_grid, log_post)
-cells <- paste0(f2(p_grid), ": ", f2(lp_grid))
+cells <- paste0(f2(p_grid), ": ", f2(sapply(p_grid, log_lik)), ", ",
+                f2(sapply(p_grid, log_prior)))
 lookup <- matrix(cells, nrow = 10)
-knitr::kable(lookup, col.names = rep("p: log posterior", 4), align = "cccc")
+knitr::kable(lookup, col.names = rep("p: log lik., log prior", 4), align = "cccc")
 ```
 
-The chain starts at $p = 0.30$. At each step, the proposal is the
+The chain starts at $p = 0.30$. In principle any starting value works,
+since a well-behaved chain eventually forgets where it began. In
+practice, pick a value that is plausible under the prior, so the chain
+doesn't waste many steps reaching the posterior. Here 0.30 is a
+plausible value on the high side of the prior (about 80% of the prior
+lies below it), which lets you watch the chain move toward the data. At each step, the proposal is the
 current value plus a random **jump**. The second column of random
 numbers is $\log u$, where $u$ is a uniform random number between 0 and
 1. Both are already drawn for you.
 
 `r nq(5, 0, extra = 3.6)`
 
-**1a.** Run six steps. For each, find the proposal, look up both log
-posteriors, compute the difference (proposal minus current), decide
+**1a.** Run six steps. For each, find the proposal, find the log
+posterior (log likelihood + log prior) of the current value and of the
+proposal, compute the difference (proposal minus current), decide
 whether to accept, and write down the value the chain records at that
 step.
 
@@ -190,8 +212,9 @@ blank_lines(5)
 
 `r nq(4, 4)`
 
-**1c.** The lookup table drops the binomial coefficient, the
-denominator of Bayes' rule, and a further constant. Would any of your
+**1c.** The lookup table drops the binomial coefficient, the Beta
+prior's normalizing constant, and the denominator of Bayes' rule.
+Would any of your
 accept/reject decisions change if those were put back in? Why or why
 not?
 
@@ -259,8 +282,8 @@ Posterior mean `r f3(mean(keep_a))`; 95% credible interval
 `r f3(quantile(keep_a, 0.025))` to `r f3(quantile(keep_a, 0.975))`.
 
 How does this interval differ from the Wald interval ($-0.03$ to
-$0.23$), and why? With a flat prior, which named distribution should
-this histogram match? (Recall Week 8.)
+$0.23$), and why? With a Beta(2, 8) prior and these data, which named
+distribution should this histogram match? (Recall Week 8.)
 
 ```{r fig.height=0.3*5}
 blank_lines(5)

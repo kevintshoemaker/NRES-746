@@ -121,5 +121,5 @@ round(cmp, 4)
 #  [BOARD] point at the FIT box; hand out optional Curvature by Hand WOD
 
 
-# Not covered Oct. 14: moved to CODE_Week9_MCMCAndModelSelection.R ----------
+# Not covered Oct. 14: moved to CODE_Week9_MCMCAndStan.R ----------
 #  Nelder-Mead and simulated annealing (Week 9 Monday); reparameterizing (Lab 7)

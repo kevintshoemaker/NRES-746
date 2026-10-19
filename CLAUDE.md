@@ -584,7 +584,7 @@ disagree; check the quoted numbers match the script's output. Material
 planned but not taught goes under a final
 `# Not covered <date>: moved to ... ----` heading. Run the script end
 to end before handing it back. See
-`lecture_notes/CODE_Week9_MCMCAndModelSelection.R`.
+`lecture_notes/CODE_Week9_MCMCAndStan.R`.
 
 **After a lecture is given ("as taught" updates).** When the
 instructor reports what a lecture actually covered:
@@ -1024,24 +1024,42 @@ record is `CourseSchedule.csv`.
   a Metropolis sampler, credible vs. Wald interval, e.g. the chytrid
   case from *Curvature by Hand* 2d), with the Week 8 "if time"
   material (Gamma reparameterization, Bolker 7.4 checklist) as the
-  explanation for the myxo banana mixing badly; Wednesday = model
-  selection (LRT, AIC; legacy LECTURE8 balsam fir example).
+  explanation for the myxo banana mixing badly; Wednesday =
+  Hamiltonian Monte Carlo and Stan (changed from model selection,
+  Oct. 18).
   - Built: `NOTES_Week9_Lecture1_FromOptimizationToMCMC.Rmd` and the
-    weekly script `CODE_Week9_MCMCAndModelSelection.R` (Monday
+    weekly script `CODE_Week9_MCMCAndStan.R` (Monday
     section). Sections 3-4 and "if time" were trimmed from the Week 8
     Lecture 2 notes and script.
   - Built: Lab 7 (`labs/Lab7_Act1.Rmd`, `Lab7_Act2.Rmd`, both keys,
     `NOTES_Lab7_BayesianMCMC.Rmd`, data `data/BdPondSurvey.csv`).
-    Act 1: one pond, 2 of 20 Bd-positive, six hand-traced Metropolis
-    steps plus four trace plots. Act 2: 12-pond survey (simulated,
+    Act 1: one pond, 2 of 20 Bd-positive, weak Beta(2, 8) prior from
+    nearby ponds (students add printed log likelihood and log prior
+    values; no hard arithmetic), six hand-traced Metropolis steps plus
+    four trace plots. Act 2: 12-pond survey (simulated,
     presented as field data; P11 is Act 1's pond), logistic
     infection vs. water temperature, own sampler; raw temperature
     mixes badly, centering at 17 °C fixes it. Groups plan Act 2 Part 1
     together in class (announced by the instructor, not in the
     handout); coding can go home.
-  - Still to build: Wednesday notes plus the script's Wednesday
-    section, and a Wednesday WOD (a good take-home slot). Bolker's
-    7.4 fitting checklist is still unused.
+  - Built: `NOTES_Week9_Lecture2_HamiltonianMCAndStan.Rmd` (why
+    random walks and Gibbs struggle, HMC intuition with a hand-coded
+    sampler on a correlated normal, Stan fit of the myxo Gamma model
+    vs. Monday's Metropolis chain, failure modes, Stan vs. JAGS), the
+    script's Wednesday section, and the take-home WOD
+    `WOD_Week9_Lecture2_GettingStanRunning.Rmd` (install cmdstanr, fit
+    the myxo model, rerun with too little warmup) with key. The Stan
+    example uses myxo, not Lab 7's chytrid model, so it doesn't give
+    away Lab 7 Act 2. cmdstanr/CmdStan 2.39 is installed on the
+    instructor machine. Bolker's 7.4 fitting checklist is still unused.
+- **Week 10 (Oct. 26-28) plan.** Monday: frequentist model comparison
+  (likelihood ratio tests, AIC; Bolker's balsam fir example, legacy
+  LECTURE8). Lab 8: model comparison, ending with AIC-based selection
+  among candidate predictors (feature selection folded in here; it no
+  longer has its own lecture). Wednesday: Bayesian model comparison
+  (posterior predictive checks, WAIC/LOO via `loo`, a brief mention of
+  Bayes factors), using Stan. Monday's WOD beat: debrief the Stan
+  install take-home and fix install problems.
   - Ask the instructor how Week 8 Monday and the start of Wednesday
     went (the take-home debrief, the workflow introduction, the BFGS
     pause) before assuming students saw them.
