@@ -29,17 +29,35 @@ metropolis <- function(log_post, start, step_sd, n_steps) {
   chain <- matrix(NA, n_steps, length(start))
   current <- start
   lp_current <- log_post(current)
+  n_accept <- 0
   for (i in seq_len(n_steps)) {
     proposal <- current + rnorm(length(start), 0, step_sd)
     lp_prop <- log_post(proposal)
     if (log(runif(1)) < lp_prop - lp_current) {
       current <- proposal
       lp_current <- lp_prop
+      n_accept <- n_accept + 1
     }
     chain[i, ] <- current
   }
+  attr(chain, "accept_rate") <- n_accept / n_steps
   chain
 }
+
+# section 0: Monday's three germination chains (30 of 40, flat prior)
+log_post_germ <- function(p) {
+  if (p <= 0 || p >= 1) return(-Inf)
+  dbinom(30, 40, p, log = TRUE) + dbeta(p, 1, 1, log = TRUE)
+}
+step_sds <- c(0.005, 0.1, 3)
+chains <- lapply(step_sds, function(s) {
+  set.seed(1)
+  metropolis(log_post_germ, 0.05, s, 1000)
+})
+acc <- sapply(chains, attr, "accept_rate")
+pm <- sapply(chains, mean)
+pct <- function(v) paste0(round(100 * v), "%")
+
 set.seed(746)
 keep <- metropolis(function(p) -nll_gamma(p), c(20, 0.05), c(4, 0.01), 20000)[-(1:2000), ]
 ess_met <- coda::effectiveSize(keep)
@@ -198,6 +216,7 @@ draw_puck <- function() {
 
 | Beat | Mode | Time |
 |---|---|---|
+| 0. Lab 7 debrief: which chains to trust? | R | ~3 min |
 | 1. Big picture | BOARD | ~3 min |
 | 2. Why random walks struggle | BOARD $\to$ R | ~7 min |
 | 3. Hamiltonian Monte Carlo | BOARD $\to$ R | ~10 min |
@@ -219,11 +238,41 @@ unfinished at home, and a Stan fit of that model would give away its
 credible interval. Myxo is Monday's banana, so the comparison with
 Metropolis is direct.
 
+**Where section 0 came from.** Monday's closing discussion (three
+germination chains) wasn't reached. Lab 7 Act 1 Part 2 then asked the
+same question with four chains, so it opens today as a short debrief.
+
 **If running behind,** skip the hand-coded HMC run in section 3 (draw
 the picture instead) and shorten section 5 to the two bullets on
 divergences and discrete parameters.
 
 # Part 1: Lecture content
+
+## 0. Lab 7 debrief: which chains to trust? (~3 min) [R]
+
+Run section 0 of the script. Same germination data as Monday (30 of
+40, flat prior, exact posterior mean `r formatC(31 / 42, format = "f", digits = 3)`), same start
+($p = 0.05$), 1,000 steps:
+
+| proposal sd | accepted | chain mean |
+|---|---|---|
+| `r step_sds[1]` | `r pct(acc[1])` | `r f2(pm[1])` |
+| `r step_sds[2]` | `r pct(acc[2])` | `r f2(pm[2])` |
+| `r step_sds[3]` | `r pct(acc[3])` | `r f2(pm[3])` |
+
+Ask: "A labmate says the first is best, since nearly every proposal
+was accepted. Which Lab 7 chain does each one look like?" Then show
+the trace plots.
+
+*Where to land* (name the terms groups were reaching for in Lab 7):
+tiny steps are nearly always accepted but barely move, so the chain
+is still climbing (it never finished **burn-in**; like Chains B and D).
+Huge steps are nearly always rejected, so the chain sits still (like
+Chain C); its mean is close by luck. The middle chain **mixes** well.
+Acceptance rate is not a quality score: check the trace plot, drop the
+burn-in, run more than one chain, and tune the step size. Segue: even
+a well-tuned random walk creeps when the posterior is a narrow, tilted
+ridge (Act 2's raw temperature), which is today's topic.
 
 ## 1. Big picture (~3 min) [BOARD]
 
@@ -282,8 +331,10 @@ draw_puck()
 - The gradient is what makes this work. Week 8 callback: Newton's
   method also used slopes, but to *find the bottom*; HMC uses them to
   *explore around* the bottom.
-- Stan computes the gradient automatically from your model code
-  (automatic differentiation): no calculus or finite differences.
+- Stan computes the gradient from your model code automatically
+  (automatic differentiation): it applies the chain rule to each step
+  of the calculation, so you never derive the gradient by hand, and
+  it's exact, not a finite-difference approximation.
 - **NUTS** (the "No-U-Turn Sampler," Stan's default) tunes $\epsilon$
   during warmup and picks $L$ on the fly, stopping when the puck starts
   to turn back.
@@ -390,7 +441,26 @@ marginalized.
 \textit{Terse on purpose. Detail: Part 1. R = Wednesday section of CODE\_Week9\_MCMCAndStan.R (run Monday's section first; compile Stan before class).}
 \large
 
-**No WOD. Lecture ~38 min, discussion ~5 min. Behind? Skip the HMC run; shorten section 5.**
+**No WOD. Debrief ~3 min, lecture ~38 min, discussion ~5 min. Behind? Skip the HMC run; shorten section 5.**
+
+## 0. Lab 7 debrief (~3 min) [R]
+
+Start 0.05, 1,000 steps; exact mean `r formatC(31 / 42, format = "f", digits = 3)`:
+
+- sd `r step_sds[1]`: `r pct(acc[1])` accepted, mean `r f2(pm[1])`
+- sd `r step_sds[2]`: `r pct(acc[2])`, mean `r f2(pm[2])`
+- sd `r step_sds[3]`: `r pct(acc[3])`, mean `r f2(pm[3])`
+- "First is best: nearly all accepted." Which Lab 7 chain is each?
+
+**Then show trace plots.**
+
+- Tiny steps: still in **burn-in** (Chains B, D)
+- Huge steps: stuck (Chain C); close by luck
+- Middle: **mixes** well
+- Acceptance $\neq$ quality: trace plot, burn-in, several chains, tune width
+- Segue: tilted ridge $\to$ even a tuned random walk creeps
+
+\newpage
 
 ## 1. Big picture (~3 min) [BOARD]
 
@@ -424,8 +494,9 @@ draw_puck()
 3. **Accept/reject** on energy (almost always accept)
 
 - Newton finds the bottom; HMC explores around it
-- Autodiff: Stan gets gradients for free
+- Autodiff: chain rule applied automatically; exact gradients, no hand derivation
 - NUTS: tunes $\epsilon$, picks $L$
+- Warmup learns each parameter's scale (the mass matrix)
 - **Still Metropolis**, with far-reaching proposals
 
 ```{r podium-rw-hmc, fig.width=6.5, fig.height=2.6, dev="png", dpi=200}

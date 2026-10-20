@@ -177,7 +177,7 @@ fit_sann <- optim(c(20, 0.05), nll_gamma, method = "SANN")
 fit_sann[c("par", "value", "counts", "convergence")]
 #  [PAUSE] is SANN broken? should you trust convergence = 0?
 
-# 4. Metropolis: annealing at T = 1, keep every step (~15 min) -----------------
+# 4. Metropolis MCMC: annealing at T = 1, keep every step (~15 min) -----------------
 
 # germination trial: 30 of 40 seeds; flat prior, so log posterior = log likelihood + const
 k <- 30
@@ -235,9 +235,18 @@ points(chain_myxo[seq(1, 20000, by = 10), ], pch = 16, cex = 0.3,
 # 95% credible intervals, dropping the first 2000 steps
 apply(chain_myxo[-(1:2000), ], 2, quantile, c(0.025, 0.5, 0.975))
 
-# Discussion (~6 min): three germination chains --------------------------------
+# Not covered Oct. 19: the three-chains discussion moved to Wednesday (section 0) ----
 
-# same data, same start (p = 0.05), 1000 steps, three proposal widths
+
+
+
+
+# WEDNESDAY, Oct. 21: Hamiltonian Monte Carlo and Stan =========================
+#  Uses titer, nll_gamma, plot_surface, log_post_germ, and metropolis() from Monday's section.
+
+# 0. Lab 7 debrief: which chains to trust? (~3 min) ------------------------------
+
+# germination data, same start (p = 0.05), 1000 steps, three proposal widths
 step_sds <- c(0.005, 0.1, 3)
 chains <- lapply(step_sds, function(s) {
   set.seed(1)
@@ -246,7 +255,7 @@ chains <- lapply(step_sds, function(s) {
 round(rbind(step_sd = step_sds,
             accept_rate = sapply(chains, attr, "accept_rate"),
             post_mean = sapply(chains, mean)), 3)
-#  [PAUSE] which chain would you trust? exact posterior mean is 0.738
+#  [PAUSE] first is best, since nearly all were accepted? which Lab 7 chain is each like?
 
 # reveal: trace plots
 par(mfrow = c(3, 1), mar = c(4, 4, 1.5, 0.5))
@@ -256,13 +265,6 @@ for (i in seq_along(chains)) {
   abline(h = 31 / 42, lty = 2, col = "darkorange")
 }
 par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
-
-
-
-
-
-# WEDNESDAY, Oct. 21: Hamiltonian Monte Carlo and Stan =========================
-#  Uses titer, nll_gamma, plot_surface, and metropolis() from Monday's section.
 
 # 2. Why random walks struggle (~7 min) ----------------------------------------
 
