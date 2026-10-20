@@ -247,9 +247,11 @@ student-facing .Rmd documents:
   subject: the earlier wording, "none / help or debugging / wrote the
   code", led a student to circle "wrote the code" meaning *they* wrote
   it.) At the start of the laptop section, explain the
-  labels and say plainly that **using AI never costs points; only
-  undisclosed use does**, so students have no reason to under-report.
-  Close with one short reflection question (where did you use AI and
+  labels and ask students to circle how they actually used AI. **Don't
+  add a "using AI never costs points; only undisclosed use does" line**
+  (dropped Oct. 20, 2026): the instructor finds it clear from context
+  and has no way to check for undisclosed use. Labs 5-6 still carry
+  it; no need to edit those. Close with one short reflection question (where did you use AI and
   what did you have to check or fix; or, if none, what was hardest).
   Keys should treat a mismatch between a label and a student's
   disclosure as something to talk about, not a penalty. See
