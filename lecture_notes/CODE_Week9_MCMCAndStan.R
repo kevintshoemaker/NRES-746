@@ -296,6 +296,8 @@ plot_bvn("Random-walk Metropolis, 200 steps")
 lines(rw, col = "steelblue")
 coda::effectiveSize(rw[, 1])
 
+plot(rw[, 1],type="l")
+
 # 3. Hamiltonian Monte Carlo (~10 min) -----------------------------------------
 
 # one HMC step: random momentum kick, L leapfrog steps along the gradient, then accept/reject
@@ -304,10 +306,12 @@ hmc_step <- function(p, log_post, grad, eps, L) {
   p_new <- p
   m_new <- m
   path <- matrix(p, nrow = 1)
+  g <- grad(p_new)
   for (i in seq_len(L)) {
-    m_new <- m_new + 0.5 * eps * grad(p_new)   # half step for momentum
-    p_new <- p_new + eps * m_new                # full step for position
-    m_new <- m_new + 0.5 * eps * grad(p_new)   # half step for momentum
+    m_new <- m_new + 0.5 * eps * g     # half step for momentum
+    p_new <- p_new + eps * m_new       # full step for position
+    g <- grad(p_new)                   # one new gradient per step; reused by the next half step
+    m_new <- m_new + 0.5 * eps * g     # half step for momentum
     path <- rbind(path, p_new)
   }
   # total energy = -log posterior + kinetic energy m^2 / 2; accept w.p. exp(-change)
@@ -342,7 +346,7 @@ for (pa in hm$paths) lines(pa, col = "darkorange", lwd = 2)
 par(mfrow = c(1, 1))
 
 c(random_walk = coda::effectiveSize(rw[, 1]), hmc = coda::effectiveSize(hm$chain[, 1]))
-#  [PAUSE] each HMC step costs 10 gradient evaluations; is it still worth it?
+#  [PAUSE] each HMC step costs 11 gradient evaluations (L + 1); is it still worth it?
 
 # 4. Stan: the myxo model (~12 min) --------------------------------------------
 
