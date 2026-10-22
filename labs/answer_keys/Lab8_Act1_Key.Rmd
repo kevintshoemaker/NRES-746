@@ -1,0 +1,332 @@
+---
+title: "Lab 8, Act 1: Which Pond Features Matter?"
+subtitle: "Which pond features predict chytrid, and can the data tell temperature from elevation?"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+  - \usepackage{xcolor}
+  - \usepackage{sansmath}
+  - \usepackage{framed}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{\sffamily\sansmath{}#1}}
+  - \newcommand{\ansbegin}{\begin{leftbar}\begingroup\color{ans}\sffamily\sansmath}
+  - \newcommand{\ansend}{\endgroup\end{leftbar}}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines); pair with fig.height
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# fill-in table drawn with base graphics so row height is controllable;
+# body = list of rows, each a list/vector of cell strings ("" = blank)
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val,
+                                    font = if (is_ans) 3 else fnt, cex = cex,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+ponds <- read.csv("../../data/BdRegionalSurvey.csv")
+covars <- c("water_temp_c", "elevation_m", "canopy_pct", "conductivity_us",
+            "area_ha", "fish", "bullfrogs", "road_km")
+X <- scale(as.matrix(ponds[, covars]))
+colnames(X) <- c("temp", "elev", "canopy", "cond", "area", "fish", "bullfrogs", "road")
+y_bin <- cbind(ponds$bd_positive, ponds$frogs_swabbed - ponds$bd_positive)
+
+# candidate models: NLL at the MLE (rounded to 2 decimals, as printed)
+fit_nll <- function(cols) {
+  f <- if (length(cols) == 0) glm(y_bin ~ 1, family = binomial) else
+    glm(y_bin ~ X[, cols, drop = FALSE], family = binomial)
+  round(-as.numeric(logLik(f)), 2)
+}
+models <- list(character(0), "temp", "elev", c("temp", "elev"),
+               c("temp", "bullfrogs", "canopy"),
+               c("temp", "elev", "bullfrogs", "canopy"), colnames(X))
+model_labels <- c("intercept only", "temp", "elevation", "temp + elevation",
+                  "temp + bullfrogs + canopy", "temp + elev. + bullfrogs + canopy",
+                  "all eight")
+k <- sapply(models, length) + 1
+nll <- sapply(models, fit_nll)
+aic <- 2 * nll + 2 * k
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+
+# NLL surface for the temp + elevation model, intercept profiled out
+zt <- X[, "temp"]
+ze <- X[, "elev"]
+nll_2d <- function(bt, be) {
+  eta_off <- bt * zt + be * ze
+  f <- function(b0) -sum(dbinom(ponds$bd_positive, ponds$frogs_swabbed,
+                                plogis(b0 + eta_off), log = TRUE))
+  optimize(f, c(-4, 3))$objective
+}
+bt_grid <- seq(-0.8, 0.45, length.out = 101)
+be_grid <- seq(-0.45, 0.8, length.out = 101)
+nll_surf <- outer(bt_grid, be_grid, Vectorize(nll_2d))
+mle_2d <- coef(glm(y_bin ~ zt + ze, family = binomial))[-1]
+
+# answers: AIC from the printed (rounded) NLLs; LRTs; constrained estimates on each budget
+d_aic <- aic - min(aic)
+lrt_56 <- 2 * (nll[5] - nll[6])
+lrt_57 <- 2 * (nll[5] - nll[7])
+budget <- 0.4
+theta <- seq(0, 2 * pi, length.out = 1441)
+circle <- cbind(budget * cos(theta), budget * sin(theta))
+s <- seq(-1, 1, length.out = 801)
+diamond <- rbind(cbind(budget * s, budget * (1 - abs(s))), cbind(budget * s, -budget * (1 - abs(s))))
+ridge_est <- circle[which.min(apply(circle, 1, function(b) nll_2d(b[1], b[2]))), ]
+lasso_est <- diamond[which.min(apply(diamond, 1, function(b) nll_2d(b[1], b[2]))), ]
+r_te <- cor(ponds$water_temp_c, ponds$elevation_m)
+```
+
+\ans{\textbf{Answer key.} Answers are in magenta sans-serif type; longer answers have a bar in the margin.}
+
+## The scenario
+
+The summer after the 12-pond survey from Lab 7, the field crew swabbed
+frogs at **60 ponds** across the region and recorded eight features of
+each pond: water temperature, elevation, canopy cover, conductivity,
+pond area, whether fish are present, whether bullfrogs are present (an
+invasive species that carries Bd without dying from it), and distance
+to the nearest road. Managers can afford to monitor only some ponds and
+want to know which features predict where Bd is common.
+
+```{r scatter, fig.height=2.7}
+par(mfrow = c(1, 2), mar = c(3.4, 3.8, 0.6, 0.6), mgp = c(2.1, 0.6, 0))
+plot(ponds$water_temp_c, ponds$bd_positive / ponds$frogs_swabbed, pch = 19,
+     col = ifelse(ponds$bullfrogs == 1, "black", "grey60"),
+     xlab = "Water temperature (°C)", ylab = "Proportion Bd-positive")
+legend("topright", c("bullfrogs", "no bullfrogs"), pch = 19,
+       col = c("black", "grey60"), bty = "n", cex = 0.8)
+plot(ponds$water_temp_c, ponds$elevation_m, pch = 19, col = "grey30",
+     xlab = "Water temperature (°C)", ylab = "Elevation (m)")
+legend("topright", paste0("r = ", f2(cor(ponds$water_temp_c, ponds$elevation_m))),
+       bty = "n", cex = 0.8)
+```
+
+The model for every candidate is the logistic-binomial model from Lab 7,
+with more predictors: the number of Bd-positive frogs at pond $i$ is
+Binomial($n_i$, $p_i$), with
+$$\text{logit}(p_i) = \beta_0 + \beta_1 x_{1i} + \beta_2 x_{2i} + \dots$$
+Every predictor was **standardized** (mean 0, SD 1) before fitting, so
+each $\beta$ is the change in log-odds of infection per standard
+deviation of that predictor.
+
+**Which pond features predict Bd prevalence?**
+
+Please keep laptops closed for this Act.
+
+`r nq(5, 0, extra = 4.2)`
+
+## Part 1: Comparing candidate models (individual, ~20 min)
+
+The table lists seven candidate models, the number of parameters $k$
+(including $\beta_0$), and each model's negative log-likelihood (NLL)
+at its MLE.
+
+**1a.** Fill in the missing AIC values ($\text{AIC} = 2\,\text{NLL} + 2k$)
+and every $\Delta$AIC.
+
+```{r aic-table, fig.height=4.1}
+rows <- lapply(seq_along(models), function(i) {
+  c(as.character(i), model_labels[i], as.character(k[i]), f2(nll[i]), f2(aic[i]), f2(d_aic[i]))
+})
+ans_cells <- lapply(seq_along(models), function(i) {
+  c(FALSE, FALSE, FALSE, FALSE, !(i %in% c(1, 4, 6)), TRUE)
+})
+blank_table(c("Model", "Predictors", "k", "NLL", "AIC", "dAIC"), rows,
+            col_widths = c(0.6, 2.9, 0.4, 0.9, 1, 1), row_height = 0.52, cex = 0.85,
+            ans = ans_cells)
+```
+
+`r nq(4, 4)`
+
+**1b.** Which model is best by AIC? Model 6 adds elevation to Model 5
+and sits within 2 AIC units of it. Does that mean the data support an
+effect of elevation? Use the NLLs.
+
+\ansbegin
+
+Model 5 (temp + bullfrogs + canopy), AIC `r f2(aic[5])`. No: adding
+elevation lowers the NLL by only `r f2(nll[5] - nll[6])`. A parameter
+with no effect at all costs at most 2 AIC units, so landing within 2 is
+expected even if elevation does nothing.
+
+\ansend
+
+`r nq(6, 9)`
+
+**1c.** Use likelihood ratio tests to compare Model 5 with Model 6, and
+Model 5 with Model 7. For each, give the test statistic, its degrees of
+freedom, and your conclusion. Critical values of $\chi^2$ at the 0.05
+level: 3.84 (1 df), 5.99 (2), 7.81 (3), 9.49 (4), 11.07 (5).
+
+\ansbegin
+
+Model 5 vs. 6: $D = 2(`r f2(nll[5])` - `r f2(nll[6])`) = `r f2(lrt_56)`$,
+1 df; $`r f2(lrt_56)` < 3.84$, so keep Model 5.
+
+Model 5 vs. 7: $D = 2(`r f2(nll[5])` - `r f2(nll[7])`) = `r f2(lrt_57)`$,
+5 df; $`r f2(lrt_57)` < 11.07$, so keep Model 5.
+
+\ansend
+
+`r nq(5, 5)`
+
+**1d.** Models 2 and 3 are nearly tied. Can these data tell whether
+water temperature or elevation is what drives Bd? Why or why not? What
+kind of ponds, or what kind of study, would help?
+
+\ansbegin
+
+No. Temperature and elevation are strongly correlated
+($r = `r f2(r_te)`$), so either one alone fits about equally well
+($\Delta$AIC `r f2(abs(aic[2] - aic[3]))`). Helpful: ponds where the two
+come apart (warm high ponds, cold low ponds, e.g. spring-fed or shaded
+sites), or an experiment that changes water temperature directly.
+
+\ansend
+
+`r nq(10, 0, extra = 5)`
+
+## Part 2: Penalties as budgets (individual, ~15 min)
+
+A ridge penalty, $\text{NLL}(\beta) + \lambda \sum_j \beta_j^2$, gives
+the same estimate as finding the lowest-NLL point inside a **budget**
+$\sum_j \beta_j^2 \le t^2$, for some $t$ that shrinks as $\lambda$
+grows. The lasso budget is $\sum_j |\beta_j| \le t$. Neither budget
+includes $\beta_0$.
+
+The figure shows NLL contours for Model 4 (temperature and elevation
+only), labeled by how far each lies above the minimum. The $\times$
+marks the MLE.
+
+```{r contours, fig.width=5, fig.height=5}
+par(mar = c(3.6, 3.8, 0.6, 0.6), mgp = c(2.2, 0.6, 0))
+plot(NA, xlim = range(bt_grid), ylim = range(be_grid), asp = 1, xaxs = "i", yaxs = "i",
+     xlab = "Temperature coefficient", ylab = "Elevation coefficient")
+abline(v = seq(-0.8, 0.4, 0.1), h = seq(-0.4, 0.8, 0.1), col = "grey90")
+abline(v = 0, h = 0, col = "grey40", lwd = 1.5)
+contour(bt_grid, be_grid, nll_surf - min(nll_surf),
+        levels = c(0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16),
+        add = TRUE, labcex = 0.65, col = "grey20")
+points(mle_2d[1], mle_2d[2], pch = 4, cex = 1.6, lwd = 2.5)
+lines(circle, col = ans_col, lwd = 2, lty = 2)
+polygon(rbind(c(budget, 0), c(0, budget), c(-budget, 0), c(0, -budget)),
+        border = ans_col, lwd = 2)
+points(rbind(ridge_est, lasso_est), pch = c(21, 24), bg = ans_col, cex = 1.5)
+legend("bottomright", c("ridge budget (circle)", "lasso budget (diamond)",
+                        "ridge estimate", "lasso estimate"),
+       col = ans_col, lty = c(2, 1, NA, NA), lwd = 2, pch = c(NA, NA, 21, 24),
+       pt.bg = ans_col, bty = "o", bg = "white", cex = 0.75, text.col = ans_col)
+box()
+```
+
+`r nq(4, 2)`
+
+**2a.** On the figure, draw the ridge budget
+$\beta_{temp}^2 + \beta_{elev}^2 \le 0.4^2$ and the lasso budget
+$|\beta_{temp}| + |\beta_{elev}| \le 0.4$. Mark the ridge estimate and
+the lasso estimate, and read off their approximate coordinates.
+
+Ridge: \ans{(`r f2(ridge_est[1])`, `r f2(ridge_est[2])`)}   Lasso:
+\ans{(`r f2(lasso_est[1])`, `r f2(lasso_est[2])`)} \ans{(approximate
+values from a sketch are fine)}
+
+`r nq(3, 4)`
+
+**2b.** Did the lasso set either coefficient to exactly 0? Use the
+shapes in your sketch to explain why or why not.
+
+\ansbegin
+
+No. The contours are long ellipses that run parallel to the diamond's
+upper-left edge, so the lowest contour touches that edge partway along
+it, not at a corner. Both coefficients stay nonzero.
+
+\ansend
+
+`r nq(2, 4)`
+
+**2c.** What would the contours have to look like for the lasso to set
+the elevation coefficient to 0?
+
+\ansbegin
+
+The lowest contour would have to touch the diamond first at its corner
+on the temperature axis, $(-0.4, 0)$: for example, rounder contours (if
+temperature and elevation weren't correlated) centered near the
+temperature axis (a small elevation effect), or ellipses tilted across
+the edge rather than along it.
+
+\ansend
+
+`r nq(4, 6)`
+
+## Group discussion and revision (~10 min)
+
+Compare your answers with your group, especially 1b, 1d, and your
+sketch in 2a, and revise as needed. Record any changes you made, new
+insights, and any "muddiest points" or topics you want to review.
+
+\ans{Open-ended.}

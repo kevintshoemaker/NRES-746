@@ -1,0 +1,375 @@
+---
+title: "Lab 8, Act 2: Shrinking the Coefficients"
+subtitle: "What changes when all eight pond features compete in one model?"
+date: ""
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+  - \usepackage{xcolor}
+  - \usepackage{sansmath}
+  - \usepackage{framed}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{\sffamily\sansmath{}#1}}
+  - \newcommand{\ansbegin}{\begin{leftbar}\begingroup\color{ans}\sffamily\sansmath}
+  - \newcommand{\ansend}{\endgroup\end{leftbar}}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines); pair with fig.height
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# fill-in table drawn with base graphics so row height is controllable;
+# body = list of rows, each a list/vector of cell strings ("" = blank)
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0), ans = NULL) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      is_ans <- !is.null(ans) && isTRUE(ans[[i]][[j]])
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val,
+                                    font = if (is_ans) 3 else fnt, cex = cex,
+                                    col = if (is_ans) ans_col else "black")
+    }
+    y <- y - row_height
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a figure or table
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+ponds <- read.csv("../../data/BdRegionalSurvey.csv")
+X <- scale(as.matrix(ponds[, 2:9]))
+pos <- ponds$bd_positive
+n_frogs <- ponds$frogs_swabbed
+
+# ridge-penalized NLL; par = c(beta0, beta1..beta8); beta0 not penalized
+ridge_nll <- function(par, lambda) {
+  p <- plogis(par[1] + X %*% par[-1])
+  -sum(dbinom(pos, n_frogs, p, log = TRUE)) + lambda * sum(par[-1]^2)
+}
+ridge_fit <- function(lambda) optim(rep(0, 9), ridge_nll, lambda = lambda, method = "BFGS")$par
+b0 <- ridge_fit(0)
+b10 <- ridge_fit(10)
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)   # + 0 drops "-0.00"
+
+# answers: ridge path, lasso at lambda.1se, and 5-fold CV for the ridge lambda
+library(glmnet)
+lambda_grid <- c(0, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100)
+path <- sapply(lambda_grid, ridge_fit)
+set.seed(1)
+cv_lasso <- cv.glmnet(X, cbind(n_frogs - pos, pos), family = "binomial", nfolds = 10)
+b_lasso <- coef(cv_lasso, s = "lambda.1se")[, 1]
+held_out_nll <- function(par, rows) {
+  p <- plogis(par[1] + X[rows, , drop = FALSE] %*% par[-1])
+  -sum(dbinom(pos[rows], n_frogs[rows], p, log = TRUE))
+}
+set.seed(1)
+folds <- sample(rep(1:5, length.out = nrow(X)))
+cv_lambdas <- c(0, 1, 2, 5, 10, 20, 50, 100)
+cv_score <- sapply(cv_lambdas, function(lam) {
+  sum(sapply(1:5, function(k) {
+    train <- folds != k
+    par <- optim(rep(0, 9), function(b) {
+      p <- plogis(b[1] + X[train, ] %*% b[-1])
+      -sum(dbinom(pos[train], n_frogs[train], p, log = TRUE)) + lam * sum(b[-1]^2)
+    }, method = "BFGS")$par
+    held_out_nll(par, !train)
+  }))
+})
+best_lambda <- cv_lambdas[which.min(cv_score)]
+```
+
+\ans{\textbf{Answer key.} Answers are in magenta sans-serif type; longer answers have a bar in the margin.}
+
+## The scenario
+
+In Act 1 you compared seven hand-picked models for Bd prevalence in the
+60-pond survey. With eight candidate pond features there are $2^8 = 256$
+possible subsets, and AIC couldn't separate temperature from elevation.
+Another approach is to keep all eight features in one model and
+**penalize** the size of their coefficients, so a feature keeps a
+large coefficient only if the data insist on it.
+
+**What happens to each pond feature's coefficient when all eight
+compete, and what can we tell the managers?**
+
+Try Part 1 on paper first, before you open a laptop or start typing
+code.
+
+`r nq(6, 6)`
+
+## Part 1: Plan it on paper (~15 min)
+
+**1a.** Write the ridge-penalized NLL for the logistic-binomial model
+with all eight standardized predictors, as a function of
+$\beta_0, \beta_1, \dots, \beta_8$ and the penalty $\lambda$. Should
+$\beta_0$ be penalized? Why or why not?
+
+\ansbegin
+
+$$\text{PNLL}(\beta) = -\sum_{i=1}^{60} \left[ y_i \log p_i + (n_i - y_i)\log(1 - p_i) \right]
+  + \lambda \sum_{j=1}^{8} \beta_j^2 + \text{const.}, \qquad
+  \text{logit}(p_i) = \beta_0 + \sum_{j=1}^{8} \beta_j x_{ij}$$
+
+No: $\beta_0$ sets the overall prevalence. Shrinking it toward 0 would
+pull every pond's prevalence toward 50% for no reason.
+
+\ansend
+
+`r nq(3, 3)`
+
+**1b.** Why standardize the predictors before penalizing them?
+
+\ansbegin
+
+One penalty applies to every coefficient, but a raw coefficient's size
+depends on units (per meter of elevation vs. per °C). Standardizing
+puts every coefficient on the same per-SD scale, so the penalty treats
+them alike.
+
+\ansend
+
+`r nq(5, 8)`
+
+**1c.** In plain English (not R code), describe step by step how you
+would choose $\lambda$ for your ridge model by 5-fold cross-validation,
+scoring each held-out fold by its NLL.
+
+\ansbegin
+
+Randomly split the 60 ponds into 5 groups of 12. For each candidate
+$\lambda$ in a grid: for each group in turn, fit the ridge model to
+the other 48 ponds, then compute the (unpenalized) NLL of the 12
+held-out ponds using those coefficients; add up the 5 held-out NLLs.
+Choose the $\lambda$ with the smallest total.
+
+\ansend
+
+`r nq(3, 0)`
+
+## Checkpoint: finalize your plan (~5 min)
+
+Look back over 1a-1c and fix anything that no longer looks right
+before you start coding.
+
+`r nq(14, 0, extra = 0.8)`
+
+## Part 2: Fit it (laptop, ~40 min)
+
+**Using AI:** each question has a recommendation. *Recommended: no
+AI* marks the core skill of the lab (writing a penalized likelihood and
+fitting it); R's help pages, web search, and classmates are fine. *AI
+optional* marks work where the results matter but writing the code by
+hand isn't the point. After each question, circle how you actually
+used AI.
+
+**What to turn in:** your filled-in answers and your 2b figure as an
+image (upload in WebCampus). You don't need to submit your code.
+
+The data are in `BdRegionalSurvey.csv` on the course website:
+<https://kevintshoemaker.github.io/NRES-746/data/BdRegionalSurvey.csv>.
+Read it and standardize the eight predictors (columns 2 to 9):
+
+```{r data-url, echo=TRUE, eval=FALSE}
+data_url <-
+  "https://kevintshoemaker.github.io/NRES-746/data/BdRegionalSurvey.csv"
+ponds <- read.csv(data_url)
+X <- scale(as.matrix(ponds[, 2:9]))
+```
+
+`r nq(8, 0, extra = 4.6)`
+
+**2a.** *(Recommended: no AI.)* Write a function for your penalized NLL
+from 1a and fit it with `optim(..., method = "BFGS")` at $\lambda = 0$
+and $\lambda = 10$. Check: the temperature coefficient should be about
+`r f2(b0[2])` at $\lambda = 0$ (the same as `glm()`) and `r f2(b10[2])`
+at $\lambda = 10$. Fill in those two columns of the table.
+
+```{r coef-table, fig.height=4.6}
+rows <- lapply(c("water temp.", "elevation", "canopy", "conductivity", "area",
+                 "fish", "bullfrogs", "road distance"),
+               function(v) c(v, "", "", ""))
+for (j in 1:8) rows[[j]][2:4] <- c(f2(b0[j + 1]), f2(b10[j + 1]), f2(b_lasso[j + 1]))
+ans_cells <- lapply(1:8, function(j) c(FALSE, j > 1, j > 1, TRUE))
+blank_table(c("Predictor", "MLE (lambda = 0)", "Ridge (lambda = 10)", "Lasso (2c)"),
+            rows, col_widths = c(1.6, 1.3, 1.4, 1.2), row_height = 0.5, cex = 0.9,
+            ans = ans_cells)
+```
+
+\ansbegin
+
+```{r ridge-code, echo=TRUE, eval=FALSE, highlight=FALSE}
+ridge_nll <- function(par, lambda) {
+  p <- plogis(par[1] + X %*% par[-1])
+  -sum(dbinom(ponds$bd_positive, ponds$frogs_swabbed, p, log = TRUE)) +
+    lambda * sum(par[-1]^2)
+}
+optim(rep(0, 9), ridge_nll, lambda = 10, method = "BFGS")$par
+```
+
+\ansend
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(6, 2)`
+
+**2b.** *(AI optional.)* Fit your ridge model over a grid of $\lambda$
+values from 0 to 100 and plot each coefficient against $\lambda$ (a
+**ridge path**), with $\lambda = 10$ marked. Turn in this figure.
+
+```{r ridge-path, fig.width=6, fig.height=3.4}
+par(mar = c(3.6, 3.8, 0.5, 7.5), mgp = c(2.2, 0.6, 0))
+matplot(lambda_grid, t(path[-1, ]), type = "l", lty = 1:8, lwd = 2, col = ans_col,
+        xlab = "lambda", ylab = "Coefficient (per SD)")
+abline(h = 0, col = "grey60")
+abline(v = 10, lty = 3)
+legend("right", c("temp", "elevation", "canopy", "conductivity", "area", "fish",
+                  "bullfrogs", "road"), lty = 1:8, lwd = 2, col = ans_col,
+       bty = "n", cex = 0.75, xpd = TRUE, inset = c(-0.33, 0), text.col = ans_col)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(8, 2)`
+
+**2c.** *(AI optional.)* Fit the lasso with the `glmnet` package:
+`cv.glmnet()` with `family = "binomial"` and `nfolds = 10`, run right
+after `set.seed(1)`. For binomial counts, `glmnet` expects the response
+as `cbind(failures, successes)`. Fill in the lasso column with the
+coefficients at `lambda.1se` (write 0 for any it dropped).
+
+\ansbegin
+
+```{r lasso-code, echo=TRUE, eval=FALSE, highlight=FALSE}
+library(glmnet)
+y <- cbind(ponds$frogs_swabbed - ponds$bd_positive, ponds$bd_positive)
+set.seed(1)
+cv_lasso <- cv.glmnet(X, y, family = "binomial", nfolds = 10)
+coef(cv_lasso, s = "lambda.1se")
+```
+
+\ansend
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(3, 4)`
+
+**2d.** Where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest to get working?
+
+\ans{Open-ended.}
+
+`r nq(5, 5)`
+
+## Part 3: Interpret (~15 min)
+
+**3a.** In your ridge path, what happens to the temperature and
+elevation coefficients as $\lambda$ grows, compared with the other
+predictors? Why?
+
+\ansbegin
+
+They move toward each other: temperature shrinks from `r f2(b0[2])`
+while elevation grows from `r f2(b0[3])` to about `r f2(max(path[3, ]))`
+before both shrink. The others shrink steadily toward 0. Temperature
+and elevation are strongly correlated, and the ridge penalty
+($\sum \beta_j^2$) is smaller when a shared effect is split between two
+coefficients than when one carries it.
+
+\ansend
+
+`r nq(4, 5)`
+
+**3b.** AIC's best model in Act 1 left out elevation, but the lasso
+kept it. Use your Act 1 sketch to explain why the lasso kept both.
+
+\ansbegin
+
+As in the Act 1 sketch, the NLL contours for the two correlated
+coefficients are long ellipses running parallel to an edge of the
+lasso's diamond, so the lowest contour touches the edge partway along
+it rather than at a corner. Both coefficients stay nonzero.
+
+\ansend
+
+`r nq(8, 6)`
+
+## Reflection (~10 min)
+
+The managers asked which pond features predict where Bd is common.
+Write two or three sentences they could act on, including what these
+data can and can't tell them about temperature versus elevation.
+
+Also record any changes you made, new insights, and any "muddiest
+points" or topics you want to review.
+
+\ansbegin
+
+Sample: Bd is more common in colder ponds, in ponds with bullfrogs, and
+in more shaded ponds, so those are the ones to prioritize for
+monitoring. These data can't say whether cold water itself or
+something else about high elevation is responsible, because the two go
+together; for choosing ponds, either one works.
+
+\ansend
+
+`r nq(5, 3)`
+
+**If you finish early.** *(Recommended: no AI.)* Code your
+cross-validation plan from 1c and use it to choose $\lambda$ for your
+ridge model from a grid of values. Which $\lambda$ did you pick?
+
+$\lambda$ = \ans{`r best_lambda` from the grid `r paste(cv_lambdas, collapse = ", ")`,
+with folds assigned after `set.seed(1)`; your choice depends on your folds and grid.}
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code

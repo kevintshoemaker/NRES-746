@@ -1,0 +1,441 @@
+---
+title: "Week 10, Lecture 1: Likelihood Ratio Tests, AIC, and Regularization"
+subtitle: "Instructor notes. Part 1: prep reading. Part 2: podium cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+  - \usepackage{booktabs}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 5.5, fig.height = 3.4)
+```
+
+```{r compute}
+# values quoted in the notes; same seeds and settings as the R demos in
+# CODE_Week10_ModelComparison.R
+library(emdbook)
+library(MASS)
+library(glmnet)
+
+fir <- na.omit(FirDBHFec[, c("TOTCONES", "DBH", "WAVE_NON")])
+fir$TOTCONES <- round(fir$TOTCONES)
+wave <- as.numeric(fir$WAVE_NON)
+nll_nb <- function(a, b, k) {
+  -sum(dnbinom(fir$TOTCONES, mu = a * fir$DBH^b, size = k, log = TRUE))
+}
+nll_full <- function(p) nll_nb(p[1:2][wave], p[3:4][wave], p[5:6][wave])
+nll_nowave <- function(p) nll_nb(p[1], p[2], p[3])
+nll_constb <- function(p) nll_nb(p[1:2][wave], p[3], p[4:5][wave])
+nll_constak <- function(p) nll_nb(p[1], p[2:3][wave], p[4])
+nll_pois <- function(p) -sum(dpois(fir$TOTCONES, p[1] * fir$DBH^p[2], log = TRUE))
+fit_model <- function(nll, start) {
+  fit <- optim(start, nll, control = list(maxit = 10000))
+  optim(fit$par, nll, method = "BFGS", control = list(maxit = 10000))
+}
+fit_full <- fit_model(nll_full, c(1, 1, 2, 2, 1, 1))
+fit_nowave <- fit_model(nll_nowave, c(1, 2, 1))
+fit_constb <- fit_model(nll_constb, c(1, 1, 2, 1, 1))
+fit_constak <- fit_model(nll_constak, c(1, 2, 2, 1))
+fit_pois <- fit_model(nll_pois, c(1, 2))
+lrt_dev <- 2 * (fit_nowave$value - fit_full$value)
+lrt_p <- pchisq(lrt_dev, df = 3, lower.tail = FALSE)
+pois_dev <- 2 * (fit_pois$value - fit_nowave$value)
+
+fits <- list(full = fit_full, const_b = fit_constb, const_ak = fit_constak,
+             no_wave = fit_nowave, poisson = fit_pois)
+n_fir <- nrow(fir)
+aic_tab <- data.frame(model = names(fits),
+                      k = sapply(fits, function(f) length(f$par)),
+                      nll = sapply(fits, function(f) f$value))
+aic_tab$AIC <- 2 * aic_tab$nll + 2 * aic_tab$k
+aic_tab$dAIC <- aic_tab$AIC - min(aic_tab$AIC)
+aic_tab$weight <- exp(-aic_tab$dAIC / 2) / sum(exp(-aic_tab$dAIC / 2))
+aic_tab$AICc <- aic_tab$AIC + 2 * aic_tab$k * (aic_tab$k + 1) / (n_fir - aic_tab$k - 1)
+aic_tab$BIC <- 2 * aic_tab$nll + log(n_fir) * aic_tab$k
+aic_tab <- aic_tab[order(aic_tab$AIC), ]
+rownames(aic_tab) <- aic_tab$model
+bic_d <- aic_tab$BIC - min(aic_tab$BIC)
+names(bic_d) <- aic_tab$model
+
+covars <- c("canopy", "big_trees", "snags", "shrub", "elev", "slope",
+            "north", "road_dist", "stream_dist", "grazing")
+beta_true <- c(0, 0.5, 0.4, 0, 0, 0, 0, 0.3, 0, 0)
+cov_mat <- diag(10)
+cov_mat[1, 2] <- cov_mat[2, 1] <- 0.6
+cov_mat[1, 4] <- cov_mat[4, 1] <- -0.4
+cov_mat[5, 6] <- cov_mat[6, 5] <- 0.5
+set.seed(19)
+X <- mvrnorm(50, rep(0, 10), cov_mat)
+colnames(X) <- covars
+creepers <- rpois(50, exp(log(2) + X %*% beta_true))
+fit_glm <- glm(creepers ~ X, family = poisson)
+b_mle <- setNames(coef(fit_glm)[-1], covars)
+subsets <- expand.grid(rep(list(c(FALSE, TRUE)), 10))
+subset_aic <- apply(subsets, 1, function(use) {
+  if (!any(use)) return(AIC(glm(creepers ~ 1, family = poisson)))
+  AIC(glm(creepers ~ X[, use, drop = FALSE], family = poisson))
+})
+best_set <- covars[unlist(subsets[which.min(subset_aic), ])]
+n_within2 <- sum(subset_aic - min(subset_aic) < 2)
+subset_wt <- exp(-(subset_aic - min(subset_aic)) / 2)
+best_wt <- max(subset_wt) / sum(subset_wt)
+fit_ridge <- glmnet(X, creepers, family = "poisson", alpha = 0)
+fit_lasso <- glmnet(X, creepers, family = "poisson", alpha = 1)
+set.seed(746)
+cv_lasso <- cv.glmnet(X, creepers, family = "poisson", alpha = 1)
+b_lasso <- setNames(coef(cv_lasso, s = "lambda.1se")[-1], covars)
+lasso_set <- covars[b_lasso != 0]
+
+f2 <- function(v) formatC(v, format = "f", digits = 2)
+f1 <- function(v) formatC(v, format = "f", digits = 1)
+lst <- function(v) paste(gsub("_", "\\\\_", v), collapse = ", ")
+```
+
+```{r tally, cache=TRUE}
+# how often does each method recover the true set, across 40 datasets like the creeper one?
+tally <- t(sapply(1:40, function(s) {
+  set.seed(s)
+  Xs <- mvrnorm(50, rep(0, 10), cov_mat)
+  ys <- rpois(50, exp(log(2) + Xs %*% beta_true))
+  aics <- apply(subsets, 1, function(use) {
+    if (!any(use)) return(AIC(glm(ys ~ 1, family = poisson)))
+    AIC(glm(ys ~ Xs[, use, drop = FALSE], family = poisson))
+  })
+  cvs <- cv.glmnet(Xs, ys, family = "poisson", alpha = 1)
+  truth <- beta_true != 0
+  c(aic = all(unlist(subsets[which.min(aics), ]) == truth),
+    lasso = all((coef(cvs, s = "lambda.1se")[-1] != 0) == truth))
+}))
+n_aic_right <- sum(tally[, "aic"])
+n_lasso_right <- sum(tally[, "lasso"])
+```
+
+```{r sketch-helpers}
+# scientific workflow schematic; 'highlight' shades one box (e.g. "COMPARE")
+draw_workflow <- function(highlight = NULL, cex = 0.8) {
+  boxes <- c("PROBLEM", "THEORIES", "MODELS", "FIT", "COMPARE")
+  subs <- c("what do we\nneed to know?", "candidate\nexplanations",
+            "data-generating\n(process + noise)", "confront each\nwith data",
+            "fit, prediction,\nrelevance")
+  x <- seq(1, 9, by = 2)
+  y <- 2
+  w <- 0.8
+  h <- 0.55
+  shade <- function(lab) if (!is.null(highlight) && lab == highlight) "grey80" else "white"
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 10), ylim = c(-0.2, 4), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_along(boxes)) {
+    rect(x[i] - w, y - h, x[i] + w, y + h, col = shade(boxes[i]), lwd = 1.5)
+    text(x[i], y + 0.18, boxes[i], font = 2, cex = cex)
+    text(x[i], y - 0.22, subs[i], cex = cex * 0.75)
+  }
+  arrows(x[-5] + w, y, x[-1] - w, y, length = 0.08, lwd = 1.5)
+  rect(6 - 0.7, 3.2 - 0.35, 6 + 0.7, 3.2 + 0.35, col = shade("DATA"), lty = 2, lwd = 1.5)
+  text(6, 3.28, "DATA", font = 2, cex = cex)
+  text(6, 3.0, "study design", cex = cex * 0.75)
+  arrows(x[3], y + h, 6 - 0.7, 3.2, length = 0.08, lty = 2, lwd = 1.2)
+  arrows(6 + 0.7, 3.2, x[4], y + h, length = 0.08, lty = 2, lwd = 1.2)
+  segments(x[5], y - h, x[5], 0.4, lwd = 1.5)
+  segments(x[5], 0.4, x[1], 0.4, lwd = 1.5)
+  arrows(x[c(1, 2)], 0.4, x[c(1, 2)], y - h, length = 0.08, lwd = 1.5)
+  text(6, 0.15, "REVISE the problem and theories; drop or down-weight poor models",
+       cex = cex * 0.85, font = 3)
+}
+
+# WOD reveal: least-squares line, a curve through every point, and the new plot
+wod_x <- c(6, 10, 13, 22, 26, 30)
+wod_y <- c(8, 13, 10, 18, 15, 21)
+wod_line <- lm(wod_y ~ wod_x)
+wod_curve <- splinefun(wod_x, wod_y, method = "natural")
+wod_pred <- c(line = unname(predict(wod_line, data.frame(wod_x = 16))), curve = wod_curve(16))
+draw_wod <- function() {
+  par(mar = c(3, 3, 0.5, 0.5), mgp = c(1.8, 0.5, 0))
+  plot(wod_x, wod_y, pch = 19, xlim = c(0, 35), ylim = c(0, 25), xaxs = "i", yaxs = "i",
+       xlab = "Soil moisture (%)", ylab = "Height (cm)")
+  abline(v = 16, lty = 3, col = "grey50")
+  abline(wod_line, lwd = 2)
+  xs <- seq(4, 32, 0.1)
+  lines(xs, pmin(wod_curve(xs), 25), lwd = 2, lty = 2)
+  points(16, 14, pch = 4, cex = 1.5, lwd = 2.5)
+}
+
+# chi-square(3) density with the 95% cutoff and the fir deviance
+draw_chisq <- function() {
+  par(mar = c(3, 3, 0.5, 0.5), mgp = c(1.8, 0.5, 0))
+  curve(dchisq(x, 3), 0, 12, lwd = 2, xlab = "Deviance", ylab = "Density",
+        ylim = c(0, 0.33))
+  abline(v = qchisq(0.95, 3), lty = 2)
+  abline(v = lrt_dev, lwd = 3, col = "grey40")
+  text(qchisq(0.95, 3), 0.29, "95% cutoff: 7.81", pos = 4, cex = 0.8)
+  text(lrt_dev, 0.29, paste0("fir: ", f2(lrt_dev)), pos = 4, cex = 0.8)
+}
+
+# one coefficient: NLL = (beta - 0.3)^2, alone and with a ridge or lasso penalty
+draw_penalty_1d <- function() {
+  par(mar = c(3, 3, 0.5, 10), mgp = c(1.8, 0.5, 0))
+  b <- seq(-0.3, 0.6, length.out = 500)
+  nll <- (b - 0.3)^2
+  ridge <- nll + 1 * b^2
+  lasso <- nll + 0.8 * abs(b)
+  plot(b, lasso, type = "l", lwd = 2, lty = 2, ylim = c(0, 0.45),
+       xlab = "Coefficient", ylab = "penalized NLL")
+  lines(b, ridge, lwd = 2, lty = 3)
+  lines(b, nll, lwd = 2)
+  abline(v = 0, col = "grey70")
+  points(c(0.3, 0.15, 0), c(0, (0.15 - 0.3)^2 + 0.15^2, 0.09), pch = 19)
+  legend("right", c("NLL alone\n(min 0.30)", "+ ridge\n(min 0.15)", "+ lasso\n(min exactly 0)"),
+         lwd = 2, lty = c(1, 3, 2), bty = "n", cex = 0.8, xpd = TRUE,
+         inset = c(-0.62, 0), y.intersp = 1.8)
+}
+```
+
+# How to prepare (for students)
+
+- **Big picture.** We have spent several weeks fitting models (FIT):
+  likelihood, optimization, MCMC. This week moves to COMPARE: when
+  several models could explain the same data, how do we decide which
+  ones the data support? Monday covers likelihood ratio tests, AIC,
+  and an alternative to choosing among models at all: fitting one big
+  model with a penalty that shrinks unneeded coefficients toward zero
+  (regularization). Wednesday covers the Bayesian versions.
+- **Read:** Bolker 6.6 through 6.6.2 (printed p. 267-280) and the
+  paragraph on AIC weights on p. 284. Also skim Tredennick et al.
+  (2021), *A practical guide to selecting models for exploration,
+  inference, and prediction in ecology* (Ecology 102: e03336); focus
+  on why the purpose of an analysis should decide how models are
+  compared.
+- **Review:** the likelihood ratio interval and the 1.92 cutoff from
+  Week 7; the negative binomial distribution and the power-law
+  function $a x^b$ from the bestiary; `glm()` with a Poisson family.
+- **Tuesday's lab** applies these tools to a larger version of Lab 7's
+  chytrid pond survey, so bring questions.
+
+# Overview (instructor only)
+
+| Beat | Mode | Time |
+|---|---|---|
+| 1. Big picture | BOARD | ~4 min |
+| 2. WOD: *Connect the Dots* | handout | ~8 min |
+| 3. Likelihood ratio test | BOARD $\to$ R | ~8 min |
+| 4. AIC | BOARD $\to$ R | ~10 min |
+| 5. Ridge and lasso | BOARD $\to$ R | ~12 min |
+| 6. Wrap and discussion | BOARD | ~5 min |
+
+- R = Monday section of `CODE_Week10_ModelComparison.R`. No Stan debrief (lab).
+- **Behind?** Skip the Poisson pause and AICc/BIC; past minute ~38, do
+  section 5's board part only and open Wednesday with the glmnet demo.
+
+# Part 1: Lecture content
+
+## 1. Big picture (~4 min) [BOARD]
+
+```{r workflow-fig, fig.width=6.5, fig.height=2.6, dev="png", dpi=250}
+draw_workflow("COMPARE")
+```
+
+- COMPARE = fit / prediction and rivals / relevance; today is the middle one
+- Tools: penalize in-sample fit (LRT, AIC), held-out data (CV), or fit
+  skeptically (ridge, lasso)
+- Survivors are corroborated, not proven
+
+## 2. WOD reveal (~8 min) [handout]
+
+```{r wod-fig, fig.width=4.5, fig.height=2.4}
+draw_wod()
+```
+
+- Residual SS: line `r f1(sum(resid(wod_line)^2))`, curve 0
+- New plot **14 cm**; line `r f1(wod_pred["line"])`, curve `r f1(wod_pred["curve"])`
+- Land: in-sample fit always improves with flexibility
+
+## 3. Likelihood ratio test (~8 min) [BOARD $\to$ R]
+
+- Fir (Bolker 6.6): cones $\sim \text{NegBin}(a\,\text{DBH}^b, k)$; full
+  (wave/non-wave $a, b, k$; 6 params) vs. no-wave (3)
+- $D = 2(\text{NLL}_{red} - \text{NLL}_{full}) \sim \chi^2_r$; nested models only
+- Week 7's 1.92 = this test with $r = 1$
+
+```{r chisq-fig, fig.width=4.5, fig.height=2.2}
+draw_chisq()
+```
+
+- **Result:** $D = `r f2(lrt_dev)`$, $p = `r f2(lrt_p)`$; keep no-wave
+- **Pause:** Poisson nested in NB? Yes ($k \to \infty$; legacy LECTURE8
+  is wrong), but on the boundary, so naive $p$ is ~2x too big.
+  $D =$ `r format(round(pois_dev), big.mark = ",")` here
+- **Sticking point:** not rejecting $\neq$ no difference
+
+## 4. AIC (~10 min) [BOARD $\to$ R]
+
+- $\text{AIC} = -2\log\mathcal{L}(\hat\theta) + 2k$; nested or not, same response data
+- $2k$ = average in-sample optimism (`NOTES_Reference_AICPenalty.Rmd`; don't derive)
+- $w_i = e^{-\Delta_i/2}/\sum_j e^{-\Delta_j/2}$; BIC: $k \log n$
+
+```{r aic-table}
+tab_show <- aic_tab[, c("k", "nll", "AIC", "dAIC", "weight", "BIC")]
+tab_show$BIC <- bic_d
+names(tab_show) <- c("k", "NLL", "AIC", "dAIC", "weight", "dBIC")
+rownames(tab_show) <- gsub("_", "\\\\_", rownames(tab_show))
+# latex tabular (not longtable) so the table can't split across pages
+show_aic <- function() {
+  knitr::kable(tab_show, format = "latex", booktabs = TRUE, escape = FALSE,
+               digits = c(0, 2, 2, 2, 2, 2))
+}
+show_aic()
+```
+
+- **Pause:** weight `r f2(aic_tab["no_wave", "weight"])` = P(true model)?
+  No; relative support within the set (Bolker p. 284)
+- **Sticking point:** `const_ak` adds 1 param, NLL down only
+  `r f2(fit_nowave$value - fit_constak$value)`, yet $\Delta$ =
+  `r f2(aic_tab["const_ak", "dAIC"])`. A useless parameter costs $\le 2$
+  (Arnold 2010)
+
+## 5. Ridge and lasso (~12 min) [BOARD $\to$ R]
+
+- Creepers: 50 stations, 10 covariates, simulated (say so); truth =
+  big trees, snags, road distance
+- $2^{10} = 1024$ subsets; instead penalize coefficient *size*:
+  $\text{NLL} + \lambda\sum\beta_j^2$ (ridge), $\text{NLL} + \lambda\sum|\beta_j|$ (lasso)
+- Standardize first; $\lambda$ by 10-fold CV (`lambda.1se`)
+- Lasso's corner at 0 gives exact zeros:
+
+```{r penalty-fig, fig.width=4.5, fig.height=2.4}
+draw_penalty_1d()
+```
+
+- **Full MLE:** all 10 nonzero; north `r f2(b_mle["north"])`, elev `r f2(b_mle["elev"])` (truth 0)
+- **All-subsets AIC:** `r lst(best_set)`; `r n_within2` within 2; best weight `r f2(best_wt)`
+- **Lasso (CV):** `r lst(lasso_set)`; big trees `r f2(b_lasso["big_trees"])` (truth 0.5), road `r f2(b_lasso["road_dist"])` (0.3)
+- **40 simulated datasets**, exact true set: AIC `r n_aic_right`, lasso `r n_lasso_right`
+
+- **Pause:** road `r f2(b_lasso["road_dist"])` vs. 0.3, broken? No:
+  bias traded for lower variance; for effect sizes refit or go Bayesian (Wed.)
+- **Sticking point:** neither method is a truth detector
+
+## 6. Wrap and discussion (~5 min) [BOARD]
+
+- Count penalty / held-out data / size penalty. Tomorrow: pond survey.
+  Wed.: WAIC, LOO, shrinkage priors
+
+**Q1.** AIC kept northness (`r n_within2` models within 2, best weight
+`r f2(best_wt)`); the lasso dropped it. Which covariates would you
+report as "important," and how would you word it?
+
+**Q2.** In a real survey, the lasso sets grazing to exactly 0. A manager
+concludes expanding grazing won't affect creepers. Agree?
+
+- Q1 lands on: report selection uncertainty; agreed covariates (big
+  trees, snags) are safest
+- Q2 lands on: zero = not needed for prediction here, not "no effect";
+  grazing may act via shrub cover; causal question = COMPARE (3), relevance
+
+\newpage
+\large
+
+# PART 2: PODIUM CHEAT SHEET
+
+\normalsize
+\textit{Terse on purpose. Detail: Part 1. R = Monday section of CODE\_Week10\_ModelComparison.R.}
+\large
+
+**Big picture $\to$ WOD $\to$ lecture. No Stan debrief (lab). Behind? Skip Poisson pause, AICc/BIC; glmnet demo $\to$ Wed.**
+
+## 1. Big picture (~4 min) [BOARD]
+
+```{r podium-workflow, fig.width=6.5, fig.height=2.6, dev="png", dpi=250}
+draw_workflow("COMPARE")
+```
+
+- Point at **COMPARE**: fit / prediction + rivals / relevance
+- Weeks 6-9 = FIT; today = rivals
+- Penalize in-sample fit (LRT, AIC); new data (CV); fit skeptically (ridge, lasso)
+- Corroborated, not proven
+- Hand out WOD
+
+\newpage
+
+## 2. WOD reveal (~8 min)
+
+```{r podium-wod, fig.width=4.5, fig.height=2.6}
+draw_wod()
+```
+
+- Residual SS: line `r f1(sum(resid(wod_line)^2))`, curve 0
+- New plot: **14 cm**; line `r f1(wod_pred["line"])`, curve `r f1(wod_pred["curve"])`
+- Curves disagree in the gap; lines don't
+- In-sample fit always improves with flexibility
+
+\newpage
+
+## 3. LRT (~8 min) [BOARD $\to$ R]
+
+- Fir: NegBin($a\,\text{DBH}^b$, $k$); wave vs. non-wave
+- Full 6 params vs. no-wave 3; **nested**
+- $D = 2(\text{NLL}_{red} - \text{NLL}_{full}) \sim \chi^2_r$
+- Week 7's 1.92 = 3.84/2, $r = 1$
+
+```{r podium-chisq, fig.width=4.5, fig.height=2.2}
+draw_chisq()
+```
+
+- **R:** $D = `r f2(lrt_dev)`$, cutoff 7.81, $p = `r f2(lrt_p)`$; keep no-wave
+- **Pause (skippable):** Poisson nested in NB? Yes ($k \to \infty$), but on the boundary: naive $p$ ~2x too big. $D =$ `r format(round(pois_dev), big.mark = ",")`
+- Not rejecting $\neq$ no difference
+
+\newpage
+
+## 4. AIC (~10 min) [BOARD $\to$ R]
+
+- $\text{AIC} = -2\log\mathcal{L}(\hat\theta) + 2k$; any models, same response data
+- $2k$ = average optimism (the WOD in one number)
+- $w_i = e^{-\Delta_i/2} / \sum_j e^{-\Delta_j/2}$
+- AICc: small $n$; BIC: $k \log n$
+
+```{r podium-aic}
+show_aic()
+```
+
+- **Pause:** weight `r f2(aic_tab["no_wave", "weight"])` = P(true)? No (Bolker p. 284)
+- `const_ak`: +1 param, NLL down `r f2(fit_nowave$value - fit_constak$value)`, $\Delta$ `r f2(aic_tab["const_ak", "dAIC"])`. Useless param costs $\le 2$
+
+\newpage
+
+## 5. Ridge and lasso (~12 min) [BOARD $\to$ R]
+
+- Creepers: 50 stations, 10 covariates; simulated; truth = big trees, snags, road
+- $2^{10} = 1024$ subsets
+- $\text{NLL} + \lambda\sum\beta_j^2$ (ridge); $\text{NLL} + \lambda\sum|\beta_j|$ (lasso)
+- AIC: how many; these: how big. Standardize first
+
+```{r podium-penalty, fig.width=4.5, fig.height=2.4}
+draw_penalty_1d()
+```
+
+- **R:** MLE: north `r f2(b_mle["north"])`, elev `r f2(b_mle["elev"])`
+- Best subset: `r lst(best_set)`; `r n_within2` within 2; weight `r f2(best_wt)`
+- Paths; CV $\to$ `lambda.1se`: `r lst(lasso_set)`
+- **Pause:** road `r f2(b_lasso["road_dist"])` vs. 0.3. Broken? No: bias for lower variance
+- 40 datasets: AIC right `r n_aic_right`, lasso `r n_lasso_right`
+
+\newpage
+
+## 6. Wrap and discussion (~5 min)
+
+- Count penalty / held-out data / size penalty
+- Tomorrow: pond survey. Wed: WAIC, LOO, shrinkage priors
+
+**Q1.** AIC kept northness (`r n_within2` within 2, best weight `r f2(best_wt)`); lasso dropped it. What do you report as "important"?
+
+- Report uncertainty; agreed covariates are safest
+
+**Q2.** Real survey: lasso zeroes grazing. "Expanding grazing won't affect creepers." Agree?
+
+- Zero = not needed for prediction here; not "no effect"
+- Grazing via shrub; small effect, 50 stations; causal question = COMPARE (3)

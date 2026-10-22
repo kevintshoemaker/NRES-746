@@ -1,0 +1,229 @@
+---
+title: "Lab 8: Model Comparison and Regularization (pre-lab lecture)"
+subtitle: "Instructor notes. Part 1: prep. Part 2: podium and circulating cheat sheet"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=4pt, parsep=0pt, topsep=4pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 5.5, fig.height = 3.4)
+```
+
+```{r compute}
+# numbers quoted for circulating; same data and settings as the Lab 8 keys
+library(glmnet)
+ponds <- read.csv("../data/BdRegionalSurvey.csv")
+X <- scale(as.matrix(ponds[, 2:9]))
+pos <- ponds$bd_positive
+n_frogs <- ponds$frogs_swabbed
+ridge_fit <- function(lambda) {
+  optim(rep(0, 9), function(par) {
+    p <- plogis(par[1] + X %*% par[-1])
+    -sum(dbinom(pos, n_frogs, p, log = TRUE)) + lambda * sum(par[-1]^2)
+  }, method = "BFGS")$par
+}
+b0 <- ridge_fit(0)
+b10 <- ridge_fit(10)
+set.seed(1)
+cv_lasso <- cv.glmnet(X, cbind(n_frogs - pos, pos), family = "binomial", nfolds = 10)
+lasso_kept <- c("temp", "elev", "canopy", "cond", "area", "fish", "bullfrogs",
+                "road")[coef(cv_lasso, s = "lambda.1se")[-1] != 0]
+r_te <- cor(ponds$water_temp_c, ponds$elevation_m)
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+```
+
+```{r sketch-helpers}
+# k-fold cross-validation schematic: one row per round, held-out fold shaded
+draw_folds <- function(k = 5) {
+  par(mar = c(0.5, 4.5, 0.5, 0.5))
+  plot(NA, xlim = c(0, k), ylim = c(0, k), axes = FALSE, xlab = "", ylab = "")
+  for (r in seq_len(k)) {
+    for (f in seq_len(k)) {
+      rect(f - 1, k - r, f - 0.05, k - r + 0.85,
+           col = if (f == r) "grey35" else "grey88", border = NA)
+    }
+    mtext(paste("round", r), side = 2, at = k - r + 0.42, las = 1, line = 0.3, cex = 0.8)
+  }
+  text(k / 2, -0.25, "dark = held out (scored), light = used to fit", cex = 0.8, xpd = TRUE)
+}
+
+# penalty vs. budget: as lambda grows, the allowed budget t shrinks
+draw_budget_1d <- function() {
+  par(mar = c(3, 3, 0.5, 0.5), mgp = c(1.8, 0.5, 0))
+  b <- seq(-0.1, 0.6, length.out = 400)
+  plot(b, (b - 0.4)^2, type = "l", lwd = 2, xlab = "Coefficient", ylab = "NLL",
+       ylim = c(0, 0.25))
+  rect(-0.1, -1, 0.15, 1, col = adjustcolor("grey70", 0.4), border = NA)
+  abline(v = 0.15, lty = 2)
+  points(0.15, (0.15 - 0.4)^2, pch = 19)
+  text(0.02, 0.22, "budget\n|beta| <= t", cex = 0.8)
+}
+```
+
+# How to prepare (for students)
+
+- **Big picture.** Monday compared models two ways: penalizing fit by
+  the number of parameters (likelihood ratio tests, AIC) and by the
+  size of the coefficients (ridge and lasso). This lab applies both to
+  a 60-pond chytrid survey that extends Lab 7, where several pond
+  features compete to explain where Bd is common.
+- **Bring a laptop with Stan working.** We'll start by checking
+  installs and last Wednesday's take-home WOD.
+- **Review:** Monday's notes on AIC and ridge/lasso; Lab 7's
+  logistic-binomial model and how to write its NLL; Bolker 6.6
+  through 6.6.2 (printed p. 267-280).
+- **R skills:** `glm()` with a binomial response written as
+  `cbind(successes, failures)`; `optim()`; `scale()`.
+
+# Overview (instructor only)
+
+| Beat | Mode | Time |
+|---|---|---|
+| 0. Stan install check (before the lecture) | laptops | ~10 min |
+| 1. Big picture | BOARD | ~3 min |
+| 2. Catch-up from Monday (**update after Monday**) | BOARD $\to$ R | ~12 min |
+| 3. Penalties as budgets | BOARD | ~5 min |
+| 4. Tools for the lab | BOARD | ~5 min |
+| 5. Cross-validation | BOARD | ~7 min |
+| 6. Launch Act 1 | BOARD | ~2 min |
+
+- Lecture ~34 min; with the Stan check, Acts start ~45 min in, leaving
+  ~2 h. Act 2 is take-home capable.
+- **Don't give away:** the 2-D budget picture (Act 1 Part 2), whether to
+  penalize $\beta_0$ or why standardize (Act 2 1a-1b), or step-by-step
+  CV pseudocode (Act 2 1c).
+
+# Part 1: Lecture content
+
+## 0. Stan check (~10 min, before lecture)
+
+- Everyone runs the myxo model from the Week 9 take-home WOD. Pair
+  working laptops with broken ones; collect unresolved cases for
+  office hours rather than holding the room.
+
+## 1. Big picture (~3 min) [BOARD]
+
+- Still COMPARE (2): which features earn a place in the model?
+- Today's data: 60 ponds, 8 pond features; Lab 7's model with more
+  predictors. Temperature and elevation: $r =$ `r f2(r_te)`.
+
+## 2. Catch-up from Monday (~12 min) [BOARD $\to$ R]
+
+- **Placeholder; update after Monday.** Most likely: Monday section 5
+  (ridge and lasso on the creepers: 1-D penalty sketch, glmnet paths,
+  `cv.glmnet`, the shrinkage pause). Run it from the Monday section of
+  `CODE_Week10_ModelComparison.R`.
+- If Monday finished: use the time for a longer section 5 here, or
+  start the Acts early.
+
+## 3. Penalties as budgets (~5 min) [BOARD]
+
+```{r budget-fig, fig.width=4, fig.height=2.2}
+draw_budget_1d()
+```
+
+- Penalized fit $\text{NLL} + \lambda\sum\beta_j^2$ = lowest NLL inside a
+  budget $\sum\beta_j^2 \le t^2$; bigger $\lambda$ = smaller $t$
+- Lasso budget: $\sum|\beta_j| \le t$
+- One coefficient only (above). Stop there; Act 1 does two.
+
+## 4. Tools for the lab (~5 min) [BOARD]
+
+- `glmnet(X, y, family = "binomial", alpha = )`: `alpha = 0` ridge,
+  `1` lasso
+- Binomial counts: `y = cbind(failures, successes)` (the reverse of
+  `glm()`'s order)
+- **Sticking point:** `glmnet` scales the NLL by the sample size, so its
+  $\lambda$ is not the $\lambda$ in a hand-coded penalty. Compare
+  coefficients, not $\lambda$ values.
+
+## 5. Cross-validation (~7 min) [BOARD]
+
+```{r folds-fig, fig.width=4.5, fig.height=2.4}
+draw_folds()
+```
+
+- Fit to 4/5 of the ponds, score the held-out 1/5 by its NLL, rotate
+- Choose the $\lambda$ with the best held-out score; `lambda.1se` =
+  simplest within 1 SE
+- Callback: Monday's WOD "new plot" made systematic
+- Folds are random: set a seed to reproduce
+
+## 6. Launch Act 1 (~2 min)
+
+- Laptops closed; Act 2 can go home.
+
+\newpage
+\large
+
+# PART 2: PODIUM AND CIRCULATING CHEAT SHEET
+
+\normalsize
+\textit{Terse on purpose. Detail: Part 1 and the two keys.}
+\large
+
+**Stan check first (~10). Lecture ~34. Don't give away: 2-D budgets, $\beta_0$ penalty, standardizing, CV steps.**
+
+## 1-2. Big picture; catch-up (~15 min)
+
+- COMPARE (2): which features earn a place?
+- 60 ponds, 8 features; temp vs. elev $r =$ `r f2(r_te)`
+- Catch-up: **update after Monday**
+
+\newpage
+
+## 3. Budgets (~5 min) [BOARD]
+
+```{r podium-budget, fig.width=4, fig.height=2.2}
+draw_budget_1d()
+```
+
+- Penalty $\lambda$ $\leftrightarrow$ budget $t$; bigger $\lambda$, smaller $t$
+- Ridge $\sum\beta^2 \le t^2$; lasso $\sum|\beta| \le t$
+- 1-D only; Act 1 does 2-D
+
+\newpage
+
+## 4-5. Tools; CV (~12 min) [BOARD]
+
+- `alpha = 0` ridge, `1` lasso; `y = cbind(failures, successes)`
+- glmnet's $\lambda$ $\neq$ hand-coded $\lambda$
+
+```{r podium-folds, fig.width=4.5, fig.height=2.2}
+draw_folds()
+```
+
+- Fit 4/5, score held-out 1/5 by NLL, rotate; pick best $\lambda$
+- `lambda.1se` = simplest within 1 SE; set a seed
+
+\newpage
+
+## Act-by-Act quick reference
+
+**Act 1 (paper)**
+
+- Best: Model 5 (temp + bullfrogs + canopy); Model 6 within 2 but NLL
+  down only 0.38 (uninformative parameter)
+- LRT 5 vs. 6: $D = 0.76$, 1 df; 5 vs. 7: $D = 3.98$, 5 df. Keep 5
+- Temp vs. elevation can't be separated; need decoupled ponds or an
+  experiment
+- Budgets at $t = 0.4$: ridge $\approx (-0.29, 0.28)$, lasso
+  $\approx (-0.23, 0.17)$; lasso lands mid-edge (contours parallel to
+  the edge), so **no zero**
+
+**Act 2 (coding)**
+
+- Don't penalize $\beta_0$; standardize so one penalty fits all
+- Check: temp `r f2(b0[2])` at $\lambda = 0$, `r f2(b10[2])` at
+  $\lambda = 10$; elevation `r f2(b0[3])` $\to$ `r f2(b10[3])` (pulled
+  toward temp)
+- Lasso (`set.seed(1)`, 10 folds) keeps `r paste(lasso_kept, collapse = ", ")`
+- Common bugs: `cbind()` order in glmnet; penalizing $\beta_0$;
+  forgetting to standardize; `optim()` default Nelder-Mead stalling
+  with 9 parameters (use BFGS)
