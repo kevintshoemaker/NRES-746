@@ -135,5 +135,141 @@ round(data.frame(truth = beta_true,
 
 
 
-# WEDNESDAY, Oct. 28: Bayesian model comparison and regularization ==============
-#  (placeholder: to be built)
+# WEDNESDAY, Oct. 28: Bayesian model comparison and shrinkage priors ===========
+#  Uses fir, wave, aic_tab, X, creepers, covars, beta_true, coef_lasso from Monday's section.
+
+# 3. WAIC and LOO (~12 min) -------------------------------------------------------
+
+options(cmdstanr_no_ver_check = TRUE)
+library(cmdstanr)
+library(loo)
+
+# fir NegBin power law; G = 1: one a, b, k for all trees; G = 2: separate for wave/non-wave
+fir_code <- "
+data {
+  int<lower=1> N;
+  int<lower=1> G;
+  array[N] int<lower=0> cones;
+  vector<lower=0>[N] dbh;
+  array[N] int<lower=1, upper=G> grp;
+}
+parameters {
+  vector[G] log_a;
+  vector[G] b;
+  vector<lower=0>[G] k;
+}
+model {
+  log_a ~ normal(0, 5);
+  b ~ normal(0, 5);
+  k ~ exponential(0.1);
+  cones ~ neg_binomial_2(exp(log_a[grp]) .* pow(dbh, b[grp]), k[grp]);
+}
+generated quantities {
+  vector[N] log_lik;    // one value per tree, for WAIC and LOO
+  for (i in 1:N)
+    log_lik[i] = neg_binomial_2_lpmf(cones[i] | exp(log_a[grp[i]]) * dbh[i]^b[grp[i]], k[grp[i]]);
+}
+"
+fir_model <- cmdstan_model(write_stan_file(fir_code))
+fit_fir <- function(G) {
+  grp <- if (G == 1) rep(1L, nrow(fir)) else wave
+  fir_model$sample(data = list(N = nrow(fir), G = G, cones = fir$TOTCONES, dbh = fir$DBH,
+                               grp = grp),
+                   chains = 4, parallel_chains = 4, seed = 746, refresh = 0)
+}
+fit_nowave_b <- fit_fir(1)
+fit_full_b <- fit_fir(2)
+
+# DIC (Bolker 6.6.3): pD = mean deviance - deviance at posterior means; DIC = Dhat + 2 pD
+dic <- function(fit, G) {
+  grp <- if (G == 1) rep(1L, nrow(fir)) else wave
+  d_bar <- mean(-2 * rowSums(fit$draws("log_lik", format = "matrix")))
+  pm <- function(v) colMeans(fit$draws(v, format = "matrix"))
+  d_hat <- -2 * sum(dnbinom(fir$TOTCONES, mu = exp(pm("log_a")[grp]) * fir$DBH^pm("b")[grp],
+                            size = pm("k")[grp], log = TRUE))
+  c(DIC = d_hat + 2 * (d_bar - d_hat), pD = d_bar - d_hat)
+}
+waic_nowave <- waic(fit_nowave_b$draws("log_lik", format = "matrix"))
+waic_full <- waic(fit_full_b$draws("log_lik", format = "matrix"))
+loo_nowave <- fit_nowave_b$loo()
+loo_full <- fit_full_b$loo()
+loo_nowave    # elpd_loo, p_loo, looic, and the Pareto k check
+
+# the same two models, four ways (lower is better; penalties: k, pD, p_waic, p_loo)
+ic_tab <- rbind(
+  AIC = aic_tab$AIC[match(c("no_wave", "full"), aic_tab$model)],
+  DIC = c(dic(fit_nowave_b, 1)["DIC"], dic(fit_full_b, 2)["DIC"]),
+  WAIC = c(waic_nowave$estimates["waic", 1], waic_full$estimates["waic", 1]),
+  LOOIC = c(loo_nowave$estimates["looic", 1], loo_full$estimates["looic", 1]))
+colnames(ic_tab) <- c("no_wave", "full")
+round(ic_tab, 1)
+loo_compare(list(no_wave = loo_nowave, full = loo_full))
+#  [PAUSE] the full model is 2.1 elpd behind, SE 1.8. what can you conclude?
+
+# 4. Shrinkage priors (~12 min) ----------------------------------------------------
+
+# creepers again: Poisson regression; prior on the slopes is Normal(0, s) or Laplace(0, s)
+pois_code <- "
+data {
+  int<lower=1> N;
+  int<lower=1> K;
+  matrix[N, K] X;
+  array[N] int<lower=0> y;
+  int<lower=1, upper=2> prior;    // 1 = Normal, 2 = Laplace
+  real<lower=0> s;
+}
+parameters {
+  real b0;
+  vector[K] beta;
+}
+model {
+  b0 ~ normal(0, 5);
+  if (prior == 1) beta ~ normal(0, s);
+  else beta ~ double_exponential(0, s);
+  y ~ poisson_log(b0 + X * beta);
+}
+generated quantities {
+  vector[N] log_lik;
+  for (i in 1:N) log_lik[i] = poisson_log_lpmf(y[i] | b0 + X[i] * beta);
+}
+"
+pois_model <- cmdstan_model(write_stan_file(pois_code))
+fit_creepers <- function(prior, s) {
+  pois_model$sample(data = list(N = 50, K = 10, X = X, y = creepers, prior = prior, s = s),
+                    chains = 4, parallel_chains = 4, seed = 746, refresh = 0)
+}
+fits_shrink <- list(vague = fit_creepers(1, 10), normal = fit_creepers(1, 0.2),
+                    laplace = fit_creepers(2, 0.15))
+
+# posterior medians and 90% intervals for each slope, under each prior; x = truth
+post_sum <- lapply(fits_shrink, function(f) {
+  as.matrix(f$summary("beta", "median", ~quantile(.x, c(0.05, 0.95)))[, -1])
+})
+par(mar = c(4, 7, 1, 1))
+plot(NA, xlim = c(-0.5, 1), ylim = c(0.5, 10.5), yaxt = "n", xlab = "Slope (per SD)", ylab = "")
+axis(2, at = 10:1, labels = covars, las = 1, cex.axis = 0.8)
+abline(v = 0, col = "grey70")
+offsets <- c(vague = 0.25, normal = 0, laplace = -0.25)
+for (p in names(post_sum)) {
+  yy <- (10:1) + offsets[p]
+  segments(post_sum[[p]][, 2], yy, post_sum[[p]][, 3], yy, lwd = 2, col = match(p, names(post_sum)))
+  points(post_sum[[p]][, 1], yy, pch = 19, col = match(p, names(post_sum)))
+}
+points(beta_true, 10:1, pch = 4, cex = 1.3, lwd = 2)
+points(coef_lasso, 10:1, pch = 2)
+legend("bottomright", c("vague prior", "Normal(0, 0.2)", "Laplace(0, 0.15)", "truth", "glmnet lasso"),
+       col = c(1:3, 1, 1), pch = c(19, 19, 19, 4, 2), bty = "n", cex = 0.8)
+par(mar = c(5, 4, 4, 2) + 0.1)
+#  [PAUSE] lasso set northness to exactly 0; the Laplace posterior says 0.08 (-0.07 to 0.28). which is more honest?
+
+sapply(fits_shrink, function(f) f$loo()$estimates["p_loo", 1])   # effective parameters shrink
+loo_compare(lapply(fits_shrink, function(f) f$loo()))
+
+# prior shapes: Normal, Laplace, horseshoe (simulated: Normal with half-Cauchy scale)
+set.seed(746)
+hs <- rnorm(1e6, 0, 0.1 * abs(rcauchy(1e6)))
+curve(dnorm(x, 0, 0.2), -1, 1, n = 501, lwd = 2, ylim = c(0, 6), xlab = "Slope", ylab = "Prior density")
+curve(dexp(abs(x), 1 / 0.15) / 2, -1, 1, n = 501, add = TRUE, lwd = 2, col = 3)
+lines(density(hs[abs(hs) < 1], bw = 0.01, n = 1024), lwd = 2, col = 4)
+legend("topright", c("Normal (ridge)", "Laplace (lasso)", "horseshoe"), col = c(1, 3, 4),
+       lwd = 2, bty = "n")

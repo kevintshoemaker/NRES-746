@@ -1,0 +1,238 @@
+---
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# fill-in table drawn with base graphics so row height is controllable;
+# body = list of rows, each a list/vector of cell strings ("" = blank)
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, bold_rows = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    fnt <- if (i %in% bold_rows) 2 else 1
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, font = fnt, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. Emits nothing in non-LaTeX output. lines =
+# lines of prompt text, rows = rows of blank space below it (0.3 in each),
+# extra = any other height (in inches), e.g. a code block
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+model_rows <- list(c("A", "temp", "2.5"), c("B", "temp, bullfrogs, canopy", "2.5"),
+                   c("C", "all eight", "2.5"), c("D", "all eight", "0.3"))
+```
+
+**NRES 746, Week 10, Lecture 2: Comparing Pond Models with LOO (take-home)**
+
+&nbsp;
+
+Name: ___________________________________________
+
+&nbsp;
+
+**Due Monday.** This uses the 60-pond survey from Lab 8 and the Stan
+setup from last week's take-home. Fitting all four models takes a few
+minutes.
+
+**Using AI:** each coding question is labeled with a recommendation.
+After each one, circle how you actually used AI.
+
+**What to turn in:** your filled-in answers and a screenshot of your
+`loo_compare()` output (upload in WebCampus). You don't need to submit
+your code.
+
+## Part 1: The model
+
+Here is Lab 8's logistic-binomial model in Stan. `X` holds whichever
+standardized predictors you pass in, and `prior_sd` sets the width of
+the Normal(0, `prior_sd`) prior on every slope. To compute LOO, Stan
+must also save the **log-likelihood of each pond** at every draw, in
+`generated quantities`. One line is missing.
+
+```{r stan-code, echo=TRUE, eval=FALSE}
+library(cmdstanr)
+ponds <- read.csv(
+  "https://kevintshoemaker.github.io/NRES-746/data/BdRegionalSurvey.csv")
+X_all <- scale(as.matrix(ponds[, 2:9]))   # temp, elev, canopy, cond, area,
+                                          # fish, bullfrogs, road
+
+pond_code <- "
+data {
+  int<lower=1> N;
+  int<lower=1> K;
+  matrix[N, K] X;
+  array[N] int<lower=0> n_frogs;
+  array[N] int<lower=0> n_pos;
+  real<lower=0> prior_sd;
+}
+parameters {
+  real b0;
+  vector[K] beta;
+}
+model {
+  b0 ~ normal(0, 2.5);
+  beta ~ normal(0, prior_sd);
+  n_pos ~ binomial_logit(n_frogs, b0 + X * beta);
+}
+generated quantities {
+  vector[N] log_lik;
+  for (i in 1:N)
+    log_lik[i] = ____________________________________ ;
+}
+"
+pond_model <- cmdstan_model(write_stan_file(pond_code))
+
+# fits the model with the predictor columns in `cols` and prior SD `s`
+fit_ponds <- function(cols, s) {
+  pond_model$sample(
+    data = list(N = nrow(ponds), K = length(cols), X = X_all[, cols, drop = FALSE],
+                n_frogs = ponds$frogs_swabbed, n_pos = ponds$bd_positive,
+                prior_sd = s),
+    chains = 4, parallel_chains = 4, seed = 746, refresh = 0)
+}
+fit_b <- fit_ponds(c(1, 7, 3), 2.5)   # Model B: temp, bullfrogs, canopy
+loo_b <- fit_b$loo()
+loo_b
+```
+
+`r nq(4, 4)`
+
+**1a.** *(Recommended: no AI.)* Fill in the missing line. (Hint: the
+`model` block's likelihood, for pond `i` only. Stan's `_lpmf` functions
+use a bar: `f_lpmf(y | parameters)`.) Then run the code.
+**Check:** Model B's `looic` should be close to 221.8.
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(3, 3)`
+
+**1b.** Why does LOO need the log-likelihood of each pond separately,
+rather than one total for all 60?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```
+
+`r nq(6, 0, extra = 2.7)`
+
+## Part 2: Four models
+
+**2a.** *(AI optional.)* Fit the four models below with `fit_ponds()`
+and `$loo()`, and fill in the table. Model D has the same predictors as
+C but a much narrower prior.
+
+```{r loo-table, fig.height=2.5}
+blank_table(c("Model", "Predictors", "prior_sd", "elpd_loo", "p_loo", "looic", "max Pareto k"),
+            lapply(model_rows, function(r) c(r, "", "", "", "")),
+            col_widths = c(0.7, 2.3, 0.9, 1, 0.8, 0.9, 1.1), row_height = 0.5, cex = 0.85)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(5, 0, extra = 2.5)`
+
+**2b.** *(AI optional.)* Run
+`loo::loo_compare(list(A = loo_a, B = loo_b, C = loo_c, D = loo_d))`
+and record each model's `elpd_diff` and `se_diff` (the best model shows
+0 and 0).
+
+```{r compare-table, fig.height=2.5}
+blank_table(c("Model", "elpd_diff", "se_diff"),
+            lapply(c("A", "B", "C", "D"), function(m) c(m, "", "")),
+            col_widths = c(1, 1.5, 1.5), row_height = 0.5, cex = 0.9)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(4, 4)`
+
+## Part 3: Interpret
+
+**3a.** Is the best model clearly better than the runner-up? Use
+`elpd_diff` and `se_diff`.
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(4, 5)`
+
+**3b.** Models C and D have the same eight predictors. Why is D's
+`p_loo` (the effective number of parameters) smaller, and why might it
+predict new ponds better?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(4, 5)`
+
+**3c.** Compare the LOO ranking with the AIC table from Lab 8 Act 1.
+What does LOO tell you that AIC didn't?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(3, 3)`
+
+## Reflection
+
+Where did you use AI, if anywhere, and what did you have to check or
+fix? If you didn't use it, what was hardest to get working?
+
+```{r fig.height=0.3*3}
+blank_lines(3)
+```

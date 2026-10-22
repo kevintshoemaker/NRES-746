@@ -452,12 +452,20 @@ Snapshot: Thu., Oct. 22, 2026 (end of Week 9).
     a ~34-min pre-lab lecture; its catch-up section is a placeholder
     to fill in once Monday's coverage is known. Push the CSV to
     `gh-pages` before the handout goes out.
-  - **Planned (Wednesday):** in-class WOD deriving ridge = Normal(0,
-    tau) prior (lambda = sigma^2 / tau^2); DIC -> WAIC -> LOO on the
-    fir models in Stan (legacy LECTURE8 code); shrinkage priors
-    (normal, Laplace, horseshoe) on the creeper data; Bayes factors,
-    RJMCMC, spike-and-slab if time. Take-home WOD: Stan LOO comparison
-    on the pond data. Posterior predictive checks move to Week 11.
+  - **Built (Wednesday), before Monday was taught; adjust after
+    Monday's report:** `NOTES_Week10_Lecture2_BayesianModelComparison.Rmd`,
+    the script's Wednesday section (Stan; run Monday's section first),
+    in-class WOD *Ridge Is a Prior* + key (lambda = 1/(2 tau^2); lasso =
+    Laplace prior), and take-home WOD *Comparing Pond Models with LOO*
+    + key (students fill in the `log_lik` line; four pond models; B =
+    temp + bullfrogs + canopy is best, looic 221.8; D = all eight with
+    a Normal(0, 0.3) prior is 2.8 elpd behind, SE 2.7, with p_loo 8.2
+    vs. 9.7 for the vague prior). Lecture: fir no-wave vs. full by AIC,
+    DIC, WAIC, LOOIC (2278.0/2278.0/2278.6/2278.6 vs. about 2282; elpd
+    difference 2.1, SE 1.8); creeper slopes under vague, Normal(0,
+    0.2), and Laplace(0, 0.15) priors (northness 0.23 -> 0.08);
+    horseshoe as a sketch only; Bayes factors and RJMCMC if time.
+    Posterior predictive checks move to Week 11.
 - **Unused material, free to reuse:** Lab 4 Act 3 (raw vs. log-scale
   analysts); Bolker's 7.4 fitting checklist. Lab 4 Act 2 was only a
   live-coding demo, without its AI part (the instructor wants an AI
