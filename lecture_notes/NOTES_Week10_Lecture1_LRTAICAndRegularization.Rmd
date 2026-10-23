@@ -348,10 +348,10 @@ concludes expanding grazing won't affect creepers. Agree?
 # PART 2: PODIUM CHEAT SHEET
 
 \normalsize
-\textit{Terse on purpose. Detail: Part 1. R = Monday section of CODE\_Week10\_ModelComparison.R.}
+\textit{Tight on purpose. Detail: Part 1. R = Monday section of CODE\_Week10\_ModelComparison.R.}
 \large
 
-**Big picture $\to$ WOD $\to$ lecture. No Stan debrief (lab). Behind? Skip Poisson pause, AICc/BIC; glmnet demo $\to$ Wed.**
+**Order:** big picture $\to$ WOD $\to$ lecture (no Stan debrief; that's at lab). **Behind?** Skip the Poisson pause and the AICc/BIC columns; move the glmnet demo to Wednesday.
 
 ## 1. Big picture (~4 min) [BOARD]
 
@@ -359,11 +359,11 @@ concludes expanding grazing won't affect creepers. Agree?
 draw_workflow("COMPARE")
 ```
 
-- Point at **COMPARE**: fit / prediction + rivals / relevance
-- Weeks 6-9 = FIT; today = rivals
-- Penalize in-sample fit (LRT, AIC); new data (CV); fit skeptically (ridge, lasso)
-- Corroborated, not proven
-- Hand out WOD
+- Point at **COMPARE**: (1) does it fit, (2) does it beat its rivals and predict new data, (3) is it relevant to the problem
+- Weeks 6-9 were FIT; today is (2): which models do the data support?
+- Three routes: penalize in-sample fit (LRT, AIC); test on new data (CV); fit one big model skeptically (ridge, lasso)
+- Survivors are corroborated, not proven
+- Hand out the WOD
 
 \newpage
 
@@ -373,77 +373,77 @@ draw_workflow("COMPARE")
 draw_wod()
 ```
 
-- Residual SS: line `r f1(sum(resid(wod_line)^2))`, curve 0
-- New plot: **14 cm**; line `r f1(wod_pred["line"])`, curve `r f1(wod_pred["curve"])`
-- Curves disagree in the gap; lines don't
-- In-sample fit always improves with flexibility
+- Sum of squared residuals: line `r f1(sum(resid(wod_line)^2))`, curve 0. The curve "wins" on the data it was fit to
+- New plot measured **14 cm**. Line predicted `r f1(wod_pred["line"])`; this curve `r f1(wod_pred["curve"])`
+- Compare neighbors: curves disagree in the gap, lines don't
+- **Land:** in-sample fit always improves as a model gets more flexible, so we need a penalty or new data
 
 \newpage
 
-## 3. LRT (~8 min) [BOARD $\to$ R]
+## 3. Likelihood ratio test (~8 min) [BOARD $\to$ R]
 
-- Fir: NegBin($a\,\text{DBH}^b$, $k$); wave vs. non-wave
-- Full 6 params vs. no-wave 3; **nested**
-- $D = 2(\text{NLL}_{red} - \text{NLL}_{full}) \sim \chi^2_r$
-- Week 7's 1.92 = 3.84/2, $r = 1$
+- Fir cones $\sim$ NegBin(mean $a\,\text{DBH}^b$, dispersion $k$). Do wave sites differ?
+- Full: separate $a, b, k$ for wave and non-wave (6 params). Reduced: one set (3). Reduced is a special case of full: **nested**
+- Deviance $D = 2(\text{NLL}_{red} - \text{NLL}_{full}) \sim \chi^2_r$, $r$ = params fixed
+- Callback: Week 7's 1.92 cutoff = this test with $r = 1$ (3.84/2)
 
 ```{r podium-chisq, fig.width=4.5, fig.height=2.2}
 draw_chisq()
 ```
 
-- **R:** $D = `r f2(lrt_dev)`$, cutoff 7.81, $p = `r f2(lrt_p)`$; keep no-wave
-- **Pause (skippable):** Poisson nested in NB? Yes ($k \to \infty$), but on the boundary: naive $p$ ~2x too big. $D =$ `r format(round(pois_dev), big.mark = ",")`
-- Not rejecting $\neq$ no difference
+- **R:** $D = `r f2(lrt_dev)`$ vs. cutoff 7.81 ($p = `r f2(lrt_p)`$): keep the simpler no-wave model
+- **Pause (skippable):** "Is the Poisson model nested in the negative binomial? Can we use an LRT?" *Land:* yes, nested ($k \to \infty$), but $k = \infty$ is on the boundary, so the naive $p$ is about twice too big. Here $D =$ `r format(round(pois_dev), big.mark = ",")`, so it doesn't matter
+- **Sticking point:** not rejecting $\neq$ "wave and non-wave trees are the same"; 242 trees just can't tell them apart
 
 \newpage
 
 ## 4. AIC (~10 min) [BOARD $\to$ R]
 
-- $\text{AIC} = -2\log\mathcal{L}(\hat\theta) + 2k$; any models, same response data
-- $2k$ = average optimism (the WOD in one number)
-- $w_i = e^{-\Delta_i/2} / \sum_j e^{-\Delta_j/2}$
-- AICc: small $n$; BIC: $k \log n$
+- $\text{AIC} = -2\log\mathcal{L}(\hat\theta) + 2k$: ranks any models fit to the same response, nested or not
+- $2k$ = average optimism of in-sample fit (the WOD's curve, in one number); don't derive
+- $\Delta_i = \text{AIC}_i - \text{AIC}_{min}$; weights $w_i = e^{-\Delta_i/2} / \sum_j e^{-\Delta_j/2}$
+- AICc: small-sample correction. BIC: $k \log n$ in place of $2k$ (harsher)
 
 ```{r podium-aic}
 show_aic()
 ```
 
-- **Pause:** weight `r f2(aic_tab["no_wave", "weight"])` = P(true)? No (Bolker p. 284)
-- `const_ak`: +1 param, NLL down `r f2(fit_nowave$value - fit_constak$value)`, $\Delta$ `r f2(aic_tab["const_ak", "dAIC"])`. Useless param costs $\le 2$
+- **Pause:** "The no-wave model has weight `r f2(aic_tab["no_wave", "weight"])`. Is there a `r round(100 * aic_tab["no_wave", "weight"])`% chance it's the true model?" *Land:* no; relative support within this set, not a probability (Bolker p. 284)
+- **Sticking point:** `const_ak` adds 1 param, NLL drops only `r f2(fit_nowave$value - fit_constak$value)`, yet it's only `r f2(aic_tab["const_ak", "dAIC"])` behind. A useless parameter costs at most 2, so "within 2" $\neq$ support (Arnold 2010)
 
 \newpage
 
 ## 5. Ridge and lasso (~12 min) [BOARD $\to$ R]
 
-- Creepers: 50 stations, 10 covariates; simulated; truth = big trees, snags, road
-- $2^{10} = 1024$ subsets
-- $\text{NLL} + \lambda\sum\beta_j^2$ (ridge); $\text{NLL} + \lambda\sum|\beta_j|$ (lasso)
-- AIC: how many; these: how big. Standardize first
+- Creepers: 50 point counts, 10 standardized habitat covariates. **Simulated, so we know the truth:** big trees, snags, road distance
+- $2^{10} = 1024$ subsets. Instead, keep all 10 and penalize coefficient *size*: $\text{NLL} + \lambda\sum\beta_j^2$ (ridge), $\text{NLL} + \lambda\sum|\beta_j|$ (lasso)
+- AIC penalizes how many; these penalize how big. Standardize first
 
 ```{r podium-penalty, fig.width=4.5, fig.height=2.4}
 draw_penalty_1d()
 ```
 
-- **R:** MLE: north `r f2(b_mle["north"])`, elev `r f2(b_mle["elev"])`
-- Best subset: `r lst(best_set)`; `r n_within2` within 2; weight `r f2(best_wt)`
-- Top-models table: truth ranks `r true_rank` ($\Delta$ `r f2(true_daic)`); `r sum(plus_one)` = best + 1 useless covariate ($\Delta \approx 2$). **Pause:** which covariates are in every top model?
-- Paths; CV $\to$ `lambda.1se`: `r lst(lasso_set)`
-- Ridge (CV): no zeros; big trees `r f2(b_ridge["big_trees"])`, road `r f2(b_ridge["road_dist"])`
-- **Pause:** road `r f2(b_lasso["road_dist"])` vs. 0.3. Broken? No: bias for lower variance
-- 40 datasets: AIC right `r n_aic_right`, lasso `r n_lasso_right`
+- Lasso's corner at 0 gives exact zeros; ridge only shrinks
+- **R, MLE:** all 10 nonzero; northness `r f2(b_mle["north"])`, elevation `r f2(b_mle["elev"])` (both truly 0)
+- **R, all-subsets AIC:** best = `r lst(best_set)` (north spurious); `r n_within2` models within 2; top weight only `r f2(best_wt)`
+- **R, top-models table:** truth ranks `r true_rank` ($\Delta$AIC `r f2(true_daic)`); `r sum(plus_one)` of the next 9 = best model + one useless covariate, each at $\Delta \approx 2$. **Pause:** "Which covariates show up in nearly every top model?" *Land:* big trees, snags, road; the rest come and go
+- **R, CV lasso** (`lambda.1se`): keeps `r lst(lasso_set)`, zeroes the rest
+- **R, CV ridge** (same folds): no zeros; big trees `r f2(b_ridge["big_trees"])`, road `r f2(b_ridge["road_dist"])`
+- **Pause:** "The lasso kept road distance but says its effect is `r f2(b_lasso["road_dist"])`; the truth is 0.3. Is the lasso broken?" *Land:* no. Shrinkage is the point: biased, less noisy estimates that predict better. Good for prediction and choosing covariates, not for effect sizes (refit, or Bayesian on Wednesday)
+- Across 40 simulated datasets, exact true set: AIC `r n_aic_right`, lasso `r n_lasso_right`. Neither is a truth detector
 
 \newpage
 
 ## 6. Wrap and discussion (~5 min)
 
-- Count penalty / held-out data / size penalty
-- Tomorrow: pond survey. Wed: WAIC, LOO, shrinkage priors
+- Three ways to compare: penalize the count (LRT, AIC), test on held-out data (CV), penalize the size (ridge, lasso)
+- Tomorrow: the pond survey. Wednesday: Bayesian versions (WAIC, LOO, shrinkage priors)
 
-**Q1.** AIC kept northness (`r n_within2` within 2, best weight `r f2(best_wt)`); lasso dropped it. What do you report as "important"?
+**Q1.** AIC's best creeper model kept northness (`r n_within2` models within 2 units; top weight `r f2(best_wt)`); the lasso dropped it. Which covariates would you report as "important," and how would you word it?
 
-- Report uncertainty; agreed covariates are safest
+- *Land:* report the uncertainty, not one list; covariates both methods agree on (big trees, snags) are the safest claims
 
-**Q2.** Real survey: lasso zeroes grazing. "Expanding grazing won't affect creepers." Agree?
+**Q2.** In a real survey, the lasso sets grazing to exactly 0. A manager concludes expanding grazing won't affect creepers. Agree?
 
-- Zero = not needed for prediction here; not "no effect"
-- Grazing via shrub; small effect, 50 stations; causal question = COMPARE (3)
+- *Land:* a zero means "not needed to predict counts here," not "no effect"
+- Grazing may act through shrub cover, or be real but too small for 50 stations. A management question is causal: COMPARE (3), relevance

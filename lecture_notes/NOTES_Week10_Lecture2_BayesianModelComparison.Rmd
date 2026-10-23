@@ -402,47 +402,48 @@ report, and why?
 # PART 2: PODIUM CHEAT SHEET
 
 \normalsize
-\textit{Terse on purpose. Detail: Part 1. R = Wednesday section of CODE\_Week10\_ModelComparison.R.}
+\textit{Tight on purpose. Detail: Part 1. R = Wednesday section of CODE\_Week10\_ModelComparison.R.}
 \large
 
-**No in-class WOD. Take-home WOD out at end. Behind? Skip DIC; sec. 4 plot + pause only.**
+**No in-class WOD; hand out the take-home LOO WOD at the end. Behind?** Skip the DIC row; in section 4 show only the interval plot and its pause.
 
 ## 1. Big picture (~3 min) [BOARD]
 
-- COMPARE (2), Bayesian side
-- Monday: count and size penalties. Today: both for MCMC fits
-- No $\hat\theta$, fuzzy $k$ $\Rightarrow$ no AIC
+- Still COMPARE (2), now on the Bayesian side
+- Monday: penalize the number of parameters (AIC) or their size (ridge, lasso). Today: both ideas for MCMC fits
+- Why not just AIC? No single best-fit $\hat\theta$, and priors make "number of parameters" fuzzy
 
 \newpage
 
 ## 2. Ridge is a prior (~6 min) [BOARD $\to$ R]
 
-- PNLL $= \sum (y_i - \mu)^2/(2\sigma^2) + \lambda\mu^2$
-- $-\log$ post. $= \sum (y_i - \mu)^2/(2\sigma^2) + \mu^2/(2\tau^2)$
-- $\lambda = 1/(2\tau^2)$; ridge = posterior mode; $\tau \to \infty$ = MLE
-- **R:** MLE `r f3(mu_mle)`, ridge = mode `r f3(mu_ridge)`
+- Ridge: $\text{PNLL}(\mu) = \sum (y_i - \mu)^2/(2\sigma^2) + \lambda\mu^2$
+- Bayes, Normal(0, $\tau$) prior: $-\log P(\mu \mid y) = \sum (y_i - \mu)^2/(2\sigma^2) + \mu^2/(2\tau^2)$ + const.
+- Same function when $\lambda = 1/(2\tau^2)$: ridge estimate = posterior mode; vague prior ($\tau \to \infty$) = MLE
+- Shrinkage: $\hat\mu = \bar y \cdot n/(n + \sigma^2/\tau^2)$; prior worth $\sigma^2/\tau^2 = `r round(route_sigma^2 / route_tau^2)`$ routes at 0
+- **R:** MLE `r f3(mu_mle)`; ridge `r f3(mu_ridge)` = posterior mode `r f3(mu_map)`
 
 ```{r podium-ridge-prior, fig.width=4.5, fig.height=2.2}
 draw_ridge_prior()
 ```
 
-- **Pause:** lasso's prior? Laplace (spike + heavy tails)
+- **Pause:** "Which prior matches the lasso penalty, $\lambda|\mu|$?" *Land:* Laplace, $\propto e^{-\lambda|\mu|}$: a spike at 0 with heavier tails
 
 \newpage
 
 ## 3. WAIC and LOO (~12 min) [BOARD $\to$ R]
 
-- elpd: per point, log of posterior-averaged lik.; sum
-- $p_D$, $p_{waic}$, $p_{loo}$: effective parameters
-- LOO = PSIS refit shortcut; Pareto $k > 0.7$ = unreliable
-- Stan saves `log_lik[i]`
+- Score = elpd: for each point, log of its likelihood averaged over the posterior; sum. Higher is better; IC $= -2 \times$ elpd
+- Penalty = effective parameters from the posterior: $p_D$ (DIC), $p_{waic}$, $p_{loo}$
+- LOO approximates refitting without each point (PSIS); Pareto $k > 0.7$ flags points where the shortcut fails
+- Stan must save `log_lik[i]` for every observation
 
 ```{r podium-ic}
 show_ic()
 ```
 
-- **Pause:** full `r f1(-nd("full")["elpd_diff"])` behind, SE `r f1(nd("full")["se_diff"])`? About 1 SE: can't tell apart
-- AIC: no SE. LOO: SE
+- **Pause:** "The full model is `r f1(-nd("full")["elpd_diff"])` elpd behind, SE `r f1(nd("full")["se_diff"])`. What can you conclude?" *Land:* about one SE: can't tell them apart (not "no wave effect")
+- **Sticking point:** AIC gives no SE for a difference; LOO does
 
 \newpage
 
@@ -452,23 +453,23 @@ show_ic()
 draw_intervals()
 ```
 
-- Prior scale = $\lambda$; Normal = ridge, Laplace = lasso
-- North: vague `r f2(north_vague[1])`, Laplace `r f2(north_lap[1])`
-- $p_{loo}$: `r f1(p_loo_shrink["vague"])` $\to$ `r f1(p_loo_shrink["normal"])` $\to$ `r f1(p_loo_shrink["laplace"])`
-- **Pause:** lasso 0 vs. Laplace `r f2(north_lap[1])` (`r f2(north_lap[2])`, `r f2(north_lap[3])`)? Posterior keeps uncertainty
-- Horseshoe: spike + heavy tails (sketch)
-- Prior scale = $\lambda$: LOO, or hierarchical later
+- The prior's scale does $\lambda$'s job: Normal prior = ridge, Laplace = lasso
+- Northness (truly 0): vague prior `r f2(north_vague[1])`; Laplace prior `r f2(north_lap[1])`
+- Effective parameters ($p_{loo}$) fall as the prior tightens: `r f1(p_loo_shrink["vague"])` $\to$ `r f1(p_loo_shrink["normal"])` $\to$ `r f1(p_loo_shrink["laplace"])`
+- **Pause:** "Monday's lasso set northness to exactly 0. The Laplace posterior says `r f2(north_lap[1])` (90%: `r f2(north_lap[2])` to `r f2(north_lap[3])`). Which is more honest?" *Land:* the posterior keeps the uncertainty a single zero hides; a Bayesian lasso never gives exact zeros
+- Horseshoe (sketch only): a taller spike plus heavier tails; small effects shrink hard, big ones barely
+- Choosing the prior scale = choosing $\lambda$: compare by LOO, or estimate it (hierarchical, later)
 
 \newpage
 
 ## 5. Discussion (~5 min)
 
-**Q1.** No-wave fir model ahead by `r f1(-nd("full")["elpd_diff"])` elpd (SE `r f1(nd("full")["se_diff"])`). "Wave has no effect"?
+**Q1.** LOO prefers the no-wave fir model by `r f1(-nd("full")["elpd_diff"])` elpd (SE `r f1(nd("full")["se_diff"])`). A colleague writes "wave regeneration has no effect on cone production." Agree?
 
-- Inconclusive; not detected $\neq$ no effect
+- *Land:* a difference within about 1 SE is inconclusive; "not detected" $\neq$ "no effect"; corroborated, not proven
 
-**Q2.** Northness: Laplace `r f2(north_lap[1])` (`r f2(north_lap[2])` to `r f2(north_lap[3])`) vs. lasso 0. Report which?
+**Q2.** With a Laplace prior, northness gets `r f2(north_lap[1])` (90% interval `r f2(north_lap[2])` to `r f2(north_lap[3])`); Monday's lasso said exactly 0. Which would you report, and why?
 
-- Posterior shows the uncertainty a zero hides
+- *Land:* the posterior shows the uncertainty a zero hides; for prediction either works, for inference report the interval
 
-**If time:** Bayes factors (marginal lik., prior-sensitive); RJMCMC / spike-and-slab (not Stan)
+**If time:** Bayes factors (ratio of marginal likelihoods; sensitive to vague priors). RJMCMC and spike-and-slab put model choice inside the sampler (not in Stan; JAGS, NIMBLE)

@@ -198,10 +198,17 @@ Name: `NOTES_Week<N>_Lecture<M>_<Topic>.Rmd`. See
   board content, results to quote (computed by hidden chunks), one
   sticking point, where a pause should land. Don't repeat the podium
   copy in more words. Target about one page per section or less.
-- **Part 2 (podium copy)** after `\newpage` + `\large`: terse bullets,
+- **Part 2 (podium copy)** after `\newpage` + `\large`: tight bullets,
   small reference figures, essential equations, `\newpage` before each
   section, time budgets summing to ~30-35 min. Re-plot from Part 1's
   objects rather than recomputing.
+- **Tight, not cryptic** (instructor feedback, Oct. 22, 2026: the
+  first Week 10 podium copies were a bit too terse). Each bullet should
+  make sense at a glance without Part 1: write every pause as the full
+  question in quotes plus a one-line *Land:*; label numbers with what
+  they are ("lasso says 0.07; truth 0.3", not "road 0.07 vs. 0.3");
+  avoid bare arrows and symbol shorthand standing in for a sentence.
+  See the Week 10 podium copies.
 - Tag every section header in both parts `[BOARD]`, `[R]`, or
   `[BOARD $\to$ R]`.
 - **Mine old material first:** legacy root-level `LECTUREn.Rmd` /
