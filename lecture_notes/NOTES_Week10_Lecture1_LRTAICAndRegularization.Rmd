@@ -85,11 +85,27 @@ best_set <- covars[unlist(subsets[which.min(subset_aic), ])]
 n_within2 <- sum(subset_aic - min(subset_aic) < 2)
 subset_wt <- exp(-(subset_aic - min(subset_aic)) / 2)
 best_wt <- max(subset_wt) / sum(subset_wt)
+# top-models table: rank and dAIC of the true model; how many top models are the
+# best model plus one extra covariate
+subset_rank <- order(subset_aic)
+true_rows <- which(apply(subsets, 1, function(use) all(use == (beta_true != 0))))
+true_rank <- match(true_rows, subset_rank)
+true_daic <- subset_aic[true_rows] - min(subset_aic)
+best_use <- unlist(subsets[subset_rank[1], ])
+plus_one <- sapply(subset_rank[2:10], function(r) {
+  use <- unlist(subsets[r, ])
+  sum(use) == sum(best_use) + 1 && all(use[best_use])
+})
+plus_one_daic <- (subset_aic[subset_rank[2:10]] - min(subset_aic))[plus_one]
 fit_ridge <- glmnet(X, creepers, family = "poisson", alpha = 0)
 fit_lasso <- glmnet(X, creepers, family = "poisson", alpha = 1)
 set.seed(746)
 cv_lasso <- cv.glmnet(X, creepers, family = "poisson", alpha = 1)
 b_lasso <- setNames(coef(cv_lasso, s = "lambda.1se")[-1], covars)
+set.seed(746)
+cv_ridge <- cv.glmnet(X, creepers, family = "poisson", alpha = 0)
+b_ridge <- setNames(coef(cv_ridge, s = "lambda.1se")[-1], covars)
+b_ridge_min <- setNames(coef(cv_ridge, s = "lambda.min")[-1], covars)
 lasso_set <- covars[b_lasso != 0]
 
 f2 <- function(v) formatC(v, format = "f", digits = 2)
@@ -291,7 +307,18 @@ draw_penalty_1d()
 
 - **Full MLE:** all 10 nonzero; north `r f2(b_mle["north"])`, elev `r f2(b_mle["elev"])` (truth 0)
 - **All-subsets AIC:** `r lst(best_set)`; `r n_within2` within 2; best weight `r f2(best_wt)`
+- **Top-models table:** the true model ranks `r true_rank` ($\Delta$AIC
+  `r f2(true_daic)`). `r sum(plus_one)` of the next 9 are the best model
+  plus one covariate, at $\Delta$AIC `r f2(min(plus_one_daic))` to
+  `r f2(max(plus_one_daic))`: uninformative parameters (section 4, Arnold
+  2010). Pause: which covariates are in nearly every top model?
 - **Lasso (CV):** `r lst(lasso_set)`; big trees `r f2(b_lasso["big_trees"])` (truth 0.5), road `r f2(b_lasso["road_dist"])` (0.3)
+- **Ridge (CV, same folds and rule):** no zeros, everything shrunk hard:
+  big trees `r f2(b_ridge["big_trees"])`, snags `r f2(b_ridge["snags"])`,
+  road `r f2(b_ridge["road_dist"])`, north `r f2(b_ridge["north"])`. At
+  `lambda.min` much less: big trees `r f2(b_ridge_min["big_trees"])`,
+  road `r f2(b_ridge_min["road_dist"])`, north `r f2(b_ridge_min["north"])`
+  (mention only if asked)
 - **40 simulated datasets**, exact true set: AIC `r n_aic_right`, lasso `r n_lasso_right`
 
 - **Pause:** road `r f2(b_lasso["road_dist"])` vs. 0.3, broken? No:
@@ -399,7 +426,9 @@ draw_penalty_1d()
 
 - **R:** MLE: north `r f2(b_mle["north"])`, elev `r f2(b_mle["elev"])`
 - Best subset: `r lst(best_set)`; `r n_within2` within 2; weight `r f2(best_wt)`
+- Top-models table: truth ranks `r true_rank` ($\Delta$ `r f2(true_daic)`); `r sum(plus_one)` = best + 1 useless covariate ($\Delta \approx 2$). **Pause:** which covariates are in every top model?
 - Paths; CV $\to$ `lambda.1se`: `r lst(lasso_set)`
+- Ridge (CV): no zeros; big trees `r f2(b_ridge["big_trees"])`, road `r f2(b_ridge["road_dist"])`
 - **Pause:** road `r f2(b_lasso["road_dist"])` vs. 0.3. Broken? No: bias for lower variance
 - 40 datasets: AIC right `r n_aic_right`, lasso `r n_lasso_right`
 

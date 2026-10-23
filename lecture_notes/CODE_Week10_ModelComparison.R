@@ -109,6 +109,20 @@ subset_aic <- apply(subsets, 1, function(use) {
 covars[unlist(subsets[which.min(subset_aic), ])]   # best subset
 sum(subset_aic - min(subset_aic) < 2)              # models within 2 AIC units
 
+# AIC table of the top models: k counts the intercept
+subset_tab <- data.frame(
+  model = apply(subsets, 1, function(use) {
+    if (!any(use)) "(intercept only)" else paste(covars[use], collapse = " + ")
+  }),
+  k = rowSums(subsets) + 1,
+  AIC = subset_aic)
+subset_tab$dAIC <- subset_tab$AIC - min(subset_tab$AIC)
+subset_tab$weight <- exp(-subset_tab$dAIC / 2) / sum(exp(-subset_tab$dAIC / 2))
+subset_tab <- subset_tab[order(subset_tab$AIC), ]
+rownames(subset_tab) <- NULL
+cbind(subset_tab[1:10, 1:2], round(subset_tab[1:10, 3:5], 2))
+#  [PAUSE] which covariates show up in nearly every top model? which come and go?
+
 # penalized NLL: NLL(beta) + lambda * sum(beta^2) (ridge) or lambda * sum(|beta|) (lasso)
 fit_ridge <- glmnet(X, creepers, family = "poisson", alpha = 0)
 fit_lasso <- glmnet(X, creepers, family = "poisson", alpha = 1)
@@ -124,9 +138,15 @@ cv_lasso <- cv.glmnet(X, creepers, family = "poisson", alpha = 1)
 plot(cv_lasso)   # left dashed line: lambda.min; right: lambda.1se (simplest within 1 SE)
 coef_lasso <- coef(cv_lasso, s = "lambda.1se")[-1]
 
+# same cross-validation for ridge (alpha = 0); same folds, so the two are comparable
+set.seed(746)
+cv_ridge <- cv.glmnet(X, creepers, family = "poisson", alpha = 0)
+coef_ridge <- coef(cv_ridge, s = "lambda.1se")[-1]   # try s = "lambda.min": much less shrinkage
+
 round(data.frame(truth = beta_true,
                  MLE = coef(fit_glm)[-1],
                  AIC_best = ifelse(unlist(subsets[which.min(subset_aic), ]), 1, 0),
+                 ridge = coef_ridge,
                  lasso = coef_lasso,
                  row.names = covars), 2)
 #  [PAUSE] the lasso kept road_dist but estimates 0.07; the truth is 0.3. is the lasso broken?
