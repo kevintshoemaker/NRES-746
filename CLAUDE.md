@@ -38,8 +38,8 @@ and stats theory as I go.
 
 # Writing style
 
-Applies to all student-facing prose (handouts, keys, prompts, the
-"How to prepare" blocks). Students know AI helped make the materials,
+Applies to all student-facing prose (handouts, keys, discussion
+prompts). Students know AI helped make the materials,
 but writing that signals it makes them take exercises less seriously.
 
 - **No em-dashes**, and no `--` in knitted `.Rmd` files (pandoc turns
@@ -188,10 +188,9 @@ split prep and podium into two files), knit to PDF, `fontsize: 12pt`, `echo = FA
 Name: `NOTES_Week<N>_Lecture<M>_<Topic>.Rmd`. See
 `NOTES_Week10_Lecture1_LRTAICAndRegularization.Rmd`.
 
-- **How to prepare (for students)**, first: a few student-facing
-  bullets (topic and big question; distributions, bestiary functions,
-  math or R skills to review; Bolker sections with printed pages).
-  Specific, but no WOD/lab answers.
+- **No "How to prepare" block** (dropped Oct. 22, 2026): the
+  instructor writes prep instructions as Canvas announcements by hand,
+  and may ask for help with those separately.
 - **Overview:** the beat table (beat, mode, time) plus a line or two
   (e.g. what to skip if behind).
 - **Part 1 (prep, read beforehand). Keep it very short.** Bullets,
@@ -213,8 +212,8 @@ Name: `NOTES_Week<N>_Lecture<M>_<Topic>.Rmd`. See
   circulating; Part 2 ends with an Act-by-Act quick reference. Worked
   examples must use different numbers/functions from the lab's graded
   questions (same rule for any lecture/lab pair).
-- **Reference handouts:** `NOTES_Reference_<Topic>.Rmd`; no prep block
-  or podium copy; writing-style rules apply (see
+- **Reference handouts:** `NOTES_Reference_<Topic>.Rmd`; no podium
+  copy; writing-style rules apply (see
   `NOTES_Reference_LikelihoodTheory.Rmd`, `NOTES_Reference_AICPenalty.Rmd`).
 
 **Companion R script, one per week:**
@@ -455,8 +454,9 @@ Snapshot: Thu., Oct. 22, 2026 (end of Week 9).
   - **Built (Wednesday), before Monday was taught; adjust after
     Monday's report:** `NOTES_Week10_Lecture2_BayesianModelComparison.Rmd`,
     the script's Wednesday section (Stan; run Monday's section first),
-    in-class WOD *Ridge Is a Prior* + key (lambda = 1/(2 tau^2); lasso =
-    Laplace prior), and take-home WOD *Comparing Pond Models with LOO*
+    no in-class WOD (the ridge-as-prior derivation, lambda = 1/(2
+    tau^2), lasso = Laplace prior, is a ~6-min board + R demo in
+    section 2; it was a WOD until Oct. 22), and take-home WOD *Comparing Pond Models with LOO*
     + key (students fill in the `log_lik` line; four pond models; B =
     temp + bullfrogs + canopy is best, looic 221.8; D = all eight with
     a Normal(0, 0.3) prior is 2.8 elpd behind, SE 2.7, with p_loo 8.2

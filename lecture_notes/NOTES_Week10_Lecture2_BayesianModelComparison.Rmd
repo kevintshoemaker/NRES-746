@@ -147,6 +147,7 @@ shrink_comp <- loo_compare(loos_shrink)
 ```{r helpers}
 f1 <- function(v) formatC(v, format = "f", digits = 1)
 f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+f3 <- function(v) formatC(v, format = "f", digits = 3)
 
 ic_tab <- data.frame(
   criterion = c("AIC", "DIC", "WAIC", "LOOIC"),
@@ -201,35 +202,45 @@ draw_priors <- function() {
 nd <- function(m) fir_comp[m, ]
 north_lap <- post_sum$laplace[7, ]
 north_vague <- post_sum$vague[7, ]
+
+# ridge-as-prior demo: 8 routes' change in log abundance; sigma known; Normal(0, tau) prior
+route_y <- c(0.12, -0.05, 0.20, 0.08, -0.10, 0.15, 0.02, 0.10)
+route_sigma <- 0.15
+route_tau <- 0.05
+route_lambda <- 1 / (2 * route_tau^2)
+nll_mu <- function(mu) sapply(mu, function(m) sum((route_y - m)^2) / (2 * route_sigma^2))
+pnll_mu <- function(mu) nll_mu(mu) + route_lambda * mu^2
+neg_log_post <- function(mu) nll_mu(mu) - dnorm(mu, 0, route_tau, log = TRUE)
+mu_mle <- mean(route_y)
+mu_ridge <- optimize(pnll_mu, c(-1, 1))$minimum
+mu_map <- optimize(neg_log_post, c(-1, 1))$minimum
+
+# PNLL and negative log posterior (each shifted to a minimum of 0) lie on top of each other
+draw_ridge_prior <- function() {
+  par(mar = c(3.2, 3.4, 0.5, 0.5), mgp = c(2, 0.6, 0))
+  mu <- seq(-0.05, 0.12, length.out = 400)
+  plot(mu, nll_mu(mu) - min(nll_mu(mu)), type = "l", lwd = 2, col = "grey60",
+       ylim = c(0, 4), xlab = "Regional trend", ylab = "Shifted to minimum 0")
+  lines(mu, pnll_mu(mu) - min(pnll_mu(mu)), lwd = 2)
+  lines(mu, neg_log_post(mu) - min(neg_log_post(mu)), lwd = 2, lty = 2, col = "white")
+  abline(v = c(mu_mle, mu_ridge), lty = 3)
+  legend("topright", c("NLL (MLE)", "ridge PNLL = -log posterior"),
+         col = c("grey60", "black"), lwd = 2, bty = "n", cex = 0.8)
+}
 ```
-
-# How to prepare (for students)
-
-- **Big picture.** Monday compared models with likelihood ratio tests,
-  AIC, and penalties on coefficient size (ridge, lasso). Today: the
-  Bayesian versions. How do we compare models fit by MCMC, where there
-  is no single best-fit parameter set, and how do priors do the job of
-  a penalty?
-- **Read:** Hooten and Hobbs (2015), *A guide to Bayesian model
-  selection for ecologists* (Ecological Monographs 85: 3-28), the
-  sections "Model validation," "Statistical regularization and
-  information criteria," and "Guidance"; skim the rest. Bolker 6.6.3
-  (printed p. 280-284) on Bayes factors and DIC.
-- **Review:** Bayes' rule for parameters (posterior $\propto$ likelihood
-  $\times$ prior); Monday's ridge and lasso penalties; fitting a model
-  with `cmdstanr` (last week's take-home).
 
 # Overview (instructor only)
 
 | Beat | Mode | Time |
 |---|---|---|
 | 1. Big picture | BOARD | ~3 min |
-| 2. WOD: *Ridge Is a Prior* | handout | ~10 min |
+| 2. Ridge is a prior | BOARD $\to$ R | ~6 min |
 | 3. WAIC and LOO | BOARD $\to$ R | ~12 min |
 | 4. Shrinkage priors | BOARD $\to$ R | ~12 min |
 | 5. Discussion | BOARD | ~5 min |
 | If time: Bayes factors, RJMCMC | BOARD | |
 
+- No in-class WOD; section 2 is a short demo instead.
 - R = Wednesday section of `CODE_Week10_ModelComparison.R` (needs
   Monday's section run first). Hand out the take-home WOD
   `WOD_Week10_Lecture2_PondModelsWithLOO.Rmd` at the end (due Monday).
@@ -247,12 +258,63 @@ north_vague <- post_sum$vague[7, ]
 - No single $\hat\theta$ $\Rightarrow$ no AIC; priors blur "number of
   parameters"
 
-## 2. WOD reveal (~10 min) [handout]
+## 2. Ridge is a prior (~6 min) [BOARD $\to$ R]
 
-- $-\log P(\mu \mid y) = \sum (y_i - \mu)^2/(2\sigma^2) + \mu^2/(2\tau^2)$,
-  so $\lambda = 1/(2\tau^2)$
-- Ridge estimate = posterior mode; vague prior ($\tau \to \infty$) = MLE
-- Lasso $\lambda|\mu|$ = Laplace prior: spike at 0, heavier tails
+- Setup: 8 survey routes, change in log abundance
+  $y_i \sim \text{Normal}(\mu, \sigma = `r route_sigma`)$; $\mu$ = regional trend
+
+**The math, step by step (board).**
+
+1. *Monday's ridge fit* (one parameter, so one penalty term):
+   $$\text{PNLL}(\mu) = \underbrace{\sum_{i=1}^n \frac{(y_i - \mu)^2}{2\sigma^2}}_{\text{NLL}} + \lambda \mu^2$$
+   (the NLL is the Normal density's exponent; the
+   $\log\sqrt{2\pi\sigma^2}$ terms don't involve $\mu$, so they drop)
+2. *Bayes' rule*, then take $-\log$ (products become sums):
+   $$P(\mu \mid y) \propto \mathcal{L}(\mu)\, P(\mu)
+     \quad\Rightarrow\quad
+     -\log P(\mu \mid y) = -\log \mathcal{L}(\mu) - \log P(\mu) + \text{const.}$$
+3. *Prior* $\mu \sim \text{Normal}(0, \tau)$, a skeptical prior centered on
+   "no trend":
+   $$P(\mu) = \frac{1}{\sqrt{2\pi\tau^2}}\, e^{-\mu^2/(2\tau^2)}
+     \quad\Rightarrow\quad
+     -\log P(\mu) = \frac{\mu^2}{2\tau^2} + \text{const.}$$
+4. *Put together:*
+   $$-\log P(\mu \mid y) = \sum_{i=1}^n \frac{(y_i - \mu)^2}{2\sigma^2} + \frac{\mu^2}{2\tau^2} + \text{const.}$$
+5. *Match to step 1:* identical functions of $\mu$ when
+   $$\lambda = \frac{1}{2\tau^2}$$
+   so they have the same minimum: the **ridge estimate is the posterior
+   mode**. Narrow prior (small $\tau$) = big penalty; vague prior
+   ($\tau \to \infty$) = $\lambda \to 0$ = MLE.
+6. *Optional, the estimate itself:* set the derivative of step 4 to 0,
+   $$-\sum_{i=1}^n \frac{y_i - \mu}{\sigma^2} + \frac{\mu}{\tau^2} = 0
+     \quad\Rightarrow\quad
+     \hat\mu = \frac{\sum y_i}{n + \sigma^2/\tau^2}
+     = \bar y \cdot \frac{n}{n + \sigma^2/\tau^2}$$
+   The MLE $\bar y$ times a shrinkage factor below 1. The prior acts like
+   $\sigma^2/\tau^2$ extra observations of exactly 0.
+7. *Lasso:* the same matching with a Laplace prior,
+   $P(\mu) = \frac{\lambda}{2} e^{-\lambda|\mu|}$, gives
+   $-\log P(\mu) = \lambda|\mu| + \text{const.}$: the lasso penalty.
+
+**Numbers for the demo.** $n = 8$, $\bar y = `r f3(mu_mle)`$,
+$\sigma = `r route_sigma`$, $\tau = `r route_tau`$, so
+$\lambda = `r route_lambda`$ and $\sigma^2/\tau^2 = `r round(route_sigma^2 / route_tau^2)`$
+(the prior is worth `r round(route_sigma^2 / route_tau^2)` routes at 0).
+Shrinkage factor $8/`r 8 + round(route_sigma^2 / route_tau^2)`$ =
+`r f2(8 / (8 + route_sigma^2 / route_tau^2))`, so
+$\hat\mu = `r f3(mu_mle)` \times `r f2(8 / (8 + route_sigma^2 / route_tau^2))` = `r f3(mu_map)`$.
+R: MLE `r f3(mu_mle)`; ridge `r f3(mu_ridge)` = posterior mode
+`r f3(mu_map)`.
+
+```{r ridge-prior-fig, fig.width=4.5, fig.height=2.4}
+draw_ridge_prior()
+```
+
+- **Pause:** which prior matches the lasso, $\lambda|\mu|$? *Land:*
+  Laplace, density $\propto e^{-\lambda|\mu|}$ (spike at 0, heavier
+  tails); section 4 uses it
+- **Sticking point:** the mode is one point; the Bayesian payoff is the
+  whole posterior (section 4)
 
 ## 3. WAIC and LOO (~12 min) [BOARD $\to$ R]
 
@@ -343,7 +405,7 @@ report, and why?
 \textit{Terse on purpose. Detail: Part 1. R = Wednesday section of CODE\_Week10\_ModelComparison.R.}
 \large
 
-**Big picture $\to$ WOD $\to$ lecture. Take-home WOD out at end. Behind? Skip DIC; sec. 4 plot + pause only.**
+**No in-class WOD. Take-home WOD out at end. Behind? Skip DIC; sec. 4 plot + pause only.**
 
 ## 1. Big picture (~3 min) [BOARD]
 
@@ -353,11 +415,18 @@ report, and why?
 
 \newpage
 
-## 2. WOD reveal (~10 min)
+## 2. Ridge is a prior (~6 min) [BOARD $\to$ R]
 
+- PNLL $= \sum (y_i - \mu)^2/(2\sigma^2) + \lambda\mu^2$
 - $-\log$ post. $= \sum (y_i - \mu)^2/(2\sigma^2) + \mu^2/(2\tau^2)$
 - $\lambda = 1/(2\tau^2)$; ridge = posterior mode; $\tau \to \infty$ = MLE
-- Lasso = Laplace prior
+- **R:** MLE `r f3(mu_mle)`, ridge = mode `r f3(mu_ridge)`
+
+```{r podium-ridge-prior, fig.width=4.5, fig.height=2.2}
+draw_ridge_prior()
+```
+
+- **Pause:** lasso's prior? Laplace (spike + heavy tails)
 
 \newpage
 

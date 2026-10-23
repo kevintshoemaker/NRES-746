@@ -138,6 +138,30 @@ round(data.frame(truth = beta_true,
 # WEDNESDAY, Oct. 28: Bayesian model comparison and shrinkage priors ===========
 #  Uses fir, wave, aic_tab, X, creepers, covars, beta_true, coef_lasso from Monday's section.
 
+# 2. Ridge is a prior (~6 min) ----------------------------------------------------
+
+# 8 survey routes: change in log abundance ~ Normal(mu, sigma = 0.15); mu = regional trend
+route_y <- c(0.12, -0.05, 0.20, 0.08, -0.10, 0.15, 0.02, 0.10)
+sigma <- 0.15
+tau <- 0.05                       # prior: mu ~ Normal(0, tau)
+lambda <- 1 / (2 * tau^2)         # ridge penalty that matches it
+nll_mu <- function(mu) sapply(mu, function(m) sum((route_y - m)^2) / (2 * sigma^2))
+pnll_mu <- function(mu) nll_mu(mu) + lambda * mu^2                       # ridge
+neg_log_post <- function(mu) nll_mu(mu) - dnorm(mu, 0, tau, log = TRUE)  # Bayes
+c(MLE = mean(route_y),
+  ridge = optimize(pnll_mu, c(-1, 1))$minimum,
+  posterior_mode = optimize(neg_log_post, c(-1, 1))$minimum)
+
+# both curves shifted to a minimum of 0: they lie on top of each other
+mu <- seq(-0.05, 0.12, length.out = 400)
+plot(mu, nll_mu(mu) - min(nll_mu(mu)), type = "l", lwd = 2, col = "grey60", ylim = c(0, 4),
+     xlab = "Regional trend", ylab = "Shifted to minimum 0")
+lines(mu, pnll_mu(mu) - min(pnll_mu(mu)), lwd = 4)
+lines(mu, neg_log_post(mu) - min(neg_log_post(mu)), lwd = 2, col = "orange", lty = 2)
+legend("topright", c("NLL (MLE)", "ridge PNLL", "-log posterior"),
+       col = c("grey60", "black", "orange"), lwd = c(2, 4, 2), lty = c(1, 1, 2), bty = "n")
+#  [PAUSE] which prior matches the lasso penalty, lambda * |mu|?
+
 # 3. WAIC and LOO (~12 min) -------------------------------------------------------
 
 options(cmdstanr_no_ver_check = TRUE)
