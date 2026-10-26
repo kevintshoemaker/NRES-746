@@ -450,8 +450,10 @@ Snapshot: Thu., Oct. 22, 2026 (end of Week 9).
     in the repo). Act 1 (paper): AIC table for 7 models (Model 5 =
     truth is best; Model 6 within 2 but an uninformative parameter),
     two LRTs, temp vs. elevation inseparable, and ridge/lasso budgets
-    at t = 0.4 on temp-elevation contours (the lasso lands mid-edge,
-    no zero). Act 2 (take-home capable): ridge NLL by hand with
+    at t = 0.3 on temp-canopy contours (ridge about (-0.26, 0.14);
+    the lasso hits the corner and zeros canopy; 2b asks whether ridge
+    can ever zero a coefficient, 2c when the lasso does; changed from a
+    temp-elevation panel on Oct. 22). Act 2 (take-home capable): ridge NLL by hand with
     `optim()` (temp -0.64 at lambda 0, -0.41 at 10), ridge path,
     `cv.glmnet` lasso (keeps temp, elev, canopy, bullfrogs), CV
     pseudocode; no Stan. Tuesday opens with a Stan check (~10 min) and

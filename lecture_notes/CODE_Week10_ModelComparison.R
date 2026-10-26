@@ -172,14 +172,28 @@ c(MLE = mean(route_y),
   ridge = optimize(pnll_mu, c(-1, 1))$minimum,
   posterior_mode = optimize(neg_log_post, c(-1, 1))$minimum)
 
-# both curves shifted to a minimum of 0: they lie on top of each other
-mu <- seq(-0.05, 0.12, length.out = 400)
-plot(mu, nll_mu(mu) - min(nll_mu(mu)), type = "l", lwd = 2, col = "grey60", ylim = c(0, 4),
-     xlab = "Regional trend", ylab = "Shifted to minimum 0")
+# left: NLL (data) + penalty (= -log prior) = ridge PNLL, which lies on top of -log posterior
+par(mfrow = c(1, 2))
+mu <- seq(-0.1, 0.18, length.out = 400)
+plot(mu, nll_mu(mu) - min(nll_mu(mu)), type = "l", lwd = 2, col = "grey60", ylim = c(0, 5),
+     xlab = "Regional trend", ylab = "Shifted to minimum 0", main = "Penalty view")
+lines(mu, lambda * mu^2, lwd = 2, lty = 2)
 lines(mu, pnll_mu(mu) - min(pnll_mu(mu)), lwd = 4)
 lines(mu, neg_log_post(mu) - min(neg_log_post(mu)), lwd = 2, col = "orange", lty = 2)
-legend("topright", c("NLL (MLE)", "ridge PNLL", "-log posterior"),
-       col = c("grey60", "black", "orange"), lwd = c(2, 4, 2), lty = c(1, 1, 2), bty = "n")
+legend("top", c("NLL (data)", "penalty = -log prior", "ridge PNLL", "-log posterior"),
+       col = c("grey60", "black", "black", "orange"), lwd = c(2, 2, 4, 2), lty = c(1, 2, 1, 2),
+       bty = "n", cex = 0.8)
+
+# right: prior x likelihood -> posterior, as densities; posterior mean = ridge estimate
+post_prec <- length(route_y) / sigma^2 + 1 / tau^2                     # precisions add
+post_mean <- (sum(route_y) / sigma^2) / post_prec
+plot(mu, dnorm(mu, post_mean, 1 / sqrt(post_prec)), type = "l", lwd = 4,
+     xlab = "Regional trend", ylab = "Density", main = "Bayes view")
+lines(mu, dnorm(mu, 0, tau), lwd = 2, lty = 2)
+lines(mu, dnorm(mu, mean(route_y), sigma / sqrt(length(route_y))), lwd = 2, col = "grey60")
+legend("topright", c("likelihood (data)", "prior", "posterior"), col = c("grey60", 1, 1),
+       lwd = c(2, 2, 4), lty = c(1, 2, 1), bty = "n", cex = 0.8)
+par(mfrow = c(1, 1))
 #  [PAUSE] which prior matches the lasso penalty, lambda * |mu|?
 
 # 3. WAIC and LOO (~12 min) -------------------------------------------------------

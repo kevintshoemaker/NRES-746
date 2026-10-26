@@ -215,17 +215,32 @@ mu_mle <- mean(route_y)
 mu_ridge <- optimize(pnll_mu, c(-1, 1))$minimum
 mu_map <- optimize(neg_log_post, c(-1, 1))$minimum
 
-# PNLL and negative log posterior (each shifted to a minimum of 0) lie on top of each other
+# left: penalty view (NLL + penalty = PNLL = -log posterior, each shifted to minimum 0);
+# right: Bayes view (prior x likelihood, normalized, gives the posterior)
 draw_ridge_prior <- function() {
-  par(mar = c(3.2, 3.4, 0.5, 0.5), mgp = c(2, 0.6, 0))
-  mu <- seq(-0.05, 0.12, length.out = 400)
-  plot(mu, nll_mu(mu) - min(nll_mu(mu)), type = "l", lwd = 2, col = "grey60",
-       ylim = c(0, 4), xlab = "Regional trend", ylab = "Shifted to minimum 0")
-  lines(mu, pnll_mu(mu) - min(pnll_mu(mu)), lwd = 2)
-  lines(mu, neg_log_post(mu) - min(neg_log_post(mu)), lwd = 2, lty = 2, col = "white")
-  abline(v = c(mu_mle, mu_ridge), lty = 3)
-  legend("topright", c("NLL (MLE)", "ridge PNLL = -log posterior"),
-         col = c("grey60", "black"), lwd = 2, bty = "n", cex = 0.8)
+  par(mfrow = c(1, 2), mar = c(3.2, 3.4, 1.4, 0.5), mgp = c(2, 0.6, 0))
+  mu <- seq(-0.1, 0.18, length.out = 400)
+  plot(mu, nll_mu(mu) - min(nll_mu(mu)), type = "l", lwd = 2, col = "grey55",
+       ylim = c(0, 5), xlab = "Regional trend", ylab = "Shifted to minimum 0",
+       main = "Penalty view", cex.main = 0.9, font.main = 1)
+  lines(mu, route_lambda * mu^2, lwd = 2, lty = 2)
+  lines(mu, pnll_mu(mu) - min(pnll_mu(mu)), lwd = 3)
+  points(c(mu_mle, 0, mu_ridge), c(0, 0, 0), pch = c(21, 22, 19), bg = "white", cex = 1.2)
+  legend("top", c("NLL (data)", "penalty = -log prior", "sum = -log posterior"),
+         col = c("grey55", "black", "black"), lwd = c(2, 2, 3), lty = c(1, 2, 1),
+         bty = "n", cex = 0.7)
+  post_sd <- 1 / sqrt(length(route_y) / route_sigma^2 + 1 / route_tau^2)
+  lik_dens <- dnorm(mu, mu_mle, route_sigma / sqrt(length(route_y)))
+  prior_dens <- dnorm(mu, 0, route_tau)
+  post_dens <- dnorm(mu, mu_map, post_sd)
+  plot(mu, post_dens, type = "l", lwd = 3, ylim = c(0, max(post_dens) * 1.25),
+       xlab = "Regional trend", ylab = "Density", main = "Bayes view",
+       cex.main = 0.9, font.main = 1)
+  lines(mu, prior_dens, lwd = 2, lty = 2)
+  lines(mu, lik_dens, lwd = 2, col = "grey55")
+  legend("topright", c("likelihood (data)", "prior", "posterior"),
+         col = c("grey55", "black", "black"), lwd = c(2, 2, 3), lty = c(1, 2, 1),
+         bty = "n", cex = 0.7)
 }
 ```
 
@@ -306,9 +321,15 @@ $\hat\mu = `r f3(mu_mle)` \times `r f2(8 / (8 + route_sigma^2 / route_tau^2))` =
 R: MLE `r f3(mu_mle)`; ridge `r f3(mu_ridge)` = posterior mode
 `r f3(mu_map)`.
 
-```{r ridge-prior-fig, fig.width=4.5, fig.height=2.4}
+```{r ridge-prior-fig, fig.width=6.5, fig.height=2.8}
 draw_ridge_prior()
 ```
+
+- Left: data's NLL (min at the MLE, open circle) + the prior's penalty
+  (min at 0, square) = the ridge PNLL, which is the $-\log$ posterior
+  (min in between, filled). Right: the same story as densities; the
+  posterior sits between the likelihood and the prior, and is narrower
+  than either (their precisions, $n/\sigma^2$ and $1/\tau^2$, add)
 
 - **Pause:** which prior matches the lasso, $\lambda|\mu|$? *Land:*
   Laplace, density $\propto e^{-\lambda|\mu|}$ (spike at 0, heavier
@@ -423,9 +444,11 @@ report, and why?
 - Shrinkage: $\hat\mu = \bar y \cdot n/(n + \sigma^2/\tau^2)$; prior worth $\sigma^2/\tau^2 = `r round(route_sigma^2 / route_tau^2)`$ routes at 0
 - **R:** MLE `r f3(mu_mle)`; ridge `r f3(mu_ridge)` = posterior mode `r f3(mu_map)`
 
-```{r podium-ridge-prior, fig.width=4.5, fig.height=2.2}
+```{r podium-ridge-prior, fig.width=6.5, fig.height=2.6}
 draw_ridge_prior()
 ```
+
+- Left: NLL + penalty = $-\log$ posterior. Right: likelihood $\times$ prior $\propto$ posterior. The estimate lands between the data and 0
 
 - **Pause:** "Which prior matches the lasso penalty, $\lambda|\mu|$?" *Land:* Laplace, $\propto e^{-\lambda|\mu|}$: a spike at 0 with heavier tails
 

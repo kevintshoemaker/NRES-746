@@ -111,25 +111,25 @@ nll <- sapply(models, fit_nll)
 aic <- 2 * nll + 2 * k
 f2 <- function(v) formatC(v, format = "f", digits = 2)
 
-# NLL surface for the temp + elevation model, intercept profiled out
+# NLL surface for a temp + canopy model, intercept profiled out
 zt <- X[, "temp"]
-ze <- X[, "elev"]
-nll_2d <- function(bt, be) {
-  eta_off <- bt * zt + be * ze
+zc <- X[, "canopy"]
+nll_2d <- function(bt, bc) {
+  eta_off <- bt * zt + bc * zc
   f <- function(b0) -sum(dbinom(ponds$bd_positive, ponds$frogs_swabbed,
                                 plogis(b0 + eta_off), log = TRUE))
   optimize(f, c(-4, 3))$objective
 }
-bt_grid <- seq(-0.8, 0.45, length.out = 101)
-be_grid <- seq(-0.45, 0.8, length.out = 101)
-nll_surf <- outer(bt_grid, be_grid, Vectorize(nll_2d))
-mle_2d <- coef(glm(y_bin ~ zt + ze, family = binomial))[-1]
+bt_grid <- seq(-0.95, 0.35, length.out = 101)
+bc_grid <- seq(-0.35, 0.95, length.out = 101)
+nll_surf <- outer(bt_grid, bc_grid, Vectorize(nll_2d))
+mle_2d <- coef(glm(y_bin ~ zt + zc, family = binomial))[-1]
 
 # answers: AIC from the printed (rounded) NLLs; LRTs; constrained estimates on each budget
 d_aic <- aic - min(aic)
 lrt_56 <- 2 * (nll[5] - nll[6])
 lrt_57 <- 2 * (nll[5] - nll[7])
-budget <- 0.4
+budget <- 0.3
 theta <- seq(0, 2 * pi, length.out = 1441)
 circle <- cbind(budget * cos(theta), budget * sin(theta))
 s <- seq(-1, 1, length.out = 801)
@@ -203,14 +203,16 @@ blank_table(c("Model", "Predictors", "k", "NLL", "AIC", "dAIC"), rows,
 
 **1b.** Which model is best by AIC? Model 6 adds elevation to Model 5
 and sits within 2 AIC units of it. Does that mean the data support an
-effect of elevation? Use the NLLs.
+effect of elevation? Does the difference in the two models' raw NLLs
+help you answer this question, and if so, how?
 
 \ansbegin
 
-Model 5 (temp + bullfrogs + canopy), AIC `r f2(aic[5])`. No: adding
-elevation lowers the NLL by only `r f2(nll[5] - nll[6])`. A parameter
-with no effect at all costs at most 2 AIC units, so landing within 2 is
-expected even if elevation does nothing.
+Model 5 (temp + bullfrogs + canopy), AIC `r f2(aic[5])`. No. Yes, the
+NLLs help: adding elevation lowers the NLL by only `r f2(nll[5] - nll[6])`,
+less than the 1 NLL unit (2 AIC units) an extra parameter must buy to
+lower AIC. A parameter with no effect at all costs at most 2 AIC units,
+so landing within 2 is expected even if elevation does nothing.
 
 \ansend
 
@@ -257,25 +259,25 @@ $\sum_j \beta_j^2 \le t^2$, for some $t$ that shrinks as $\lambda$
 grows. The lasso budget is $\sum_j |\beta_j| \le t$. Neither budget
 includes $\beta_0$.
 
-The figure shows NLL contours for Model 4 (temperature and elevation
-only), labeled by how far each lies above the minimum. The $\times$
-marks the MLE.
+The figure shows NLL contours for a model with only two predictors,
+water temperature and canopy cover, labeled by how far each lies above
+the minimum. The $\times$ marks the MLE.
 
 ```{r contours, fig.width=5, fig.height=5}
 par(mar = c(3.6, 3.8, 0.6, 0.6), mgp = c(2.2, 0.6, 0))
-plot(NA, xlim = range(bt_grid), ylim = range(be_grid), asp = 1, xaxs = "i", yaxs = "i",
-     xlab = "Temperature coefficient", ylab = "Elevation coefficient")
-abline(v = seq(-0.8, 0.4, 0.1), h = seq(-0.4, 0.8, 0.1), col = "grey90")
+plot(NA, xlim = range(bt_grid), ylim = range(bc_grid), asp = 1, xaxs = "i", yaxs = "i",
+     xlab = "Temperature coefficient", ylab = "Canopy coefficient")
+abline(v = seq(-0.9, 0.3, 0.1), h = seq(-0.3, 0.9, 0.1), col = "grey90")
 abline(v = 0, h = 0, col = "grey40", lwd = 1.5)
-contour(bt_grid, be_grid, nll_surf - min(nll_surf),
-        levels = c(0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16),
+contour(bt_grid, bc_grid, nll_surf - min(nll_surf),
+        levels = c(1, 4, 8, 12, 16, 20, 23, 25, 27, 29, 31, 34, 40),
         add = TRUE, labcex = 0.65, col = "grey20")
 points(mle_2d[1], mle_2d[2], pch = 4, cex = 1.6, lwd = 2.5)
 lines(circle, col = ans_col, lwd = 2, lty = 2)
 polygon(rbind(c(budget, 0), c(0, budget), c(-budget, 0), c(0, -budget)),
         border = ans_col, lwd = 2)
 points(rbind(ridge_est, lasso_est), pch = c(21, 24), bg = ans_col, cex = 1.5)
-legend("bottomright", c("ridge budget (circle)", "lasso budget (diamond)",
+legend("topright", c("ridge budget (circle)", "lasso budget (diamond)",
                         "ridge estimate", "lasso estimate"),
        col = ans_col, lty = c(2, 1, NA, NA), lwd = 2, pch = c(NA, NA, 21, 24),
        pt.bg = ans_col, bty = "o", bg = "white", cex = 0.75, text.col = ans_col)
@@ -285,39 +287,45 @@ box()
 `r nq(4, 2)`
 
 **2a.** On the figure, draw the ridge budget
-$\beta_{temp}^2 + \beta_{elev}^2 \le 0.4^2$ and the lasso budget
-$|\beta_{temp}| + |\beta_{elev}| \le 0.4$. Mark the ridge estimate and
+$\beta_{temp}^2 + \beta_{canopy}^2 \le 0.3^2$ and the lasso budget
+$|\beta_{temp}| + |\beta_{canopy}| \le 0.3$. Mark the ridge estimate and
 the lasso estimate, and read off their approximate coordinates.
 
 Ridge: \ans{(`r f2(ridge_est[1])`, `r f2(ridge_est[2])`)}   Lasso:
 \ans{(`r f2(lasso_est[1])`, `r f2(lasso_est[2])`)} \ans{(approximate
 values from a sketch are fine)}
 
-`r nq(3, 4)`
+`r nq(4, 4)`
 
-**2b.** Did the lasso set either coefficient to exactly 0? Use the
-shapes in your sketch to explain why or why not.
+**2b.** Did either penalty set a coefficient to exactly 0? Could a ridge
+budget ever set a coefficient to exactly 0? Use the shapes in your
+sketch to explain.
 
 \ansbegin
 
-No. The contours are long ellipses that run parallel to the diamond's
-upper-left edge, so the lowest contour touches that edge partway along
-it, not at a corner. Both coefficients stay nonzero.
+The lasso did: its estimate sits on the diamond's corner,
+$(`r f2(lasso_est[1])`, `r f2(lasso_est[2])`)$, so the canopy
+coefficient is exactly 0. Ridge did not (canopy `r f2(ridge_est[2])`).
+Ridge essentially never does: the circle has no corners, so the lowest
+contour touches it on an axis only if the MLE already has that
+coefficient at exactly 0.
 
 \ansend
 
-`r nq(2, 4)`
+`r nq(3, 5)`
 
-**2c.** What would the contours have to look like for the lasso to set
-the elevation coefficient to 0?
+**2c.** In general, when does the lasso set a coefficient to exactly 0?
+Describe what the contours and the budget have to look like.
 
 \ansbegin
 
-The lowest contour would have to touch the diamond first at its corner
-on the temperature axis, $(-0.4, 0)$: for example, rounder contours (if
-temperature and elevation weren't correlated) centered near the
-temperature axis (a small elevation effect), or ellipses tilted across
-the edge rather than along it.
+When the lowest contour reaches the diamond first at a corner (on an
+axis) rather than along an edge. That happens when the budget is small
+compared with how far the MLE is from 0, and the contours approach the
+diamond from a corner's direction (one coefficient's effect is weak
+relative to the other's). A smaller budget zeros more coefficients.
+Contours stretched parallel to an edge (strongly correlated predictors)
+tend to touch the edge instead, keeping both.
 
 \ansend
 

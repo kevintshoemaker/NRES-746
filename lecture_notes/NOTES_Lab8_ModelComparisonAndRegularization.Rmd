@@ -36,6 +36,19 @@ lasso_kept <- c("temp", "elev", "canopy", "cond", "area", "fish", "bullfrogs",
                 "road")[coef(cv_lasso, s = "lambda.1se")[-1] != 0]
 r_te <- cor(ponds$water_temp_c, ponds$elevation_m)
 f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+
+# Act 1 Part 2: temp + canopy model; lowest NLL on the ridge circle and lasso diamond, t = 0.3
+nll_tc <- function(b) {
+  off <- b[1] * X[, "water_temp_c"] + b[2] * X[, "canopy_pct"]
+  optimize(function(b0) -sum(dbinom(pos, n_frogs, plogis(b0 + off), log = TRUE)), c(-4, 3))$objective
+}
+budget <- 0.3
+theta <- seq(0, 2 * pi, length.out = 1441)
+circle <- cbind(budget * cos(theta), budget * sin(theta))
+s <- seq(-1, 1, length.out = 801)
+diamond <- rbind(cbind(budget * s, budget * (1 - abs(s))), cbind(budget * s, -budget * (1 - abs(s))))
+ridge_tc <- circle[which.min(apply(circle, 1, nll_tc)), ]
+lasso_tc <- diamond[which.min(apply(diamond, 1, nll_tc)), ]
 ```
 
 ```{r sketch-helpers}
@@ -56,13 +69,14 @@ draw_folds <- function(k = 5) {
 # penalty vs. budget: as lambda grows, the allowed budget t shrinks
 draw_budget_1d <- function() {
   par(mar = c(3, 3, 0.5, 0.5), mgp = c(1.8, 0.5, 0))
-  b <- seq(-0.1, 0.6, length.out = 400)
+  b <- seq(-0.3, 0.6, length.out = 400)
   plot(b, (b - 0.4)^2, type = "l", lwd = 2, xlab = "Coefficient", ylab = "NLL",
-       ylim = c(0, 0.25))
-  rect(-0.1, -1, 0.15, 1, col = adjustcolor("grey70", 0.4), border = NA)
-  abline(v = 0.15, lty = 2)
-  points(0.15, (0.15 - 0.4)^2, pch = 19)
-  text(0.02, 0.22, "budget\n|beta| <= t", cex = 0.8)
+       ylim = c(0, 0.5))
+  rect(-0.2, -1, 0.2, 1, col = adjustcolor("grey70", 0.4), border = NA)
+  abline(v = c(-0.2, 0.2), lty = 2)
+  points(c(0.2, 0.4), c((0.2 - 0.4)^2, 0), pch = c(19, 4), cex = c(1, 1.3), lwd = 2)
+  text(0, 0.44, "budget\n|coef| <= 0.2", cex = 0.8)
+  text(0.4, 0.06, "MLE", cex = 0.8)
 }
 ```
 
@@ -73,13 +87,13 @@ draw_budget_1d <- function() {
 | 0. Stan install check (before the lecture) | laptops | ~10 min |
 | 1. Big picture | BOARD | ~3 min |
 | 2. Catch-up from Monday (**update after Monday**) | BOARD $\to$ R | ~12 min |
-| 3. Penalties as budgets | BOARD | ~5 min |
+| 3. Penalties as budgets: defining $t$ | BOARD | ~8 min |
 | 4. Tools for the lab | BOARD | ~5 min |
 | 5. Cross-validation | BOARD | ~7 min |
 | 6. Launch Act 1 | BOARD | ~2 min |
 
-- Lecture ~34 min; with the Stan check, Acts start ~45 min in, leaving
-  ~2 h. Act 2 is take-home capable.
+- Lecture ~37 min; with the Stan check, Acts start ~48 min in, leaving
+  just under 2 h. Act 2 is take-home capable.
 - **Don't give away:** the 2-D budget picture (Act 1 Part 2), whether to
   penalize $\beta_0$ or why standardize (Act 2 1a-1b), or step-by-step
   CV pseudocode (Act 2 1c).
@@ -107,16 +121,42 @@ draw_budget_1d <- function() {
 - If Monday finished: use the time for a longer section 5 here, or
   start the Acts early.
 
-## 3. Penalties as budgets (~5 min) [BOARD]
+## 3. Penalties as budgets: defining $t$ (~8 min) [BOARD]
+
+**Definition (board).**
+
+1. The ridge fit for a given $\lambda$:
+   $$\hat\beta_\lambda = \arg\min_\beta \Big[\text{NLL}(\beta) + \lambda \sum_j \beta_j^2\Big]$$
+2. Define the budget as the size of that answer:
+   $$t^2 = \sum_j \hat\beta_{\lambda,j}^2 \quad\text{(ridge)}, \qquad
+     t = \sum_j |\hat\beta_{\lambda,j}| \quad\text{(lasso)}$$
+3. Claim: $\hat\beta_\lambda$ is also the **lowest-NLL point inside the
+   budget** $\sum_j \beta_j^2 \le t^2$.
+4. Why (one line): if some $\beta^*$ inside the budget had a lower NLL,
+   its penalty $\lambda\sum\beta_j^{*2} \le \lambda t^2$ would be no
+   bigger than $\hat\beta_\lambda$'s, so its penalized total would be
+   lower too. But $\hat\beta_\lambda$ has the lowest total.
+   Contradiction. (Same argument for the lasso with $|\beta|$.)
+5. So each $\lambda$ sets a $t$: $\lambda = 0$ gives $t$ = size of the
+   MLE (the budget doesn't bind); $\lambda \to \infty$ gives $t \to 0$.
+
+**Worked example (one coefficient; the figure).** $\text{NLL}(\beta) = (\beta - 0.4)^2$, so the MLE is 0.4.
+
+- Ridge: $\frac{d}{d\beta}\big[(\beta - 0.4)^2 + \lambda\beta^2\big] = 2(\beta - 0.4) + 2\lambda\beta = 0
+  \Rightarrow \hat\beta = 0.4/(1 + \lambda)$. With $\lambda = 1$: $\hat\beta = 0.2$, so $t = 0.2$
+- Lasso ($\beta > 0$): $2(\beta - 0.4) + \lambda = 0 \Rightarrow \hat\beta = 0.4 - \lambda/2$.
+  With $\lambda = 0.4$: $\hat\beta = 0.2$, so $t = 0.2$. Once $\lambda \ge 0.8$, $\hat\beta = 0$ (the corner)
+- Figure: inside the budget $|\beta| \le 0.2$, the lowest NLL is at the
+  budget's edge, $\beta = 0.2$
 
 ```{r budget-fig, fig.width=4, fig.height=2.2}
 draw_budget_1d()
 ```
 
-- Penalized fit $\text{NLL} + \lambda\sum\beta_j^2$ = lowest NLL inside a
-  budget $\sum\beta_j^2 \le t^2$; bigger $\lambda$ = smaller $t$
-- Lasso budget: $\sum|\beta_j| \le t$
-- One coefficient only (above). Stop there; Act 1 does two.
+- **Sticking point:** $t$ isn't chosen separately; $\lambda$ (with the
+  data) sets it. We tune $\lambda$ by CV; $t$ is a way to picture what
+  $\lambda$ does
+- Stop at one coefficient; Act 1 does two
 
 ## 4. Tools for the lab (~5 min) [BOARD]
 
@@ -153,7 +193,7 @@ draw_folds()
 \textit{Tight on purpose. Detail: Part 1 and the two keys.}
 \large
 
-**Order:** Stan check (~10 min), then lecture (~34 min), then Act 1. **Don't give away:** the 2-D budget picture (Act 1), whether to penalize $\beta_0$ or why standardize (Act 2 1a-1b), or step-by-step CV (Act 2 1c).
+**Order:** Stan check (~10 min), then lecture (~37 min), then Act 1. **Don't give away:** the 2-D budget picture (Act 1), whether to penalize $\beta_0$ or why standardize (Act 2 1a-1b), or step-by-step CV (Act 2 1c).
 
 ## 1-2. Big picture; catch-up (~15 min)
 
@@ -163,15 +203,20 @@ draw_folds()
 
 \newpage
 
-## 3. Penalties as budgets (~5 min) [BOARD]
+## 3. Defining the budget $t$ (~8 min) [BOARD]
+
+- Ridge fit: $\hat\beta_\lambda$ minimizes $\text{NLL}(\beta) + \lambda\sum\beta_j^2$
+- Define $t$ as the size of that answer: $t^2 = \sum\hat\beta_{\lambda,j}^2$ (lasso: $t = \sum|\hat\beta_{\lambda,j}|$)
+- Claim: $\hat\beta_\lambda$ is the lowest-NLL point with $\sum\beta_j^2 \le t^2$
+- Why: a point inside the budget with lower NLL has penalty $\le \lambda t^2$, so a lower penalized total too. Contradiction
+- $\lambda = 0$: $t$ = size of the MLE. $\lambda \to \infty$: $t \to 0$
 
 ```{r podium-budget, fig.width=4, fig.height=2.2}
 draw_budget_1d()
 ```
 
-- A penalty $\lambda$ is the same as a budget $t$: find the lowest NLL with $\sum\beta^2 \le t^2$ (ridge) or $\sum|\beta| \le t$ (lasso)
-- Bigger $\lambda$ = smaller budget
-- One coefficient only (above). Stop there; Act 1 does two
+- Example, NLL $= (\beta - 0.4)^2$: ridge $\hat\beta = 0.4/(1 + \lambda)$, so $\lambda = 1$ gives $t = 0.2$. Lasso $\hat\beta = 0.4 - \lambda/2$, so $\lambda = 0.4$ gives $t = 0.2$; $\lambda \ge 0.8$ gives 0
+- We tune $\lambda$ (by CV); $t$ just pictures it. Stop at one coefficient; Act 1 does two
 
 \newpage
 
@@ -198,7 +243,8 @@ draw_folds()
 - Best by AIC: Model 5 (temp + bullfrogs + canopy). Model 6 adds elevation and sits within 2, but its NLL drops only 0.38: an uninformative parameter
 - LRTs: 5 vs. 6, $D = 0.76$ (1 df, cutoff 3.84); 5 vs. 7, $D = 3.98$ (5 df, cutoff 11.07). Keep Model 5 both times
 - Temperature vs. elevation: these data can't separate them; need ponds where they come apart, or an experiment
-- Budgets at $t = 0.4$: ridge $\approx (-0.29, 0.28)$, lasso $\approx (-0.23, 0.17)$. The lasso lands partway along an edge (contours run parallel to it), so **no zero**. Expect students to put it on a corner
+- Part 2 (temperature vs. canopy, budget $t = 0.3$): ridge $\approx$ (`r f2(ridge_tc[1])`, `r f2(ridge_tc[2])`); lasso (`r f2(lasso_tc[1])`, `r f2(lasso_tc[2])`), on the corner, so **canopy is exactly 0** even though canopy truly matters
+- 2b: ridge essentially never zeros a coefficient (a circle has no corners). 2c: the lasso zeros one when the lowest contour hits a corner first: small budgets, one effect weak relative to the other. Correlated pairs (contours parallel to an edge) tend to keep both, which sets up Act 2 3b
 
 **Act 2 (coding)**
 
