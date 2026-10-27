@@ -1,0 +1,74 @@
+<div class="w746" id="rp">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746 input[type=range]{flex:1}
+.w746 .val{font-weight:600;min-width:42px}
+.w746 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:8px}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:20px;font-weight:600;color:var(--ink)}
+.w746 .ax{stroke:var(--muted);stroke-width:1}
+.w746 .lab{fill:var(--ink2);font-size:13px}
+.w746 .tk{fill:var(--muted);font-size:11px}
+.w746 .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2)}
+.w746 .key span{display:flex;align-items:center;gap:6px}
+</style>
+<div class="row">
+  <label for="rp-tau">Prior SD &tau;</label>
+  <input type="range" id="rp-tau" min="0.01" max="0.3" step="0.005" value="0.05">
+  <span class="val" id="rp-tauout">0.050</span>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Matching ridge &lambda; = 1/(2&tau;&sup2;)</div><div class="v" id="rp-lam"></div></div>
+  <div class="card"><div class="k">Prior worth (routes at 0)</div><div class="v" id="rp-worth"></div></div>
+  <div class="card"><div class="k">Shrinkage factor</div><div class="v" id="rp-fac"></div></div>
+  <div class="card"><div class="k">Estimate (MLE 0.065)</div><div class="v" id="rp-est"></div></div>
+</div>
+<svg viewBox="0 0 680 260" width="100%" role="img" aria-label="Likelihood, prior, and posterior for the regional trend as the prior SD changes.">
+  <g id="rp-g"></g>
+</svg>
+<div class="key">
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#8a8a8a" stroke-width="2.5"/></svg>likelihood (data)</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#222" stroke-width="2" stroke-dasharray="5 3"/></svg>prior Normal(0, &tau;)</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#2a78d6" stroke-width="3"/></svg>posterior (its peak = ridge estimate)</span>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+const n=8,ybar=0.065,sigma=0.15,se=sigma/Math.sqrt(n);
+const P={x0:40,x1:665,y0:225,y1:15,mmin:-0.1,mmax:0.2};
+const px=m=>P.x0+(m-P.mmin)/(P.mmax-P.mmin)*(P.x1-P.x0);
+const dn=(x,m,s)=>Math.exp(-0.5*((x-m)/s)**2)/(s*Math.sqrt(2*Math.PI));
+const g=document.getElementById('rp-g');
+el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x1,y2:P.y0},g);
+[-0.1,-0.05,0,0.05,0.1,0.15,0.2].forEach(m=>txt('tk',px(m),P.y0+15,m.toFixed(2),g));
+txt('lab',(P.x0+P.x1)/2,252,'regional trend μ (change in log abundance)',g);
+el('line',{x1:px(0),y1:P.y0,x2:px(0),y2:P.y1,stroke:'#ddd'},g);
+const d=el('g',{},g);
+function curve(f,ymax,attrs){let p='';for(let i=0;i<=300;i++){const m=P.mmin+i/300*(P.mmax-P.mmin);const y=P.y0-Math.min(f(m)/ymax,1.05)*(P.y0-P.y1);p+=(i?'L':'M')+px(m)+','+y;}attrs.d=p;attrs.fill='none';el('path',attrs,d);}
+function draw(tau){
+  d.innerHTML='';
+  const prec=n/sigma**2+1/tau**2,pm=(n*ybar/sigma**2)/prec,psd=1/Math.sqrt(prec);
+  const ymax=Math.max(dn(pm,pm,psd),dn(ybar,ybar,se))*1.08;
+  curve(m=>dn(m,ybar,se),ymax,{stroke:'#8a8a8a','stroke-width':2.5});
+  curve(m=>dn(m,0,tau),ymax,{stroke:'#222','stroke-width':2,'stroke-dasharray':'5 3'});
+  curve(m=>dn(m,pm,psd),ymax,{stroke:'#2a78d6','stroke-width':3});
+  el('line',{x1:px(pm),y1:P.y0,x2:px(pm),y2:P.y0-(dn(pm,pm,psd)/ymax)*(P.y0-P.y1),stroke:'#2a78d6','stroke-width':1,'stroke-dasharray':'2 3'},d);
+  el('line',{x1:px(ybar),y1:P.y0,x2:px(ybar),y2:P.y0-(dn(ybar,ybar,se)/ymax)*(P.y0-P.y1),stroke:'#8a8a8a','stroke-width':1,'stroke-dasharray':'2 3'},d);
+  const worth=sigma**2/tau**2;
+  document.getElementById('rp-tauout').textContent=tau.toFixed(3);
+  document.getElementById('rp-lam').textContent=Math.round(1/(2*tau**2)).toLocaleString();
+  document.getElementById('rp-worth').textContent=worth<10?worth.toFixed(1):Math.round(worth).toString();
+  document.getElementById('rp-fac').textContent=(n/(n+worth)).toFixed(2);
+  document.getElementById('rp-est').textContent=pm.toFixed(3);
+}
+const s=document.getElementById('rp-tau');
+s.addEventListener('input',()=>draw(parseFloat(s.value)));
+draw(parseFloat(s.value));
+})();
+</script>
+</div>
