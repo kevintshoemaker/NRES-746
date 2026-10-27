@@ -50,7 +50,15 @@ but writing that signals it makes them take exercises less seriously.
   "genuinely") unless they do real work.
 - **Banned phrases:** "pin down" (say "how uncertain," "rule out");
   callbacks framed as "X is [earlier material] applied to Y" (say what
-  X does). Plain references ("Monday's pika data") are fine.
+  X does). Plain references ("Monday's pika data") are fine. Also
+  "reveal" ("WOD reveal").
+- **Plain headers:** say what the section is ("WOD: bias-variance
+  tradeoff", "Big picture"), not a teaser or a cute label. In
+  student-facing pages, label in-class prompts "Question:" or
+  "Discussion:", not "Pause" (NOTES and scripts keep `[PAUSE]`).
+- **Public web pages** (e.g. `Week10_ModelComparison.Rmd`): no class-day
+  or week references ("Monday's creepers", "Week 7's cutoff"); link the
+  relevant section instead (explicit `{#id}` anchors on headers).
 - **Concise:** if a shorter phrasing says the same thing, use it.
 - **No specific forward references** ("this comes up in Lab 7"), since
   schedules shift; say "later in the semester" unless you're editing
@@ -154,7 +162,7 @@ Build all three together (with timing) unless told otherwise.
 7-8 each covered 3-4 of 7-8 planned sections. Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
-marked "if time" section. A derivation eats its whole slot, so put
+marked "Bonus" section. A derivation eats its whole slot, so put
 the worked numeric example first. Leave slack, and check whether this
 week's lab uses anything lecture hasn't covered yet. Update this
 paragraph when the instructor reports how a lecture went.
@@ -473,7 +481,7 @@ Snapshot: Thu., Oct. 22, 2026 (end of Week 9).
     DIC, WAIC, LOOIC (2278.0/2278.0/2278.6/2278.6 vs. about 2282; elpd
     difference 2.1, SE 1.8); creeper slopes under vague, Normal(0,
     0.2), and Laplace(0, 0.15) priors (northness 0.23 -> 0.08);
-    horseshoe as a sketch only; Bayes factors and RJMCMC if time.
+    horseshoe as a sketch only; Bayes factors and RJMCMC as a bonus section.
     Posterior predictive checks move to Week 11.
 - **Unused material, free to reuse:** Lab 4 Act 3 (raw vs. log-scale
   analysts); Bolker's 7.4 fitting checklist. Lab 4 Act 2 was only a

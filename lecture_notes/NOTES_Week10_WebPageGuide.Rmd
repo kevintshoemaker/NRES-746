@@ -1,0 +1,146 @@
+---
+title: "Week 10 web page: delivery guide"
+subtitle: "Instructor notes for Week10_ModelComparison.html"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=3pt, parsep=0pt, topsep=3pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+# General
+
+- Page: <https://kevintshoemaker.github.io/NRES-746/Week10_ModelComparison.html>.
+  Open it before class; the sliders need no internet once loaded.
+- The page shows code and output already run. For live demos, run the
+  matching section of `CODE_Week10_ModelComparison.R` instead (same
+  seeds, same numbers).
+- Zoom the browser to 125-150% for the projector; the sliders scale with it.
+- Questions on the page are printed without answers. Answers are below;
+  the *Land:* line is where discussion should end up.
+- Use the floating table of contents to jump; it doubles as the outline.
+
+# Part 1: LRT, AIC, regularization (Monday, ~35 min)
+
+**Big picture (~4 min)**
+
+- Point at COMPARE in the workflow figure, then the three uses (null
+  tests, selection, multimodel inference).
+- Order to stress: validation and CV are the gold standard; LRT and AIC
+  are single-fit shortcuts; ridge and lasso are a third route.
+
+**WOD: bias-variance tradeoff (~8 min)**
+
+- Show the WOD figure first; ask a few students for their 19% predictions.
+- Then scroll to the 20-sample figure. Point at the right panel: both
+  sets center near the truth (red), but the curve's spread is about 2.4
+  times the line's (SD 2.9 vs. 1.2 cm).
+- If asked about bias: in this simulation the truth is a line, so the
+  line is unbiased too. A constant model would show bias.
+
+**Likelihood ratio test (~8 min)**
+
+- Walk the four numbered steps, then the code: $D = 2.01$ vs. cutoff
+  7.81, $p = 0.57$.
+- "Is the Poisson model nested in the negative binomial? Can we use an
+  LRT here?" *Land:* yes, nested ($k \to \infty$), but that value is on
+  the boundary of the parameter space, so the naive $p$ is about twice
+  too big. The deviance here is in the thousands, so it doesn't matter.
+
+**AIC (~10 min)**
+
+- "The no-wave model has weight 0.52. Is there a 52% chance it's the
+  true model?" *Land:* no; relative support within this set (Bolker p. 284).
+- `const_ak` is 1.48 AIC units behind with one useless parameter:
+  "within 2" is not support (Arnold 2010).
+
+**Regularization (~12 min)**
+
+- Say up front the creeper data are simulated, so we know the truth.
+- "Which covariates show up in nearly every top model?" *Land:* big
+  trees, snags, road distance; the others are the best model plus one
+  useless covariate, each about 2 units behind.
+- Path plots: read the lasso right to left; big trees and snags enter first, then road distance, well
+  before the rest.
+- "The lasso estimates road distance at 0.07; the truth is 0.3. Is the
+  lasso broken?" *Land:* no. Shrinkage trades bias for lower variance
+  and better prediction. Use the lasso for prediction and covariate
+  choice, not effect sizes (refit, or a shrinkage prior).
+- 40 simulated data sets: AIC found the exact true set 12 times, lasso 13.
+- **Behind?** Stop after the path plots; the CV demo can open the next lecture.
+
+**Discussion (~5 min)**
+
+- Q1 (northness) *Land:* report the uncertainty, not one list; big
+  trees and snags are the safest claims.
+- Q2 (grazing at 0) *Land:* zero means "not needed to predict counts
+  here," not "no effect." Grazing may act through shrub cover or be too
+  small to detect with 50 stations. A management question is causal:
+  COMPARE part 3.
+
+# Part 2: budgets and CV (Lab 8 pre-lab)
+
+**Lasso slider** (`lasso_kink.html`)
+
+- Start at $\lambda = 0$: dot at the MLE (0.4), both estimates equal.
+- Move to 0.4: lasso estimate 0.2. Then to 1 and point at ridge: also
+  0.2. Same budget $t = 0.2$, different $\lambda$.
+- Ask where the lasso dot will land at 0.8 before moving there. It hits
+  the kink at 0 and stays for every larger $\lambda$ (try 1.5).
+- Ridge keeps sinking but never reaches 0 (0.16 at $\lambda = 1.5$).
+- "Why does the lasso stop at exactly 0 once $\lambda \ge 0.8$?"
+  *Land:* at $\beta = 0$ the NLL slopes downhill at rate $2(0.4) = 0.8$.
+  The lasso charges $\lambda$ per unit of $|\beta|$ from the first unit,
+  so once $\lambda \ge 0.8$, leaving 0 costs more than it gains. Ridge's
+  penalty is flat at 0 (slope $2\lambda\beta = 0$), so the first bit of
+  coefficient is free.
+- Don't draw the 2-D picture; Act 1 Part 2 asks for it.
+- Glmnet tips and CV folds: read off the page; don't give away why
+  standardize or whether to penalize $\beta_0$ (Act 2 1a-1b).
+
+# Part 3: Bayesian comparison (Wednesday, ~35 min)
+
+**Why not AIC? (~3 min)** No single $\hat\theta$; priors blur the
+parameter count.
+
+**Ridge is a prior (~6 min)**
+
+- Do the six steps on the board; the page has them for reference.
+- Ridge-prior slider (`ridge_prior.html`):
+    - Default $\tau = 0.05$: $\lambda = 200$, prior worth 9 routes at 0,
+      shrinkage factor 0.47, estimate 0.031 (MLE 0.065).
+    - Slide to 0.15: $\lambda = 22$, prior worth 1 route, factor 0.89,
+      estimate 0.058. The posterior moves toward the likelihood.
+    - Slide to 0.01: the prior dominates; estimate near 0.
+    - Point out the posterior is narrower than both the prior and the
+      likelihood (precisions add).
+- "Which prior matches the lasso penalty?" *Land:* Laplace (double
+  exponential), $\propto e^{-\lambda|\mu|}$: a spike at 0 and heavier tails.
+
+**WAIC and LOO (~12 min)**
+
+- Stan chunks take about a minute to run live; run them before class.
+- "The full model is 2.1 elpd behind, SE 1.8. What can you conclude?"
+  *Land:* about one SE; the data can't tell the models apart. Not the
+  same as "no wave effect."
+- **Behind?** Skip the DIC row.
+
+**Shrinkage priors (~12 min)**
+
+- Interval plot: northness (truth 0) under each prior; triangles are
+  the glmnet lasso.
+- "The lasso set northness to 0; the Laplace posterior says 0.08
+  ($-0.07$ to 0.28). Which is more honest?" *Land:* the posterior keeps
+  the uncertainty a single zero hides; a Bayesian lasso never gives
+  exact zeros.
+- Horseshoe: sketch only.
+
+**Discussion (~5 min)**
+
+- Q1 (wave "no effect") *Land:* within about 1 SE is inconclusive;
+  "not detected" is not "no effect"; corroborated, not proven.
+- Q2 (northness) *Land:* for prediction either works; for inference,
+  report the interval.
+- Bonus (Bayes factors, RJMCMC): only if time remains.

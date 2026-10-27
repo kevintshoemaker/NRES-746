@@ -2,11 +2,9 @@
 title: "Week 10: Model Comparison and Regularization"
 author: "NRES 746"
 date: "Oct. 26-28, 2026"
-params:
-  instructor: FALSE
 output:
   html_document:
-    theme: cerulean
+    theme: flatly
     toc: yes
     toc_float: yes
     toc_depth: 3
@@ -17,13 +15,9 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
                       fig.width = 7, fig.height = 4.5, fig.align = "center")
 options(cmdstanr_no_ver_check = TRUE)
 
-# instructor-only text: shown when knit with params$instructor = TRUE
-land <- function(text) if (isTRUE(params$instructor)) paste0(" *Land:* ", text) else ""
-note <- function(text) if (isTRUE(params$instructor)) paste0("**[Instructor]** ", text) else ""
 widget <- function(file) htmltools::includeHTML(file.path("widgets", file))
 f1 <- function(v) formatC(v, format = "f", digits = 1)
 f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
-f3 <- function(v) formatC(v, format = "f", digits = 3)
 ```
 
 ```{r helpers, echo=FALSE}
@@ -73,45 +67,81 @@ draw_folds <- function(k = 5) {
 }
 ```
 
-The R code on this page is also in the
+R code from this page is also in the
 [companion script](lecture_notes/CODE_Week10_ModelComparison.R).
 Packages: `emdbook`, `MASS`, `glmnet`, `cmdstanr`, `loo`.
 
 **Readings.** Bolker, *Ecological Models and Data in R*, section 6.6
-(pp. 267-290). Monday: Tredennick, Hooker, Ellner, and Adler (2021), A
+(pp. 267-290). Tredennick, Hooker, Ellner, and Adler (2021), A
 practical guide to selecting models for exploration, inference, and
-prediction in ecology, *Ecology* 102: e03336. Wednesday: Hooten and
-Hobbs (2015), A guide to Bayesian model selection for ecologists,
-*Ecological Monographs* 85: 3-28.
+prediction in ecology, *Ecology* 102: e03336. For the Bayesian methods,
+Hooten and Hobbs (2015), A guide to Bayesian model selection for
+ecologists, *Ecological Monographs* 85: 3-28.
 
-`r note("Public version hides timings and the answers to pauses. Knit with params instructor = TRUE for the podium copy.")`
+# Likelihood ratio tests, AIC, and regularization {#frequentist}
 
-# Monday: likelihood ratio tests, AIC, ridge and lasso
+How do we compare models that differ in complexity? This part covers
+the most rigorous test (predicting new data), two shortcuts that need
+only one fit (the likelihood ratio test and AIC), and regularization,
+which keeps every covariate in a single model and shrinks the
+coefficients toward 0.
 
-## 1. Where we are `r if (params$instructor) "(~4 min)"`
+## 1. Big picture
 
 ```{r workflow, echo=FALSE, fig.height=2.8, dev="png", dpi=150}
 draw_workflow("COMPARE")
 ```
 
-Weeks 6-9 were about FIT: getting estimates and their uncertainty for
-one model. This week is COMPARE, which has three parts:
+The FIT step gives estimates and their uncertainty for one model at a
+time. COMPARE weighs models against each other. It has three parts:
 
 1. Does the model fit the data at all?
 2. Does it beat its rivals, including a null model, and predict new data?
 3. Is it relevant to the problem we started with? (A judgment, not a
    statistic.)
 
-This week is mostly part 2. There are three routes:
+Here we focus on part 2, comparing models fit to the same data. This
+includes:
 
-- penalize in-sample fit by the number of parameters (LRT, AIC);
-- test on data the model didn't see (cross-validation);
-- fit one big model skeptically, penalizing the *size* of coefficients
-  (ridge, lasso).
+- **Null-model tests:** is there evidence that a model (a theory)
+  outperforms an uninteresting one?
+- **Model selection:** which of several alternative models is best
+  supported by the data?
+- **Multimodel inference:** when several models have some support,
+  base predictions and inferences on all of them.
 
-Models that survive are **corroborated**, not proven.
+Adding parameters always improves the fit to the data in hand (see the
+[WOD](#wod)), so in-sample fit can't answer these questions. The most
+rigorous test is how well a model predicts new data from the same
+process:
 
-## 2. WOD reveal: Connect the Dots `r if (params$instructor) "(~8 min)"`
+- **Validation:** fit the model to one data set and score its
+  predictions on data it never saw, ideally collected separately.
+- **Cross-validation:** without new data, hold out part of the data,
+  fit to the rest, score the held-out part, and rotate. This means
+  fitting the model many times. (More on this later in the course.)
+
+Because cross-validation takes many refits, we often rely on shortcuts
+that use a single fit to all the data:
+
+- **LRT:** does a bigger (nested) model fit better than chance alone
+  would explain?
+- **AIC:** estimates how well a model would predict new data. In large
+  samples it ranks models about the same way leave-one-out
+  cross-validation does.
+
+Ridge regression and the lasso take a third route: fit one large model
+and penalize the size of its coefficients, usually choosing the penalty
+strength by cross-validation.
+
+Models that pass these tests are **corroborated**, not proven.
+
+## 2. WOD: bias-variance tradeoff {#wod}
+
+The WOD (a short warm-up exercise at the start of class) gave seven
+measurements of seedling height and soil moisture, and two models: a
+straight line and a curve through every point. Both models were used to
+predict height at 19% moisture, where there were no data.
 
 ```{r wod, echo=FALSE, fig.width=5.5, fig.height=3.2}
 wod_x <- c(3, 8, 10, 14, 25, 27, 32)
@@ -136,10 +166,61 @@ legend("topleft", c("straight line", "curve through every point", "new plot (19%
   `r f1(predict(wod_line, data.frame(wod_x = 19)))`; this curve predicted
   `r f1(wod_curve(19))`.
 
-In-sample fit always improves as a model gets more flexible. To compare
-models fairly we need either a penalty for flexibility or new data.
+A perfect fit to seven points says little about prediction. Suppose we
+repeated the study many times with new seedlings from the same process,
+refitting both models each time:
 
-## 3. Likelihood ratio test `r if (params$instructor) "(~8 min)"`
+- A very flexible model fits the noise along with the signal. Its
+  predictions are about right on average (low **bias**) but swing widely
+  from one sample to the next (high **variance**).
+- A very simple model, such as a constant mean height, gives nearly the
+  same prediction from every sample, but it misses a real trend, so it
+  is consistently wrong (high bias, low variance).
+
+Prediction error on new data includes both. More complexity lowers bias
+but raises variance, so the best predictive model lies somewhere between
+the extremes.
+
+In the figure below, the study is repeated 20 times. Each sample uses
+the WOD's moisture values, with heights simulated from the red line plus
+random noise.
+
+```{r bias-variance, echo=FALSE, fig.width=9, fig.height=3.8}
+# 20 new samples from a straight-line truth at the WOD's moisture values
+truth <- coef(wod_line)
+noise_sd <- summary(wod_line)$sigma
+set.seed(746)
+sims <- replicate(20, truth[1] + truth[2] * wod_x + rnorm(length(wod_x), 0, noise_sd))
+xs <- seq(2, 33, 0.25)
+pred_line <- pred_curve <- numeric(20)
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 0.5))
+plot(NA, xlim = c(0, 35), ylim = c(0, 30), xlab = "Soil moisture (%)", ylab = "Height (cm)",
+     main = "Straight line, 20 samples")
+for (i in seq_len(20)) {
+  fit <- lm(sims[, i] ~ wod_x)
+  lines(xs, coef(fit)[1] + coef(fit)[2] * xs, col = adjustcolor("black", 0.4))
+  pred_line[i] <- coef(fit)[1] + coef(fit)[2] * 19
+}
+abline(truth, lwd = 3, col = "firebrick")
+plot(NA, xlim = c(0, 35), ylim = c(0, 30), xlab = "Soil moisture (%)", ylab = "Height (cm)",
+     main = "Curve through every point, 20 samples")
+for (i in seq_len(20)) {
+  f <- splinefun(wod_x, sims[, i], method = "natural")
+  lines(xs, f(xs), col = adjustcolor("steelblue", 0.5))
+  pred_curve[i] <- f(19)
+}
+abline(truth, lwd = 3, col = "firebrick")
+stripchart(list(line = pred_line, curve = pred_curve), method = "jitter", pch = 19,
+           col = c("black", "steelblue"), vertical = TRUE,
+           ylab = "Predicted height at 19% (cm)", main = "Predictions at 19%")
+abline(h = truth[1] + truth[2] * 19, lwd = 3, col = "firebrick")
+```
+
+Both models center near the true height at 19% (red line), but the
+curve's predictions vary more than twice as much (SD
+`r f1(sd(pred_curve))` cm vs. `r f1(sd(pred_line))` cm for the line).
+
+## 3. Likelihood ratio test
 
 Bolker's balsam fir data (section 6.6): cone counts on 242 trees, some
 at "wave" sites (where stands regenerate in waves) and some not. Model:
@@ -149,14 +230,34 @@ sites differ?
 - **Full model:** separate $a$, $b$, $k$ for wave and non-wave sites (6 parameters).
 - **Reduced model:** one $a$, $b$, $k$ for all trees (3 parameters).
 
-The reduced model is the full model with three constraints, so the two
-are **nested**. For nested models, the deviance
+The likelihood ratio test is the oldest shortcut. It applies to
+**nested** models, where the reduced model is the full model with some
+parameters fixed (often at 0). Here the reduced model fixes three: wave
+and non-wave sites share $a$, $b$, and $k$.
+
+Since the full model always fits at least as well, the real question is
+whether it fits better than extra parameters fitting pure noise would.
+If the reduced model is true, then in large samples the deviance
 
 $$D = 2(\text{NLL}_{\text{reduced}} - \text{NLL}_{\text{full}})$$
 
-follows a $\chi^2_r$ distribution if the reduced model is true, where $r$
-is the number of constraints. (Week 7's 1.92 cutoff for likelihood
-intervals is this test with $r = 1$: $\chi^2_1$ 95% quantile 3.84, divided by 2.)
+follows a $\chi^2_r$ distribution, where $r$ is the number of fixed
+parameters (Wilks' theorem).
+
+The test:
+
+1. Fit both models by maximum likelihood and record each minimum NLL.
+2. Compute $D$. It is never negative, since the full model fits at
+   least as well.
+3. Compare $D$ with the 95% quantile of $\chi^2_r$ (`qchisq(0.95, r)`).
+4. If $D$ exceeds it ($p < 0.05$), the extra parameters improve the fit
+   more than fitting noise usually would: evidence for the full model.
+   Otherwise keep the reduced model, following the principle of
+   parsimony.
+
+The 1.92 cutoff for likelihood-based confidence intervals comes from the
+same result with $r = 1$: $\chi^2_1$'s 95% quantile is 3.84, and
+$3.84/2 = 1.92$ on the NLL scale.
 
 ```{r fir-data}
 library(emdbook)
@@ -203,8 +304,8 @@ abline(v = qchisq(0.95, 3), lty = 2)
 abline(v = deviance, col = "red", lwd = 3)
 ```
 
-The deviance (`r f2(deviance)`) is well below the cutoff, so we keep the
-simpler no-wave model.
+With $D = `r f2(deviance)`$, well below the cutoff, we keep the no-wave
+model.
 
 ```{r fir-poisson}
 # Poisson, no wave effect (2 parameters)
@@ -213,21 +314,21 @@ fit_pois <- fit_model(nll_pois, c(1, 2))
 2 * (fit_pois$value - fit_nowave$value)
 ```
 
-> **Pause.** Is the Poisson model nested in the negative binomial? Can we
-> use an LRT here?`r land("yes, nested (the NB becomes Poisson as k goes to infinity), but that value sits on the boundary of the parameter space, so the naive p-value is about twice too big. With a deviance in the thousands, it doesn't matter here.")`
+> **Question:** Is the Poisson model nested in the negative binomial? Can we
+> use an LRT here?
 
-**Sticking point:** failing to reject the reduced model doesn't mean wave
-and non-wave trees are the same. It means 242 trees can't tell them apart.
+Keeping the reduced model doesn't show that wave and non-wave trees
+are alike. It shows that these 242 trees can't distinguish them.
 
-## 4. AIC `r if (params$instructor) "(~10 min)"`
+## 4. AIC
 
 $$\text{AIC} = -2\log\mathcal{L}(\hat\theta) + 2k$$
 
-AIC ranks any set of models fit to the same response data, nested or
-not. The $2k$ penalty is the average optimism of in-sample fit: the
-WOD's curve problem, summarized in one number (see the
-[AIC penalty handout](lecture_notes/NOTES_Reference_AICPenalty.pdf) for
-where it comes from).
+AIC can rank any set of models fit to the same response data, nested or
+not. The $2k$ term estimates how much the in-sample fit overstates the
+fit to new data (the problem in the [WOD](#wod)). The
+[AIC penalty handout](lecture_notes/NOTES_Reference_AICPenalty.pdf)
+shows where it comes from.
 
 - $\Delta_i = \text{AIC}_i - \text{AIC}_{\min}$
 - Akaike weights: $w_i = e^{-\Delta_i/2} / \sum_j e^{-\Delta_j/2}$
@@ -261,33 +362,34 @@ knitr::kable(aic_tab, digits = 2)
 w_nowave <- aic_tab$weight[aic_tab$model == "no_wave"]
 ```
 
-> **Pause.** The no-wave model has weight `r f2(w_nowave)`. Is there a
-> `r round(100 * w_nowave)`% chance it's the true model?`r land("no. A weight is relative support within this set of models, not a probability that a model is true (Bolker p. 284).")`
+> **Question:** The no-wave model has weight `r f2(w_nowave)`. Is there a
+> `r round(100 * w_nowave)`% chance it's the true model?
 
-**Sticking point:** `const_ak` adds one parameter to the no-wave model
-and lowers the NLL by only
-`r f2(fit_nowave$value - fit_constak$value)`, yet it sits only
-`r f2(aic_tab$dAIC[aic_tab$model == "const_ak"])` AIC units behind. A
-useless parameter costs at most 2 AIC units, so "within 2 of the best"
-doesn't mean "supported" (Arnold 2010, *J. Wildl. Manage.* 74: 1175-1178).
+Look at `const_ak`. It has one more parameter than the no-wave model and
+an NLL only `r f2(fit_nowave$value - fit_constak$value)` lower, yet it
+is just `r f2(aic_tab$dAIC[aic_tab$model == "const_ak"])` AIC units
+behind. A useless parameter costs at most 2 AIC units, so being within
+2 of the best model isn't evidence of support (Arnold 2010, *J. Wildl.
+Manage.* 74: 1175-1178).
 
-## 5. Ridge and lasso `r if (params$instructor) "(~12 min)"`
+## 5. Regularization: ridge and LASSO {#regularization}
 
 **Example: brown creepers.** Counts at 50 point-count stations, with 10
 standardized habitat covariates. These data are simulated, so we know
 the truth: only big trees, snags, and road distance matter.
 
-With 10 covariates there are $2^{10} = 1024$ subsets. Instead of
-choosing among them, keep all 10 and penalize the *size* of the
+Ten covariates give $2^{10} = 1024$ possible subsets. Instead of
+searching them all, we can keep all 10 and penalize the size of the
 coefficients:
 
 $$\text{ridge: } \text{NLL}(\beta) + \lambda\sum_j \beta_j^2 \qquad\qquad
   \text{lasso: } \text{NLL}(\beta) + \lambda\sum_j |\beta_j|$$
 
-AIC penalizes how *many* parameters; these penalize how *big*. Because
-one $\lambda$ applies to every coefficient, the covariates are
-standardized first. The lasso's penalty has a corner at 0, which can set
-coefficients to exactly 0 (see Tuesday's slider below).
+AIC charges for each parameter; these penalties grow with the size of
+the coefficients. One $\lambda$ applies to every coefficient, so the
+covariates are standardized first. The lasso penalty has a corner at 0
+that can set coefficients to exactly 0 (try the slider in
+[Penalties as budgets](#budgets)).
 
 ```{r creeper-data}
 library(MASS)
@@ -339,8 +441,8 @@ rownames(subset_tab) <- NULL
 knitr::kable(subset_tab[1:10, ], digits = 2)
 ```
 
-> **Pause.** Which covariates show up in nearly every top model? Which
-> come and go?`r land("big trees, snags, and road distance are in nearly all of them; the rest are the best model plus one useless covariate, each about 2 units behind.")`
+> **Question:** Which covariates show up in nearly every top model? Which
+> come and go?
 
 ```{r creeper-paths, fig.width=9, fig.height=4.5}
 # penalized NLL: NLL(beta) + lambda * sum(beta^2) (ridge) or lambda * sum(|beta|) (lasso)
@@ -352,7 +454,7 @@ plot(fit_lasso, xvar = "lambda", label = TRUE, main = "Lasso")
 par(mfrow = c(1, 1))
 ```
 
-> **Pause.** Read the lasso panel from right to left (from a big penalty
+> **Question:** Read the lasso panel from right to left (from a big penalty
 > to none). Which covariates enter first?
 
 ```{r creeper-cv}
@@ -375,32 +477,34 @@ round(data.frame(truth = beta_true,
                  row.names = covars), 2)
 ```
 
-> **Pause.** The lasso kept road distance but estimates its effect at
-> `r f2(coef_lasso[8])`; the truth is 0.3. Is the lasso broken?`r land("no. Shrinkage is the point: biased but less noisy estimates that predict better. Use the lasso for prediction and for choosing covariates, not for effect sizes (refit, or go Bayesian on Wednesday).")`
+> **Question:** The lasso kept road distance but estimates its effect at
+> `r f2(coef_lasso[8])`; the truth is 0.3. Is the lasso broken?
 
-**Sticking point:** neither method is a truth detector. Across 40
-simulated data sets like this one, the AIC-best subset found the exact
-true set of covariates 12 times and the lasso 13 times.
+Neither AIC nor the lasso reliably recovers the true model. In 40
+simulated data sets like this one, the AIC-best subset matched the true
+set of covariates 12 times and the lasso 13 times.
 
 ## Discussion
 
 **Q1.** AIC's best creeper model kept northness (several models within 2
 units, top weight small); the lasso dropped it. Which covariates would
 you report as "important," and how would you word it?
-`r land("report the uncertainty, not one list; covariates both methods agree on (big trees, snags) are the safest claims.")`
 
 **Q2.** In a real survey, the lasso sets grazing to exactly 0. A manager
 concludes that expanding grazing won't affect creepers. Do you agree?
-`r land("a zero means 'not needed to predict counts here,' not 'no effect.' Grazing may act through shrub cover, or be real but too small for 50 stations. A management question is causal: COMPARE part 3, relevance.")`
 
-# Tuesday (Lab 8): penalties as budgets
+# Penalties as budgets and cross-validation {#lab-tools}
 
-Lab 8 extends Lab 7's Bd model to a 60-pond survey with 8 pond features
-([data](data/BdRegionalSurvey.csv)).
+These tools come up in a lab on Bd infection in frogs, which fits a
+logistic model to a 60-pond survey with 8 pond features
+([data](data/BdRegionalSurvey.csv)). This part offers another way to
+picture regularization, as a budget on coefficient size, along with
+tips for `glmnet` and an outline of how cross-validation picks the
+penalty.
 
-## Penalties as budgets
+## Penalties as budgets {#budgets}
 
-Another way to picture a penalty is as a **budget** on coefficient size.
+A penalty can also be pictured as a **budget** on coefficient size.
 
 1. The ridge fit for a given $\lambda$:
    $$\hat\beta_\lambda = \arg\min_\beta \Big[\text{NLL}(\beta) + \lambda \sum_j \beta_j^2\Big]$$
@@ -412,13 +516,13 @@ Another way to picture a penalty is as a **budget** on coefficient size.
 4. Why: suppose some $\beta^*$ inside the budget had a lower NLL. Its
    penalty $\lambda\sum\beta_j^{*2}$ is at most $\lambda t^2$, no bigger
    than $\hat\beta_\lambda$'s, so its penalized total would be lower too.
-   But $\hat\beta_\lambda$ has the lowest total, a contradiction. (The
-   lasso works the same way with $|\beta|$.)
+   That contradicts $\hat\beta_\lambda$ having the lowest total. (The
+   same argument works for the lasso with $|\beta|$.)
 5. Each $\lambda$ sets a $t$: $\lambda = 0$ gives $t$ = size of the MLE
    (the budget doesn't bind), and as $\lambda \to \infty$, $t \to 0$.
 
-We don't choose $t$ directly. We tune $\lambda$ (by cross-validation),
-and $t$ is a way to picture what $\lambda$ does.
+In practice we tune $\lambda$ (usually by cross-validation), not $t$;
+the budget is a way to picture what $\lambda$ does.
 
 **One coefficient.** Take $\text{NLL}(\beta) = (\beta - 0.4)^2$, so the
 MLE is 0.4.
@@ -428,16 +532,16 @@ MLE is 0.4.
 - Lasso (for $\beta > 0$): $2(\beta - 0.4) + \lambda = 0$, so
   $\hat\beta = 0.4 - \lambda/2$. At $\lambda = 0.4$, $\hat\beta = t = 0.2$.
 
-Drag the slider. On the left, the dot is the minimum of the lasso
-objective. On the right are the lasso and ridge estimates as $\lambda$
-grows.
+Drag the slider. The left panel shows the lasso objective, with a dot at
+its minimum; the right panel tracks the lasso and ridge estimates as
+$\lambda$ increases.
 
 ```{r widget-lasso, echo=FALSE}
 widget("lasso_kink.html")
 ```
 
-> **Pause.** Why does the lasso estimate stop at exactly 0 once
-> $\lambda \ge 0.8$, while the ridge estimate never gets there?`r land("at beta = 0 the NLL slopes downhill at rate 2(0.4) = 0.8. The lasso charges lambda per unit of |beta| from the first unit on, so once lambda is at least 0.8, leaving 0 costs more than it gains. Ridge's penalty is flat at 0 (slope 2 lambda beta = 0), so the first bit of coefficient is free.")`
+> **Question:** Why does the lasso estimate stop at exactly 0 once
+> $\lambda \ge 0.8$, while the ridge estimate never gets there?
 
 ## Tools for the lab
 
@@ -460,24 +564,31 @@ draw_folds()
 - Choose the $\lambda$ with the best total held-out score. `lambda.1se`
   is the largest $\lambda$ (the simplest model) whose score is within one
   SE of the best.
-- This is Monday's "new plot" made systematic.
-- Folds are random: set a seed to reproduce them.
+- Each held-out fold plays the role of the new plot in the [WOD](#wod).
+- Folds are random, so set a seed to reproduce them.
 
-# Wednesday: Bayesian model comparison and shrinkage priors
+# Bayesian model comparison and shrinkage priors {#bayesian}
 
-## 1. Where we are `r if (params$instructor) "(~3 min)"`
+This part brings the same ideas to models fit by MCMC. A ridge penalty
+is equivalent to a Normal prior, so regularization has a direct Bayesian
+counterpart. WAIC and LOO estimate predictive performance from the
+posterior, and shrinkage priors do the job of ridge and the lasso while
+keeping the full posterior uncertainty.
 
-Still COMPARE (part 2), now for models fit by MCMC. Monday penalized the
-*number* of parameters (AIC) or their *size* (ridge, lasso). Today: both
-ideas for Bayesian fits. Why not just AIC? There's no single best-fit
-$\hat\theta$, and priors make "number of parameters" fuzzy.
+## 1. Why not AIC?
 
-## 2. Ridge is a prior `r if (params$instructor) "(~6 min)"`
+AIC needs a single best-fit $\hat\theta$ and a count of parameters. An
+MCMC fit gives a whole posterior instead, and priors constrain
+parameters to different degrees, so the parameter count is no longer
+clear-cut. WAIC and LOO (section 3) handle both problems.
+
+## 2. Ridge is a prior
 
 Eight survey routes each report a change in log abundance,
-$y_i \sim \text{Normal}(\mu, \sigma = 0.15)$; $\mu$ is the regional trend.
+$y_i \sim \text{Normal}(\mu, \sigma = 0.15)$, where $\mu$ is the
+regional trend.
 
-1. Monday's ridge fit, with one parameter:
+1. The ridge fit from [Regularization](#regularization), with one parameter:
    $$\text{PNLL}(\mu) = \sum_{i=1}^n \frac{(y_i - \mu)^2}{2\sigma^2} + \lambda \mu^2$$
    (the NLL is the Normal density's exponent; the
    $\log\sqrt{2\pi\sigma^2}$ terms don't involve $\mu$, so they drop out).
@@ -489,13 +600,13 @@ $y_i \sim \text{Normal}(\mu, \sigma = 0.15)$; $\mu$ is the regional trend.
    $$-\log P(\mu) = \frac{\mu^2}{2\tau^2} + \text{const.}$$
 4. Together:
    $$-\log P(\mu \mid y) = \sum_{i=1}^n \frac{(y_i - \mu)^2}{2\sigma^2} + \frac{\mu^2}{2\tau^2} + \text{const.}$$
-5. This is the ridge PNLL when $\lambda = 1/(2\tau^2)$, so the two have
-   the same minimum: **the ridge estimate is the posterior mode.** A
-   narrow prior is a big penalty; a vague prior ($\tau \to \infty$) gives
-   $\lambda \to 0$, the MLE.
+5. This matches the ridge PNLL when $\lambda = 1/(2\tau^2)$, so both
+   have the same minimum: **the ridge estimate is the posterior mode.**
+   A narrow prior means a big penalty; a vague prior
+   ($\tau \to \infty$) gives $\lambda \to 0$, the MLE.
 6. Setting the derivative to 0:
    $$\hat\mu = \bar y \cdot \frac{n}{n + \sigma^2/\tau^2}$$
-   The MLE times a shrinkage factor below 1. The prior acts like
+   This is the MLE times a shrinkage factor below 1. The prior acts like
    $\sigma^2/\tau^2$ extra routes that each reported exactly 0.
 
 ```{r ridge-prior}
@@ -512,16 +623,16 @@ c(MLE = mean(route_y),
   posterior_mode = optimize(neg_log_post, c(-1, 1))$minimum)
 ```
 
-Drag the prior SD $\tau$ and watch the posterior (and the matching ridge
-penalty) move between the data and 0.
+Drag the prior SD $\tau$. The posterior, and the ridge $\lambda$ that
+matches it, shift between the data and 0.
 
 ```{r widget-ridge-prior, echo=FALSE}
 widget("ridge_prior.html")
 ```
 
-> **Pause.** Which prior matches the lasso penalty, $\lambda|\mu|$?`r land("the Laplace (double exponential), with density proportional to exp(-lambda |mu|): a spike at 0 and heavier tails. Section 4 uses it.")`
+> **Question:** Which prior matches the lasso penalty, $\lambda|\mu|$?
 
-## 3. WAIC and LOO `r if (params$instructor) "(~12 min)"`
+## 3. WAIC and LOO
 
 - **Score:** the expected log predictive density (elpd). For each data
   point, average its likelihood over the posterior draws, take the log,
@@ -531,7 +642,7 @@ widget("ridge_prior.html")
   - DIC (Bolker 6.6.3): $p_D$ = mean deviance minus the deviance at the posterior means.
   - WAIC: $p_{\text{waic}}$ = the summed posterior variance of each point's log likelihood.
   - LOO: approximates refitting the model without each point (PSIS).
-    Pareto $k > 0.7$ flags points where the shortcut fails.
+    Pareto $k > 0.7$ flags points where the approximation fails.
 - Stan has to save `log_lik[i]` for every observation, in `generated quantities`.
 
 ```{r fir-stan, cache=TRUE, results="hide", echo=-10}
@@ -605,18 +716,19 @@ fir_comp <- loo_compare(list(no_wave = loo_nowave, full = loo_full))
 fir_comp
 ```
 
-> **Pause.** The full model is `r f1(-fir_comp["full", "elpd_diff"])`
+> **Question:** The full model is `r f1(-fir_comp["full", "elpd_diff"])`
 > elpd behind, SE `r f1(fir_comp["full", "se_diff"])`. What can you
-> conclude?`r land("the difference is about one SE, so the data can't tell the models apart. That is not the same as 'no wave effect.'")`
+> conclude?
 
-**Sticking point:** AIC gives no standard error for a difference between
-models; LOO does.
+Unlike AIC, LOO gives a standard error for the difference between two
+models.
 
-## 4. Shrinkage priors `r if (params$instructor) "(~12 min)"`
+## 4. Shrinkage priors {#shrinkage}
 
-The prior's scale does $\lambda$'s job: a Normal prior on the slopes is
-ridge, a Laplace prior is lasso. Monday's creepers, with three priors on
-the 10 slopes:
+The prior's scale plays the role of $\lambda$: a Normal prior on the
+slopes corresponds to ridge, a Laplace prior to the lasso. Here are the
+brown creepers from [Regularization](#regularization) again, with three
+different priors on the 10 slopes:
 
 ```{r creeper-stan, cache=TRUE, results="hide", echo=-6}
 # creepers again: Poisson regression; prior on the slopes is Normal(0, s) or Laplace(0, s)
@@ -685,12 +797,13 @@ loo_compare(lapply(fits_shrink, function(f) f$loo()))
 north_lap <- post_sum$laplace[7, ]
 ```
 
-> **Pause.** Monday's lasso set northness to exactly 0. The Laplace
+> **Question:** The cross-validated lasso in
+> [Regularization](#regularization) set northness to exactly 0. The Laplace
 > posterior says `r f2(north_lap[1])` (90% interval `r f2(north_lap[2])`
-> to `r f2(north_lap[3])`). Which is more honest?`r land("the posterior keeps the uncertainty that a single zero hides. A Bayesian lasso never gives exact zeros.")`
+> to `r f2(north_lap[3])`). Which is more honest?
 
 **Horseshoe prior** (sketch only): a taller spike at 0 plus heavier
-tails, so small effects shrink hard and big ones barely shrink.
+tails, so small effects shrink hard and large ones barely shrink.
 
 ```{r prior-shapes, fig.width=6, fig.height=3.8}
 # prior shapes: Normal, Laplace, horseshoe (simulated: Normal with half-Cauchy scale)
@@ -703,9 +816,9 @@ legend("topright", c("Normal (ridge)", "Laplace (lasso)", "horseshoe"), col = c(
        lwd = 2, bty = "n")
 ```
 
-**Sticking point:** choosing the prior scale is choosing $\lambda$.
-Compare scales by LOO, or estimate the scale from the data (a
-hierarchical prior, later in the semester).
+Choosing the prior scale amounts to choosing $\lambda$. Scales can be
+compared by LOO, or the scale can be estimated from the data with a
+hierarchical prior (covered later in the course).
 
 ## Discussion
 
@@ -713,14 +826,12 @@ hierarchical prior, later in the semester).
 `r f1(-fir_comp["full", "elpd_diff"])` elpd (SE
 `r f1(fir_comp["full", "se_diff"])`). A colleague writes "wave
 regeneration has no effect on cone production." Do you agree?
-`r land("a difference within about one SE is inconclusive; 'not detected' is not 'no effect.' Corroborated, not proven.")`
 
 **Q2.** With a Laplace prior, northness gets a posterior median of
-`r f2(north_lap[1])`; Monday's lasso said exactly 0. Which would you
-report, and why?
-`r land("the posterior shows the uncertainty a zero hides. For prediction either works; for inference, report the interval.")`
+`r f2(north_lap[1])`; the cross-validated lasso said exactly 0. Which
+would you report, and why?
 
-## If time: Bayes factors and selection inside the sampler
+## Bonus: Bayes factors and RJMCMC
 
 - A **Bayes factor** is a ratio of marginal likelihoods (the likelihood
   averaged over the prior). It is sensitive to vague priors and hard to
