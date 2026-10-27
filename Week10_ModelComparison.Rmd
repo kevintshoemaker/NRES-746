@@ -385,7 +385,7 @@ AIC charges for each parameter; these penalties grow with the size of
 the coefficients. One $\lambda$ applies to every coefficient, so the
 covariates are standardized first. The lasso penalty has a corner at 0
 that can set coefficients to exactly 0 (try the slider in
-[Penalties as budgets](#budgets)).
+[Prices and budgets](#budgets)).
 
 ```{r creeper-data}
 library(MASS)
@@ -489,44 +489,79 @@ you report as "important," and how would you word it?
 **Q2.** In a real survey, the lasso sets grazing to exactly 0. A manager
 concludes that expanding grazing won't affect creepers. Do you agree?
 
-# Penalties as budgets and cross-validation {#lab-tools}
+# Prices, budgets, and cross-validation {#lab-tools}
 
 These tools come up in a lab on Bd infection in frogs, which fits a
 logistic model to a 60-pond survey with 8 pond features
 ([data](data/BdRegionalSurvey.csv)). This part offers another way to
-picture regularization, as a budget on coefficient size, along with
+picture regularization, as a price or a budget for coefficient size, along with
 tips for `glmnet` and an outline of how cross-validation picks the
 penalty.
 
-## Penalties as budgets {#budgets}
+## Prices and budgets {#budgets}
 
-A penalty can also be pictured as a **budget** on coefficient size.
+Think of fitting a model as shopping, with fit as the currency
+(measured in NLL units). Coefficient size buys a lower NLL: the first
+bit of a useful coefficient buys a lot, and later bits buy less. A
+penalty restrains the spending in one of two equivalent ways.
 
-1. The ridge fit for a given $\lambda$:
-   $$\hat\beta_\lambda = \arg\min_\beta \Big[\text{NLL}(\beta) + \lambda \sum_j \beta_j^2\Big]$$
-2. Define the budget as the size of that answer:
-   $$t^2 = \sum_j \hat\beta_{\lambda,j}^2 \quad\text{(ridge)}, \qquad
-     t = \sum_j |\hat\beta_{\lambda,j}| \quad\text{(lasso)}$$
-3. Claim: $\hat\beta_\lambda$ is also the **lowest-NLL point inside the
-   budget** $\sum_j \beta_j^2 \le t^2$.
-4. Why: suppose some $\beta^*$ inside the budget had a lower NLL. Its
-   penalty $\lambda\sum\beta_j^{*2}$ is at most $\lambda t^2$, no bigger
-   than $\hat\beta_\lambda$'s, so its penalized total would be lower too.
-   That contradicts $\hat\beta_\lambda$ having the lowest total. (The
-   same argument works for the lasso with $|\beta|$.)
-5. Each $\lambda$ sets a $t$: $\lambda = 0$ gives $t$ = size of the MLE
-   (the budget doesn't bind), and as $\lambda \to \infty$, $t \to 0$.
+**A price.** The penalized form, which is what `glmnet` computes:
 
-In practice we tune $\lambda$ (usually by cross-validation), not $t$;
-the budget is a way to picture what $\lambda$ does.
+$$\min_\beta \; \text{NLL}(\beta) + \lambda \cdot \text{size}(\beta),
+  \qquad \text{size} = \sum_j \beta_j^2 \text{ (ridge) or } \sum_j |\beta_j| \text{ (lasso)}$$
+
+- $\lambda$ is the price of coefficient size, paid in NLL units.
+- There is no spending limit. The fit keeps adding size as long as the
+  next unit lowers the NLL by more than it costs, and stops where the
+  two balance.
+- How much gets spent depends on the data: if the fit improves steeply,
+  it pays for a lot of size even at a high price.
+- At $\lambda = 0$, size is free and we get the MLE.
+
+**A budget.** The constrained form:
+
+$$\min_\beta \; \text{NLL}(\beta) \quad \text{subject to} \quad
+  \sum_j \beta_j^2 \le t^2 \text{ (ridge) or } \sum_j |\beta_j| \le t \text{ (lasso)}$$
+
+- $t$ is a fixed allowance of coefficient size, with no price. The fit
+  spends it wherever it lowers the NLL most.
+- If the MLE fits within the allowance, the limit doesn't bind and we
+  get the MLE. Any $t$ at least as large as the MLE's size acts like an
+  unlimited budget.
+
+**The bridge.** Every price has a matching budget that gives the same
+coefficients.
+
+- Fix $\lambda$, fit, and add up the size of what was bought. That total
+  is the matching $t$. (If some point within that budget had a lower
+  NLL, its penalized total would be lower too, so the penalized fit
+  couldn't have been the best.)
+- Going the other way, the price that matches a budget $t$ is how much
+  NLL one more unit of budget would buy.
+- As $\lambda$ rises from 0, the matching $t$ shrinks from the size of
+  the MLE toward 0. In practice we tune $\lambda$ (usually by
+  cross-validation); $t$ pictures how much the fit ended up spending.
+
+**Two price schedules.**
+
+- Lasso: a flat price. Each unit of $|\beta_j|$ costs $\lambda$,
+  starting with the first.
+- Ridge: a rising price. Size costs $\lambda\beta_j^2$, so the next unit
+  costs $2\lambda\beta_j$: almost nothing near 0, more the more you've
+  already bought.
 
 **One coefficient.** Take $\text{NLL}(\beta) = (\beta - 0.4)^2$, so the
-MLE is 0.4.
+MLE is 0.4. Raising $\beta$ from $b$ lowers the NLL at a rate of
+$2(0.4 - b)$ per unit: 0.8 at $b = 0$, falling to 0 at the MLE.
 
-- Ridge: $2(\beta - 0.4) + 2\lambda\beta = 0$, so
-  $\hat\beta = 0.4/(1 + \lambda)$. At $\lambda = 1$, $\hat\beta = t = 0.2$.
-- Lasso (for $\beta > 0$): $2(\beta - 0.4) + \lambda = 0$, so
-  $\hat\beta = 0.4 - \lambda/2$. At $\lambda = 0.4$, $\hat\beta = t = 0.2$.
+- Lasso: buy until the rate equals the price, $2(0.4 - b) = \lambda$,
+  so $\hat\beta = 0.4 - \lambda/2$ (for $\lambda < 0.8$). At
+  $\lambda = 0.4$, $\hat\beta = 0.2$.
+- Ridge: buy until the rate equals the next unit's price,
+  $2(0.4 - b) = 2\lambda b$, so $\hat\beta = 0.4/(1 + \lambda)$. At
+  $\lambda = 1$, $\hat\beta = 0.2$.
+- Both match a budget of $t = 0.2$: given an allowance of 0.2 and no
+  price, either penalty would buy the same $\hat\beta$.
 
 Drag the slider. The left panel shows the lasso objective, with a dot at
 its minimum; the right panel tracks the lasso and ridge estimates as
@@ -536,8 +571,8 @@ $\lambda$ increases.
 widget("lasso_kink.html")
 ```
 
-> **Question:** Why does the lasso estimate stop at exactly 0 once
-> $\lambda \ge 0.8$, while the ridge estimate never gets there?
+> **Question:** Why does the lasso buy nothing at all once
+> $\lambda \ge 0.8$, while ridge always buys some?
 
 ## Tools for the lab
 

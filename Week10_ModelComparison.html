@@ -646,7 +646,7 @@ rownames(aic_tab) &lt;- NULL</code></pre>
 <p>Ten covariates give <span class="math inline">\(2^{10} = 1024\)</span> possible subsets. Instead of searching them all, we can keep all 10 and penalize the size of the coefficients:</p>
 <p><span class="math display">\[\text{ridge: } \text{NLL}(\beta) + \lambda\sum_j \beta_j^2 \qquad\qquad
   \text{lasso: } \text{NLL}(\beta) + \lambda\sum_j |\beta_j|\]</span></p>
-<p>AIC charges for each parameter; these penalties grow with the size of the coefficients. One <span class="math inline">\(\lambda\)</span> applies to every coefficient, so the covariates are standardized first. The lasso penalty has a corner at 0 that can set coefficients to exactly 0 (try the slider in <a href="#budgets">Penalties as budgets</a>).</p>
+<p>AIC charges for each parameter; these penalties grow with the size of the coefficients. One <span class="math inline">\(\lambda\)</span> applies to every coefficient, so the covariates are standardized first. The lasso penalty has a corner at 0 that can set coefficients to exactly 0 (try the slider in <a href="#budgets">Prices and budgets</a>).</p>
 <pre class="r"><code>library(MASS)
 library(glmnet)
 
@@ -830,24 +830,43 @@ round(data.frame(truth = beta_true,
 </div>
 </div>
 <div id="lab-tools" class="section level1">
-<h1>Penalties as budgets and cross-validation</h1>
-<p>These tools come up in a lab on Bd infection in frogs, which fits a logistic model to a 60-pond survey with 8 pond features (<a href="data/BdRegionalSurvey.csv">data</a>). This part offers another way to picture regularization, as a budget on coefficient size, along with tips for <code>glmnet</code> and an outline of how cross-validation picks the penalty.</p>
+<h1>Prices, budgets, and cross-validation</h1>
+<p>These tools come up in a lab on Bd infection in frogs, which fits a logistic model to a 60-pond survey with 8 pond features (<a href="data/BdRegionalSurvey.csv">data</a>). This part offers another way to picture regularization, as a price or a budget for coefficient size, along with tips for <code>glmnet</code> and an outline of how cross-validation picks the penalty.</p>
 <div id="budgets" class="section level2">
-<h2>Penalties as budgets</h2>
-<p>A penalty can also be pictured as a <strong>budget</strong> on coefficient size.</p>
-<ol style="list-style-type: decimal">
-<li>The ridge fit for a given <span class="math inline">\(\lambda\)</span>: <span class="math display">\[\hat\beta_\lambda = \arg\min_\beta \Big[\text{NLL}(\beta) + \lambda \sum_j \beta_j^2\Big]\]</span></li>
-<li>Define the budget as the size of that answer: <span class="math display">\[t^2 = \sum_j \hat\beta_{\lambda,j}^2 \quad\text{(ridge)}, \qquad
- t = \sum_j |\hat\beta_{\lambda,j}| \quad\text{(lasso)}\]</span></li>
-<li>Claim: <span class="math inline">\(\hat\beta_\lambda\)</span> is also the <strong>lowest-NLL point inside the budget</strong> <span class="math inline">\(\sum_j \beta_j^2 \le t^2\)</span>.</li>
-<li>Why: suppose some <span class="math inline">\(\beta^*\)</span> inside the budget had a lower NLL. Its penalty <span class="math inline">\(\lambda\sum\beta_j^{*2}\)</span> is at most <span class="math inline">\(\lambda t^2\)</span>, no bigger than <span class="math inline">\(\hat\beta_\lambda\)</span>'s, so its penalized total would be lower too. That contradicts <span class="math inline">\(\hat\beta_\lambda\)</span> having the lowest total. (The same argument works for the lasso with <span class="math inline">\(|\beta|\)</span>.)</li>
-<li>Each <span class="math inline">\(\lambda\)</span> sets a <span class="math inline">\(t\)</span>: <span class="math inline">\(\lambda = 0\)</span> gives <span class="math inline">\(t\)</span> = size of the MLE (the budget doesn't bind), and as <span class="math inline">\(\lambda \to \infty\)</span>, <span class="math inline">\(t \to 0\)</span>.</li>
-</ol>
-<p>In practice we tune <span class="math inline">\(\lambda\)</span> (usually by cross-validation), not <span class="math inline">\(t\)</span>; the budget is a way to picture what <span class="math inline">\(\lambda\)</span> does.</p>
-<p><strong>One coefficient.</strong> Take <span class="math inline">\(\text{NLL}(\beta) = (\beta - 0.4)^2\)</span>, so the MLE is 0.4.</p>
+<h2>Prices and budgets</h2>
+<p>Think of fitting a model as shopping, with fit as the currency (measured in NLL units). Coefficient size buys a lower NLL: the first bit of a useful coefficient buys a lot, and later bits buy less. A penalty restrains the spending in one of two equivalent ways.</p>
+<p><strong>A price.</strong> The penalized form, which is what <code>glmnet</code> computes:</p>
+<p><span class="math display">\[\min_\beta \; \text{NLL}(\beta) + \lambda \cdot \text{size}(\beta),
+  \qquad \text{size} = \sum_j \beta_j^2 \text{ (ridge) or } \sum_j |\beta_j| \text{ (lasso)}\]</span></p>
 <ul>
-<li>Ridge: <span class="math inline">\(2(\beta - 0.4) + 2\lambda\beta = 0\)</span>, so <span class="math inline">\(\hat\beta = 0.4/(1 + \lambda)\)</span>. At <span class="math inline">\(\lambda = 1\)</span>, <span class="math inline">\(\hat\beta = t = 0.2\)</span>.</li>
-<li>Lasso (for <span class="math inline">\(\beta &gt; 0\)</span>): <span class="math inline">\(2(\beta - 0.4) + \lambda = 0\)</span>, so <span class="math inline">\(\hat\beta = 0.4 - \lambda/2\)</span>. At <span class="math inline">\(\lambda = 0.4\)</span>, <span class="math inline">\(\hat\beta = t = 0.2\)</span>.</li>
+<li><span class="math inline">\(\lambda\)</span> is the price of coefficient size, paid in NLL units.</li>
+<li>There is no spending limit. The fit keeps adding size as long as the next unit lowers the NLL by more than it costs, and stops where the two balance.</li>
+<li>How much gets spent depends on the data: if the fit improves steeply, it pays for a lot of size even at a high price.</li>
+<li>At <span class="math inline">\(\lambda = 0\)</span>, size is free and we get the MLE.</li>
+</ul>
+<p><strong>A budget.</strong> The constrained form:</p>
+<p><span class="math display">\[\min_\beta \; \text{NLL}(\beta) \quad \text{subject to} \quad
+  \sum_j \beta_j^2 \le t^2 \text{ (ridge) or } \sum_j |\beta_j| \le t \text{ (lasso)}\]</span></p>
+<ul>
+<li><span class="math inline">\(t\)</span> is a fixed allowance of coefficient size, with no price. The fit spends it wherever it lowers the NLL most.</li>
+<li>If the MLE fits within the allowance, the limit doesn't bind and we get the MLE. Any <span class="math inline">\(t\)</span> at least as large as the MLE's size acts like an unlimited budget.</li>
+</ul>
+<p><strong>The bridge.</strong> Every price has a matching budget that gives the same coefficients.</p>
+<ul>
+<li>Fix <span class="math inline">\(\lambda\)</span>, fit, and add up the size of what was bought. That total is the matching <span class="math inline">\(t\)</span>. (If some point within that budget had a lower NLL, its penalized total would be lower too, so the penalized fit couldn't have been the best.)</li>
+<li>Going the other way, the price that matches a budget <span class="math inline">\(t\)</span> is how much NLL one more unit of budget would buy.</li>
+<li>As <span class="math inline">\(\lambda\)</span> rises from 0, the matching <span class="math inline">\(t\)</span> shrinks from the size of the MLE toward 0. In practice we tune <span class="math inline">\(\lambda\)</span> (usually by cross-validation); <span class="math inline">\(t\)</span> pictures how much the fit ended up spending.</li>
+</ul>
+<p><strong>Two price schedules.</strong></p>
+<ul>
+<li>Lasso: a flat price. Each unit of <span class="math inline">\(|\beta_j|\)</span> costs <span class="math inline">\(\lambda\)</span>, starting with the first.</li>
+<li>Ridge: a rising price. Size costs <span class="math inline">\(\lambda\beta_j^2\)</span>, so the next unit costs <span class="math inline">\(2\lambda\beta_j\)</span>: almost nothing near 0, more the more you've already bought.</li>
+</ul>
+<p><strong>One coefficient.</strong> Take <span class="math inline">\(\text{NLL}(\beta) = (\beta - 0.4)^2\)</span>, so the MLE is 0.4. Raising <span class="math inline">\(\beta\)</span> from <span class="math inline">\(b\)</span> lowers the NLL at a rate of <span class="math inline">\(2(0.4 - b)\)</span> per unit: 0.8 at <span class="math inline">\(b = 0\)</span>, falling to 0 at the MLE.</p>
+<ul>
+<li>Lasso: buy until the rate equals the price, <span class="math inline">\(2(0.4 - b) = \lambda\)</span>, so <span class="math inline">\(\hat\beta = 0.4 - \lambda/2\)</span> (for <span class="math inline">\(\lambda &lt; 0.8\)</span>). At <span class="math inline">\(\lambda = 0.4\)</span>, <span class="math inline">\(\hat\beta = 0.2\)</span>.</li>
+<li>Ridge: buy until the rate equals the next unit's price, <span class="math inline">\(2(0.4 - b) = 2\lambda b\)</span>, so <span class="math inline">\(\hat\beta = 0.4/(1 + \lambda)\)</span>. At <span class="math inline">\(\lambda = 1\)</span>, <span class="math inline">\(\hat\beta = 0.2\)</span>.</li>
+<li>Both match a budget of <span class="math inline">\(t = 0.2\)</span>: given an allowance of 0.2 and no price, either penalty would buy the same <span class="math inline">\(\hat\beta\)</span>.</li>
 </ul>
 <p>Drag the slider. The left panel shows the lasso objective, with a dot at its minimum; the right panel tracks the lasso and ridge estimates as <span class="math inline">\(\lambda\)</span> increases.</p>
 <div class="w746" id="lk">
@@ -941,7 +960,7 @@ draw(parseFloat(s.value));
 </script>
 </div>
 <blockquote>
-<p><strong>Question:</strong> Why does the lasso estimate stop at exactly 0 once <span class="math inline">\(\lambda \ge 0.8\)</span>, while the ridge estimate never gets there?</p>
+<p><strong>Question:</strong> Why does the lasso buy nothing at all once <span class="math inline">\(\lambda \ge 0.8\)</span>, while ridge always buys some?</p>
 </blockquote>
 </div>
 <div id="tools-for-the-lab" class="section level2">
