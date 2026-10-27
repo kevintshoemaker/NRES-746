@@ -38,8 +38,8 @@ and stats theory as I go.
 
 # Writing style
 
-Applies to all student-facing prose (handouts, keys, discussion
-prompts). Students know AI helped make the materials,
+Applies to all student-facing prose (web pages, handouts, keys,
+discussion prompts). Students know AI helped make the materials,
 but writing that signals it makes them take exercises less seriously.
 
 - **No em-dashes**, and no `--` in knitted `.Rmd` files (pandoc turns
@@ -50,15 +50,17 @@ but writing that signals it makes them take exercises less seriously.
   "genuinely") unless they do real work.
 - **Banned phrases:** "pin down" (say "how uncertain," "rule out");
   callbacks framed as "X is [earlier material] applied to Y" (say what
-  X does). Plain references ("Monday's pika data") are fine. Also
-  "reveal" ("WOD reveal").
+  X does). Plain references ("Monday's pika data") are fine in
+  handouts, not on web pages. Also "reveal" ("WOD reveal").
 - **Plain headers:** say what the section is ("WOD: bias-variance
   tradeoff", "Big picture"), not a teaser or a cute label. In
   student-facing pages, label in-class prompts "Question:" or
-  "Discussion:", not "Pause" (NOTES and scripts keep `[PAUSE]`).
-- **Public web pages** (e.g. `Week10_ModelComparison.Rmd`): no class-day
-  or week references ("Monday's creepers", "Week 7's cutoff"); link the
-  relevant section instead (explicit `{#id}` anchors on headers).
+  "Discussion:", not "Pause" (instructor notes and scripts keep `[PAUSE]`).
+- **Vary the phrasing.** Don't reuse a sentence frame or label section
+  after section (e.g. a "Sticking point:" label on every section); avoid
+  catchy antitheses ("penalizes how *many*; these penalize how *big*").
+- **Web pages** have extra rules (public audience, no day references):
+  see "Weekly web page".
 - **Concise:** if a shorter phrasing says the same thing, use it.
 - **No specific forward references** ("this comes up in Lab 7"), since
   schedules shift; say "later in the semester" unless you're editing
@@ -153,10 +155,12 @@ Each 50-min lecture has three beats.
    one likely sticking point. Intuition first, notation second.
 3. **Discussion (remaining time).** Open-ended prompts that make
    students compare or defend interpretations. Put the numbers the
-   question turns on into the prompt. Follow with a short instructor
-   note on what it should surface and where it should land.
+   question turns on into the prompt. Where it should land goes in the
+   instructor notes, not on the page.
 
-Build all three together (with timing) unless told otherwise.
+Build all three together (with timing) unless told otherwise. The
+lecture and discussion live on the week's web page; see "Weekly
+materials".
 
 **Calibration: lectures cover about half of what's planned.** Weeks
 7-8 each covered 3-4 of 7-8 planned sections. Plan **3-4 sub-topics**
@@ -189,74 +193,128 @@ which double as final-project models.
 = Monday/Wednesday slot. If the schedule shifts, rename the file and
 its header together.
 
-# Lecture notes (`lecture_notes/`)
+# Weekly materials
 
-Instructor-only, so raw LaTeX is fine. One `.Rmd` per lecture (don't
-split prep and podium into two files), knit to PDF, `fontsize: 12pt`, `echo = FALSE` globally (no visible code).
-Name: `NOTES_Week<N>_Lecture<M>_<Topic>.Rmd`. See
-`NOTES_Week10_Lecture1_LRTAICAndRegularization.Rmd`.
+Adopted Oct. 27, 2026 (Week 10). The instructor teaches from a single
+web page per week, walking through it in lectures and in the lab's
+lecture portion. An ordinary week has:
 
-- **No "How to prepare" block** (dropped Oct. 22, 2026): the
-  instructor writes prep instructions as Canvas announcements by hand,
-  and may ask for help with those separately.
-- **Overview:** the beat table (beat, mode, time) plus a line or two
-  (e.g. what to skip if behind).
-- **Part 1 (prep, read beforehand). Keep it very short.** Bullets,
-  tables, and figures only, no prose paragraphs. Per section: setup,
-  board content, results to quote (computed by hidden chunks), one
-  sticking point, where a pause should land. Don't repeat the podium
-  copy in more words. Target about one page per section or less.
-- **Part 2 (podium copy)** after `\newpage` + `\large`: tight bullets,
-  small reference figures, essential equations, `\newpage` before each
-  section, time budgets summing to ~30-35 min. Re-plot from Part 1's
-  objects rather than recomputing.
-- **Tight, not cryptic** (instructor feedback, Oct. 22, 2026: the
-  first Week 10 podium copies were a bit too terse). Each bullet should
-  make sense at a glance without Part 1: write every pause as the full
-  question in quotes plus a one-line *Land:*; label numbers with what
-  they are ("lasso says 0.07; truth 0.3", not "road 0.07 vs. 0.3");
-  avoid bare arrows and symbol shorthand standing in for a sentence.
-  See the Week 10 podium copies.
-- Tag every section header in both parts `[BOARD]`, `[R]`, or
-  `[BOARD $\to$ R]`.
-- **Mine old material first:** legacy root-level `LECTUREn.Rmd` /
-  `LABn.Rmd` examples were tested in class. Also check the Bolker
-  section, the idea bank, and this week's WOD/lab so the lecture calls
-  back to them rather than repeating or contradicting them.
-- **Lab notes:** `NOTES_Lab<N>_<Topic>.Rmd`, same format, for prep and
-  circulating; Part 2 ends with an Act-by-Act quick reference. Worked
-  examples must use different numbers/functions from the lab's graded
-  questions (same rule for any lecture/lab pair).
-- **Reference handouts:** `NOTES_Reference_<Topic>.Rmd`; no podium
-  copy; writing-style rules apply (see
-  `NOTES_Reference_LikelihoodTheory.Rmd`, `NOTES_Reference_AICPenalty.Rmd`).
+1. **WOD handout(s) with keys** (see "Lecture periods", "Answer keys").
+2. **One web page** for the week (below). Replaces the old PDF NOTES
+   as the main lecture resource.
+3. **One R script** with the page's code (below).
+4. **Lab handout(s) with keys** (see "Labs", "Answer keys").
+5. **Short bulleted instructor notes, one per class meeting** (Monday,
+   Tuesday's lab lecture, Wednesday; below).
 
-**Companion R script, one per week:**
-`lecture_notes/CODE_Week<N>_<Topic>.R` (see `CODE_Week10_ModelComparison.R`).
-Posted to WebCampus; run live for demos.
+**Mine old material first:** legacy root-level `LECTUREn.Rmd` /
+`LABn.Rmd` examples were tested in class. Also check the Bolker
+section, the idea bank, and this week's WOD/lab so the page calls back
+to them rather than repeating or contradicting them. Worked examples
+must use different numbers/functions from the lab's graded questions.
 
-- One- or two-line title block (title, packages). A header per session
-  (`# MONDAY, Oct. 26: <topic> ====`; Wednesday as a placeholder until
-  built). Under it, one subheading per R-demo section, numbered and
-  timed to match the NOTES (`# 4. AIC (~10 min) ----`); board-only
-  sections get none.
-- Only code the instructor runs as a demo. Figure/number-only code
-  stays in the NOTES file.
+## Weekly web page
+
+Root-level `Week<N>_<Topic>.Rmd` (model:
+`Week10_ModelComparison.Rmd`), public on the course site.
+
+- **YAML:** `html_document`, `theme: flatly` (the homepage's theme, not
+  the legacy `cerulean`), `toc: yes`, `toc_float: yes`, `toc_depth: 3`.
+  Render with `rmarkdown::render_site("Week<N>_<Topic>.Rmd")` so it gets
+  the site navbar.
+- **Navbar:** add the page to the Lectures menu in `_site.yml`, then
+  re-render `index.Rmd` too (each page's navbar is baked in at render
+  time; other pages pick up the link only when re-rendered).
+- **Structure:** links to the companion script and readings at the top;
+  one H1 per class meeting, titled by topic (no day names), each opening
+  with a 2-3 sentence summary; numbered H2 sections inside; "Bonus" for
+  extras. The lab's lecture portion gets its own H1; lab Act answers and
+  anything the Acts ask students to work out stay off the page.
+- **Public audience:** no class-day or week references ("Monday's
+  creepers", "Week 7's cutoff"); link the relevant section instead,
+  with explicit `{#id}` anchors on referenced headers. Explain course
+  jargon on first use (e.g. what a WOD is).
+- **Prompts:** `> **Question:**` blockquotes and a `## Discussion`
+  section, with no answers on the page (answers go in the instructor
+  notes). No timings or instructor-only text; there is no instructor
+  version of the page.
+- **Code:** demo code in visible chunks; figure helpers and
+  figure-only code in `echo = FALSE` chunks. Numbers in the prose come
+  from inline R.
+- **Widgets** (interactive sliders, where they help): standalone
+  HTML/JS files in `widgets/` (models: `lasso_kink.html`,
+  `ridge_prior.html`), included with
+  `htmltools::includeHTML(file.path("widgets", file))`. Plain
+  JavaScript, no Shiny (no server on GitHub Pages). Scope CSS under a
+  class and prefix element ids so several widgets can share a page.
+- **Stan chunks:** `cache = TRUE`, and call `$draws()` on each fit
+  inside the same chunk (cached fits otherwise point at deleted temp
+  CSVs). Hide that line with `echo = -n`; knitr's expression count can
+  be off by one or two, so check the HTML.
+- **Check before committing:** view it through the local server
+  (`.claude/launch.json` config `site`, port 8746; a `file://` URL
+  won't load `site_libs`), try each widget and anchor link, and confirm
+  every figure in `Week<N>_<Topic>_files/` is tracked (`git add -f`).
+
+## Companion R script
+
+`lecture_notes/CODE_Week<N>_<Topic>.R` (see
+`CODE_Week10_ModelComparison.R`), linked from the page and posted to
+WebCampus.
+
+- The page's visible code, in page order, with one subheading per page
+  section (`# 4. AIC ----`) under a header per H1. One- or two-line
+  title block (title, packages).
 - Brief comments per major step; equations where they say it better.
-  `#  [PAUSE] <question>` right after the code a pause depends on,
+  `#  [PAUSE] <question>` after the code a page question depends on,
   never the answer.
-- The NOTES hidden chunks repeat demo code with the same seeds; check
-  the quoted numbers match. Run the script end to end.
+- Same seeds as the page; run it end to end and check its numbers match
+  the page.
 
-**After a lecture ("as taught").** When the instructor reports what was
-covered: (1) add a dated "As taught" note to that NOTES Overview and
-cut uncovered sections from both parts; (2) move them into the next
-session's NOTES (fix day references; add a "Where this came from"
-note); (3) split the script the same way, with untaught material
-under `# Not covered <date>: moved to ... ----`; (4) update
+## Instructor notes, one per class meeting
+
+`lecture_notes/NOTES_Week<N>_Lecture<M>_<Topic>.Rmd` (Monday = 1,
+Wednesday = 2) and `NOTES_Lab<N>_<Topic>.Rmd` (the lab's lecture
+portion plus an Act-by-Act quick reference). PDF, `fontsize: 12pt`,
+raw LaTeX fine. Model: `NOTES_Week10_WebPageGuide.Rmd` (written as one
+doc for the whole week; from Week 11 on, split by meeting).
+
+- **Short and bulleted:** delivery tips that follow the page's
+  sections, with time budgets summing to ~30-35 min; what to skip if
+  behind.
+- **Every page question and discussion prompt**, quoted in full, with a
+  one-line *Land:*. Label numbers with what they are ("lasso says 0.07;
+  truth 0.3").
+- **Widget walkthroughs:** the slider stops to use, in order, the
+  values each stop shows, and where to ask students to predict before
+  moving it.
+- Board work the page doesn't show, and what not to give away before
+  lab.
+- No "How to prepare" block (prep goes in Canvas announcements, written
+  by the instructor). These PDFs sit in `lecture_notes/` and are
+  reachable by URL once pushed; nothing links to them.
+- **Reference handouts** are separate: `NOTES_Reference_<Topic>.Rmd`,
+  student-facing, writing-style rules apply (see
+  `NOTES_Reference_AICPenalty.Rmd`).
+
+## After a lecture ("as taught")
+
+When the instructor reports what was covered: (1) add a dated "As
+taught" note to that meeting's instructor notes; (2) move uncovered
+items into the next meeting's notes (the page usually stays as is,
+unless material moves to another week's page); (3) update
 `CourseSchedule.csv` and re-render with
-`rmarkdown::render_site("schedule.Rmd")`; (5) update the calibration
+`rmarkdown::render_site("schedule.Rmd")`; (4) update the calibration
 paragraph above.
+
+## Backlog: web pages for Weeks 1-9
+
+In the next few weeks, build a web page (and companion script, if the
+week lacks one) for each earlier week, with widgets where they help.
+Sources: that week's PDF NOTES (Weeks 1-10, kept as the record of what
+was planned and taught), CODE scripts, WODs, and legacy `LECTUREn.Rmd`
+pages. Ask the instructor before removing legacy `LECTUREn` entries
+from the navbar or deleting old NOTES.
 
 # Modeling workflow framing
 
@@ -280,8 +338,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 - Each big-picture opening names its box: bestiary, distributions,
   simulation = MODELS; likelihood, optimization, Bayes, MCMC = FIT;
   LRT, AIC, cross-validation, LOO, predictive checks = COMPARE.
-- Draw it with `draw_workflow()` (copy from
-  `NOTES_Week10_Lecture1_LRTAICAndRegularization.Rmd`;
+- Draw it with `draw_workflow()` (copy from `Week10_ModelComparison.Rmd`;
   `highlight = "COMPARE"`), in a chunk with `dev = "png", dpi = 250`
   (the pdf device mangles hyphens).
 - Bolker's Figure 1.5 puts data collection second, but his p. 26
@@ -421,7 +478,13 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Thu., Oct. 22, 2026 (end of Week 9).
+Snapshot: Tue., Oct. 27, 2026 (Week 10).
+
+- **New format from Week 10:** one web page per week plus short
+  per-meeting instructor notes (see "Weekly materials"). Week 10's page
+  (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
+  (`NOTES_Week10_WebPageGuide.Rmd`) are built; the Week 10 PDF NOTES
+  are now the planning record. Backlog: pages for Weeks 1-9.
 
 - **Weeks 1-9 built and taught.** Week 7 and Week 8 Wednesday NOTES
   carry "as taught" notes; Week 8 Monday has no report. Every WOD and
