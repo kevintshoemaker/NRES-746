@@ -313,10 +313,12 @@ paragraph above.
 
 In the next few weeks, build a web page (and companion script, if the
 week lacks one) for each earlier week, with widgets where they help.
-Sources: that week's PDF NOTES (Weeks 1-10, kept as the record of what
-was planned and taught), CODE scripts, WODs, and legacy `LECTUREn.Rmd`
-pages. Ask the instructor before removing legacy `LECTUREn` entries
-from the navbar or deleting old NOTES.
+Sources: that week's PDF NOTES (the record of what was planned and
+taught), CODE scripts, WODs, and legacy `LECTUREn.Rmd` pages. Once a
+week's page and instructor notes are built, ask the instructor whether
+to move its old PDF NOTES (`.Rmd` + `.pdf`, via `git mv`) to
+`lecture_notes/archive/` (done for Week 10, Oct. 27). Ask before
+removing legacy `LECTUREn` entries from the navbar or deleting anything.
 
 # Modeling workflow framing
 
@@ -485,8 +487,9 @@ Snapshot: Tue., Oct. 27, 2026 (Week 10).
 - **New format from Week 10:** one web page per week plus short
   per-meeting instructor notes (see "Weekly materials"). Week 10's page
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
-  (`NOTES_Week10_WebPageGuide.Rmd`) are built; the Week 10 PDF NOTES
-  are now the planning record. Backlog: pages for Weeks 1-9.
+  (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
+  8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
+  1-9.
 
 - **Weeks 1-9 built and taught.** Week 7 and Week 8 Wednesday NOTES
   carry "as taught" notes; Week 8 Monday has no report. Every WOD and
@@ -516,7 +519,7 @@ Snapshot: Tue., Oct. 27, 2026 (Week 10).
     legacy LECTURE8: Poisson *is* nested in the negative binomial (on
     the boundary).
   - **Built (Lab 8):** `labs/Lab8_Act1.Rmd`, `Lab8_Act2.Rmd`, both
-    keys, `NOTES_Lab8_ModelComparisonAndRegularization.Rmd`, data
+    keys, `archive/NOTES_Lab8_ModelComparisonAndRegularization.Rmd`, data
     `data/BdRegionalSurvey.csv` (60 ponds, 8 standardized features;
     simulated, presented as field data; truth = temp, bullfrogs,
     canopy; temp-elevation r = -0.94; generator `sim_ponds(3)` is not
@@ -534,7 +537,7 @@ Snapshot: Tue., Oct. 27, 2026 (Week 10).
     to fill in once Monday's coverage is known. Push the CSV to
     `gh-pages` before the handout goes out.
   - **Built (Wednesday), before Monday was taught; adjust after
-    Monday's report:** `NOTES_Week10_Lecture2_BayesianModelComparison.Rmd`,
+    Monday's report:** `archive/NOTES_Week10_Lecture2_BayesianModelComparison.Rmd`,
     the script's Wednesday section (Stan; run Monday's section first),
     no in-class WOD (the ridge-as-prior derivation, lambda = 1/(2
     tau^2), lasso = Laplace prior, is a ~6-min board + R demo in

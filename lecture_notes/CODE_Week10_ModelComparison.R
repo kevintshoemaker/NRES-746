@@ -1,6 +1,6 @@
 
 #  NRES 746, Week 10: LRT, AIC, penalized likelihood (Mon.); Bayesian model comparison (Wed.) =
-#  R demos only; section numbers match the NOTES files. Needs emdbook, MASS, glmnet.
+#  R demos only; sections match the Week 10 web page. Needs emdbook, MASS, glmnet.
 
 # MONDAY, Oct. 26: Likelihood ratio tests, AIC, ridge and lasso ===============
 
