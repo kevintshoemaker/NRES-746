@@ -258,6 +258,22 @@ Root-level `Week<N>_<Topic>.Rmd` (model:
   won't load `site_libs`), try each widget and anchor link, and confirm
   every figure in `Week<N>_<Topic>_files/` is tracked (`git add -f`).
 
+## Site menus: WODs, Labs, Data sets
+
+Students can get every handout from the navbar, as a backup to Canvas.
+**Whenever a WOD or lab handout is finalized** (PDF knit and
+committed), without being asked:
+
+- Add it to the `WODs` or `Labs` menu in `_site.yml`, in chronological
+  order with a short title (`"Week 10: Connect the dots"`,
+  `"Lab 8, Act 1: Which pond features matter?"`), linking the PDF.
+  Add any new lab data CSV to `Data sets` under "Lab data".
+- Leave out Acts never handed out (Lab 4 Acts 2-3) and answer keys.
+- Re-render `index.Rmd`, then copy its `<ul class="nav navbar-nav">`
+  block into the other rendered pages that carry the current navbar
+  (no need to re-knit legacy pages). Check every menu link loads
+  through the local server, then commit and push with the handout.
+
 ## Companion R script
 
 `lecture_notes/CODE_Week<N>_<Topic>.R` (see
