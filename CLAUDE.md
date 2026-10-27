@@ -225,7 +225,9 @@ Root-level `Week<N>_<Topic>.Rmd` (model:
 - **Navbar:** add the page to the Lectures menu in `_site.yml`, then
   re-render `index.Rmd` too (each page's navbar is baked in at render
   time; other pages pick up the link only when re-rendered).
-- **Structure:** links to the companion script and readings at the top;
+- **Structure:** a link to the companion script and the relevant Bolker
+  section at the top (no other readings; the instructor assigns those
+  on Canvas);
   one H1 per class meeting, titled by topic (no day names), each opening
   with a 2-3 sentence summary; numbered H2 sections inside; "Bonus" for
   extras. The lab's lecture portion gets its own H1; lab Act answers and
@@ -502,9 +504,9 @@ Snapshot: Tue., Oct. 27, 2026 (Week 10).
 - **Week 10 (Oct. 26-28): model comparison and regularization.** Theme:
   every method is a penalty (AIC on the number of parameters; ridge and
   lasso on coefficient size; shrinkage priors as the Bayesian version;
-  CV and LOO on held-out data). Readings: Bolker 6.6 (printed p.
-  267-290); Tredennick et al. 2021 (Ecology 102: e03336) Monday; Hooten
-  & Hobbs 2015 (Ecol. Monogr. 85: 3-28) Wednesday.
+  CV and LOO on held-out data). Reading: Bolker 6.6 (printed p.
+  267-290). Tredennick et al. 2021 (Ecology 102: e03336) and Hooten &
+  Hobbs 2015 (Ecol. Monogr. 85: 3-28) were optional, not assigned.
   - **Built (Monday):** NOTES, `CODE_Week10_ModelComparison.R`
     (Monday), WOD *Connect the Dots* + key. Order: big picture, WOD,
     lecture. Fir models for LRT/AIC (no-wave best; full vs. no-wave
