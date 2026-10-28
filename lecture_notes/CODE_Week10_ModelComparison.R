@@ -116,11 +116,13 @@ subset_tab <- data.frame(
   }),
   k = rowSums(subsets) + 1,
   AIC = subset_aic)
+subset_tab$logLik <- (2 * subset_tab$k - subset_tab$AIC) / 2      # AIC = -2 log L + 2k
+subset_tab <- subset_tab[c("model", "k", "logLik", "AIC")]
 subset_tab$dAIC <- subset_tab$AIC - min(subset_tab$AIC)
 subset_tab$weight <- exp(-subset_tab$dAIC / 2) / sum(exp(-subset_tab$dAIC / 2))
 subset_tab <- subset_tab[order(subset_tab$AIC), ]
 rownames(subset_tab) <- NULL
-cbind(subset_tab[1:10, 1:2], round(subset_tab[1:10, 3:5], 2))
+cbind(subset_tab[1:10, 1:2], round(subset_tab[1:10, 3:6], 2))
 #  [PAUSE] which covariates show up in nearly every top model? which come and go?
 
 # penalized NLL: NLL(beta) + lambda * sum(beta^2) (ridge) or lambda * sum(|beta|) (lasso)
