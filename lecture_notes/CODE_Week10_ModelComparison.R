@@ -1,5 +1,5 @@
 
-#  NRES 746, Week 10: LRT, AIC, penalized likelihood (Mon.); Bayesian model comparison (Wed.) =
+#  NRES 746, Week 10: LRT, AIC, penalized likelihood (Mon.); causal diagrams (Wed.) =========
 #  R demos only; sections match the Week 10 web page. Needs emdbook, MASS, glmnet.
 
 # MONDAY, Oct. 26: Likelihood ratio tests, AIC, ridge and lasso ===============
@@ -66,12 +66,12 @@ fits <- list(full = fit_full, const_b = fit_constb, const_ak = fit_constak,
 n <- nrow(fir)
 aic_tab <- data.frame(model = names(fits),
                       k = sapply(fits, function(f) length(f$par)),
-                      nll = sapply(fits, function(f) f$value))
-aic_tab$AIC <- 2 * aic_tab$nll + 2 * aic_tab$k                  # -2 log L + 2k
+                      logLik = sapply(fits, function(f) -f$value))     # log L = -NLL
+aic_tab$AIC <- -2 * aic_tab$logLik + 2 * aic_tab$k              # -2 log L + 2k
 aic_tab$dAIC <- aic_tab$AIC - min(aic_tab$AIC)
 aic_tab$weight <- exp(-aic_tab$dAIC / 2) / sum(exp(-aic_tab$dAIC / 2))
 aic_tab$AICc <- aic_tab$AIC + 2 * aic_tab$k * (aic_tab$k + 1) / (n - aic_tab$k - 1)
-aic_tab$BIC <- 2 * aic_tab$nll + log(n) * aic_tab$k             # -2 log L + k log(n)
+aic_tab$BIC <- -2 * aic_tab$logLik + log(n) * aic_tab$k         # -2 log L + k log(n)
 aic_tab <- aic_tab[order(aic_tab$AIC), ]
 rownames(aic_tab) <- NULL
 cbind(aic_tab[1:2], round(aic_tab[-(1:2)], 2))
@@ -157,7 +157,31 @@ round(data.frame(truth = beta_true,
 
 
 
-# WEDNESDAY, Oct. 28: Bayesian model comparison and shrinkage priors ===========
+# WEDNESDAY, Oct. 28: Causal diagrams and variable choice =======================
+
+# 3. A collider fools AIC ------------------------------------------------------
+
+# simulated stations: big trees have NO effect on creepers; both affect bark insects
+set.seed(1)
+n_sta <- 60
+stations <- data.frame(big_trees = rnorm(n_sta))           # standardized
+stations$creepers <- rpois(n_sta, exp(1))                   # no effect of big trees
+stations$insects <- with(stations,
+  0.8 * big_trees - 0.6 * as.vector(scale(creepers)) + rnorm(n_sta, sd = 0.5))
+
+m_trees <- glm(creepers ~ big_trees, family = poisson, data = stations)
+m_collider <- glm(creepers ~ big_trees + insects, family = poisson, data = stations)
+round(rbind(trees_only = coef(summary(m_trees))["big_trees", ],
+            with_insects = coef(summary(m_collider))["big_trees", ]), 3)
+AIC(m_trees, m_collider)
+#  [PAUSE] among stations with the same insect density, why would those with more big trees
+#  tend to have more creepers?
+
+
+
+
+
+# BONUS: Bayesian model comparison and shrinkage priors (not covered in class) ===
 #  Uses fir, wave, aic_tab, X, creepers, covars, beta_true, coef_lasso from Monday's section.
 
 # 2. Ridge is a prior (~6 min) ----------------------------------------------------

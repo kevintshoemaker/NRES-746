@@ -343,12 +343,12 @@ fits <- list(full = fit_full, const_b = fit_constb, const_ak = fit_constak,
 n <- nrow(fir)
 aic_tab <- data.frame(model = names(fits),
                       k = sapply(fits, function(f) length(f$par)),
-                      nll = sapply(fits, function(f) f$value))
-aic_tab$AIC <- 2 * aic_tab$nll + 2 * aic_tab$k                  # -2 log L + 2k
+                      logLik = sapply(fits, function(f) -f$value))     # log L = -NLL
+aic_tab$AIC <- -2 * aic_tab$logLik + 2 * aic_tab$k              # -2 log L + 2k
 aic_tab$dAIC <- aic_tab$AIC - min(aic_tab$AIC)
 aic_tab$weight <- exp(-aic_tab$dAIC / 2) / sum(exp(-aic_tab$dAIC / 2))
 aic_tab$AICc <- aic_tab$AIC + 2 * aic_tab$k * (aic_tab$k + 1) / (n - aic_tab$k - 1)
-aic_tab$BIC <- 2 * aic_tab$nll + log(n) * aic_tab$k             # -2 log L + k log(n)
+aic_tab$BIC <- -2 * aic_tab$logLik + log(n) * aic_tab$k         # -2 log L + k log(n)
 aic_tab <- aic_tab[order(aic_tab$AIC), ]
 rownames(aic_tab) <- NULL
 ```
@@ -362,7 +362,7 @@ w_nowave <- aic_tab$weight[aic_tab$model == "no_wave"]
 > `r round(100 * w_nowave)`% chance it's the true model?
 
 Look at `const_ak`. It has one more parameter than the no-wave model and
-an NLL only `r f2(fit_nowave$value - fit_constak$value)` lower, yet it
+a log likelihood only `r f2(fit_nowave$value - fit_constak$value)` higher, yet it
 is just `r f2(aic_tab$dAIC[aic_tab$model == "const_ak"])` AIC units
 behind. A useless parameter costs at most 2 AIC units, so being within
 2 of the best model isn't evidence of support (Arnold 2010, *J. Wildl.
@@ -653,9 +653,131 @@ elastic net is a common default when there are many predictors,
 especially correlated ones, where the lasso and ridge behave
 differently; the Bd lab works through how.
 
-# Bayesian model comparison and shrinkage priors {#bayesian}
+# Causal diagrams: which variables belong in the model? {#dags}
 
-This part brings the same ideas to models fit by MCMC. A ridge penalty
+AIC, cross-validation, and the lasso choose variables by how well they
+predict. When the question is what would happen if we changed something
+(protect big trees, close a road), the best predictive model can give
+the wrong answer. A causal diagram states which variables affect which,
+and it tells us which variables to include before any model comparison
+starts.
+
+## 1. Prediction vs. intervention
+
+A manager might ask where creepers are common (prediction) or what
+would happen to creepers if we protected big trees (a causal effect).
+For prediction, any variable that carries information about creeper
+counts is useful. A regression slope estimates a causal effect only if
+the model includes the right other variables, and the data alone can't
+tell us which those are.
+
+A **directed acyclic graph (DAG)** draws each variable as a node and
+each direct causal effect as an arrow; "acyclic" means no chain of
+arrows leads back to where it started. A DAG belongs in the THEORIES
+box of the [workflow](#frequentist): it is a claim about how the system
+works, made before fitting, and rival theories can have rival DAGs.
+
+## 2. Three ways a third variable connects
+
+```{r dag-helper, echo=FALSE}
+# one small DAG: nodes at (x, y), arrows given as pairs of node indices
+draw_dag <- function(labels, x, y, from, to, main) {
+  par(mar = c(0.5, 0.5, 2, 0.5))
+  plot(NA, xlim = c(0, 10), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "", main = main)
+  dx <- x[to] - x[from]
+  dy <- y[to] - y[from]
+  d <- sqrt(dx^2 + dy^2)
+  arrows(x[from] + 1.4 * dx / d, y[from] + 0.7 * dy / d,
+         x[to] - 1.4 * dx / d, y[to] - 0.7 * dy / d, length = 0.1, lwd = 2)
+  text(x, y, labels, font = 2, cex = 1.1)
+}
+```
+
+```{r dag-types, echo=FALSE, fig.width=9, fig.height=2.8}
+par(mfrow = c(1, 3))
+draw_dag(c("stand age", "big trees", "creepers"), c(5, 1.8, 8.2), c(5, 1, 1),
+         from = c(1, 1, 2), to = c(2, 3, 3), main = "Confounder")
+draw_dag(c("road dist.", "big trees", "creepers"), c(1.8, 5, 8.2), c(1, 5, 1),
+         from = c(1, 2), to = c(2, 3), main = "Mediator")
+draw_dag(c("big trees", "creepers", "bark insects"), c(1.8, 8.2, 5), c(5, 5, 1),
+         from = c(1, 2), to = c(3, 3), main = "Collider")
+```
+
+Each panel asks about the effect of big trees (or, in the middle, road
+access) on creepers.
+
+- **Confounder:** old stands have big trees, and also other features
+  creepers like. Leave stand age out and big trees get credit for its
+  effect. **Include it.**
+- **Mediator:** logging near roads removes big trees. To estimate the
+  total effect of road access, **leave big trees out**; including them
+  blocks the path we want to measure.
+- **Collider:** big trees support more bark insects, and creepers eat
+  them, so insect density depends on both. **Leave it out**; including
+  it creates an association between big trees and creepers even if
+  there is none.
+
+In short: adjust for common causes of the predictor and the response,
+and not for consequences of either.
+
+## 3. A collider fools AIC {#collider}
+
+Simulated stations where big trees have **no** effect on creepers, but
+both affect bark insects:
+
+```{r dag-collider}
+set.seed(1)
+n_sta <- 60
+stations <- data.frame(big_trees = rnorm(n_sta))           # standardized
+stations$creepers <- rpois(n_sta, exp(1))                   # no effect of big trees
+stations$insects <- with(stations,
+  0.8 * big_trees - 0.6 * as.vector(scale(creepers)) + rnorm(n_sta, sd = 0.5))
+
+m_trees <- glm(creepers ~ big_trees, family = poisson, data = stations)
+m_collider <- glm(creepers ~ big_trees + insects, family = poisson, data = stations)
+```
+
+```{r dag-collider-table, echo=FALSE}
+slope_row <- function(m) {
+  cs <- coef(summary(m))["big_trees", ]
+  c(f2(cs["Estimate"]), f2(cs["Std. Error"]), formatC(cs["Pr(>|z|)"], format = "f", digits = 3),
+    f1(AIC(m)))
+}
+knitr::kable(rbind(slope_row(m_trees), slope_row(m_collider)),
+             col.names = c("Big-tree slope", "SE", "p", "AIC"), align = "cccc",
+             row.names = FALSE,
+             caption = "creepers ~ big trees (row 1) and creepers ~ big trees + insects (row 2)")
+d_aic_dag <- AIC(m_trees) - AIC(m_collider)
+```
+
+Adding insects lowers AIC by `r f1(d_aic_dag)` units, and the big-tree
+slope moves from `r f2(coef(m_trees)["big_trees"])` to
+`r f2(coef(m_collider)["big_trees"])`. AIC is doing its job: insect
+density does help predict creepers, since creepers deplete insects. But
+the slope in the better-predicting model is the wrong answer to "what
+happens if we protect big trees?" The DAG decides which models are
+eligible to answer a causal question; AIC, cross-validation, or the
+lasso can then choose among those.
+
+> **Question:** Among stations with the same insect density, why would
+> those with more big trees tend to have more creepers?
+
+## Discussion {#dags-discussion}
+
+**Q1.** A colleague fits creeper counts against all 10 habitat
+covariates, keeps the model with the lowest AIC, and reports each slope
+as "the effect of" that covariate on creepers. When is that a fair
+description, and what would you need to know to check?
+
+**Q2.** Fire creates snags, and snags help creepers; fire also opens the
+canopy, which may hurt them. A manager asks whether prescribed burns
+help creepers. Would you include snag density, canopy cover, both, or
+neither? Does your answer change if the question is instead whether
+leaving snags standing after a burn helps?
+
+# Bonus: Bayesian model comparison and shrinkage priors {#bayesian}
+
+This bonus part brings the same ideas to models fit by MCMC. A ridge penalty
 is equivalent to a Normal prior, so regularization has a direct Bayesian
 counterpart. WAIC and LOO estimate predictive performance from the
 posterior, and shrinkage priors do the job of ridge and the lasso while
@@ -917,7 +1039,7 @@ regeneration has no effect on cone production." Do you agree?
 `r f2(north_lap[1])`; the cross-validated lasso said exactly 0. Which
 would you report, and why?
 
-## Bonus: Bayes factors and RJMCMC
+## Bayes factors and RJMCMC
 
 - A **Bayes factor** is a ratio of marginal likelihoods (the likelihood
   averaged over the prior). It is sensitive to vague priors and hard to

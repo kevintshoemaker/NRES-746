@@ -163,7 +163,9 @@ lecture and discussion live on the week's web page; see "Weekly
 materials".
 
 **Calibration: lectures cover about half of what's planned.** Weeks
-7-8 each covered 3-4 of 7-8 planned sections. Plan **3-4 sub-topics**
+7-8 each covered 3-4 of 7-8 planned sections; Week 10 Wednesday
+dropped its whole planned topic (Bayesian comparison) for an unplanned
+sidebar (causal DAGs). Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
 marked "Bonus" section. A derivation eats its whole slot, so put
@@ -504,7 +506,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Tue., Oct. 27, 2026 (Week 10).
+Snapshot: Wed., Oct. 28, 2026 (end of Week 10).
 
 - **New format from Week 10:** one web page per week plus short
   per-meeting instructor notes (see "Weekly materials"). Week 10's page
@@ -512,6 +514,18 @@ Snapshot: Tue., Oct. 27, 2026 (Week 10).
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
   8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
   1-9.
+- **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
+  Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
+  1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
+  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-9 link
+  legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
+  relink each to what was actually covered. Navbar updates: re-render
+  `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block into
+  the 12 current-navbar pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-3,
+  LECTURE8, LECTURE9, Links, schedule, Week10); LECTURE4-7, 10 and LAB1,
+  2, 5 carry older navbars and are left alone. Long menus scroll via
+  `styles.css` (`css:` in `_site.yml`); pages not re-rendered got its
+  `<link>` inserted before `</head>`.
 
 - **Weeks 1-9 built and taught.** Week 7 and Week 8 Wednesday NOTES
   carry "as taught" notes; Week 8 Monday has no report. Every WOD and
@@ -554,7 +568,14 @@ Snapshot: Tue., Oct. 27, 2026 (Week 10).
     temp-elevation panel on Oct. 22). Act 2 (take-home capable): ridge NLL by hand with
     `optim()` (temp -0.64 at lambda 0, -0.41 at 10), ridge path,
     `cv.glmnet` lasso (keeps temp, elev, canopy, bullfrogs), CV
-    pseudocode; no Stan. Tuesday opens with a Stan check (~10 min) and
+    pseudocode; no Stan. Part 3 (rewritten Oct. 27 so it's workable at
+    home without the contour geometry): 3a compares Options A (temp
+    -0.6, elev 0) and B (-0.3, 0.3), with nearly the same log-odds
+    change (-0.60 vs. -0.58) but ridge penalties 0.36 vs. 0.18, to
+    explain the elevation line in the ridge path; 3b gives the lasso
+    penalty (0.60 for both) and a `glm()` SE table (temp SE 0.08 without
+    elevation, 0.24 with it) and asks how far to trust *either*
+    method's split (worded so ridge doesn't look preferable). Tuesday opens with a Stan check (~10 min) and
     a ~34-min pre-lab lecture; its catch-up section is a placeholder
     to fill in once Monday's coverage is known. Push the CSV to
     `gh-pages` before the handout goes out.
@@ -564,7 +585,8 @@ Snapshot: Tue., Oct. 27, 2026 (Week 10).
     no in-class WOD (the ridge-as-prior derivation, lambda = 1/(2
     tau^2), lasso = Laplace prior, is a ~6-min board + R demo in
     section 2; it was a WOD until Oct. 22), and take-home WOD *Comparing Pond Models with LOO*
-    + key (students fill in the `log_lik` line; four pond models; B =
+    + key (never handed out; now in `wod/archive/` and
+    `wod/answer_keys/archive/`; students fill in the `log_lik` line; four pond models; B =
     temp + bullfrogs + canopy is best, looic 221.8; D = all eight with
     a Normal(0, 0.3) prior is 2.8 elpd behind, SE 2.7, with p_loo 8.2
     vs. 9.7 for the vague prior). Lecture: fir no-wave vs. full by AIC,
@@ -573,6 +595,31 @@ Snapshot: Tue., Oct. 27, 2026 (Week 10).
     0.2), and Laplace(0, 0.15) priors (northness 0.23 -> 0.08);
     horseshoe as a sketch only; Bayes factors and RJMCMC as a bonus section.
     Posterior predictive checks move to Week 11.
+  - **Page additions (Oct. 27-28):** "Bonus: elastic net"
+    (`#elastic-net`, end of the lab-tools H1) with
+    `widgets/elastic_net.html` (alpha and lambda sliders, one-coefficient
+    price picture; the grouping effect is left off the page because
+    Lab 8 Act 2 Part 3 covers it); a "one dial" paragraph in section 5
+    (lambda path replaces the 1024-subset search); a log-likelihood
+    column in the creeper all-subsets AIC table (page and script); both
+    AIC tables report `logLik`, not NLL.
+  - **Wednesday as taught (Oct. 28):** Bayesian model comparison was
+    **not covered** and the LOO WOD was not handed out; the instructor
+    is moving on to new topics in Week 11 rather than carrying it over.
+    The lecture included a sidebar on causal inference (DAGs: which
+    variables to include or leave out). The page now has a "Causal
+    diagrams" H1 (`#dags`: confounder/mediator/collider panels with
+    creeper examples; a seed-1 collider sim where big trees have no
+    effect but adding bark insects moves the slope 0.01 -> 0.38 and
+    lowers AIC by 27.9; two discussion prompts), and the Bayesian H1 is
+    now "Bonus: Bayesian model comparison and shrinkage priors"
+    (`#bayesian`). Script and delivery guide match; the schedule's
+    Wednesday cell links `#dags`.
+  - **Not yet reported:** what Monday and Lab 8 actually covered.
+- **Open item:** archived `NOTES_Lab8` still says Act 1 2c "sets up
+  Act 2 3b" (stale after the Part 3 rewrite; left because it's
+  archived). Optional readings stay listed in `CourseSchedule.csv`,
+  marked "optional:".
 - **Unused material, free to reuse:** Lab 4 Act 3 (raw vs. log-scale
   analysts); Bolker's 7.4 fitting checklist. Lab 4 Act 2 was only a
   live-coding demo, without its AI part (the instructor wants an AI

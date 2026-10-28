@@ -61,6 +61,7 @@ if (window.hljs) {
 
 
 
+<link rel="stylesheet" href="styles.css" type="text/css" />
 
 
 
@@ -430,9 +431,6 @@ div.tocify {
     <li>
       <a href="wod/WOD_Week10_Lecture1_ConnectTheDots.pdf">Week 10: Connect the dots</a>
     </li>
-    <li>
-      <a href="wod/WOD_Week10_Lecture2_PondModelsWithLOO.pdf">Week 10: Comparing pond models with LOO (take-home)</a>
-    </li>
   </ul>
 </li>
 <li class="dropdown">
@@ -699,12 +697,12 @@ fits &lt;- list(full = fit_full, const_b = fit_constb, const_ak = fit_constak,
 n &lt;- nrow(fir)
 aic_tab &lt;- data.frame(model = names(fits),
                       k = sapply(fits, function(f) length(f$par)),
-                      nll = sapply(fits, function(f) f$value))
-aic_tab$AIC &lt;- 2 * aic_tab$nll + 2 * aic_tab$k                  # -2 log L + 2k
+                      logLik = sapply(fits, function(f) -f$value))     # log L = -NLL
+aic_tab$AIC &lt;- -2 * aic_tab$logLik + 2 * aic_tab$k              # -2 log L + 2k
 aic_tab$dAIC &lt;- aic_tab$AIC - min(aic_tab$AIC)
 aic_tab$weight &lt;- exp(-aic_tab$dAIC / 2) / sum(exp(-aic_tab$dAIC / 2))
 aic_tab$AICc &lt;- aic_tab$AIC + 2 * aic_tab$k * (aic_tab$k + 1) / (n - aic_tab$k - 1)
-aic_tab$BIC &lt;- 2 * aic_tab$nll + log(n) * aic_tab$k             # -2 log L + k log(n)
+aic_tab$BIC &lt;- -2 * aic_tab$logLik + log(n) * aic_tab$k         # -2 log L + k log(n)
 aic_tab &lt;- aic_tab[order(aic_tab$AIC), ]
 rownames(aic_tab) &lt;- NULL</code></pre>
 <table>
@@ -712,7 +710,7 @@ rownames(aic_tab) &lt;- NULL</code></pre>
 <tr class="header">
 <th align="left">model</th>
 <th align="right">k</th>
-<th align="right">nll</th>
+<th align="right">logLik</th>
 <th align="right">AIC</th>
 <th align="right">dAIC</th>
 <th align="right">weight</th>
@@ -724,7 +722,7 @@ rownames(aic_tab) &lt;- NULL</code></pre>
 <tr class="odd">
 <td align="left">no_wave</td>
 <td align="right">3</td>
-<td align="right">1136.02</td>
+<td align="right">-1136.02</td>
 <td align="right">2278.03</td>
 <td align="right">0.00</td>
 <td align="right">0.52</td>
@@ -734,7 +732,7 @@ rownames(aic_tab) &lt;- NULL</code></pre>
 <tr class="even">
 <td align="left">const_ak</td>
 <td align="right">4</td>
-<td align="right">1135.76</td>
+<td align="right">-1135.76</td>
 <td align="right">2279.52</td>
 <td align="right">1.48</td>
 <td align="right">0.25</td>
@@ -744,7 +742,7 @@ rownames(aic_tab) &lt;- NULL</code></pre>
 <tr class="odd">
 <td align="left">const_b</td>
 <td align="right">5</td>
-<td align="right">1135.13</td>
+<td align="right">-1135.13</td>
 <td align="right">2280.27</td>
 <td align="right">2.24</td>
 <td align="right">0.17</td>
@@ -754,7 +752,7 @@ rownames(aic_tab) &lt;- NULL</code></pre>
 <tr class="even">
 <td align="left">full</td>
 <td align="right">6</td>
-<td align="right">1135.01</td>
+<td align="right">-1135.01</td>
 <td align="right">2282.02</td>
 <td align="right">3.99</td>
 <td align="right">0.07</td>
@@ -764,7 +762,7 @@ rownames(aic_tab) &lt;- NULL</code></pre>
 <tr class="odd">
 <td align="left">poisson</td>
 <td align="right">2</td>
-<td align="right">3161.83</td>
+<td align="right">-3161.83</td>
 <td align="right">6327.66</td>
 <td align="right">4049.63</td>
 <td align="right">0.00</td>
@@ -776,7 +774,7 @@ rownames(aic_tab) &lt;- NULL</code></pre>
 <blockquote>
 <p><strong>Question:</strong> The no-wave model has weight 0.52. Is there a 52% chance it's the true model?</p>
 </blockquote>
-<p>Look at <code>const_ak</code>. It has one more parameter than the no-wave model and an NLL only 0.26 lower, yet it is just 1.48 AIC units behind. A useless parameter costs at most 2 AIC units, so being within 2 of the best model isn't evidence of support (Arnold 2010, <em>J. Wildl. Manage.</em> 74: 1175-1178).</p>
+<p>Look at <code>const_ak</code>. It has one more parameter than the no-wave model and a log likelihood only 0.26 higher, yet it is just 1.48 AIC units behind. A useless parameter costs at most 2 AIC units, so being within 2 of the best model isn't evidence of support (Arnold 2010, <em>J. Wildl. Manage.</em> 74: 1175-1178).</p>
 </div>
 <div id="regularization" class="section level2">
 <h2>5. Regularization: ridge and LASSO</h2>
@@ -1248,9 +1246,76 @@ draw();
 <p>In <code>glmnet</code>, the <code>alpha</code> argument is this mix. Its ridge term is written <span class="math inline">\(\frac{1 - \alpha}{2}\beta_j^2\)</span>, half of the one here, so its <span class="math inline">\(\lambda\)</span> values won't match a hand calculation. <code>cv.glmnet()</code> tunes <span class="math inline">\(\lambda\)</span> only. To choose <span class="math inline">\(\alpha\)</span>, run it at a few values of <code>alpha</code> with the same <code>foldid</code> and compare the cross-validation scores. The elastic net is a common default when there are many predictors, especially correlated ones, where the lasso and ridge behave differently; the Bd lab works through how.</p>
 </div>
 </div>
+<div id="dags" class="section level1">
+<h1>Causal diagrams: which variables belong in the model?</h1>
+<p>AIC, cross-validation, and the lasso choose variables by how well they predict. When the question is what would happen if we changed something (protect big trees, close a road), the best predictive model can give the wrong answer. A causal diagram states which variables affect which, and it tells us which variables to include before any model comparison starts.</p>
+<div id="prediction-vs.-intervention" class="section level2">
+<h2>1. Prediction vs. intervention</h2>
+<p>A manager might ask where creepers are common (prediction) or what would happen to creepers if we protected big trees (a causal effect). For prediction, any variable that carries information about creeper counts is useful. A regression slope estimates a causal effect only if the model includes the right other variables, and the data alone can't tell us which those are.</p>
+<p>A <strong>directed acyclic graph (DAG)</strong> draws each variable as a node and each direct causal effect as an arrow; &quot;acyclic&quot; means no chain of arrows leads back to where it started. A DAG belongs in the THEORIES box of the <a href="#frequentist">workflow</a>: it is a claim about how the system works, made before fitting, and rival theories can have rival DAGs.</p>
+</div>
+<div id="three-ways-a-third-variable-connects" class="section level2">
+<h2>2. Three ways a third variable connects</h2>
+<p><img src="Week10_ModelComparison_files/figure-html/dag-types-1.png" width="864" style="display: block; margin: auto;" /></p>
+<p>Each panel asks about the effect of big trees (or, in the middle, road access) on creepers.</p>
+<ul>
+<li><strong>Confounder:</strong> old stands have big trees, and also other features creepers like. Leave stand age out and big trees get credit for its effect. <strong>Include it.</strong></li>
+<li><strong>Mediator:</strong> logging near roads removes big trees. To estimate the total effect of road access, <strong>leave big trees out</strong>; including them blocks the path we want to measure.</li>
+<li><strong>Collider:</strong> big trees support more bark insects, and creepers eat them, so insect density depends on both. <strong>Leave it out</strong>; including it creates an association between big trees and creepers even if there is none.</li>
+</ul>
+<p>In short: adjust for common causes of the predictor and the response, and not for consequences of either.</p>
+</div>
+<div id="collider" class="section level2">
+<h2>3. A collider fools AIC</h2>
+<p>Simulated stations where big trees have <strong>no</strong> effect on creepers, but both affect bark insects:</p>
+<pre class="r"><code>set.seed(1)
+n_sta &lt;- 60
+stations &lt;- data.frame(big_trees = rnorm(n_sta))           # standardized
+stations$creepers &lt;- rpois(n_sta, exp(1))                   # no effect of big trees
+stations$insects &lt;- with(stations,
+  0.8 * big_trees - 0.6 * as.vector(scale(creepers)) + rnorm(n_sta, sd = 0.5))
+
+m_trees &lt;- glm(creepers ~ big_trees, family = poisson, data = stations)
+m_collider &lt;- glm(creepers ~ big_trees + insects, family = poisson, data = stations)</code></pre>
+<table>
+<caption>creepers ~ big trees (row 1) and creepers ~ big trees + insects (row 2)</caption>
+<thead>
+<tr class="header">
+<th align="center">Big-tree slope</th>
+<th align="center">SE</th>
+<th align="center">p</th>
+<th align="center">AIC</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">0.01</td>
+<td align="center">0.09</td>
+<td align="center">0.944</td>
+<td align="center">220.4</td>
+</tr>
+<tr class="even">
+<td align="center">0.38</td>
+<td align="center">0.11</td>
+<td align="center">0.001</td>
+<td align="center">192.4</td>
+</tr>
+</tbody>
+</table>
+<p>Adding insects lowers AIC by 27.9 units, and the big-tree slope moves from 0.01 to 0.38. AIC is doing its job: insect density does help predict creepers, since creepers deplete insects. But the slope in the better-predicting model is the wrong answer to &quot;what happens if we protect big trees?&quot; The DAG decides which models are eligible to answer a causal question; AIC, cross-validation, or the lasso can then choose among those.</p>
+<blockquote>
+<p><strong>Question:</strong> Among stations with the same insect density, why would those with more big trees tend to have more creepers?</p>
+</blockquote>
+</div>
+<div id="dags-discussion" class="section level2">
+<h2>Discussion</h2>
+<p><strong>Q1.</strong> A colleague fits creeper counts against all 10 habitat covariates, keeps the model with the lowest AIC, and reports each slope as &quot;the effect of&quot; that covariate on creepers. When is that a fair description, and what would you need to know to check?</p>
+<p><strong>Q2.</strong> Fire creates snags, and snags help creepers; fire also opens the canopy, which may hurt them. A manager asks whether prescribed burns help creepers. Would you include snag density, canopy cover, both, or neither? Does your answer change if the question is instead whether leaving snags standing after a burn helps?</p>
+</div>
+</div>
 <div id="bayesian" class="section level1">
-<h1>Bayesian model comparison and shrinkage priors</h1>
-<p>This part brings the same ideas to models fit by MCMC. A ridge penalty is equivalent to a Normal prior, so regularization has a direct Bayesian counterpart. WAIC and LOO estimate predictive performance from the posterior, and shrinkage priors do the job of ridge and the lasso while keeping the full posterior uncertainty.</p>
+<h1>Bonus: Bayesian model comparison and shrinkage priors</h1>
+<p>This bonus part brings the same ideas to models fit by MCMC. A ridge penalty is equivalent to a Normal prior, so regularization has a direct Bayesian counterpart. WAIC and LOO estimate predictive performance from the posterior, and shrinkage priors do the job of ridge and the lasso while keeping the full posterior uncertainty.</p>
 <div id="why-not-aic" class="section level2">
 <h2>1. Why not AIC?</h2>
 <p>AIC needs a single best-fit <span class="math inline">\(\hat\theta\)</span> and a count of parameters. An MCMC fit gives a whole posterior instead, and priors constrain parameters to different degrees, so the parameter count is no longer clear-cut. WAIC and LOO (section 3) handle both problems.</p>
@@ -1542,8 +1607,8 @@ legend(&quot;topright&quot;, c(&quot;Normal (ridge)&quot;, &quot;Laplace (lasso)
 <p><strong>Q1.</strong> LOO prefers the no-wave fir model by 2.1 elpd (SE 1.8). A colleague writes &quot;wave regeneration has no effect on cone production.&quot; Do you agree?</p>
 <p><strong>Q2.</strong> With a Laplace prior, northness gets a posterior median of 0.08; the cross-validated lasso said exactly 0. Which would you report, and why?</p>
 </div>
-<div id="bonus-bayes-factors-and-rjmcmc" class="section level2">
-<h2>Bonus: Bayes factors and RJMCMC</h2>
+<div id="bayes-factors-and-rjmcmc" class="section level2">
+<h2>Bayes factors and RJMCMC</h2>
 <ul>
 <li>A <strong>Bayes factor</strong> is a ratio of marginal likelihoods (the likelihood averaged over the prior). It is sensitive to vague priors and hard to compute (Bolker 6.6.3).</li>
 <li><strong>RJMCMC and spike-and-slab</strong> priors let the sampler jump between models, giving posterior model probabilities. They need discrete parameters, so they run in JAGS or NIMBLE rather than Stan.</li>
