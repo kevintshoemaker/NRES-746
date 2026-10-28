@@ -206,8 +206,8 @@ lecture portion. An ordinary week has:
    as the main lecture resource.
 3. **One R script** with the page's code (below).
 4. **Lab handout(s) with keys** (see "Labs", "Answer keys").
-5. **Short bulleted instructor notes, one per class meeting** (Monday,
-   Tuesday's lab lecture, Wednesday; below).
+5. **One short bulleted instructor guide** for the week, covering
+   Monday, Tuesday's lab lecture, and Wednesday (below).
 
 **Mine old material first:** legacy root-level `LECTUREn.Rmd` /
 `LABn.Rmd` examples were tested in class. Also check the Bolker
@@ -297,13 +297,13 @@ WebCampus.
 - Same seeds as the page; run it end to end and check its numbers match
   the page.
 
-## Instructor notes, one per class meeting
+## Instructor guide, one per week
 
-`lecture_notes/NOTES_Week<N>_Lecture<M>_<Topic>.Rmd` (Monday = 1,
-Wednesday = 2) and `NOTES_Lab<N>_<Topic>.Rmd` (the lab's lecture
-portion plus an Act-by-Act quick reference). PDF, `fontsize: 12pt`,
-raw LaTeX fine. Model: `NOTES_Week10_WebPageGuide.Rmd` (written as one
-doc for the whole week; from Week 11 on, split by meeting).
+`lecture_notes/NOTES_Week<N>_WebPageGuide.Rmd` (decided Oct. 28: one
+per week, not one per meeting), with a part per class meeting
+(Monday, the lab's lecture portion plus a pointer to the Act keys,
+Wednesday). PDF, `fontsize: 12pt`, raw LaTeX fine. Models:
+`NOTES_Week10_WebPageGuide.Rmd`, `NOTES_Week9_WebPageGuide.Rmd`.
 
 - **Short and bulleted:** delivery tips that follow the page's
   sections, with time budgets summing to ~30-35 min; what to skip if
@@ -333,16 +333,22 @@ unless material moves to another week's page); (3) update
 `rmarkdown::render_site("schedule.Rmd")`; (4) update the calibration
 paragraph above.
 
-## Backlog: web pages for Weeks 1-9
+## Backlog: web pages for Weeks 1-8
 
-In the next few weeks, build a web page (and companion script, if the
-week lacks one) for each earlier week, with widgets where they help.
-Sources: that week's PDF NOTES (the record of what was planned and
-taught), CODE scripts, WODs, and legacy `LECTUREn.Rmd` pages. Once a
-week's page and instructor notes are built, ask the instructor whether
-to move its old PDF NOTES (`.Rmd` + `.pdf`, via `git mv`) to
-`lecture_notes/archive/` (done for Week 10, Oct. 27). Ask before
-removing legacy `LECTUREn` entries from the navbar or deleting anything.
+Build a web page (and companion script, if the week lacks one) for
+each earlier week, with widgets where they help. Sources: that week's
+PDF NOTES (the record of what was planned and taught), CODE scripts,
+WODs, and legacy `LECTUREn.Rmd` pages. Week 9 (Oct. 28) is the model
+for a week built after the fact: an "As taught" section in the guide,
+and the old PDF NOTES moved to `lecture_notes/archive/` (`git mv`) once
+the page and guide exist (the instructor has approved this as
+standing practice). Archive a legacy `LECTUREn` page (`git mv` the
+`.Rmd`, `.html`, `.R`, `.pdf`, `_files`, `_cache` to `archive/`) only
+once week pages cover all of its material: drop it from the navbar,
+point remaining `href="LECTUREn.html"` links in older pages at the new
+page (sed on the HTML), and comment out its line in `index.Rmd`'s
+render script. LECTURE7 was archived this way; LECTURE5 still holds
+Week 8 material (brute force, Newton). Ask before deleting anything.
 
 # Modeling workflow framing
 
@@ -513,17 +519,27 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10).
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
   8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
-  1-9.
+  1-8.
+- **Week 9 page (built Oct. 28, after the week):** `Week9_MCMC.Rmd`
+  (H1s: derivative-free optimization and Metropolis `#metropolis`; log
+  scale `#log-scale` for the Lab 7 opening; chain checks, Gibbs, HMC,
+  Stan `#hmc`), four widgets (`nelder_mead`, `annealing`, `mcmc_chain`,
+  `samplers` in `widgets/`), the rebuilt
+  `CODE_Week9_MCMCAndStan.R` (now in page order), and
+  `NOTES_Week9_WebPageGuide.Rmd`. The three Week 9/Lab 7 PDF NOTES
+  are archived; LECTURE7 (MCMC) is in `archive/` and its navbar entry
+  is replaced by the Week 9 page. `NOTES_Reference_CmdstanrQuickStart.pdf`
+  (one-page Stan setup) is linked from the page and the schedule.
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-9 link
+  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-8 link
   legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
   relink each to what was actually covered. Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block into
-  the 12 current-navbar pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-3,
-  LECTURE8, LECTURE9, Links, schedule, Week10); LECTURE4-7, 10 and LAB1,
-  2, 5 carry older navbars and are left alone. Long menus scroll via
+  the 13 current-navbar pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-3,
+  LECTURE8, LECTURE9, Links, schedule, Week9, Week10); LECTURE4-6, 10 and
+  LAB1, 2, 5 carry older navbars and are left alone. Long menus scroll via
   `styles.css` (`css:` in `_site.yml`); pages not re-rendered got its
   `<link>` inserted before `</head>`.
 

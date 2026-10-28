@@ -1,0 +1,120 @@
+<div class="w746" id="nmw">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746 button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 button:hover{background:#eee}
+.w746 select{font-size:14px;padding:2px 4px}
+.w746 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:8px}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746 canvas{width:100%;height:auto;display:block}
+.w746 .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2);margin-top:4px}
+.w746 .key span{display:flex;align-items:center;gap:6px}
+.w746 .sw{display:inline-block;width:18px;height:4px;border-radius:2px}
+</style>
+<div class="row">
+  <button id="nmw-step">Step</button>
+  <button id="nmw-ten">10 steps</button>
+  <button id="nmw-reset">Reset</button>
+  <label for="nmw-start">Start</label>
+  <select id="nmw-start">
+    <option value="0">far up the valley wall</option>
+    <option value="1">across the valley</option>
+    <option value="2">near the minimum</option>
+  </select>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Iteration</div><div class="v" id="nmw-it"></div></div>
+  <div class="card"><div class="k">Last move</div><div class="v" id="nmw-mv"></div></div>
+  <div class="card"><div class="k">Best f so far</div><div class="v" id="nmw-best"></div></div>
+  <div class="card"><div class="k">Function evaluations</div><div class="v" id="nmw-ev"></div></div>
+</div>
+<canvas id="nmw-cv" width="680" height="420" role="img" aria-label="A curved valley shaded by height, with the Nelder-Mead triangle and its earlier positions."></canvas>
+<div class="key">
+  <span><i class="sw" style="background:#2a78d6"></i>reflect</span>
+  <span><i class="sw" style="background:#e08a00"></i>expand</span>
+  <span><i class="sw" style="background:#c0392b"></i>contract</span>
+  <span><i class="sw" style="background:#7d3c98"></i>shrink</span>
+  <span>&#10005; minimum at (1, 1). Darker = lower f. Faded triangles are earlier steps.</span>
+</div>
+<script>
+(function(){
+// f(x, y) = (1 - x)^2 + 5 (y - x^2)^2: a curved valley (a gentle Rosenbrock function)
+const f=(p)=>(1-p[0])**2+5*(p[1]-p[0]*p[0])**2;
+const X=[-2,2],Y=[-1,3];
+const cv=document.getElementById('nmw-cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height,pad={l:44,r:12,t:12,b:36};
+const sx=x=>pad.l+(x-X[0])/(X[1]-X[0])*(W-pad.l-pad.r);
+const sy=y=>H-pad.b-(y-Y[0])/(Y[1]-Y[0])*(H-pad.t-pad.b);
+const cols={reflect:'#2a78d6',expand:'#e08a00',contract:'#c0392b',shrink:'#7d3c98',start:'#222'};
+const starts=[[-1.6,2.6],[0.2,2.4],[0.6,0.1]];
+// background: log(1 + f) shaded once into an offscreen canvas
+const bg=document.createElement('canvas');bg.width=W;bg.height=H;
+(function(){
+  const b=bg.getContext('2d');b.fillStyle='#fff';b.fillRect(0,0,W,H);
+  const nx=W-pad.l-pad.r,ny=H-pad.t-pad.b,img=b.createImageData(nx,ny),lev=new Int16Array(nx*ny);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+    const x=X[0]+(i+0.5)/nx*(X[1]-X[0]),y=Y[1]-(j+0.5)/ny*(Y[1]-Y[0]);
+    const lf=Math.log1p(f([x,y])),v=Math.min(1,lf/Math.log1p(40)),k=4*(j*nx+i);
+    lev[j*nx+i]=Math.floor(lf*2.2);
+    const edge=(i>0&&lev[j*nx+i]!==lev[j*nx+i-1])||(j>0&&lev[j*nx+i]!==lev[(j-1)*nx+i]);
+    const g=edge?150:Math.round(95+160*v);
+    img.data[k]=g-25;img.data[k+1]=g-8;img.data[k+2]=g;img.data[k+3]=255;
+  }
+  b.putImageData(img,pad.l,pad.t);
+  b.strokeStyle='#999';b.lineWidth=1;b.strokeRect(pad.l,pad.t,nx,ny);
+  b.fillStyle='#666';b.font='12px sans-serif';b.textAlign='center';
+  for(let x=-2;x<=2;x++){b.fillText(x,sx(x),H-pad.b+15);}
+  b.fillText('parameter 1',(pad.l+W-pad.r)/2,H-6);
+  b.textAlign='right';for(let y=-1;y<=3;y++){b.fillText(y,pad.l-6,sy(y)+4);}
+  b.save();b.translate(12,(pad.t+H-pad.b)/2);b.rotate(-Math.PI/2);b.textAlign='center';b.fillText('parameter 2',0,0);b.restore();
+})();
+let S,V,hist,moves,evals,last;
+function reset(){
+  const s=starts[+document.getElementById('nmw-start').value];
+  S=[s,[s[0]+0.4,s[1]],[s[0],s[1]+0.4]];V=S.map(f);evals=3;hist=[];moves=[];last='start';draw();
+}
+function order(){const o=[0,1,2].sort((a,b)=>V[a]-V[b]);S=o.map(i=>S[i]);V=o.map(i=>V[i]);}
+function step(){
+  order();hist.push({S:S.map(p=>p.slice()),m:null});
+  const c=[(S[0][0]+S[1][0])/2,(S[0][1]+S[1][1])/2],w=S[2];
+  const at=t=>[c[0]+t*(c[0]-w[0]),c[1]+t*(c[1]-w[1])];
+  const r=at(1),fr=f(r);evals++;let m;
+  if(fr<V[0]){const e=at(2),fe=f(e);evals++;if(fe<fr){S[2]=e;V[2]=fe;m='expand';}else{S[2]=r;V[2]=fr;m='reflect';}}
+  else if(fr<V[1]){S[2]=r;V[2]=fr;m='reflect';}
+  else{const k=at(-0.5),fk=f(k);evals++;
+    if(fk<V[2]){S[2]=k;V[2]=fk;m='contract';}
+    else{for(const i of [1,2]){S[i]=[(S[i][0]+S[0][0])/2,(S[i][1]+S[0][1])/2];V[i]=f(S[i]);evals++;}m='shrink';}}
+  hist[hist.length-1].m=m;last=m;
+}
+function tri(P,col,lw,alpha){
+  ctx.globalAlpha=alpha;ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();
+  ctx.moveTo(sx(P[0][0]),sy(P[0][1]));ctx.lineTo(sx(P[1][0]),sy(P[1][1]));ctx.lineTo(sx(P[2][0]),sy(P[2][1]));ctx.closePath();ctx.stroke();ctx.globalAlpha=1;
+}
+function draw(){
+  ctx.drawImage(bg,0,0);
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);ctx.clip();
+  hist.forEach(h=>tri(h.S,cols[h.m],1.2,0.35));
+  tri(S,cols[last],3,1);
+  const bi=V.indexOf(Math.min(...V));
+  ctx.fillStyle='#222';ctx.beginPath();ctx.arc(sx(S[bi][0]),sy(S[bi][1]),4.5,0,2*Math.PI);ctx.fill();
+  ctx.strokeStyle='#0a7d33';ctx.lineWidth=3;const mx=sx(1),my=sy(1);
+  ctx.beginPath();ctx.moveTo(mx-7,my-7);ctx.lineTo(mx+7,my+7);ctx.moveTo(mx+7,my-7);ctx.lineTo(mx-7,my+7);ctx.stroke();
+  ctx.restore();
+  document.getElementById('nmw-it').textContent=hist.length;
+  document.getElementById('nmw-mv').textContent=last;
+  document.getElementById('nmw-mv').style.color=cols[last];
+  document.getElementById('nmw-best').textContent=Math.min(...V).toPrecision(3);
+  document.getElementById('nmw-ev').textContent=evals;
+}
+document.getElementById('nmw-step').addEventListener('click',()=>{step();draw();});
+document.getElementById('nmw-ten').addEventListener('click',()=>{for(let i=0;i<10;i++)step();draw();});
+document.getElementById('nmw-reset').addEventListener('click',reset);
+document.getElementById('nmw-start').addEventListener('change',reset);
+reset();
+})();
+</script>
+</div>

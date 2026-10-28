@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="NRES 746" />
+
+
+<title>Week 9: Derivative-Free Optimization and MCMC</title>
+
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.13.2/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+<link rel="stylesheet" href="styles.css" type="text/css" />
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">NRES 746</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Schedule
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="schedule.html">Course Schedule</a>
+    </li>
+    <li>
+      <a href="Syllabus.pdf">Syllabus</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Lectures
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="INTRO.html">Introduction to NRES 746</a>
+    </li>
+    <li>
+      <a href="LECTURE1.html">Computational statistics</a>
+    </li>
+    <li>
+      <a href="LECTURE2.html">Working with probabilities</a>
+    </li>
+    <li>
+      <a href="LECTURE3.html">Data Generating Models</a>
+    </li>
+    <li>
+      <a href="LECTURE4.html">Likelihood</a>
+    </li>
+    <li>
+      <a href="LECTURE5.html">Optimization</a>
+    </li>
+    <li>
+      <a href="LECTURE6.html">Bayesian #1: concepts</a>
+    </li>
+    <li>
+      <a href="LECTURE8.html">Model Selection</a>
+    </li>
+    <li>
+      <a href="LECTURE9.html">Performance Evaluation</a>
+    </li>
+    <li>
+      <a href="Week9_MCMC.html">Week 9: Derivative-free optimization and MCMC</a>
+    </li>
+    <li>
+      <a href="Week10_ModelComparison.html">Week 10: Model comparison and regularization</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    WODs
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="wod/WOD_Week1_Lecture1_Diagnostic.pdf">Week 1: Math and stats self-diagnostic</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week1_Lecture2_PermutationPseudocode.pdf">Week 1: Pseudocoding a permutation test</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week2_Lecture1_RSyntaxAndNotation.pdf">Week 2: R syntax and function adjustments</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week2_Lecture2_BestiaryLimits.pdf">Week 2: Limits and a derivative</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week3_Lecture2_ProbabilityPuzzle.pdf">Week 3: A probability puzzle</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week4_Lecture2_SampleMeanVariance.pdf">Week 4: Expectation and the sample mean</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week5_Lecture1_ChooseDataGeneratingModel.pdf">Week 5: Choosing a data-generating model</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week5_Lecture2_WritingTheLikelihood.pdf">Week 5: Writing the likelihood</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week6_Lecture2_FindTheBugs.pdf">Week 6: Find the bugs</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week7_Lecture1_ReadTheInterval.pdf">Week 7: Reading the interval</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture1_HowMuchDidThePriorMatter.pdf">Week 8: How much did the prior matter?</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture1_NewtonByHand.pdf">Week 8: Newton's method by hand (take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture2_CurvatureByHand.pdf">Week 8: Curvature by hand (optional take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week9_Lecture2_GettingStanRunning.pdf">Week 9: Getting Stan running (take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week10_Lecture1_ConnectTheDots.pdf">Week 10: Connect the dots</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Labs
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="labs/Lab1_Act1.pdf">Lab 1, Act 1: Predation risk and tadpole size</a>
+    </li>
+    <li>
+      <a href="labs/Lab1_Act2.pdf">Lab 1, Act 2: From a shape to an equation</a>
+    </li>
+    <li>
+      <a href="labs/Lab1_Act3.pdf">Lab 1, Act 3: Does the evidence support it?</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act1.pdf">Lab 2, Act 1: Systematic search</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act2.pdf">Lab 2, Act 2: A better-fitting function?</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act3.pdf">Lab 2, Act 3: Trusting the best fit</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act1.pdf">Lab 3, Act 1: Trusting a positive detection</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act2.pdf">Lab 3, Act 2: Binomial or Poisson?</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act3.pdf">Lab 3, Act 3: A continuous measurement</a>
+    </li>
+    <li>
+      <a href="labs/Lab4_Act1.pdf">Lab 4, Act 1: Would the trend analysis find it?</a>
+    </li>
+    <li>
+      <a href="labs/Lab5_Act1.pdf">Lab 5, Act 1: Finding the peak</a>
+    </li>
+    <li>
+      <a href="labs/Lab5_Act2.pdf">Lab 5, Act 2: Finding the peak numerically</a>
+    </li>
+    <li>
+      <a href="labs/Lab6_Act1.pdf">Lab 6, Act 1: Reading the surface</a>
+    </li>
+    <li>
+      <a href="labs/Lab6_Act2.pdf">Lab 6, Act 2: An interval for the lethal dose</a>
+    </li>
+    <li>
+      <a href="labs/Lab7_Act1.pdf">Lab 7, Act 1: Running a chain by hand</a>
+    </li>
+    <li>
+      <a href="labs/Lab7_Act2.pdf">Lab 7, Act 2: Your own sampler</a>
+    </li>
+    <li>
+      <a href="labs/Lab8_Act1.pdf">Lab 8, Act 1: Which pond features matter?</a>
+    </li>
+    <li>
+      <a href="labs/Lab8_Act2.pdf">Lab 8, Act 2: Shrinking the coefficients</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Data sets
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li class="dropdown-header">Lab data</li>
+    <li>
+      <a href="data/ReedfrogSizepred.csv">Labs 1-2: Reed frog size and predation</a>
+    </li>
+    <li>
+      <a href="data/FrogChorus.csv">Lab 5: Frog chorus</a>
+    </li>
+    <li>
+      <a href="data/BeetleFumigation.csv">Lab 6: Beetle fumigation</a>
+    </li>
+    <li>
+      <a href="data/BdPondSurvey.csv">Lab 7: Bd pond survey</a>
+    </li>
+    <li>
+      <a href="data/BdRegionalSurvey.csv">Lab 8: Bd regional survey</a>
+    </li>
+    <li class="divider"></li>
+    <li class="dropdown-header">Other</li>
+    <li>
+      <a href="data/other/TreeData.csv">Tree Data</a>
+    </li>
+    <li>
+      <a href="data/ReedfrogPred.csv">Reed Frog Predation Data</a>
+    </li>
+    <li>
+      <a href="data/ReedfrogFuncresp.csv">Reed Frog Func Resp</a>
+    </li>
+  </ul>
+</li>
+<li>
+  <a href="Links.html">Links</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Week 9: Derivative-Free Optimization and MCMC</h1>
+<h4 class="author">NRES 746</h4>
+<h4 class="date">Oct. 19-21, 2026</h4>
+
+</div>
+
+
+<p>R code from this page is also in the <a href="lecture_notes/CODE_Week9_MCMCAndStan.R">companion script</a>. Packages: <code>emdbook</code>, <code>coda</code>, <code>cmdstanr</code>.</p>
+<p>This material follows Bolker, <em>Ecological Models and Data in R</em>, sections 7.2.3 through 7.3 (pp. 302-319).</p>
+<div id="metropolis" class="section level1">
+<h1>Derivative-free optimization and the Metropolis algorithm</h1>
+<p>Derivative-based optimizers such as Newton's method and BFGS use the slope of the negative log-likelihood (NLL) to find its minimum. This part covers two optimizers that need no derivatives (Nelder-Mead and simulated annealing), then shows how a small change to simulated annealing turns it from a way to find the best parameter values into a way to sample the whole posterior distribution: the Metropolis algorithm, the basis of Markov chain Monte Carlo (MCMC).</p>
+<div id="big-picture" class="section level2">
+<h2>1. Big picture</h2>
+<p><img src="Week9_MCMC_files/figure-html/workflow-1.png" width="1050" style="display: block; margin: auto;" /></p>
+<p>Everything on this page belongs to the FIT step: confronting a model with data. Fitting by maximum likelihood means finding the lowest point on the NLL surface. Methods that follow the slope are fast near the answer but need derivatives, and they can fail far from the answer or on a bumpy surface. Two questions:</p>
+<ol style="list-style-type: decimal">
+<li>How do we search when slopes are unavailable or misleading?</li>
+<li>For a Bayesian fit, how do we get the posterior when there are too many parameters for a grid and no conjugate prior to give the answer in closed form?</li>
+</ol>
+<p>The answer to the second question grows out of the answer to the first.</p>
+<p>The running example is Bolker's myxomatosis data: virus titers in 27 rabbits (grade 1 virus), modeled with a Gamma distribution.</p>
+<pre class="r"><code>library(emdbook)
+titer &lt;- subset(MyxoTiter_sum, grade == 1)$titer   # myxo titers, 27 rabbits
+
+# gamma NLL; Inf outside the allowed range so optimizers can&#39;t use it
+nll_gamma &lt;- function(p) {
+  if (any(p &lt;= 0)) return(Inf)
+  -sum(dgamma(titer, shape = p[1], scale = p[2], log = TRUE))
+}
+
+# NLL surface over a shape x scale grid, for the background contours
+shape_vec &lt;- seq(10, 90, length.out = 120)
+scale_vec &lt;- seq(0.03, 0.32, length.out = 120)
+surf &lt;- outer(shape_vec, scale_vec, Vectorize(function(a, s) nll_gamma(c(a, s))))
+
+# contour plot of NLL minus its minimum
+plot_surface &lt;- function(...) {
+  contour(shape_vec, scale_vec, surf - min(surf),
+          levels = c(1, 2, 5, 10, 20, 50, 100, 200, 500, 1000),
+          xlab = &quot;shape&quot;, ylab = &quot;scale&quot;, col = &quot;grey60&quot;, labcex = 0.6, ...)
+}</code></pre>
+</div>
+<div id="nelder-mead" class="section level2">
+<h2>2. Nelder-Mead simplex</h2>
+<p>Nelder-Mead only compares NLL values; it never computes a slope. With two parameters it moves a triangle (a &quot;simplex&quot;; <span class="math inline">\(k + 1\)</span> points for <span class="math inline">\(k\)</span> parameters) across the surface:</p>
+<p><img src="Week9_MCMC_files/figure-html/simplex-moves-1.png" width="480" style="display: block; margin: auto;" /></p>
+<ol style="list-style-type: decimal">
+<li>Rank the three points by NLL: best, good, worst.</li>
+<li>Reflect the worst point through the midpoint of the other two.</li>
+<li>If the reflection beats the best point, try going twice as far (expand) and keep whichever of the two is lower.</li>
+<li>Else, if the reflection beats the good point, keep it.</li>
+<li>Else, try a point halfway between the worst point and the midpoint (contract); keep it if it beats the worst point.</li>
+<li>If even that fails, shrink the whole triangle halfway toward the best point.</li>
+<li>Repeat until the NLL values at the three points are nearly equal.</li>
+</ol>
+<p>The triangle stretches out where the surface falls steadily, turns to follow a valley, and shrinks as it closes in on the minimum.</p>
+<pre class="r"><code># hand-coded Nelder-Mead for two parameters; stores every simplex
+nelder_mead &lt;- function(f, start, step, n_iter = 80) {
+  simplex &lt;- rbind(start, start + c(step[1], 0), start + c(0, step[2]))
+  vals &lt;- apply(simplex, 1, f)
+  history &lt;- vector(&quot;list&quot;, n_iter)
+  moves &lt;- character(n_iter)
+  for (it in seq_len(n_iter)) {
+    o &lt;- order(vals)                                 # best first, worst last
+    simplex &lt;- simplex[o, ]
+    vals &lt;- vals[o]
+    history[[it]] &lt;- simplex
+    centroid &lt;- colMeans(simplex[1:2, ])
+    refl &lt;- centroid + (centroid - simplex[3, ])     # reflect the worst point
+    f_r &lt;- f(refl)
+    if (f_r &lt; vals[1]) {
+      expd &lt;- centroid + 2 * (centroid - simplex[3, ])   # best yet: try expanding
+      f_e &lt;- f(expd)
+      if (f_e &lt; f_r) {
+        simplex[3, ] &lt;- expd; vals[3] &lt;- f_e; moves[it] &lt;- &quot;expand&quot;
+      } else {
+        simplex[3, ] &lt;- refl; vals[3] &lt;- f_r; moves[it] &lt;- &quot;reflect&quot;
+      }
+    } else if (f_r &lt; vals[2]) {
+      simplex[3, ] &lt;- refl; vals[3] &lt;- f_r; moves[it] &lt;- &quot;reflect&quot;
+    } else {
+      contr &lt;- centroid + 0.5 * (simplex[3, ] - centroid)   # still bad: contract
+      f_c &lt;- f(contr)
+      if (f_c &lt; vals[3]) {
+        simplex[3, ] &lt;- contr; vals[3] &lt;- f_c; moves[it] &lt;- &quot;contract&quot;
+      } else {
+        simplex[2:3, ] &lt;- (simplex[2:3, ] + rbind(simplex[1, ], simplex[1, ])) / 2
+        vals[2:3] &lt;- apply(simplex[2:3, ], 1, f)
+        moves[it] &lt;- &quot;shrink&quot;
+      }
+    }
+  }
+  list(best = simplex[which.min(vals), ], value = min(vals),
+       history = history, moves = moves)
+}
+
+nm &lt;- nelder_mead(nll_gamma, start = c(20, 0.05), step = c(5, 0.02))
+round(c(shape = nm$best[1], scale = nm$best[2], nll = nm$value), 3)</code></pre>
+<pre><code>##  shape  scale    nll 
+## 49.611  0.140 37.667</code></pre>
+<pre class="r"><code>table(nm$moves)</code></pre>
+<pre><code>## 
+## contract   expand  reflect   shrink 
+##       46        8       25        1</code></pre>
+<pre class="r"><code># first 30 triangles, colored by move
+move_cols &lt;- c(expand = &quot;darkorange&quot;, reflect = &quot;steelblue&quot;,
+               contract = &quot;firebrick&quot;, shrink = &quot;purple&quot;)
+plot_surface()
+for (i in 1:30) polygon(nm$history[[i]], border = move_cols[nm$moves[i]], lwd = 1.5)
+legend(&quot;topright&quot;, names(move_cols), col = move_cols, lwd = 2, bty = &quot;n&quot;)</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/nm-plot-1.png" width="576" style="display: block; margin: auto;" /></p>
+<p>The triangle expands across the contours, contracts as it turns into the curved valley, then crawls along the valley floor. In the widget below, step a triangle through a curved valley yourself.</p>
+<div class="w746" id="nmw">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746 button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 button:hover{background:#eee}
+.w746 select{font-size:14px;padding:2px 4px}
+.w746 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:8px}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746 canvas{width:100%;height:auto;display:block}
+.w746 .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2);margin-top:4px}
+.w746 .key span{display:flex;align-items:center;gap:6px}
+.w746 .sw{display:inline-block;width:18px;height:4px;border-radius:2px}
+</style>
+<div class="row">
+  <button id="nmw-step">Step</button>
+  <button id="nmw-ten">10 steps</button>
+  <button id="nmw-reset">Reset</button>
+  <label for="nmw-start">Start</label>
+  <select id="nmw-start">
+    <option value="0">far up the valley wall</option>
+    <option value="1">across the valley</option>
+    <option value="2">near the minimum</option>
+  </select>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Iteration</div><div class="v" id="nmw-it"></div></div>
+  <div class="card"><div class="k">Last move</div><div class="v" id="nmw-mv"></div></div>
+  <div class="card"><div class="k">Best f so far</div><div class="v" id="nmw-best"></div></div>
+  <div class="card"><div class="k">Function evaluations</div><div class="v" id="nmw-ev"></div></div>
+</div>
+<canvas id="nmw-cv" width="680" height="420" role="img" aria-label="A curved valley shaded by height, with the Nelder-Mead triangle and its earlier positions."></canvas>
+<div class="key">
+  <span><i class="sw" style="background:#2a78d6"></i>reflect</span>
+  <span><i class="sw" style="background:#e08a00"></i>expand</span>
+  <span><i class="sw" style="background:#c0392b"></i>contract</span>
+  <span><i class="sw" style="background:#7d3c98"></i>shrink</span>
+  <span>&#10005; minimum at (1, 1). Darker = lower f. Faded triangles are earlier steps.</span>
+</div>
+<script>
+(function(){
+// f(x, y) = (1 - x)^2 + 5 (y - x^2)^2: a curved valley (a gentle Rosenbrock function)
+const f=(p)=>(1-p[0])**2+5*(p[1]-p[0]*p[0])**2;
+const X=[-2,2],Y=[-1,3];
+const cv=document.getElementById('nmw-cv'),ctx=cv.getContext('2d');
+const W=cv.width,H=cv.height,pad={l:44,r:12,t:12,b:36};
+const sx=x=>pad.l+(x-X[0])/(X[1]-X[0])*(W-pad.l-pad.r);
+const sy=y=>H-pad.b-(y-Y[0])/(Y[1]-Y[0])*(H-pad.t-pad.b);
+const cols={reflect:'#2a78d6',expand:'#e08a00',contract:'#c0392b',shrink:'#7d3c98',start:'#222'};
+const starts=[[-1.6,2.6],[0.2,2.4],[0.6,0.1]];
+// background: log(1 + f) shaded once into an offscreen canvas
+const bg=document.createElement('canvas');bg.width=W;bg.height=H;
+(function(){
+  const b=bg.getContext('2d');b.fillStyle='#fff';b.fillRect(0,0,W,H);
+  const nx=W-pad.l-pad.r,ny=H-pad.t-pad.b,img=b.createImageData(nx,ny),lev=new Int16Array(nx*ny);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+    const x=X[0]+(i+0.5)/nx*(X[1]-X[0]),y=Y[1]-(j+0.5)/ny*(Y[1]-Y[0]);
+    const lf=Math.log1p(f([x,y])),v=Math.min(1,lf/Math.log1p(40)),k=4*(j*nx+i);
+    lev[j*nx+i]=Math.floor(lf*2.2);
+    const edge=(i>0&&lev[j*nx+i]!==lev[j*nx+i-1])||(j>0&&lev[j*nx+i]!==lev[(j-1)*nx+i]);
+    const g=edge?150:Math.round(95+160*v);
+    img.data[k]=g-25;img.data[k+1]=g-8;img.data[k+2]=g;img.data[k+3]=255;
+  }
+  b.putImageData(img,pad.l,pad.t);
+  b.strokeStyle='#999';b.lineWidth=1;b.strokeRect(pad.l,pad.t,nx,ny);
+  b.fillStyle='#666';b.font='12px sans-serif';b.textAlign='center';
+  for(let x=-2;x<=2;x++){b.fillText(x,sx(x),H-pad.b+15);}
+  b.fillText('parameter 1',(pad.l+W-pad.r)/2,H-6);
+  b.textAlign='right';for(let y=-1;y<=3;y++){b.fillText(y,pad.l-6,sy(y)+4);}
+  b.save();b.translate(12,(pad.t+H-pad.b)/2);b.rotate(-Math.PI/2);b.textAlign='center';b.fillText('parameter 2',0,0);b.restore();
+})();
+let S,V,hist,moves,evals,last;
+function reset(){
+  const s=starts[+document.getElementById('nmw-start').value];
+  S=[s,[s[0]+0.4,s[1]],[s[0],s[1]+0.4]];V=S.map(f);evals=3;hist=[];moves=[];last='start';draw();
+}
+function order(){const o=[0,1,2].sort((a,b)=>V[a]-V[b]);S=o.map(i=>S[i]);V=o.map(i=>V[i]);}
+function step(){
+  order();hist.push({S:S.map(p=>p.slice()),m:null});
+  const c=[(S[0][0]+S[1][0])/2,(S[0][1]+S[1][1])/2],w=S[2];
+  const at=t=>[c[0]+t*(c[0]-w[0]),c[1]+t*(c[1]-w[1])];
+  const r=at(1),fr=f(r);evals++;let m;
+  if(fr<V[0]){const e=at(2),fe=f(e);evals++;if(fe<fr){S[2]=e;V[2]=fe;m='expand';}else{S[2]=r;V[2]=fr;m='reflect';}}
+  else if(fr<V[1]){S[2]=r;V[2]=fr;m='reflect';}
+  else{const k=at(-0.5),fk=f(k);evals++;
+    if(fk<V[2]){S[2]=k;V[2]=fk;m='contract';}
+    else{for(const i of [1,2]){S[i]=[(S[i][0]+S[0][0])/2,(S[i][1]+S[0][1])/2];V[i]=f(S[i]);evals++;}m='shrink';}}
+  hist[hist.length-1].m=m;last=m;
+}
+function tri(P,col,lw,alpha){
+  ctx.globalAlpha=alpha;ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();
+  ctx.moveTo(sx(P[0][0]),sy(P[0][1]));ctx.lineTo(sx(P[1][0]),sy(P[1][1]));ctx.lineTo(sx(P[2][0]),sy(P[2][1]));ctx.closePath();ctx.stroke();ctx.globalAlpha=1;
+}
+function draw(){
+  ctx.drawImage(bg,0,0);
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);ctx.clip();
+  hist.forEach(h=>tri(h.S,cols[h.m],1.2,0.35));
+  tri(S,cols[last],3,1);
+  const bi=V.indexOf(Math.min(...V));
+  ctx.fillStyle='#222';ctx.beginPath();ctx.arc(sx(S[bi][0]),sy(S[bi][1]),4.5,0,2*Math.PI);ctx.fill();
+  ctx.strokeStyle='#0a7d33';ctx.lineWidth=3;const mx=sx(1),my=sy(1);
+  ctx.beginPath();ctx.moveTo(mx-7,my-7);ctx.lineTo(mx+7,my+7);ctx.moveTo(mx+7,my-7);ctx.lineTo(mx-7,my+7);ctx.stroke();
+  ctx.restore();
+  document.getElementById('nmw-it').textContent=hist.length;
+  document.getElementById('nmw-mv').textContent=last;
+  document.getElementById('nmw-mv').style.color=cols[last];
+  document.getElementById('nmw-best').textContent=Math.min(...V).toPrecision(3);
+  document.getElementById('nmw-ev').textContent=evals;
+}
+document.getElementById('nmw-step').addEventListener('click',()=>{step();draw();});
+document.getElementById('nmw-ten').addEventListener('click',()=>{for(let i=0;i<10;i++)step();draw();});
+document.getElementById('nmw-reset').addEventListener('click',reset);
+document.getElementById('nmw-start').addEventListener('change',reset);
+reset();
+})();
+</script>
+</div>
+<p>Nelder-Mead is <code>optim()</code>'s default method:</p>
+<pre class="r"><code>fit_nm &lt;- optim(c(20, 0.05), nll_gamma)
+fit_nm[c(&quot;par&quot;, &quot;value&quot;, &quot;counts&quot;, &quot;convergence&quot;)]</code></pre>
+<pre><code>## $par
+## [1] 49.602640  0.139584
+## 
+## $value
+## [1] 37.66714
+## 
+## $counts
+## function gradient 
+##      147       NA 
+## 
+## $convergence
+## [1] 0</code></pre>
+<p>It needed 147 NLL evaluations, more than a derivative-based method would near the answer. In exchange, it can't be misled by a bad derivative, and bumps, kinks, and thresholds in the NLL don't stop it.</p>
+<blockquote>
+<p><strong>Question:</strong> Try the widget's &quot;near the minimum&quot; start. Why do the triangles keep shrinking, and how could you use their size to decide when to stop?</p>
+</blockquote>
+</div>
+<div id="annealing" class="section level2">
+<h2>3. Simulated annealing</h2>
+<p>Any method that only goes downhill finds whichever valley it starts in. If the NLL has more than one valley, that may not be the deepest one. Simulated annealing (Bolker p. 306) sometimes accepts uphill moves so it can escape:</p>
+<ol style="list-style-type: decimal">
+<li>Propose a random point near the current one.</li>
+<li>If its NLL is lower, move there.</li>
+<li>If its NLL is higher by <span class="math inline">\(\Delta\)</span>, move there anyway with probability <span class="math inline">\(e^{-\Delta/T}\)</span>.</li>
+<li>Repeat, lowering the &quot;temperature&quot; <span class="math inline">\(T\)</span> now and then.</li>
+</ol>
+<p>The name comes from metallurgy: a metal cooled slowly settles into a low-energy crystal structure. At a high temperature the search accepts most uphill moves and explores widely; as it cools it becomes a pure downhill search.</p>
+<pre class="r"><code># acceptance probability exp(-delta / T) for a few temperatures and NLL increases
+accept_tab &lt;- outer(c(10, 1, 0.1), c(0.5, 2, 10),
+                    function(temp, delta) exp(-delta / temp))
+dimnames(accept_tab) &lt;- list(paste(&quot;T =&quot;, c(10, 1, 0.1)),
+                             paste(&quot;NLL worse by&quot;, c(0.5, 2, 10)))
+signif(accept_tab, 2)</code></pre>
+<pre><code>##         NLL worse by 0.5 NLL worse by 2 NLL worse by 10
+## T = 10            0.9500        8.2e-01         3.7e-01
+## T = 1             0.6100        1.4e-01         4.5e-05
+## T = 0.1           0.0067        2.1e-09         3.7e-44</code></pre>
+<p>In the widget, the search starts in the shallow valley on the right. Try a cold start, a hot start that cools quickly, and a hot start that never cools.</p>
+<div class="w746" id="saw">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746 input[type=range]{flex:1;min-width:140px}
+.w746 .val{font-weight:600;min-width:48px}
+.w746 button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 button:hover{background:#eee}
+.w746 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746 canvas{width:100%;height:auto;display:block}
+.w746 .note{font-size:13px;color:var(--ink2);margin-top:4px}
+</style>
+<div class="row">
+  <label for="saw-t0">Starting temperature T</label>
+  <input type="range" id="saw-t0" min="-2" max="1.3" step="0.05" value="0.3">
+  <span class="val" id="saw-t0o"></span>
+</div>
+<div class="row">
+  <label for="saw-cool">Cooling: T &times; this every 100 steps</label>
+  <input type="range" id="saw-cool" min="0.7" max="1" step="0.01" value="0.85">
+  <span class="val" id="saw-coolo"></span>
+</div>
+<div class="row">
+  <button id="saw-run">Run 3,000 steps</button>
+  <button id="saw-seed">New random numbers</button>
+  <span class="note">Starts at x = 2 (the shallow valley). Proposals: x + Normal(0, 0.4).</span>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Final temperature</div><div class="v" id="saw-tf"></div></div>
+  <div class="card"><div class="k">Best x found</div><div class="v" id="saw-best"></div></div>
+  <div class="card"><div class="k">Uphill moves accepted</div><div class="v" id="saw-up"></div></div>
+  <div class="card"><div class="k">Last 1,000 steps in deep valley</div><div class="v" id="saw-deep"></div></div>
+</div>
+<canvas id="saw-cv" width="680" height="430" role="img" aria-label="Top left: the curve with two valleys and the points visited. Top right: position over time. Bottom: histogram of positions visited."></canvas>
+<div class="note">Bottom panel: where the chain spent its last 1,000 steps. With cooling set to 1 (never cool) the orange curve shows e<sup>&minus;f(x)/T</sup>, scaled to match.</div>
+<script>
+(function(){
+// two valleys: deep one near x = -2, shallow one near x = 2
+const f=x=>0.15*(x*x-4)**2+0.5*x;
+const XL=[-3.6,3.6];
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let seed=7,run=null,anim=null;
+const cv=document.getElementById('saw-cv'),ctx=cv.getContext('2d'),W=cv.width;
+const P1={x0:40,x1:330,y0:200,y1:14},P2={x0:380,x1:670,y0:200,y1:14},P3={x0:40,x1:670,y0:400,y1:262};
+const fmin=-1.1,fmax=3.2,N=3000;
+function axes(P,xl,yl){ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(P.x0,P.y1,P.x1-P.x0,P.y0-P.y1);
+  ctx.fillStyle='#555';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText(xl,(P.x0+P.x1)/2,P.y0+28);
+  ctx.save();ctx.translate(P.x0-26,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);ctx.fillText(yl,0,0);ctx.restore();}
+const px=(P,x)=>P.x0+(x-XL[0])/(XL[1]-XL[0])*(P.x1-P.x0);
+function simulate(){
+  const T0=10**(+document.getElementById('saw-t0').value),c=+document.getElementById('saw-cool').value,u=rng(seed);
+  const norm=()=>Math.sqrt(-2*Math.log(u()+1e-12))*Math.cos(2*Math.PI*u());
+  let x=2,fx=f(x),T=T0,best=x,fb=fx,up=0,upTried=0;const xs=[],Ts=[];
+  for(let i=0;i<N;i++){
+    const y=x+0.4*norm(),fy=f(y),d=fy-fx;
+    if(d>0)upTried++;
+    if(Math.abs(y)<XL[1]&&(d<=0||u()<Math.exp(-d/T))){if(d>0)up++;x=y;fx=fy;}
+    if(fx<fb){best=x;fb=fx;}
+    xs.push(x);Ts.push(T);if((i+1)%100===0)T*=c;
+  }
+  return {xs,Ts,best,up,upTried,T0,c,Tf:T};
+}
+function draw(r,n){
+  ctx.clearRect(0,0,W,cv.height);
+  axes(P1,'x','f(x)');axes(P2,'step','x');axes(P3,'x','visits');
+  // curve
+  const fy=v=>P1.y0-(v-fmin)/(fmax-fmin)*(P1.y0-P1.y1);
+  ctx.strokeStyle='#222';ctx.lineWidth=2;ctx.beginPath();
+  for(let i=0;i<=200;i++){const x=XL[0]+i/200*(XL[1]-XL[0]);const y=Math.max(P1.y1,fy(f(x)));i?ctx.lineTo(px(P1,x),y):ctx.moveTo(px(P1,x),y);}ctx.stroke();
+  // visited points on the curve
+  ctx.fillStyle='rgba(42,120,214,0.15)';
+  for(let i=0;i<n;i+=3){const x=r.xs[i];ctx.beginPath();ctx.arc(px(P1,x),fy(f(x)),3,0,2*Math.PI);ctx.fill();}
+  const xc=r.xs[n-1];ctx.fillStyle='#e08a00';ctx.beginPath();ctx.arc(px(P1,xc),fy(f(xc)),6,0,2*Math.PI);ctx.fill();
+  // trace
+  const tx=i=>P2.x0+i/N*(P2.x1-P2.x0),ty=x=>P2.y0-(x-XL[0])/(XL[1]-XL[0])*(P2.y0-P2.y1);
+  ctx.strokeStyle='#ddd';ctx.beginPath();ctx.moveTo(P2.x0,ty(0));ctx.lineTo(P2.x1,ty(0));ctx.stroke();
+  ctx.strokeStyle='#2a78d6';ctx.lineWidth=1;ctx.beginPath();
+  for(let i=0;i<n;i++){i?ctx.lineTo(tx(i),ty(r.xs[i])):ctx.moveTo(tx(i),ty(r.xs[i]));}ctx.stroke();
+  ctx.fillStyle='#555';ctx.font='11px sans-serif';ctx.textAlign='left';
+  ctx.fillText('deep valley',P2.x0+4,ty(-2)+4);ctx.fillText('shallow valley',P2.x0+4,ty(2)+4);
+  ctx.textAlign='right';ctx.fillText('T = '+r.Ts[n-1].toPrecision(2),P2.x1-4,P2.y1+14);
+  // histogram of the last 1,000 steps
+  if(n===N){
+    const nb=48,cnt=new Array(nb).fill(0),bw=(XL[1]-XL[0])/nb;
+    for(let i=N-1000;i<N;i++){const b=Math.floor((r.xs[i]-XL[0])/bw);if(b>=0&&b<nb)cnt[b]++;}
+    let dens=null,mx=Math.max(...cnt);
+    if(r.c===1){dens=[];let z=0;for(let b=0;b<nb;b++){const x=XL[0]+(b+0.5)*bw;dens.push(Math.exp(-(f(x)-fmin)/r.Tf));z+=dens[b];}
+      dens=dens.map(d=>d/z*1000);mx=Math.max(mx,...dens);}
+    const hy=v=>P3.y0-v/mx*(P3.y0-P3.y1-6);
+    ctx.fillStyle='rgba(42,120,214,0.55)';
+    for(let b=0;b<nb;b++){const x0=px(P3,XL[0]+b*bw);ctx.fillRect(x0+1,hy(cnt[b]),px(P3,XL[0]+bw)-px(P3,XL[0])-2,P3.y0-hy(cnt[b]));}
+    if(dens){ctx.strokeStyle='#e08a00';ctx.lineWidth=2.5;ctx.beginPath();
+      dens.forEach((d,b)=>{const x=px(P3,XL[0]+(b+0.5)*bw);b?ctx.lineTo(x,hy(d)):ctx.moveTo(x,hy(d));});ctx.stroke();}
+    let deep=0;for(let i=N-1000;i<N;i++)if(r.xs[i]<0)deep++;
+    document.getElementById('saw-deep').textContent=Math.round(deep/10)+'%';
+    document.getElementById('saw-best').textContent=r.best.toFixed(2);
+    document.getElementById('saw-up').textContent=r.up+' of '+r.upTried;
+    document.getElementById('saw-tf').textContent=r.Tf.toPrecision(2);
+  }else{['saw-deep','saw-best','saw-up','saw-tf'].forEach(id=>document.getElementById(id).textContent='...');}
+}
+function go(){
+  if(anim)cancelAnimationFrame(anim);
+  run=simulate();let n=0;
+  const r0=run;
+  if(document.hidden){draw(run,N);return;}
+  const tick=()=>{n=Math.min(N,n+60);draw(run,n);if(n<N)anim=requestAnimationFrame(tick);};tick();
+  setTimeout(()=>{if(run===r0&&n<N){cancelAnimationFrame(anim);n=N;draw(run,N);}},3000);   // finish if animation is paused
+}
+function label(){
+  document.getElementById('saw-t0o').textContent=(10**(+document.getElementById('saw-t0').value)).toPrecision(2);
+  const c=+document.getElementById('saw-cool').value;document.getElementById('saw-coolo').textContent=c===1?'1 (never)':c.toFixed(2);
+}
+['saw-t0','saw-cool'].forEach(id=>document.getElementById(id).addEventListener('input',label));
+['saw-t0','saw-cool'].forEach(id=>document.getElementById(id).addEventListener('change',go));
+document.getElementById('saw-run').addEventListener('click',go);
+document.getElementById('saw-seed').addEventListener('click',()=>{seed++;go();});
+label();run=simulate();draw(run,N);
+})();
+</script>
+</div>
+<p>The same algorithm on the myxomatosis surface:</p>
+<pre class="r"><code># simulated annealing: accept worse steps w.p. exp(-delta / temp); cool temp over time
+anneal &lt;- function(f, start, step_sd, n_steps = 3000, temp0 = 10,
+                   cool = 0.9, every = 100) {
+  current &lt;- start
+  f_current &lt;- f(current)
+  best &lt;- current
+  f_best &lt;- f_current
+  temp &lt;- temp0
+  track &lt;- matrix(NA, n_steps, 4,
+                  dimnames = list(NULL, c(&quot;shape&quot;, &quot;scale&quot;, &quot;nll&quot;, &quot;temp&quot;)))
+  for (i in seq_len(n_steps)) {
+    proposal &lt;- current + rnorm(length(current), 0, step_sd)
+    f_prop &lt;- f(proposal)
+    if (is.finite(f_prop) &amp;&amp; runif(1) &lt; exp(-(f_prop - f_current) / temp)) {
+      current &lt;- proposal
+      f_current &lt;- f_prop
+    }
+    if (f_current &lt; f_best) {
+      best &lt;- current
+      f_best &lt;- f_current
+    }
+    track[i, ] &lt;- c(current, f_current, temp)
+    if (i %% every == 0) temp &lt;- temp * cool
+  }
+  list(best = best, value = f_best, track = track)
+}
+
+set.seed(746)
+sa &lt;- anneal(nll_gamma, c(20, 0.05), step_sd = c(2, 0.005))
+round(c(shape = sa$best[1], scale = sa$best[2], nll = sa$value), 3)</code></pre>
+<pre><code>##  shape  scale    nll 
+## 50.182  0.138 37.668</code></pre>
+<pre class="r"><code># left: path on the surface; right: NLL of the current point at each step (log axis)
+par(mfrow = c(1, 2))
+plot_surface()
+lines(sa$track[, &quot;shape&quot;], sa$track[, &quot;scale&quot;], col = adjustcolor(&quot;darkorange&quot;, 0.5))
+plot(sa$track[, &quot;nll&quot;], type = &quot;l&quot;, log = &quot;y&quot;, xlab = &quot;Step&quot;, ylab = &quot;Current NLL&quot;)</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/anneal-plot-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))</code></pre>
+<p>The NLL drops from about 1,800 to under 100 within the first 50 steps, then bounces above the minimum (37.67) because worse moves are still accepted. As <span class="math inline">\(T\)</span> falls from 10 to about 0.5 the bounces shrink and the search settles. That took 3,000 NLL evaluations for what Nelder-Mead did in 147. <code>optim()</code> has a built-in annealer:</p>
+<pre class="r"><code>set.seed(746)
+fit_sann &lt;- optim(c(20, 0.05), nll_gamma, method = &quot;SANN&quot;)
+fit_sann[c(&quot;par&quot;, &quot;value&quot;, &quot;counts&quot;, &quot;convergence&quot;)]</code></pre>
+<pre><code>## $par
+## [1] 23.1909794  0.2977502
+## 
+## $value
+## [1] 40.7738
+## 
+## $counts
+## function gradient 
+##    10000       NA 
+## 
+## $convergence
+## [1] 0</code></pre>
+<blockquote>
+<p><strong>Question:</strong> With default settings, SANN reports an NLL of 40.77 after 10,000 evaluations, with <code>convergence = 0</code>; Nelder-Mead reached 37.67. Is SANN broken? Should you trust <code>convergence = 0</code>?</p>
+</blockquote>
+</div>
+<div id="metropolis-rule" class="section level2">
+<h2>4. The Metropolis algorithm</h2>
+<p>Keep the annealing rule but change three things, and the chain of visited points becomes a sample from the posterior distribution:</p>
+<ol style="list-style-type: decimal">
+<li>Fix <span class="math inline">\(T = 1\)</span> and never cool. The probability of accepting an uphill step becomes <span class="math inline">\(e^{-(\text{NLL}_{new} - \text{NLL}_{old})} = \mathcal{L}(\theta_{new}) / \mathcal{L}(\theta_{old})\)</span>.</li>
+<li>Use the posterior instead of the likelihood: <span class="math display">\[P(\text{accept}) = \min\left(1,
+ \frac{P(\theta_{new} \mid y)}{P(\theta_{old} \mid y)}\right)\]</span></li>
+<li>Keep <strong>every</strong> step, not only the best one.</li>
+</ol>
+<p>Writing Bayes' rule into the ratio shows why this is practical:</p>
+<p><span class="math display">\[\frac{P(\theta_{new} \mid y)}{P(\theta_{old} \mid y)} =
+  \frac{\mathcal{L}(\theta_{new})\, P(\theta_{new}) / P(y)}
+       {\mathcal{L}(\theta_{old})\, P(\theta_{old}) / P(y)}\]</span></p>
+<p>The denominator <span class="math inline">\(P(y)\)</span> cancels. Computing <span class="math inline">\(P(y)\)</span> requires integrating the likelihood times the prior over every possible parameter value, which is why a Bayesian fit otherwise needs a grid (feasible for one or two parameters) or a conjugate prior (available only for some models). Metropolis needs only likelihood times prior, at two points at a time.</p>
+<p><strong>Why the chain lands on the posterior.</strong> Take two parameter values, <span class="math inline">\(A\)</span> and <span class="math inline">\(B\)</span>, with <span class="math inline">\(P(A \mid y) = 2\,P(B \mid y)\)</span>. From <span class="math inline">\(B\)</span>, a proposal to move to <span class="math inline">\(A\)</span> is always accepted; from <span class="math inline">\(A\)</span>, a proposal to move to <span class="math inline">\(B\)</span> is accepted half the time. In the long run the chain sits at <span class="math inline">\(A\)</span> twice as often as at <span class="math inline">\(B\)</span>. The same holds for every pair of values, so the time the chain spends near any <span class="math inline">\(\theta\)</span> is proportional to its posterior probability.</p>
+<p>Two consequences:</p>
+<ul>
+<li>A rejected proposal means <strong>record the current value again</strong>. The repeats are how the chain gives extra weight to high-posterior regions; skipping them gives the wrong distribution.</li>
+<li>The chain is not supposed to converge to a single point. Wandering through the posterior is the goal.</li>
+</ul>
+<p>The proposal here is symmetric (a normal jump centered on the current value), so a jump from <span class="math inline">\(A\)</span> to <span class="math inline">\(B\)</span> is as likely to be proposed as a jump from <span class="math inline">\(B\)</span> to <span class="math inline">\(A\)</span>. With an asymmetric proposal, the <strong>Metropolis-Hastings</strong> rule multiplies the ratio by <span class="math inline">\(q(\theta_{old} \mid \theta_{new}) / q(\theta_{new} \mid \theta_{old})\)</span>, where <span class="math inline">\(q\)</span> is the proposal density, to correct for the imbalance.</p>
+<p><strong>Example: germination.</strong> 30 of 40 seeds germinated. With a flat (Beta(1, 1)) prior, the exact posterior is Beta(31, 11), so we can check the sampler against it.</p>
+<pre class="r"><code># germination trial: 30 of 40 seeds; flat prior, so log posterior = log likelihood + const
+k &lt;- 30
+n &lt;- 40
+log_post_germ &lt;- function(p) {
+  if (p &lt;= 0 || p &gt;= 1) return(-Inf)
+  dbinom(k, n, p, log = TRUE) + dbeta(p, 1, 1, log = TRUE)
+}
+
+# Metropolis sampler: accept w.p. min(1, Post(new) / Post(old)); returns the whole chain
+metropolis &lt;- function(log_post, start, step_sd, n_steps) {
+  chain &lt;- matrix(NA, n_steps, length(start), dimnames = list(NULL, names(start)))
+  current &lt;- start
+  lp_current &lt;- log_post(current)
+  n_accept &lt;- 0
+  for (i in seq_len(n_steps)) {
+    proposal &lt;- current + rnorm(length(start), 0, step_sd)
+    lp_prop &lt;- log_post(proposal)
+    if (log(runif(1)) &lt; lp_prop - lp_current) {   # log of the posterior ratio
+      current &lt;- proposal
+      lp_current &lt;- lp_prop
+      n_accept &lt;- n_accept + 1
+    }
+    chain[i, ] &lt;- current   # a rejected step records the current value again
+  }
+  attr(chain, &quot;accept_rate&quot;) &lt;- n_accept / n_steps
+  chain
+}
+
+set.seed(746)
+chain_germ &lt;- metropolis(log_post_germ, start = 0.5, step_sd = 0.1, n_steps = 5000)
+attr(chain_germ, &quot;accept_rate&quot;)</code></pre>
+<pre><code>## [1] 0.5858</code></pre>
+<blockquote>
+<p><strong>Question:</strong> The annealer accepted with <code>runif(1) &lt; exp(-delta / temp)</code>; <code>metropolis()</code> uses <code>log(runif(1)) &lt; lp_prop - lp_current</code>. Are these different rules?</p>
+</blockquote>
+<pre class="r"><code># trace plot, then histogram of the chain vs. the exact posterior, Beta(31, 11)
+par(mfrow = c(1, 2))
+plot(chain_germ, type = &quot;l&quot;, xlab = &quot;Step&quot;, ylab = &quot;p&quot;)
+hist(chain_germ, breaks = 40, freq = FALSE, main = &quot;&quot;, xlab = &quot;Germination probability, p&quot;)
+curve(dbeta(x, 31, 11), add = TRUE, lwd = 2, col = &quot;darkorange&quot;)</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/germ-plots-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))
+
+# posterior summaries from the chain vs. exact
+rbind(chain = c(mean = mean(chain_germ), quantile(chain_germ, c(0.025, 0.975))),
+      exact = c(31 / 42, qbeta(c(0.025, 0.975), 31, 11)))</code></pre>
+<pre><code>##            mean      2.5%     97.5%
+## chain 0.7341027 0.5937651 0.8499169
+## exact 0.7380952 0.5969538 0.8577870</code></pre>
+<p>The chain accepted 59% of its proposals, and its histogram matches the exact posterior.</p>
+<p><strong>Two parameters: myxomatosis.</strong> The same function samples the Gamma model's shape and scale, with flat priors on the positive values (so the log posterior is the negative NLL plus a constant):</p>
+<pre class="r"><code>set.seed(746)
+chain_myxo &lt;- metropolis(function(p) -nll_gamma(p),
+                         start = c(shape = 20, scale = 0.05),
+                         step_sd = c(4, 0.01), n_steps = 20000)
+attr(chain_myxo, &quot;accept_rate&quot;)</code></pre>
+<pre><code>## [1] 0.27815</code></pre>
+<pre class="r"><code>plot_surface()
+points(chain_myxo[seq(1, 20000, by = 10), ], pch = 16, cex = 0.3,
+       col = adjustcolor(&quot;steelblue&quot;, 0.4))</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/myxo-chain-1.png" width="576" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># 95% credible intervals, dropping the first 2000 steps
+apply(chain_myxo[-(1:2000), ], 2, quantile, c(0.025, 0.5, 0.975))</code></pre>
+<pre><code>##          shape      scale
+## 2.5%  28.97286 0.08511468
+## 50%   49.20264 0.14048690
+## 97.5% 81.46669 0.24469750</code></pre>
+<p>The draws fill the banana-shaped valley. The first 2,000 steps are dropped because the chain started far from the posterior (see <a href="#chain-checks">which chains can you trust?</a>). This chain mixes slowly: shape and scale trade off along a narrow, curved ridge, so most independent jumps in the two parameters leave it. <a href="#random-walks">Why random walks struggle</a> takes this up.</p>
+</div>
+</div>
+<div id="log-scale" class="section level1">
+<h1>Working on the log scale</h1>
+<p>Samplers compute the log posterior, never the posterior itself. This short section shows why, and what the acceptance rule looks like on the log scale.</p>
+<div id="why-logs" class="section level2">
+<h2>Why logs?</h2>
+<p>A likelihood is a product of one density per observation, and products of many small numbers underflow: they become smaller than the smallest number the computer can store, and R returns 0.</p>
+<pre class="r"><code>set.seed(1)
+y_sim &lt;- rnorm(1000, 10, 2)
+prod(dnorm(y_sim, 10, 2))             # the likelihood itself: underflows to 0</code></pre>
+<pre><code>## [1] 0</code></pre>
+<pre class="r"><code>sum(dnorm(y_sim, 10, 2, log = TRUE))  # the log likelihood is fine</code></pre>
+<pre><code>## [1] -2147.143</code></pre>
+<p>A ratio of two zeros is undefined, so a sampler built on the raw posterior fails. On the log scale:</p>
+<ul>
+<li>log posterior = log likelihood + log prior (+ a constant);</li>
+<li>the posterior ratio becomes a difference, <span class="math inline">\(\log P(\theta_{new} \mid y) - \log P(\theta_{old} \mid y)\)</span>;</li>
+<li>accept when <span class="math inline">\(\log u\)</span> is less than that difference, where <span class="math inline">\(u \sim \text{Uniform}(0, 1)\)</span>, since <span class="math inline">\(u &lt; e^x\)</span> exactly when <span class="math inline">\(\log u &lt; x\)</span>.</li>
+</ul>
+<p>Only the difference is ever exponentiated (if at all), and a difference of log posteriors is a modest number even when each posterior is astronomically small.</p>
+</div>
+</div>
+<div id="hmc" class="section level1">
+<h1>Checking chains, Hamiltonian Monte Carlo, and Stan</h1>
+<p>A Metropolis chain gives samples from the posterior eventually, but how do we know it has? This part covers checking chains (burn-in, mixing, R-hat, effective sample size), why random-walk samplers struggle when parameters are correlated, and Hamiltonian Monte Carlo (HMC), the sampler behind the Stan software.</p>
+<div id="chain-checks" class="section level2">
+<h2>1. Which chains can you trust?</h2>
+<p>Three chains on the germination posterior (exact mean 0.738), each starting at <span class="math inline">\(p = 0.05\)</span> and running 1,000 steps, with different proposal SDs:</p>
+<pre class="r"><code>step_sds &lt;- c(0.005, 0.1, 3)
+chains &lt;- lapply(step_sds, function(s) {
+  set.seed(1)
+  metropolis(log_post_germ, start = 0.05, step_sd = s, n_steps = 1000)
+})
+round(rbind(step_sd = step_sds,
+            accept_rate = sapply(chains, attr, &quot;accept_rate&quot;),
+            post_mean = sapply(chains, mean)), 3)</code></pre>
+<pre><code>##              [,1]  [,2]  [,3]
+## step_sd     0.005 0.100 3.000
+## accept_rate 0.871 0.591 0.042
+## post_mean   0.383 0.733 0.697</code></pre>
+<blockquote>
+<p><strong>Question:</strong> The chain with the smallest jumps accepted 87% of its proposals; the one with the largest accepted 4%. A labmate says the first chain is the best, since nearly every proposal was accepted. Which chain would you trust, and what would you check?</p>
+</blockquote>
+<pre class="r"><code>par(mfrow = c(3, 1), mar = c(4, 4, 1.5, 0.5))
+for (i in seq_along(chains)) {
+  plot(chains[[i]], type = &quot;l&quot;, ylim = c(0, 1), xlab = &quot;Step&quot;, ylab = &quot;p&quot;,
+       main = paste(&quot;step sd =&quot;, step_sds[i]))
+  abline(h = 31 / 42, lty = 2, col = &quot;darkorange&quot;)
+}</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/three-traces-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)</code></pre>
+<p>Things to check in any chain:</p>
+<ul>
+<li><strong>Burn-in.</strong> A chain &quot;remembers&quot; its starting value for a while. The early stretch that trends toward the posterior is the burn-in (Stan calls it warmup); drop it before summarizing.</li>
+<li><strong>Mixing.</strong> A chain that mixes well moves through the whole posterior quickly, so its trace plot looks like random noise around a stable level (a &quot;fuzzy caterpillar&quot;). Tiny jumps creep; huge jumps are mostly rejected, leaving flat stretches. A high acceptance rate is not a quality score.</li>
+<li><strong>Several chains from different starts.</strong> If they have all found the posterior, they should look the same. The <strong>Gelman-Rubin diagnostic</strong>, <span class="math inline">\(\hat{R}\)</span> (R-hat), compares the variation between chains with the variation within them. Values near 1 mean the chains agree; a common rule is <span class="math inline">\(\hat{R} &lt; 1.01\)</span>.</li>
+<li><strong>Effective sample size (ESS).</strong> Successive draws are correlated, so 1,000 steps carry less information than 1,000 independent draws. The ESS is the number of independent draws the chain is worth. It drops as the autocorrelation rises.</li>
+</ul>
+<p>Try these in the widget: change the jump size, drop a burn-in, and turn on three chains to see R-hat.</p>
+<div class="w746" id="mcw">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746 input[type=range]{flex:1;min-width:140px}
+.w746 .val{font-weight:600;min-width:48px}
+.w746 button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 button:hover{background:#eee}
+.w746 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746 canvas{width:100%;height:auto;display:block}
+.w746 .note{font-size:13px;color:var(--ink2);margin-top:4px}
+.w746 .chk{display:flex;align-items:center;gap:6px;color:var(--ink2);font-size:15px}
+</style>
+<div class="row">
+  <label for="mcw-sd">Proposal SD (jump size)</label>
+  <input type="range" id="mcw-sd" min="-2.7" max="0.7" step="0.05" value="-1">
+  <span class="val" id="mcw-sdo"></span>
+</div>
+<div class="row">
+  <label for="mcw-burn">Burn-in to drop</label>
+  <input type="range" id="mcw-burn" min="0" max="500" step="10" value="0">
+  <span class="val" id="mcw-burno"></span>
+</div>
+<div class="row">
+  <span class="chk"><input type="checkbox" id="mcw-three"><label for="mcw-three" style="min-width:0">Three chains (start at 0.05, 0.5, 0.95)</label></span>
+  <button id="mcw-seed">New random numbers</button>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Proposals accepted</div><div class="v" id="mcw-acc"></div></div>
+  <div class="card"><div class="k">Posterior mean (exact 0.738)</div><div class="v" id="mcw-mean"></div></div>
+  <div class="card"><div class="k">Effective sample size</div><div class="v" id="mcw-ess"></div></div>
+  <div class="card"><div class="k">R-hat (three chains)</div><div class="v" id="mcw-rhat"></div></div>
+</div>
+<canvas id="mcw-cv" width="680" height="420" role="img" aria-label="Top: trace plot of the chain. Bottom: histogram of the kept draws with the exact posterior curve."></canvas>
+<div class="note">Germination trial: 30 of 40 seeds, flat prior, so the exact posterior is Beta(31, 11). Each chain runs 1,000 steps; one chain starts at 0.05. Grey shading marks the burn-in that is dropped. Effective sample size is summed over chains (approximate).</div>
+<script>
+(function(){
+const lp=p=>(p<=0||p>=1)?-Infinity:30*Math.log(p)+10*Math.log(1-p);
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let seed=1;const N=1000,cols=['#2a78d6','#e08a00','#2e9e5b'];
+const cv=document.getElementById('mcw-cv'),ctx=cv.getContext('2d'),W=cv.width;
+const PT={x0:44,x1:670,y0:190,y1:12},PH={x0:44,x1:670,y0:385,y1:236};
+function chain(start,sd,u){
+  const norm=()=>Math.sqrt(-2*Math.log(u()+1e-12))*Math.cos(2*Math.PI*u());
+  let x=start,l=lp(x),acc=0;const out=new Float64Array(N);
+  for(let i=0;i<N;i++){const y=x+sd*norm(),ly=lp(y);if(Math.log(u())<ly-l){x=y;l=ly;acc++;}out[i]=x;}
+  return {x:out,acc:acc/N};
+}
+function ess(x){
+  const n=x.length,m=x.reduce((a,b)=>a+b,0)/n;let v=0;for(const z of x)v+=(z-m)**2;v/=n;
+  if(v<1e-14)return 1;
+  const r=k=>{let s=0;for(let i=0;i<n-k;i++)s+=(x[i]-m)*(x[i+k]-m);return s/n/v;};
+  let tau=-1;for(let k=0;k<n-1;k+=2){const p=r(k)+r(k+1);if(p<=0)break;tau+=2*p;}
+  return n/Math.max(tau,1/n);
+}
+function rhat(cs){
+  const m=cs.length,n=cs[0].length,mu=cs.map(c=>c.reduce((a,b)=>a+b,0)/n),mm=mu.reduce((a,b)=>a+b,0)/m;
+  const Wv=cs.map((c,j)=>c.reduce((a,b)=>a+(b-mu[j])**2,0)/(n-1)).reduce((a,b)=>a+b,0)/m;
+  const B=n*mu.reduce((a,b)=>a+(b-mm)**2,0)/(m-1);
+  return Math.sqrt(((n-1)/n*Wv+B/n)/Wv);
+}
+function update(){
+  const sd=10**(+document.getElementById('mcw-sd').value),burn=+document.getElementById('mcw-burn').value;
+  const three=document.getElementById('mcw-three').checked,starts=three?[0.05,0.5,0.95]:[0.05];
+  document.getElementById('mcw-sdo').textContent=sd<0.01?sd.toFixed(4):sd<1?sd.toFixed(3):sd.toFixed(2);
+  document.getElementById('mcw-burno').textContent=burn;
+  const u=rng(seed),runs=starts.map(s=>chain(s,sd,u)),kept=runs.map(r=>Array.from(r.x.slice(burn)));
+  ctx.clearRect(0,0,W,cv.height);
+  // trace panel
+  const tx=i=>PT.x0+i/N*(PT.x1-PT.x0),ty=p=>PT.y0-p*(PT.y0-PT.y1);
+  ctx.fillStyle='#e6e6e6';ctx.fillRect(PT.x0,PT.y1,tx(burn)-PT.x0,PT.y0-PT.y1);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(PT.x0,PT.y1,PT.x1-PT.x0,PT.y0-PT.y1);
+  ctx.setLineDash([5,4]);ctx.strokeStyle='#c0392b';ctx.beginPath();ctx.moveTo(PT.x0,ty(31/42));ctx.lineTo(PT.x1,ty(31/42));ctx.stroke();ctx.setLineDash([]);
+  runs.forEach((r,j)=>{ctx.strokeStyle=cols[j];ctx.lineWidth=1.2;ctx.beginPath();for(let i=0;i<N;i++){i?ctx.lineTo(tx(i),ty(r.x[i])):ctx.moveTo(tx(i),ty(r.x[i]));}ctx.stroke();});
+  ctx.fillStyle='#555';ctx.font='12px sans-serif';ctx.textAlign='right';
+  [0,0.5,1].forEach(p=>ctx.fillText(p,PT.x0-6,ty(p)+4));
+  ctx.textAlign='center';[0,250,500,750,1000].forEach(i=>ctx.fillText(i,tx(i),PT.y0+15));
+  ctx.fillText('step',(PT.x0+PT.x1)/2,PT.y0+30);
+  ctx.save();ctx.translate(14,(PT.y0+PT.y1)/2);ctx.rotate(-Math.PI/2);ctx.fillText('p',0,0);ctx.restore();
+  // histogram panel
+  const all=[].concat(...kept),nb=40,bw=1/nb,cnt=new Array(nb).fill(0);
+  all.forEach(p=>{const b=Math.min(nb-1,Math.floor(p/bw));if(b>=0)cnt[b]++;});
+  const dens=[];let z=0;for(let i=0;i<=200;i++){const p=i/200;const d=Math.exp(lp(p)-lp(30/40));dens.push(d);z+=d/200;}
+  const hd=cnt.map(c=>c/all.length/bw),dd=dens.map(d=>d/z),mx=Math.max(...hd,...dd);
+  const hx=p=>PH.x0+p*(PH.x1-PH.x0),hy=v=>PH.y0-v/mx*(PH.y0-PH.y1);
+  ctx.strokeStyle='#999';ctx.strokeRect(PH.x0,PH.y1,PH.x1-PH.x0,PH.y0-PH.y1);
+  ctx.fillStyle='rgba(42,120,214,0.5)';
+  for(let b=0;b<nb;b++)ctx.fillRect(hx(b*bw)+1,hy(hd[b]),hx(bw)-hx(0)-2,PH.y0-hy(hd[b]));
+  ctx.strokeStyle='#c0392b';ctx.lineWidth=2.5;ctx.beginPath();dd.forEach((d,i)=>{i?ctx.lineTo(hx(i/200),hy(d)):ctx.moveTo(hx(0),hy(d));});ctx.stroke();
+  ctx.fillStyle='#555';ctx.textAlign='center';[0,0.25,0.5,0.75,1].forEach(p=>ctx.fillText(p,hx(p),PH.y0+15));
+  ctx.fillText('germination probability, p (kept draws vs. exact posterior)',(PH.x0+PH.x1)/2,PH.y0+30);
+  // cards
+  const acc=runs.reduce((a,r)=>a+r.acc,0)/runs.length;
+  document.getElementById('mcw-acc').textContent=Math.round(100*acc)+'%';
+  document.getElementById('mcw-mean').textContent=(all.reduce((a,b)=>a+b,0)/all.length).toFixed(3);
+  document.getElementById('mcw-ess').textContent=Math.round(kept.reduce((a,k)=>a+ess(k),0));
+  document.getElementById('mcw-rhat').textContent=three?rhat(kept).toFixed(2):'(one chain)';
+}
+['mcw-sd','mcw-burn','mcw-three'].forEach(id=>document.getElementById(id).addEventListener('input',update));
+document.getElementById('mcw-seed').addEventListener('click',()=>{seed++;update();});
+update();
+})();
+</script>
+</div>
+<p>The autocorrelation function shows how quickly a chain forgets where it was. Compare the well-tuned germination chain with the myxomatosis chain:</p>
+<pre class="r"><code>par(mfrow = c(1, 2))
+acf(chain_germ[-(1:500)], lag.max = 50, main = &quot;Germination, step sd 0.1&quot;)
+acf(chain_myxo[-(1:2000), &quot;shape&quot;], lag.max = 500, main = &quot;Myxomatosis shape&quot;)</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/acf-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))
+
+library(coda)
+c(germination = effectiveSize(chain_germ[-(1:500)]),
+  myxo_shape = effectiveSize(chain_myxo[-(1:2000), &quot;shape&quot;]))</code></pre>
+<pre><code>## germination.var1  myxo_shape.var1 
+##        913.59262         42.75732</code></pre>
+<p><strong>Thinning</strong> (keeping every 5th or 10th draw) makes the kept draws less correlated, but it throws information away: the thinned chain has fewer effective draws, not more. Thin to save memory or disk space, not to improve estimates.</p>
+</div>
+<div id="random-walks" class="section level2">
+<h2>2. Why random walks struggle</h2>
+<p>The myxomatosis chain kept 18,000 steps but is worth only about 43 independent draws of shape. The problem is the shape of the posterior: a long, narrow, tilted ridge.</p>
+<ul>
+<li>Jumps must be small enough to stay inside the <em>narrow</em> direction, so progress along the <em>long</em> direction is slow.</li>
+<li>A random walk covers distance only in proportion to <span class="math inline">\(\sqrt{\text{number of steps}}\)</span>.</li>
+<li>With many parameters it gets worse: almost every random direction points uphill.</li>
+</ul>
+<p>A simple test case: two parameters, each Normal(0, 1), with correlation <span class="math inline">\(\rho = 0.95\)</span>.</p>
+<pre class="r"><code>rho &lt;- 0.95
+sigma_inv &lt;- solve(matrix(c(1, rho, rho, 1), 2))
+log_post_bvn &lt;- function(p) -0.5 * drop(t(p) %*% sigma_inv %*% p)
+grad_bvn &lt;- function(p) -drop(sigma_inv %*% p)   # gradient of the log posterior
+
+# contours of the target, for the background of the plots
+plot_bvn &lt;- function(main) {
+  g &lt;- seq(-3, 3, length.out = 100)
+  z &lt;- outer(g, g, Vectorize(function(a, b) log_post_bvn(c(a, b))))
+  contour(g, g, z, levels = c(-0.5, -2, -4.5), drawlabels = FALSE, col = &quot;grey60&quot;,
+          xlab = expression(theta[1]), ylab = expression(theta[2]), main = main)
+}
+
+set.seed(3)
+rw &lt;- metropolis(log_post_bvn, start = c(-2, -2), step_sd = 0.25, n_steps = 200)
+effectiveSize(rw[, 1])</code></pre>
+<pre><code>##     var1 
+## 6.022575</code></pre>
+<p>(<code>drop()</code> turns the 1 <span class="math inline">\(\times\)</span> 1 and 2 <span class="math inline">\(\times\)</span> 1 matrices that <code>%*%</code> returns into a plain number and a plain vector.)</p>
+<p><strong>Gibbs sampling.</strong> The first widely used Bayesian software, BUGS (Bayesian inference Using Gibbs Sampling) and later JAGS, updates one parameter at a time, drawing it from its <strong>full conditional</strong> distribution: its posterior given the current values of all the other parameters. With conjugate priors those conditionals have known forms, so each draw is exact and nothing is rejected. (When they don't, the software substitutes a Metropolis-type step.) For our target, each conditional is normal: <span class="math inline">\(\theta_1 \mid \theta_2 \sim \text{Normal}(\rho\,\theta_2, \sqrt{1 - \rho^2})\)</span>.</p>
+<pre class="r"><code># Gibbs sampler: draw each parameter in turn from its conditional distribution
+gibbs &lt;- function(start, rho, n_steps) {
+  chain &lt;- matrix(NA, n_steps, 2)
+  x &lt;- start
+  for (i in seq_len(n_steps)) {
+    x[1] &lt;- rnorm(1, rho * x[2], sqrt(1 - rho^2))
+    x[2] &lt;- rnorm(1, rho * x[1], sqrt(1 - rho^2))
+    chain[i, ] &lt;- x
+  }
+  chain
+}
+
+set.seed(3)
+gb &lt;- gibbs(c(-2, -2), rho, 200)
+effectiveSize(gb[, 1])</code></pre>
+<pre><code>##     var1 
+## 14.10493</code></pre>
+<pre class="r"><code>par(mfrow = c(1, 2))
+plot_bvn(&quot;Random-walk Metropolis, 200 steps&quot;)
+lines(rw, col = &quot;steelblue&quot;)
+plot_bvn(&quot;Gibbs, 200 sweeps&quot;)
+# each sweep moves horizontally (theta1 update), then vertically (theta2 update)
+gb_path &lt;- cbind(rep(gb[, 1], each = 2), as.vector(rbind(c(-2, gb[-200, 2]), gb[, 2])))
+lines(rbind(c(-2, -2), gb_path), col = &quot;steelblue&quot;)</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/rw-gibbs-plot-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))</code></pre>
+<p>Gibbs never rejects a draw, but each move goes parallel to one axis, and only as far as the conditional distribution allows. With correlated parameters the conditionals are narrow (SD <span class="math inline">\(\sqrt{1 - \rho^2}\)</span> as a share of the marginal SD), so the chain zigzags up the ridge in short steps:</p>
+<pre class="r"><code>rhos &lt;- c(0.5, 0.95, 0.99)
+round(data.frame(rho = rhos, conditional_sd = sqrt(1 - rhos^2),
+                 lag1_autocorrelation = rhos^2,
+                 ess_per_sweep = (1 - rhos^2) / (1 + rhos^2)), 3)</code></pre>
+<pre><code>##    rho conditional_sd lag1_autocorrelation ess_per_sweep
+## 1 0.50          0.866                0.250         0.600
+## 2 0.95          0.312                0.902         0.051
+## 3 0.99          0.141                0.980         0.010</code></pre>
+<p>(For this target each Gibbs sweep's <span class="math inline">\(\theta_1\)</span> chain is autocorrelated with coefficient <span class="math inline">\(\rho^2\)</span>, which gives the last two columns.) Gibbs works well when parameters are close to independent, however many there are, and poorly when they are strongly correlated. The correlation, not the number of parameters, is what matters.</p>
+</div>
+<div id="hmc-algorithm" class="section level2">
+<h2>3. Hamiltonian Monte Carlo</h2>
+<p>HMC uses the <em>gradient</em> (slope) of the log posterior to make long, well-aimed proposals. Picture the negative log posterior as a bowl, so &quot;downhill&quot; means toward more plausible parameter values, and slide a frictionless puck across it:</p>
+<p><img src="Week9_MCMC_files/figure-html/puck-1.png" width="480" style="display: block; margin: auto;" /></p>
+<ol style="list-style-type: decimal">
+<li>Give the puck a random <strong>kick</strong>: a momentum <span class="math inline">\(m\)</span> drawn from a normal distribution.</li>
+<li>Let it <strong>slide</strong> for <span class="math inline">\(L\)</span> small time steps of size <span class="math inline">\(\epsilon\)</span>. Going downhill it speeds up, converting potential energy into kinetic energy; going uphill it slows, and eventually turns back. Each step uses the gradient to update the momentum (&quot;leapfrog&quot; steps).</li>
+<li>Where it stops is the <strong>proposal</strong>. Accept it with the Metropolis rule applied to the total energy, <span class="math inline">\(H(\theta, m) = -\log P(\theta \mid y) + \tfrac12 \sum m^2\)</span>: accept with probability <span class="math inline">\(\min(1, e^{-\Delta H})\)</span>.</li>
+</ol>
+<p>Exact physics would conserve <span class="math inline">\(H\)</span>, so every proposal would be accepted. The leapfrog steps are approximate, and the accept/reject step corrects for their error; with a small <span class="math inline">\(\epsilon\)</span> nearly everything is accepted. The momentum is drawn fresh each iteration and then discarded, so the recorded draws come from the posterior alone. HMC is still a Metropolis algorithm. What's new is a proposal that travels far and is still likely to be accepted.</p>
+<pre class="r"><code># one HMC step: random momentum kick, L leapfrog steps along the gradient, then accept/reject
+hmc_step &lt;- function(p, log_post, grad, eps, L) {
+  m &lt;- rnorm(length(p))
+  p_new &lt;- p
+  m_new &lt;- m
+  path &lt;- matrix(p, nrow = 1)
+  g &lt;- grad(p_new)
+  for (i in seq_len(L)) {
+    m_new &lt;- m_new + 0.5 * eps * g     # half step for momentum
+    p_new &lt;- p_new + eps * m_new       # full step for position
+    g &lt;- grad(p_new)                   # one new gradient per step; reused by the next half step
+    m_new &lt;- m_new + 0.5 * eps * g     # half step for momentum
+    path &lt;- rbind(path, p_new)
+  }
+  # total energy = -log posterior + kinetic energy m^2 / 2; accept w.p. exp(-change)
+  log_accept &lt;- log_post(p_new) - 0.5 * sum(m_new^2) - log_post(p) + 0.5 * sum(m^2)
+  list(p = if (log(runif(1)) &lt; log_accept) p_new else p, path = path)
+}
+
+# run n HMC steps; keep the first few trajectories for plotting
+hmc &lt;- function(start, log_post, grad, eps, L, n_steps, n_paths = 5) {
+  chain &lt;- matrix(NA, n_steps, length(start))
+  paths &lt;- list()
+  p &lt;- start
+  for (i in seq_len(n_steps)) {
+    s &lt;- hmc_step(p, log_post, grad, eps, L)
+    p &lt;- s$p
+    chain[i, ] &lt;- p
+    if (i &lt;= n_paths) paths[[i]] &lt;- s$path
+  }
+  list(chain = chain, paths = paths)
+}
+
+set.seed(3)
+hm &lt;- hmc(c(-2, -2), log_post_bvn, grad_bvn, eps = 0.1, L = 10, n_steps = 200)
+c(random_walk = effectiveSize(rw[, 1]), gibbs = effectiveSize(gb[, 1]),
+  hmc = effectiveSize(hm$chain[, 1]))</code></pre>
+<pre><code>## random_walk.var1       gibbs.var1         hmc.var1 
+##         6.022575        14.104926       182.611011</code></pre>
+<pre class="r"><code># side by side: random walk vs. HMC, same number of iterations
+par(mfrow = c(1, 2))
+plot_bvn(&quot;Random walk&quot;)
+lines(rw, col = &quot;steelblue&quot;)
+plot_bvn(&quot;HMC (orange: first five trajectories)&quot;)
+points(hm$chain, pch = 16, cex = 0.5)
+for (pa in hm$paths) lines(pa, col = &quot;darkorange&quot;, lwd = 2)</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/rw-hmc-plot-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))</code></pre>
+<blockquote>
+<p><strong>Question:</strong> Each HMC iteration here costs 11 gradient evaluations (one per leapfrog step, plus one at the start), against one density evaluation per random-walk step. Is it still worth it?</p>
+</blockquote>
+<p>Compare all three samplers, and change the correlation, in the widget:</p>
+<div class="w746" id="spw">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746 input[type=range]{flex:1;min-width:140px}
+.w746 .val{font-weight:600;min-width:48px}
+.w746 button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 button:hover{background:#eee}
+.w746 .seg{display:flex;gap:0}
+.w746 .seg button{border-radius:0;margin-left:-1px}
+.w746 .seg button:first-child{border-radius:6px 0 0 6px}
+.w746 .seg button:last-child{border-radius:0 6px 6px 0}
+.w746 .seg button.on{background:#2a78d6;color:#fff;border-color:#2a78d6}
+.w746 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+#spw-ess{font-size:16px}
+.w746 canvas{width:100%;height:auto;display:block}
+.w746 .note{font-size:13px;color:var(--ink2);margin-top:4px}
+.w746 .dim{opacity:0.4}
+</style>
+<div class="row">
+  <div class="seg" id="spw-seg">
+    <button data-s="rw" class="on">Random walk</button><button data-s="gibbs">Gibbs</button><button data-s="hmc">HMC</button>
+  </div>
+  <button id="spw-seed">New random numbers</button>
+</div>
+<div class="row">
+  <label for="spw-rho">Correlation &rho;</label>
+  <input type="range" id="spw-rho" min="0" max="0.99" step="0.01" value="0.95">
+  <span class="val" id="spw-rhoo"></span>
+</div>
+<div class="row" id="spw-sdrow">
+  <label for="spw-sd" id="spw-sdlab">Proposal SD</label>
+  <input type="range" id="spw-sd" min="-1.7" max="0.3" step="0.05" value="-0.6">
+  <span class="val" id="spw-sdo"></span>
+</div>
+<div class="row" id="spw-lrow">
+  <label for="spw-l">Leapfrog steps L</label>
+  <input type="range" id="spw-l" min="1" max="40" step="1" value="10">
+  <span class="val" id="spw-lo"></span>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Accepted</div><div class="v" id="spw-acc"></div></div>
+  <div class="card"><div class="k">Lag-1 autocorrelation (&theta;<sub>1</sub>)</div><div class="v" id="spw-ac"></div></div>
+  <div class="card"><div class="k">Effective size of 200 (&theta;<sub>1</sub>)</div><div class="v" id="spw-ess"></div></div>
+  <div class="card"><div class="k">Density evaluations</div><div class="v" id="spw-ev"></div></div>
+</div>
+<canvas id="spw-cv" width="680" height="330" role="img" aria-label="Left: the sampler's path over a tilted bivariate normal. Right: trace of the first parameter."></canvas>
+<div class="note">Target: two parameters, each Normal(0, 1), with correlation &rho;. 200 iterations from (&minus;2, &minus;2). Gibbs draws each parameter in turn from its conditional distribution, so its path moves along the axes. Orange lines: the last five HMC trajectories. Density evaluations count gradients for HMC (L + 1 per iteration).</div>
+<script>
+(function(){
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let seed=3,sampler='rw';const N=200;
+const cv=document.getElementById('spw-cv'),ctx=cv.getContext('2d'),W=cv.width;
+const P={x0:40,x1:330,y0:300,y1:10},T={x0:385,x1:670,y0:300,y1:10},R=3.2;
+const sx=x=>P.x0+(x+R)/(2*R)*(P.x1-P.x0),sy=y=>P.y0-(y+R)/(2*R)*(P.y0-P.y1);
+function ess(x){
+  const n=x.length,m=x.reduce((a,b)=>a+b,0)/n;let v=0;for(const z of x)v+=(z-m)**2;v/=n;if(v<1e-14)return 1;
+  const r=k=>{let s=0;for(let i=0;i<n-k;i++)s+=(x[i]-m)*(x[i+k]-m);return s/n/v;};
+  let tau=-1;for(let k=0;k<n-1;k+=2){const p=r(k)+r(k+1);if(p<=0)break;tau+=2*p;}return n/Math.max(tau,1/n);
+}
+function lag1(x){const n=x.length,m=x.reduce((a,b)=>a+b,0)/n;let a=0,b=0;for(let i=0;i<n;i++){b+=(x[i]-m)**2;if(i)a+=(x[i]-m)*(x[i-1]-m);}return a/b;}
+function run(){
+  const rho=+document.getElementById('spw-rho').value,s=10**(+document.getElementById('spw-sd').value),L=+document.getElementById('spw-l').value;
+  const u=rng(seed),norm=()=>Math.sqrt(-2*Math.log(u()+1e-12))*Math.cos(2*Math.PI*u());
+  const d=1-rho*rho,lp=p=>-(p[0]*p[0]-2*rho*p[0]*p[1]+p[1]*p[1])/(2*d);
+  const gr=p=>[-(p[0]-rho*p[1])/d,-(p[1]-rho*p[0])/d];
+  let x=[-2,-2],acc=0,ev=0;const path=[x.slice()],chain=[],trajs=[];
+  for(let i=0;i<N;i++){
+    if(sampler==='rw'){const y=[x[0]+s*norm(),x[1]+s*norm()];ev++;if(Math.log(u())<lp(y)-lp(x)){x=y;acc++;}path.push(x.slice());}
+    else if(sampler==='gibbs'){const sd=Math.sqrt(d);x=[rho*x[1]+sd*norm(),x[1]];path.push(x.slice());x=[x[0],rho*x[0]+sd*norm()];path.push(x.slice());acc++;}
+    else{let q=x.slice(),m=[norm(),norm()];const m0=m.slice();let g=gr(q);ev++;const tr=[q.slice()];
+      for(let j=0;j<L;j++){m=[m[0]+0.5*s*g[0],m[1]+0.5*s*g[1]];q=[q[0]+s*m[0],q[1]+s*m[1]];g=gr(q);ev++;m=[m[0]+0.5*s*g[0],m[1]+0.5*s*g[1]];tr.push(q.slice());}
+      const la=lp(q)-0.5*(m[0]**2+m[1]**2)-lp(x)+0.5*(m0[0]**2+m0[1]**2);
+      if(Math.log(u())<la){x=q;acc++;}trajs.push(tr);path.push(x.slice());}
+    chain.push(x[0]);
+  }
+  draw(rho,path,chain,trajs);
+  document.getElementById('spw-acc').textContent=Math.round(100*acc/N)+'%';
+  document.getElementById('spw-ac').textContent=lag1(chain).toFixed(2);
+  const e=Math.round(ess(chain));
+  document.getElementById('spw-ess').textContent=e>N?e+' (above 200: draws alternate sides)':e;
+  document.getElementById('spw-ev').textContent=sampler==='gibbs'?'(exact draws)':ev.toLocaleString();
+}
+function draw(rho,path,chain,trajs){
+  ctx.clearRect(0,0,W,cv.height);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(P.x0,P.y1,P.x1-P.x0,P.y0-P.y1);ctx.strokeRect(T.x0,T.y1,T.x1-T.x0,T.y0-T.y1);
+  ctx.save();ctx.beginPath();ctx.rect(P.x0,P.y1,P.x1-P.x0,P.y0-P.y1);ctx.clip();
+  // contours: ellipses at 1, 2, 3 SD (eigenvectors at 45 degrees)
+  const a=Math.sqrt(1+rho),b=Math.sqrt(Math.max(1-rho,1e-4));
+  [1,2,3].forEach(k=>{ctx.strokeStyle='#bbb';ctx.beginPath();for(let i=0;i<=120;i++){const t=i/120*2*Math.PI,u=k*a*Math.cos(t),v=k*b*Math.sin(t);
+    const x=(u-v)/Math.SQRT2,y=(u+v)/Math.SQRT2;i?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y));}ctx.stroke();});
+  trajs.slice(-5).forEach(tr=>{ctx.strokeStyle='#e08a00';ctx.lineWidth=2;ctx.beginPath();tr.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.stroke();});
+  ctx.strokeStyle='rgba(42,120,214,0.75)';ctx.lineWidth=1;ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.stroke();
+  ctx.fillStyle='#2a78d6';path.forEach(p=>{ctx.beginPath();ctx.arc(sx(p[0]),sy(p[1]),1.8,0,2*Math.PI);ctx.fill();});
+  ctx.fillStyle='#222';ctx.beginPath();ctx.arc(sx(-2),sy(-2),4,0,2*Math.PI);ctx.fill();
+  ctx.restore();
+  const tx=i=>T.x0+i/N*(T.x1-T.x0),ty=v=>T.y0-(v+R)/(2*R)*(T.y0-T.y1);
+  ctx.strokeStyle='#ddd';ctx.beginPath();ctx.moveTo(T.x0,ty(0));ctx.lineTo(T.x1,ty(0));ctx.stroke();
+  ctx.strokeStyle='#2a78d6';ctx.lineWidth=1.2;ctx.beginPath();chain.forEach((v,i)=>i?ctx.lineTo(tx(i),ty(v)):ctx.moveTo(tx(i),ty(v)));ctx.stroke();
+  ctx.fillStyle='#555';ctx.font='12px sans-serif';ctx.textAlign='center';
+  [-3,0,3].forEach(v=>ctx.fillText(v,sx(v),P.y0+15));
+  ctx.fillText('θ1',(P.x0+P.x1)/2,P.y0+28);ctx.fillText('iteration',(T.x0+T.x1)/2,T.y0+28);
+  [0,100,200].forEach(i=>ctx.fillText(i,tx(i),T.y0+15));
+  ctx.textAlign='right';[-3,0,3].forEach(v=>{ctx.fillText(v,P.x0-6,sy(v)+4);ctx.fillText(v,T.x0-6,ty(v)+4);});
+  ctx.save();ctx.translate(12,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('θ2',0,0);ctx.restore();
+  ctx.save();ctx.translate(T.x0-28,(T.y0+T.y1)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('θ1',0,0);ctx.restore();
+}
+function labels(){
+  const s=10**(+document.getElementById('spw-sd').value);
+  document.getElementById('spw-rhoo').textContent=(+document.getElementById('spw-rho').value).toFixed(2);
+  document.getElementById('spw-sdo').textContent=s.toFixed(3);
+  document.getElementById('spw-lo').textContent=document.getElementById('spw-l').value;
+  document.getElementById('spw-sdlab').textContent=sampler==='hmc'?'Step size ε':'Proposal SD';
+  document.getElementById('spw-sdrow').classList.toggle('dim',sampler==='gibbs');
+  document.getElementById('spw-lrow').classList.toggle('dim',sampler!=='hmc');
+}
+document.querySelectorAll('#spw-seg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#spw-seg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');sampler=b.dataset.s;
+  document.getElementById('spw-sd').value=sampler==='hmc'?-1:-0.6;labels();run();}));
+['spw-rho','spw-sd','spw-l'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{labels();run();}));
+document.getElementById('spw-seed').addEventListener('click',()=>{seed++;run();});
+labels();run();
+})();
+</script>
+</div>
+<p>A few details matter in practice:</p>
+<ul>
+<li><strong>Step size <span class="math inline">\(\epsilon\)</span> and number of steps <span class="math inline">\(L\)</span>.</strong> Too large an <span class="math inline">\(\epsilon\)</span> overshoots the curve of the surface, so proposals get rejected, or the trajectory blows up. Too small an <span class="math inline">\(\epsilon\)</span> wastes gradient evaluations. Too few steps and HMC behaves like a random walk; too many and the trajectory loops back toward where it started.</li>
+<li><strong>NUTS.</strong> Stan's default sampler, the No-U-Turn Sampler, tunes <span class="math inline">\(\epsilon\)</span> during warmup and picks <span class="math inline">\(L\)</span> separately for each iteration: it keeps doubling the trajectory until the two ends start to turn back toward each other (a U-turn), then draws the next point from along the trajectory.</li>
+<li><strong>The mass matrix.</strong> During warmup Stan also estimates each parameter's posterior scale and rescales the parameters so one <span class="math inline">\(\epsilon\)</span> works in every direction. By default this rescaling is diagonal: it fixes differences in scale but not correlation, which the trajectories handle by bending (at the cost of more steps).</li>
+<li><strong>Gradients for free.</strong> Stan computes the gradient from your model code by automatic differentiation: it applies the chain rule to each step of the calculation, so the gradients are exact and you never derive them by hand.</li>
+</ul>
+</div>
+<div id="stan" class="section level2">
+<h2>4. Stan: the myxomatosis model</h2>
+<p>Stan is a language for writing down a model; it compiles the model to C++ and samples it with NUTS. We run it from R with the <code>cmdstanr</code> package (setup instructions: <a href="lecture_notes/NOTES_Reference_CmdstanrQuickStart.pdf">cmdstanr quick start</a>). Here is the Gamma model for the myxomatosis titers, with flat priors on the positive values as before:</p>
+<pre class="r"><code>library(cmdstanr)
+myxo_code &lt;- &quot;
+data {
+  int&lt;lower=0&gt; N;
+  vector&lt;lower=0&gt;[N] titer;
+}
+parameters {
+  real&lt;lower=0&gt; shape;
+  real&lt;lower=0&gt; scale;
+}
+model {
+  titer ~ gamma(shape, 1 / scale);  // Stan&#39;s gamma uses shape and rate
+}
+&quot;
+myxo_model &lt;- cmdstan_model(write_stan_file(myxo_code))   # compiles to C++ (slow, once)
+fit_stan &lt;- myxo_model$sample(data = list(N = length(titer), titer = titer),
+                              chains = 4, parallel_chains = 4, seed = 746)</code></pre>
+<p>A Stan program is made of blocks, always in this order. This model uses three; all are optional in principle.</p>
+<table>
+<colgroup>
+<col width="27%" />
+<col width="72%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Block</th>
+<th align="left">What goes there</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left"><code>functions</code></td>
+<td align="left">your own functions</td>
+</tr>
+<tr class="even">
+<td align="left"><code>data</code></td>
+<td align="left">declarations of the inputs passed from R</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>transformed data</code></td>
+<td align="left">quantities computed from the data only</td>
+</tr>
+<tr class="even">
+<td align="left"><code>parameters</code></td>
+<td align="left">what the sampler explores, with any bounds (<code>&lt;lower=0&gt;</code>)</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>transformed parameters</code></td>
+<td align="left">quantities computed from parameters, saved with each draw</td>
+</tr>
+<tr class="even">
+<td align="left"><code>model</code></td>
+<td align="left">priors and likelihood (the log posterior)</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>generated quantities</code></td>
+<td align="left">anything computed once per saved draw (derived quantities, simulated data)</td>
+</tr>
+</tbody>
+</table>
+<p>Every variable is declared with a type, lines end in <code>;</code>, and comments start with <code>//</code>. Each <code>~</code> statement adds a log density to the log posterior (Stan calls the running total <code>target</code>), so a model block is a log posterior written out term by term. With no prior statement, a parameter declared <code>&lt;lower=0&gt;</code> gets a flat prior on the positive values.</p>
+<pre class="r"><code>fit_stan$summary()</code></pre>
+<pre><code>## # A tibble: 3 × 10
+##   variable    mean  median      sd     mad       q5     q95  rhat ess_bulk
+##   &lt;chr&gt;      &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;    &lt;dbl&gt;   &lt;dbl&gt; &lt;dbl&gt;    &lt;dbl&gt;
+## 1 lp__     -36.8   -36.4    1.04    0.716  -38.9    -35.8    1.00     866.
+## 2 shape     48.1    47.4   13.2    13.2     27.9     71.0    1.00     452.
+## 3 scale      0.156   0.146  0.0489  0.0405   0.0978   0.249  1.00     449.
+## # ℹ 1 more variable: ess_tail &lt;dbl&gt;</code></pre>
+<pre class="r"><code>fit_stan$diagnostic_summary()</code></pre>
+<pre><code>## $num_divergent
+## [1] 0 0 0 0
+## 
+## $num_max_treedepth
+## [1] 0 0 0 0
+## 
+## $ebfmi
+## [1] 0.8580162 1.1393600 0.9712159 1.1187068</code></pre>
+<pre class="r"><code># Stan&#39;s 4,000 draws on the NLL surface
+draws &lt;- fit_stan$draws(c(&quot;shape&quot;, &quot;scale&quot;), format = &quot;draws_matrix&quot;)
+plot_surface()
+points(draws[, &quot;shape&quot;], draws[, &quot;scale&quot;], pch = 16, cex = 0.3,
+       col = adjustcolor(&quot;darkorange&quot;, 0.4))</code></pre>
+<p><img src="Week9_MCMC_files/figure-html/stan-draws-1.png" width="576" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># effective draws: 18,000 kept Metropolis steps vs. Stan&#39;s 4,000 draws
+keep &lt;- chain_myxo[-(1:2000), ]
+rbind(metropolis = effectiveSize(keep),
+      stan = fit_stan$summary(c(&quot;shape&quot;, &quot;scale&quot;))$ess_bulk)</code></pre>
+<pre><code>##                shape     scale
+## metropolis  42.75732  43.43315
+## stan       451.90083 448.69306</code></pre>
+<pre class="r"><code># 95% credible intervals for shape
+rbind(metropolis = quantile(keep[, 1], c(0.025, 0.975)),
+      stan = quantile(draws[, &quot;shape&quot;], c(0.025, 0.975)))</code></pre>
+<pre><code>##                2.5%    97.5%
+## metropolis 28.97286 81.46669
+## stan       24.96977 75.96623</code></pre>
+<p>Four chains of 1,000 draws each (after 1,000 warmup draws per chain) give <span class="math inline">\(\hat{R}\)</span> = 1.00 and an effective sample size of about 452 for shape, compared with 43 from 18,000 Metropolis steps. The draws fill the same banana.</p>
+</div>
+<div id="hmc-failures" class="section level2">
+<h2>5. When HMC struggles</h2>
+<ul>
+<li><strong>Divergent transitions.</strong> Where the posterior curves sharply, the leapfrog steps overshoot and the energy blows up. Stan flags these as divergences. Don't ignore them: they mark regions the sampler can't reach, so the draws may be biased. Raising <code>adapt_delta</code> (for example to 0.95) forces a smaller <span class="math inline">\(\epsilon\)</span>; if that doesn't help, change the model's parameterization.</li>
+<li><strong>Discrete parameters.</strong> HMC needs gradients, so Stan can't sample discrete unknowns (for example, whether a site is truly occupied). They must be summed out of the likelihood first. JAGS and NIMBLE handle them directly.</li>
+<li><strong>Several separate modes.</strong> HMC explores locally; well-separated valleys can trap it. Run several chains from different starts.</li>
+<li><strong>Overhead.</strong> Compiling, and a C++ toolchain to install. For a two-parameter model, any sampler works.</li>
+</ul>
+<p>The classic source of divergences is the &quot;funnel&quot; in hierarchical models, where a group-level standard deviation <span class="math inline">\(\sigma\)</span> controls how far each group effect <span class="math inline">\(\tau\)</span> can wander from 0. When <span class="math inline">\(\sigma\)</span> is small, every <span class="math inline">\(\tau\)</span> is squeezed near 0, so the posterior is wide at the top and very narrow at the neck. A step size that suits the top overshoots in the neck. The usual fix is the <strong>non-centered</strong> parameterization: sample <span class="math inline">\(Z \sim \text{Normal}(0, 1)\)</span> and compute <span class="math inline">\(\tau = \sigma Z\)</span>. It describes the same model, but the sampler explores a shape with no neck:</p>
+<p><img src="Week9_MCMC_files/figure-html/funnel-1.png" width="864" style="display: block; margin: auto;" /></p>
+<p><strong>Stan or JAGS?</strong> Monnahan, Thorson &amp; Branch (2017, <em>Methods in Ecology and Evolution</em> 8:339-348) compared them on population models from 5 to about 1,100 parameters. For small, simple models the choice made little difference. Stan's advantage grew with the number of parameters and how correlated they were, up to orders of magnitude, and it depended on using the non-centered form for random effects. JAGS remains handy for quick models and for models with discrete latent states.</p>
+</div>
+<div id="discussion" class="section level2">
+<h2>Discussion</h2>
+<ol style="list-style-type: decimal">
+<li>For the myxomatosis model, the Metropolis sampler took 20,000 steps (about 0.11 seconds) and gave about 43 effective draws of shape. Stan needed time to compile, then 0.3 seconds to sample, and gave about 452 effective draws from 4,000. A labmate says Stan is overkill: &quot;my sampler was faster.&quot; Who's right?</li>
+<li>For your own research, when would you reach for Stan, and when might JAGS, NIMBLE, or a hand-written sampler be the better choice?</li>
+<li>A Gibbs sampler never rejects a draw. On the correlated example above it was worth only 14 independent draws out of 200. How can a sampler that accepts everything be so inefficient?</li>
+</ol>
+<p><strong>More to explore:</strong> an <a href="https://chi-feng.github.io/mcmc-demo/app.html">interactive gallery of MCMC samplers</a> (Chi Feng), the <a href="https://mc-stan.org/docs/">Stan documentation</a>, and Betancourt's <a href="https://arxiv.org/abs/1701.02434">conceptual introduction to HMC</a>.</p>
+</div>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

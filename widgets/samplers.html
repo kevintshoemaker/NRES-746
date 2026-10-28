@@ -1,0 +1,129 @@
+<div class="w746" id="spw">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746 input[type=range]{flex:1;min-width:140px}
+.w746 .val{font-weight:600;min-width:48px}
+.w746 button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 button:hover{background:#eee}
+.w746 .seg{display:flex;gap:0}
+.w746 .seg button{border-radius:0;margin-left:-1px}
+.w746 .seg button:first-child{border-radius:6px 0 0 6px}
+.w746 .seg button:last-child{border-radius:0 6px 6px 0}
+.w746 .seg button.on{background:#2a78d6;color:#fff;border-color:#2a78d6}
+.w746 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+#spw-ess{font-size:16px}
+.w746 canvas{width:100%;height:auto;display:block}
+.w746 .note{font-size:13px;color:var(--ink2);margin-top:4px}
+.w746 .dim{opacity:0.4}
+</style>
+<div class="row">
+  <div class="seg" id="spw-seg">
+    <button data-s="rw" class="on">Random walk</button><button data-s="gibbs">Gibbs</button><button data-s="hmc">HMC</button>
+  </div>
+  <button id="spw-seed">New random numbers</button>
+</div>
+<div class="row">
+  <label for="spw-rho">Correlation &rho;</label>
+  <input type="range" id="spw-rho" min="0" max="0.99" step="0.01" value="0.95">
+  <span class="val" id="spw-rhoo"></span>
+</div>
+<div class="row" id="spw-sdrow">
+  <label for="spw-sd" id="spw-sdlab">Proposal SD</label>
+  <input type="range" id="spw-sd" min="-1.7" max="0.3" step="0.05" value="-0.6">
+  <span class="val" id="spw-sdo"></span>
+</div>
+<div class="row" id="spw-lrow">
+  <label for="spw-l">Leapfrog steps L</label>
+  <input type="range" id="spw-l" min="1" max="40" step="1" value="10">
+  <span class="val" id="spw-lo"></span>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Accepted</div><div class="v" id="spw-acc"></div></div>
+  <div class="card"><div class="k">Lag-1 autocorrelation (&theta;<sub>1</sub>)</div><div class="v" id="spw-ac"></div></div>
+  <div class="card"><div class="k">Effective size of 200 (&theta;<sub>1</sub>)</div><div class="v" id="spw-ess"></div></div>
+  <div class="card"><div class="k">Density evaluations</div><div class="v" id="spw-ev"></div></div>
+</div>
+<canvas id="spw-cv" width="680" height="330" role="img" aria-label="Left: the sampler's path over a tilted bivariate normal. Right: trace of the first parameter."></canvas>
+<div class="note">Target: two parameters, each Normal(0, 1), with correlation &rho;. 200 iterations from (&minus;2, &minus;2). Gibbs draws each parameter in turn from its conditional distribution, so its path moves along the axes. Orange lines: the last five HMC trajectories. Density evaluations count gradients for HMC (L + 1 per iteration).</div>
+<script>
+(function(){
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let seed=3,sampler='rw';const N=200;
+const cv=document.getElementById('spw-cv'),ctx=cv.getContext('2d'),W=cv.width;
+const P={x0:40,x1:330,y0:300,y1:10},T={x0:385,x1:670,y0:300,y1:10},R=3.2;
+const sx=x=>P.x0+(x+R)/(2*R)*(P.x1-P.x0),sy=y=>P.y0-(y+R)/(2*R)*(P.y0-P.y1);
+function ess(x){
+  const n=x.length,m=x.reduce((a,b)=>a+b,0)/n;let v=0;for(const z of x)v+=(z-m)**2;v/=n;if(v<1e-14)return 1;
+  const r=k=>{let s=0;for(let i=0;i<n-k;i++)s+=(x[i]-m)*(x[i+k]-m);return s/n/v;};
+  let tau=-1;for(let k=0;k<n-1;k+=2){const p=r(k)+r(k+1);if(p<=0)break;tau+=2*p;}return n/Math.max(tau,1/n);
+}
+function lag1(x){const n=x.length,m=x.reduce((a,b)=>a+b,0)/n;let a=0,b=0;for(let i=0;i<n;i++){b+=(x[i]-m)**2;if(i)a+=(x[i]-m)*(x[i-1]-m);}return a/b;}
+function run(){
+  const rho=+document.getElementById('spw-rho').value,s=10**(+document.getElementById('spw-sd').value),L=+document.getElementById('spw-l').value;
+  const u=rng(seed),norm=()=>Math.sqrt(-2*Math.log(u()+1e-12))*Math.cos(2*Math.PI*u());
+  const d=1-rho*rho,lp=p=>-(p[0]*p[0]-2*rho*p[0]*p[1]+p[1]*p[1])/(2*d);
+  const gr=p=>[-(p[0]-rho*p[1])/d,-(p[1]-rho*p[0])/d];
+  let x=[-2,-2],acc=0,ev=0;const path=[x.slice()],chain=[],trajs=[];
+  for(let i=0;i<N;i++){
+    if(sampler==='rw'){const y=[x[0]+s*norm(),x[1]+s*norm()];ev++;if(Math.log(u())<lp(y)-lp(x)){x=y;acc++;}path.push(x.slice());}
+    else if(sampler==='gibbs'){const sd=Math.sqrt(d);x=[rho*x[1]+sd*norm(),x[1]];path.push(x.slice());x=[x[0],rho*x[0]+sd*norm()];path.push(x.slice());acc++;}
+    else{let q=x.slice(),m=[norm(),norm()];const m0=m.slice();let g=gr(q);ev++;const tr=[q.slice()];
+      for(let j=0;j<L;j++){m=[m[0]+0.5*s*g[0],m[1]+0.5*s*g[1]];q=[q[0]+s*m[0],q[1]+s*m[1]];g=gr(q);ev++;m=[m[0]+0.5*s*g[0],m[1]+0.5*s*g[1]];tr.push(q.slice());}
+      const la=lp(q)-0.5*(m[0]**2+m[1]**2)-lp(x)+0.5*(m0[0]**2+m0[1]**2);
+      if(Math.log(u())<la){x=q;acc++;}trajs.push(tr);path.push(x.slice());}
+    chain.push(x[0]);
+  }
+  draw(rho,path,chain,trajs);
+  document.getElementById('spw-acc').textContent=Math.round(100*acc/N)+'%';
+  document.getElementById('spw-ac').textContent=lag1(chain).toFixed(2);
+  const e=Math.round(ess(chain));
+  document.getElementById('spw-ess').textContent=e>N?e+' (above 200: draws alternate sides)':e;
+  document.getElementById('spw-ev').textContent=sampler==='gibbs'?'(exact draws)':ev.toLocaleString();
+}
+function draw(rho,path,chain,trajs){
+  ctx.clearRect(0,0,W,cv.height);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(P.x0,P.y1,P.x1-P.x0,P.y0-P.y1);ctx.strokeRect(T.x0,T.y1,T.x1-T.x0,T.y0-T.y1);
+  ctx.save();ctx.beginPath();ctx.rect(P.x0,P.y1,P.x1-P.x0,P.y0-P.y1);ctx.clip();
+  // contours: ellipses at 1, 2, 3 SD (eigenvectors at 45 degrees)
+  const a=Math.sqrt(1+rho),b=Math.sqrt(Math.max(1-rho,1e-4));
+  [1,2,3].forEach(k=>{ctx.strokeStyle='#bbb';ctx.beginPath();for(let i=0;i<=120;i++){const t=i/120*2*Math.PI,u=k*a*Math.cos(t),v=k*b*Math.sin(t);
+    const x=(u-v)/Math.SQRT2,y=(u+v)/Math.SQRT2;i?ctx.lineTo(sx(x),sy(y)):ctx.moveTo(sx(x),sy(y));}ctx.stroke();});
+  trajs.slice(-5).forEach(tr=>{ctx.strokeStyle='#e08a00';ctx.lineWidth=2;ctx.beginPath();tr.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.stroke();});
+  ctx.strokeStyle='rgba(42,120,214,0.75)';ctx.lineWidth=1;ctx.beginPath();path.forEach((p,i)=>i?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1])));ctx.stroke();
+  ctx.fillStyle='#2a78d6';path.forEach(p=>{ctx.beginPath();ctx.arc(sx(p[0]),sy(p[1]),1.8,0,2*Math.PI);ctx.fill();});
+  ctx.fillStyle='#222';ctx.beginPath();ctx.arc(sx(-2),sy(-2),4,0,2*Math.PI);ctx.fill();
+  ctx.restore();
+  const tx=i=>T.x0+i/N*(T.x1-T.x0),ty=v=>T.y0-(v+R)/(2*R)*(T.y0-T.y1);
+  ctx.strokeStyle='#ddd';ctx.beginPath();ctx.moveTo(T.x0,ty(0));ctx.lineTo(T.x1,ty(0));ctx.stroke();
+  ctx.strokeStyle='#2a78d6';ctx.lineWidth=1.2;ctx.beginPath();chain.forEach((v,i)=>i?ctx.lineTo(tx(i),ty(v)):ctx.moveTo(tx(i),ty(v)));ctx.stroke();
+  ctx.fillStyle='#555';ctx.font='12px sans-serif';ctx.textAlign='center';
+  [-3,0,3].forEach(v=>ctx.fillText(v,sx(v),P.y0+15));
+  ctx.fillText('θ1',(P.x0+P.x1)/2,P.y0+28);ctx.fillText('iteration',(T.x0+T.x1)/2,T.y0+28);
+  [0,100,200].forEach(i=>ctx.fillText(i,tx(i),T.y0+15));
+  ctx.textAlign='right';[-3,0,3].forEach(v=>{ctx.fillText(v,P.x0-6,sy(v)+4);ctx.fillText(v,T.x0-6,ty(v)+4);});
+  ctx.save();ctx.translate(12,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('θ2',0,0);ctx.restore();
+  ctx.save();ctx.translate(T.x0-28,(T.y0+T.y1)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('θ1',0,0);ctx.restore();
+}
+function labels(){
+  const s=10**(+document.getElementById('spw-sd').value);
+  document.getElementById('spw-rhoo').textContent=(+document.getElementById('spw-rho').value).toFixed(2);
+  document.getElementById('spw-sdo').textContent=s.toFixed(3);
+  document.getElementById('spw-lo').textContent=document.getElementById('spw-l').value;
+  document.getElementById('spw-sdlab').textContent=sampler==='hmc'?'Step size ε':'Proposal SD';
+  document.getElementById('spw-sdrow').classList.toggle('dim',sampler==='gibbs');
+  document.getElementById('spw-lrow').classList.toggle('dim',sampler!=='hmc');
+}
+document.querySelectorAll('#spw-seg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#spw-seg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');sampler=b.dataset.s;
+  document.getElementById('spw-sd').value=sampler==='hmc'?-1:-0.6;labels();run();}));
+['spw-rho','spw-sd','spw-l'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{labels();run();}));
+document.getElementById('spw-seed').addEventListener('click',()=>{seed++;run();});
+labels();run();
+})();
+</script>
+</div>

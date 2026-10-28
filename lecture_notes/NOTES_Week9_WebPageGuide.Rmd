@@ -1,0 +1,211 @@
+---
+title: "Week 9 web page: delivery guide"
+subtitle: "Instructor notes for Week9_MCMC.html"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=3pt, parsep=0pt, topsep=3pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+# General
+
+- Page: <https://kevintshoemaker.github.io/NRES-746/Week9_MCMC.html>.
+  Open it before class; the widgets need no internet once loaded.
+- For live demos, run the matching section of
+  `CODE_Week9_MCMCAndStan.R` (same seeds, same numbers). Run the first
+  part before the Wednesday sections: they reuse `nll_gamma()`,
+  `plot_surface()`, `log_post_germ()`, and `metropolis()`. Compile the
+  Stan model before class (up to a minute the first time).
+- Zoom the browser to 125-150% for the projector.
+- Questions on the page have no answers. Answers are below; *Land:* is
+  where discussion should end up.
+- Readings for Canvas: Bolker 7.2.3-7.3 (printed pp. 302-319);
+  optional: Monnahan et al. 2017 (MEE 8:339-348), *Statistical
+  Rethinking* Ch. 9.
+- No in-class WODs this week. Take-home WOD *Getting Stan Running* goes
+  out at the end of the Wednesday period (due Monday); hand out the
+  cmdstanr quick start (`NOTES_Reference_CmdstanrQuickStart.pdf`) with it.
+
+# As taught (Oct. 19-21, 2026)
+
+- **Monday** covered sections 1-4 of the first part (Nelder-Mead,
+  annealing, Metropolis) with no WOD. The closing discussion (three
+  germination chains) wasn't reached; it opened Wednesday as a
+  debrief after Lab 7 Act 1 Part 2 had students judge chains first.
+  It now sits in the page's third part as "Which chains can you trust?"
+- **Lab 7:** most groups got 45+ min on Act 2, which went home.
+- **Wednesday:** the debrief, then HMC and Stan; it went well. While
+  showing Chi Feng's sampler gallery, the instructor said Gibbs is
+  "always best with few parameters." That was corrected afterward (the
+  issue is correlation, not the number of parameters); the page's
+  Gibbs section states the corrected version.
+- The page was built after the week from the PDF NOTES (now in
+  `lecture_notes/archive/`) and the legacy LECTURE7 page; Gibbs,
+  thinning, the funnel, and the widgets are new.
+
+# Part 1: Derivative-free optimization and Metropolis (Monday, ~35 min)
+
+**Big picture (~4 min)**
+
+- Point at FIT. Derivative-based methods (Newton, BFGS) are fast near
+  the answer but need slopes. Two questions on the page; the second
+  grows out of the first.
+
+**Nelder-Mead (~7 min)**
+
+- Draw one triangle and its moves on the board (the page figure).
+- Run the triangle plot; then the widget, default start ("far up the
+  valley wall"): 10 steps, best $f$ 2.60 (22 evaluations); 30 steps,
+  0.015; 60 steps, $7 \times 10^{-10}$ (113 evaluations). Point at the
+  long expansion down the wall, then the crawl along the curve.
+- `optim()` default: 147 evaluations, NLL 37.67.
+- "Why do the triangles keep shrinking, and how could you use their
+  size to decide when to stop?" *Land:* near the minimum every
+  reflection overshoots, so contractions and shrinks dominate; the
+  triangle's size tracks how well the minimum is located. `optim()`
+  stops when the NLL values at the vertices nearly agree (`reltol`).
+
+**Simulated annealing (~8 min)**
+
+- Read the acceptance table: at $T = 1$ an NLL 2 units worse is
+  accepted 14% of the time; at $T = 0.1$, essentially never.
+- Widget, in this order (predict before each run):
+    - Default ($T = 2$, cool $\times 0.85$): finds the deep valley
+      (best $x = -2.10$, 100% of the last 1,000 steps there).
+    - Cold start (slider far left, $T \approx 0.05$): stuck in the
+      shallow valley (0%, best $x = 1.89$).
+    - Hot and never cooling (cooling = 1): wanders between both (82% in
+      the deep one); the histogram matches the orange $e^{-f/T}$ curve.
+      Say: "hold that thought" (it's Metropolis at $T = 2$).
+- Myxo annealer: 3,000 evaluations vs. Nelder-Mead's 147.
+- "SANN reports 40.77 with `convergence = 0`; Nelder-Mead reached
+  37.67. Broken?" *Land:* untuned, not broken. SANN runs a fixed 10,000
+  iterations and always reports 0. Use a global search to find the
+  right valley, then polish with Nelder-Mead or BFGS.
+
+**Metropolis (~15 min)**
+
+- Board: the three changes, then Bayes' rule in the ratio; $P(y)$
+  cancels. Then the $A$/$B$ argument (1 min).
+- Stress: a rejection records the current value again; the chain
+  should wander, not converge.
+- Germination run: 59% accepted; mean 0.734 vs. exact 0.738; histogram
+  matches Beta(31, 11).
+- "The annealer used `runif(1) < exp(-delta / temp)`; `metropolis()`
+  uses `log(runif(1)) < lp_prop - lp_current`. Different rules?"
+  *Land:* no. $u < e^x \iff \log u < x$; with $T = 1$ and the NLL
+  difference replaced by the log posterior difference, both lines make
+  the same decision.
+- Myxo chain: 28% accepted; shape interval 29 to 81. Mention it mixes
+  slowly; don't explain why yet.
+- **Behind?** Skip the SANN question and the myxo chain.
+
+**Before the lab: don't show** the page's third part (chain checks,
+random walks). Lab 7 Act 1 Part 2 asks students to judge chains, and
+Act 2 2c asks why centering fixes a badly mixing sampler.
+
+# Part 2: Working on the log scale (Lab 7 opening, ~5 min)
+
+- Run the underflow chunk: `prod()` gives 0, the sum of logs gives
+  $-2147$.
+- Log posterior = log likelihood + log prior; accept if
+  $\log u <$ the difference; record the current value either way.
+- Examples only with the germination data, never the lab's numbers.
+  Act-by-Act answers: `labs/answer_keys/Lab7_Act1_Key.pdf`,
+  `Lab7_Act2_Key.pdf`. Common Act 2 bugs: not updating the current log
+  posterior after an acceptance; storing only accepted steps; the same
+  seed for both runs.
+
+# Part 3: Chains, HMC, and Stan (Wednesday, ~40 min)
+
+**Which chains can you trust? (~6 min)**
+
+- Show the three-chain table first (accepted 87%, 59%, 4%; means 0.38,
+  0.73, 0.70), then ask the page question before the trace plots.
+- "A labmate says the first chain is the best, since nearly every
+  proposal was accepted." *Land:* the middle one. Tiny steps are
+  accepted but barely move (still in burn-in); huge steps are
+  rejected, so the chain sits still and its mean is close by luck.
+  Check the trace plot, drop burn-in, run several chains, and tune the
+  step size. Acceptance is not a quality score.
+- Name the terms: burn-in (Stan: warmup), mixing, R-hat, ESS. Map to
+  Lab 7 Act 1: tiny steps = Chains B and D; huge = Chain C.
+- Widget walkthrough (seed fixed until "New random numbers"):
+    - Default (SD 0.1, one chain): 59%, mean 0.731, ESS 62. Burn-in 100:
+      mean 0.741, ESS 220.
+    - SD 0.005: 88% accepted, mean 0.404, ESS 3. Turn on three chains:
+      R-hat 2.38.
+    - SD 3.16 (far right): 2% accepted, ESS 6; three chains, R-hat 1.22.
+    - Back to SD 0.1, three chains, burn-in 100: R-hat 1.00, ESS 702.
+- ACF figure: germination ESS 914 of 4,500 kept steps; myxo shape 43
+  of 18,000. Thinning: fewer effective draws, not more.
+
+**Why random walks struggle (~7 min)**
+
+- Board: a tilted ellipse with small circle proposals; distance grows
+  like $\sqrt{\text{steps}}$.
+- Random walk on $\rho = 0.95$: ESS 6 of 200. Gibbs: ESS 14.
+- Gibbs: exact conditional draws, no rejections, but moves only along
+  the axes by the conditional SD $\sqrt{1 - \rho^2}$ (0.31 at 0.95).
+  The table: ESS per sweep 0.60, 0.05, 0.01 at $\rho$ = 0.5, 0.95, 0.99.
+  Correlation, not the number of parameters, is what matters.
+
+**HMC (~10 min)**
+
+- Board: the puck (kick, slide, accept on total energy). It's still
+  Metropolis, with far-reaching proposals that are nearly always
+  accepted.
+- Energy: $H = -\log P(\theta \mid y) + \frac12\sum m^2$; accept with
+  $\min(1, e^{-\Delta H})$. Exact physics conserves $H$; the
+  accept/reject step corrects the leapfrog error. Same form as the
+  annealing rule at $T = 1$, applied to total energy.
+- ESS: random walk 6, Gibbs 14, HMC 183 of 200.
+- "Each HMC iteration costs 11 gradient evaluations. Still worth it?"
+  *Land:* yes: effective draws per evaluation are 6/200 = 0.03 for the
+  random walk vs. 183/2,200 = 0.08 for HMC, and the gap grows quickly
+  with more parameters.
+- Sampler widget ($\rho = 0.95$, defaults; seed fixed):
+    - Random walk: 67% accepted, lag-1 0.90, ESS 16.
+    - Gibbs: lag-1 0.89, ESS 7. Slide $\rho$ to 0.5: ESS 134; to 0:
+      198; to 0.99: 3.
+    - HMC ($\epsilon$ 0.1, $L$ 10): 99% accepted, ESS 51, 2,200
+      evaluations. $L = 2$: ESS 10 (random-walk-like). $L = 30$: ESS
+      above 200 (trajectories cross to the far side each time). This
+      sensitivity is why NUTS picks $L$.
+- If asked: NUTS doubles the trajectory until a U-turn, so drawn
+  trajectories look like arcs; $\epsilon$ is the leapfrog time step,
+  tuned in warmup to `adapt_delta` (0.8). The default mass matrix is
+  diagonal (fixes scale, not correlation). Autodiff applies the chain
+  rule mechanically: exact gradients, no hand derivation.
+
+**Stan (~10 min)**
+
+- Blocks table; `~` adds to `target` (the log posterior, not its
+  negative; HMC's potential energy is $-$`target`).
+- Output: R-hat 1.00, ESS 452 for shape (vs. 43), divergences 0,
+  shape 95% interval 25 to 76 (Metropolis: 29 to 81).
+
+**When HMC struggles (~4 min)**
+
+- Funnel figure: centered vs. non-centered. Divergences are a bias
+  warning, not just slowness. Gibbs/JAGS doesn't diverge in a funnel
+  (no global step size), but non-centering helps Stan far more than
+  JAGS (Monnahan et al.: 2.8 to 129 times faster in Stan).
+- **Behind?** Skip the mass-matrix and autodiff bullets and the funnel.
+
+**Discussion (~5 min)**
+
+- Q1 (Stan overkill?) *Land:* compare effective draws per second, not
+  steps per second: about 43/0.12 s for Metropolis vs. 452/0.3 s for
+  Stan; compiling happens once per model. For two parameters either is
+  fine; Stan earns its keep as models grow and when diagnostics matter.
+- Q2 (when Stan, when JAGS?) *Land:* Stan for many correlated
+  parameters and hierarchical models; JAGS or NIMBLE for discrete
+  latent states (occupancy, mark-recapture) unless you marginalize.
+- Q3 (Gibbs accepts everything) *Land:* acceptance says nothing about
+  how far a move goes; each Gibbs move is axis-parallel and as wide as
+  the narrow conditional, so the chain zigzags (lag-1 autocorrelation
+  $\rho^2$).

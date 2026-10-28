@@ -1,0 +1,95 @@
+---
+fontsize: 10pt
+geometry: margin=0.5in
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist{itemsep=1pt, parsep=0pt, topsep=2pt}
+  - \pagenumbering{gobble}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+```
+
+\begin{center}
+{\Large\textbf{Stan from R: a cmdstanr quick start}}\\
+NRES 746
+\end{center}
+
+## 1. Install (once, ~20-30 min, mostly waiting)
+
+**Get a C++ toolchain.** Windows: install the Rtools version that
+matches your R (Rtools45 for R 4.5, Rtools44 for R 4.4) from
+<https://cran.r-project.org/bin/windows/Rtools/>. Mac: in the
+Terminal, run `xcode-select --install`.
+
+**Install cmdstanr and Stan**, in R:
+
+```{r install}
+install.packages("cmdstanr",
+                 repos = c("https://stan-dev.r-universe.dev", getOption("repos")))
+library(cmdstanr)
+check_cmdstan_toolchain(fix = TRUE)   # checks (and tries to fix) the C++ setup
+install_cmdstan(cores = 2)            # downloads and builds Stan
+cmdstan_version()                     # success: prints a version number
+```
+
+## 2. Fit a model
+
+Save the model as `myxo.stan` (RStudio's File > New File > Stan File
+checks your syntax):
+
+```stan
+data {
+  int<lower=0> N;
+  vector<lower=0>[N] titer;
+}
+parameters {
+  real<lower=0> shape;
+  real<lower=0> scale;
+}
+model {
+  titer ~ gamma(shape, 1 / scale);   // Stan's gamma uses shape and rate
+}
+```
+
+Then, in R:
+
+```{r fit}
+library(cmdstanr)
+myxo <- read.csv("https://kevintshoemaker.github.io/NRES-746/data/MyxoTiter_sum.csv")
+titer <- myxo$titer[myxo$grade == 1]
+mod <- cmdstan_model("myxo.stan")                  # compiles (once per model)
+fit <- mod$sample(data = list(N = length(titer), titer = titer),
+                  chains = 4, parallel_chains = 4, seed = 1)
+fit$summary()                                      # means, intervals, R-hat, ESS
+fit$diagnostic_summary()                           # divergences, tree depth
+draws <- fit$draws(format = "draws_df")            # one row per draw
+```
+
+## 3. Before you trust the results
+
+- $\hat R$ (`rhat`) below 1.01 for every parameter.
+- Effective sample size (`ess_bulk`, `ess_tail`) above about 400.
+- Zero divergent transitions. If you get some, try
+  `adapt_delta = 0.95` in `$sample()`; if they don't go away,
+  reparameterize the model.
+- Look at trace plots: `bayesplot::mcmc_trace(fit$draws())`.
+
+## 4. Common problems
+
+- **Toolchain errors (Windows):** wrong Rtools version for your R, or
+  Rtools not on the path. Rerun `check_cmdstan_toolchain(fix = TRUE)`.
+- **Install fails on a path with spaces or non-English characters:**
+  install to a simple folder, `install_cmdstan(dir = "C:/cmdstan")`,
+  then in each new session run `set_cmdstan_path("C:/cmdstan/<version>")`.
+- **Model won't compile:** Stan gives the line number; look for a
+  missing `;`, an undeclared variable, or `int` vs. `real`.
+- **Stuck on an error message?** Paste it into a web search or an AI
+  assistant.
+
+**Learn more:** <https://mc-stan.org/cmdstanr/>; <https://mc-stan.org/docs/>; *Statistical Rethinking*, Ch. 9.
