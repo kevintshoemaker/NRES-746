@@ -1,0 +1,113 @@
+<div class="w746pp" id="ppw">
+<style>
+.w746pp{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746pp .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746pp .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746pp .row input[type=range]{flex:1;min-width:160px}
+.w746pp .row output{font-weight:600;min-width:44px;text-align:right}
+.w746pp button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746pp button:hover{background:#eee}
+.w746pp .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746pp .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746pp .card .k{font-size:13px;color:var(--ink2)}
+.w746pp .card .v{font-size:18px;font-weight:600;color:var(--ink)}
+.w746pp canvas{width:100%;height:auto;display:block}
+.w746pp .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2);margin-top:4px}
+.w746pp .key span{display:flex;align-items:center;gap:6px}
+.w746pp .sw{display:inline-block;width:20px;height:0;border-top:3px solid}
+.w746pp .grp{font-size:14px;color:var(--ink2);margin:6px 0 2px;font-weight:600}
+</style>
+<div class="row">
+  <button id="ppw-flat">Flat prior</button>
+  <button id="ppw-supp">Supplier prior (120 of 200)</button>
+  <button id="ppw-germ">Data: 30 of 40</button>
+  <button id="ppw-big">Data: 300 of 400</button>
+</div>
+<div class="grp">Prior: earlier observations</div>
+<div class="row"><label for="ppw-pn">Earlier seeds tested</label><input type="range" id="ppw-pn" min="0" max="400" step="1"><output id="ppw-pn-o"></output></div>
+<div class="row"><label for="ppw-pf">Share that germinated</label><input type="range" id="ppw-pf" min="0" max="1" step="0.01"><output id="ppw-pf-o"></output></div>
+<div class="grp">Data: this seed lot</div>
+<div class="row"><label for="ppw-n">Seeds tested</label><input type="range" id="ppw-n" min="1" max="500" step="1"><output id="ppw-n-o"></output></div>
+<div class="row"><label for="ppw-f">Share that germinated</label><input type="range" id="ppw-f" min="0" max="1" step="0.01"><output id="ppw-f-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">Prior</div><div class="v" id="ppw-prior"></div></div>
+  <div class="card"><div class="k">Posterior</div><div class="v" id="ppw-post"></div></div>
+  <div class="card"><div class="k">Posterior mean</div><div class="v" id="ppw-mean"></div></div>
+  <div class="card"><div class="k">95% credible interval</div><div class="v" id="ppw-ci"></div></div>
+</div>
+<canvas id="ppw-cv" width="680" height="330" role="img" aria-label="Prior, rescaled likelihood, and posterior densities for a germination probability."></canvas>
+<div class="key">
+  <span><i class="sw" style="border-color:#999"></i>prior</span>
+  <span><i class="sw" style="border-color:#e08a00;border-top-style:dashed"></i>likelihood (rescaled to area 1)</span>
+  <span><i class="sw" style="border-color:#222"></i>posterior</span>
+  <span id="ppw-wt"></span>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById('ppw-'+id);
+// log-gamma by the Lanczos approximation
+function lgam(z){
+  const g=7,c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,
+    -176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(z<0.5)return Math.log(Math.PI/Math.sin(Math.PI*z))-lgam(1-z);
+  z-=1;let x=c[0];for(let i=1;i<g+2;i++)x+=c[i]/(z+i);
+  const t=z+g+0.5;return 0.5*Math.log(2*Math.PI)+(z+0.5)*Math.log(t)-t+Math.log(x);
+}
+const lbeta=(a,b)=>lgam(a)+lgam(b)-lgam(a+b);
+const dbeta=(x,a,b)=>Math.exp((a-1)*Math.log(x)+(b-1)*Math.log(1-x)-lbeta(a,b));
+// quantiles from the CDF on a fine grid of midpoints
+function qbeta(ps,a,b){
+  const N=4000,cdf=new Float64Array(N+1);let s=0;
+  for(let i=0;i<N;i++){s+=dbeta((i+0.5)/N,a,b)/N;cdf[i+1]=s;}
+  return ps.map(p=>{const t=p*s;let i=0;while(i<N&&cdf[i+1]<t)i++;
+    const frac=(t-cdf[i])/Math.max(cdf[i+1]-cdf[i],1e-300);return (i+frac)/N;});
+}
+const cv=$('cv'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height,pad={l:46,r:12,t:12,b:38};
+const sx=x=>pad.l+x*(W-pad.l-pad.r);
+function set(id,v){$(id).value=v;}
+function counts(){
+  const pn=+$('pn').value,pf=+$('pf').value,n=+$('n').value,f=+$('f').value;
+  const ps=Math.round(pn*pf),k=Math.round(n*f);
+  return {pn,ps,n,k};
+}
+function draw(){
+  const {pn,ps,n,k}=counts();
+  $('pn-o').textContent=pn;$('pf-o').textContent=pn?(ps+' ('+(+$('pf').value).toFixed(2)+')'):'-';
+  $('n-o').textContent=n;$('f-o').textContent=k+' ('+(+$('f').value).toFixed(2)+')';
+  const a0=1+ps,b0=1+pn-ps,a1=a0+k,b1=b0+n-k;
+  $('prior').textContent='Beta('+a0+', '+b0+')';
+  $('post').textContent='Beta('+a1+', '+b1+')';
+  $('mean').textContent=(a1/(a1+b1)).toFixed(3);
+  const q=qbeta([0.025,0.975],a1,b1);$('ci').textContent=q[0].toFixed(2)+' to '+q[1].toFixed(2);
+  const wd=n/(n+pn+2);
+  $('wt').textContent='Data carry '+Math.round(100*wd)+'% of the weight (data '+n+' vs. prior '+(pn+2)+').';
+  const xs=[];for(let i=1;i<600;i++)xs.push(i/600);
+  const curves=[[a0,b0,'#999',[]],[k+1,n-k+1,'#e08a00',[6,4]],[a1,b1,'#222',[]]];
+  const ys=curves.map(c=>xs.map(x=>dbeta(x,c[0],c[1])));
+  let ymax=0;ys.forEach(y=>y.forEach(v=>{if(isFinite(v)&&v>ymax)ymax=v;}));ymax=Math.min(ymax*1.08,60);
+  const sy=y=>H-pad.b-Math.min(y,ymax)/ymax*(H-pad.t-pad.b);
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#e4e4e4';ctx.lineWidth=1;
+  for(let g=0;g<=10;g++){ctx.beginPath();ctx.moveTo(sx(g/10),pad.t);ctx.lineTo(sx(g/10),H-pad.b);ctx.stroke();}
+  ctx.strokeStyle='#999';ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  for(let g=0;g<=10;g+=2)ctx.fillText((g/10).toFixed(1),sx(g/10),H-pad.b+15);
+  ctx.fillText('Germination probability, p',(pad.l+W-pad.r)/2,H-5);
+  ctx.save();ctx.translate(13,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.fillText('Density',0,0);ctx.restore();
+  // shaded 95% interval under the posterior
+  ctx.fillStyle='rgba(42,120,214,0.15)';ctx.beginPath();ctx.moveTo(sx(q[0]),sy(0));
+  xs.forEach((x,i)=>{if(x>=q[0]&&x<=q[1])ctx.lineTo(sx(x),sy(ys[2][i]));});ctx.lineTo(sx(q[1]),sy(0));ctx.closePath();ctx.fill();
+  curves.forEach((c,j)=>{ctx.strokeStyle=c[2];ctx.lineWidth=j===2?3:2.5;ctx.setLineDash(c[3]);ctx.beginPath();
+    xs.forEach((x,i)=>{const v=ys[j][i];if(i===0)ctx.moveTo(sx(x),sy(v));else ctx.lineTo(sx(x),sy(v));});ctx.stroke();});
+  ctx.setLineDash([]);
+}
+function preset(o){Object.keys(o).forEach(k=>set(k,o[k]));draw();}
+$('flat').addEventListener('click',()=>preset({pn:0,pf:0.5}));
+$('supp').addEventListener('click',()=>preset({pn:200,pf:0.6}));
+$('germ').addEventListener('click',()=>preset({n:40,f:0.75}));
+$('big').addEventListener('click',()=>preset({n:400,f:0.75}));
+['pn','pf','n','f'].forEach(id=>$(id).addEventListener('input',draw));
+preset({pn:200,pf:0.6,n:40,f:0.75});
+})();
+</script>
+</div>

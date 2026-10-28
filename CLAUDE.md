@@ -333,7 +333,7 @@ unless material moves to another week's page); (3) update
 `rmarkdown::render_site("schedule.Rmd")`; (4) update the calibration
 paragraph above.
 
-## Backlog: web pages for Weeks 1-8
+## Backlog: web pages for Weeks 1-7
 
 Build a web page (and companion script, if the week lacks one) for
 each earlier week, with widgets where they help. Sources: that week's
@@ -347,8 +347,10 @@ standing practice). Archive a legacy `LECTUREn` page (`git mv` the
 once week pages cover all of its material: drop it from the navbar,
 point remaining `href="LECTUREn.html"` links in older pages at the new
 page (sed on the HTML), and comment out its line in `index.Rmd`'s
-render script. LECTURE7 was archived this way; LECTURE5 still holds
-Week 8 material (brute force, Newton). Ask before deleting anything.
+render script. LECTURE7 (Oct. 28) and LECTURE5 (Oct. 28, covered by
+the Week 8 and Week 9 pages) were archived this way. LECTURE6 stays
+until a Week 7 page covers Bayes' rule and the brute-force grid
+material. Ask before deleting anything.
 
 # Modeling workflow framing
 
@@ -537,7 +539,19 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
   8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
-  1-8.
+  1-7.
+- **Week 8 page (built Oct. 28, after the week):**
+  `Week8_PosteriorsAndOptimization.Rmd` (H1s: priors and posteriors
+  `#priors`, with the tortoise WOD `#wod-priors`, germination, summaries,
+  sticking points, why Bayes, discussion, and bonuses on a grid
+  posterior for the myxo Gamma and two-peaked posteriors; derivative-based
+  optimization `#optimization`, with the full workflow, Newton in 1D,
+  finite differences, Newton in 2D and BFGS, discussion, and a bonus on
+  the shape-scale correlation, mean/shape reparameterization, and
+  Bolker's 7.4 checklist). Widgets `prior_posterior.html` and
+  `newton.html`. Script `CODE_Week8_PosteriorsAndOptimization.R`, guide
+  `NOTES_Week8_WebPageGuide.Rmd`. The two Week 8 PDF NOTES and their
+  old scripts are in `lecture_notes/archive/`; LECTURE5 is in `archive/`.
 - **Week 9 page (built Oct. 28, after the week):** `Week9_MCMC.Rmd`
   (H1s: derivative-free optimization and Metropolis `#metropolis`; log
   scale `#log-scale` for the Lab 7 opening; chain checks, Gibbs, HMC,
@@ -551,17 +565,20 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-8 link
+  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-7 link
   legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
   relink each to what was actually covered. Navbar updates: re-render
-  `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block into
-  the 13 current-navbar pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-3,
-  LECTURE8, LECTURE9, Links, schedule, Week9, Week10); LECTURE4-6, 10 and
-  LAB1, 2, 5 carry older navbars and are left alone. Long menus scroll via
+  `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
+  the line before the `navbar-right` list) into the current-navbar
+  pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-3, LECTURE8, LECTURE9,
+  Links, Week9, Week10, Week11; schedule and the newest week page get it
+  by re-rendering); LECTURE4, 6, 10 and LAB1, 2, 5 carry older navbars
+  and are left alone (their links to archived pages were repointed by
+  `sed`). Long menus scroll via
   `styles.css` (`css:` in `_site.yml`); pages not re-rendered got its
   `<link>` inserted before `</head>`.
 
-- **Weeks 1-9 built and taught.** Week 7 and Week 8 Wednesday NOTES
+- **Weeks 1-9 built and taught.** Week 7's NOTES and the Week 8 guide
   carry "as taught" notes; Week 8 Monday has no report. Every WOD and
   every handed-out lab Act through Lab 7 has a (color-only) key.
 - **Lab 7 data** (Lab 8 builds on it): Act 1 is one pond, 2 of 20
@@ -655,7 +672,8 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
   archived). Optional readings stay listed in `CourseSchedule.csv`,
   marked "optional:".
 - **Unused material, free to reuse:** Lab 4 Act 3 (raw vs. log-scale
-  analysts); Bolker's 7.4 fitting checklist. Lab 4 Act 2 was only a
+  analysts); Bolker's 7.4 fitting checklist (only in a bonus section of
+  the Week 8 page, never taught). Lab 4 Act 2 was only a
   live-coding demo, without its AI part (the instructor wants an AI
   live-coding demo in a later lecture). *Curvature by Hand*
   (`WOD_Week8_Lecture2_CurvatureByHand.Rmd`) went out as optional and

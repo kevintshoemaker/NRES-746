@@ -1,0 +1,138 @@
+<div class="w746nw" id="nwt">
+<style>
+.w746nw{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746nw .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746nw .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746nw .row input[type=range]{flex:1;min-width:140px}
+.w746nw .row output{font-weight:600;min-width:40px}
+.w746nw button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746nw button:hover{background:#eee}
+.w746nw button:disabled{color:#aaa;cursor:default;background:#fafafa}
+.w746nw select{font-size:14px;padding:2px 4px}
+.w746nw .cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:8px 0}
+.w746nw .card{background:var(--card);border-radius:8px;padding:7px 10px}
+.w746nw .card .k{font-size:12.5px;color:var(--ink2)}
+.w746nw .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746nw canvas{width:100%;height:auto;display:block}
+.w746nw .msg{min-height:1.4em;font-size:14px;color:#b03a2e;margin:4px 0}
+.w746nw .hist{font-size:13px;color:var(--ink2);font-family:monospace;margin-top:4px}
+.w746nw .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2);margin-top:4px}
+.w746nw .key span{display:flex;align-items:center;gap:6px}
+.w746nw .sw{display:inline-block;width:20px;height:0;border-top:3px solid}
+</style>
+<div class="row">
+  <button id="nwt-step">Step</button>
+  <button id="nwt-reset">Reset</button>
+  <label for="nwt-scale">Optimize over</label>
+  <select id="nwt-scale"><option value="lin">&lambda;</option><option value="log">log &lambda;</option></select>
+  <label for="nwt-deriv">Derivatives</label>
+  <select id="nwt-deriv"><option value="exact">exact (calculus)</option><option value="fd">finite differences</option></select>
+</div>
+<div class="row">
+  <label for="nwt-start">Starting &lambda;</label><input type="range" id="nwt-start" min="0.5" max="9" step="0.1"><output id="nwt-start-o"></output>
+  <label for="nwt-delta">Step &Delta;</label><input type="range" id="nwt-delta" min="0.01" max="1" step="0.01"><output id="nwt-delta-o"></output>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Step</div><div class="v" id="nwt-it"></div></div>
+  <div class="card"><div class="k">Current &lambda;</div><div class="v" id="nwt-cur"></div></div>
+  <div class="card"><div class="k">Slope NLL&prime;</div><div class="v" id="nwt-d1"></div></div>
+  <div class="card"><div class="k">Curvature NLL&Prime;</div><div class="v" id="nwt-d2"></div></div>
+  <div class="card"><div class="k">Next &lambda;</div><div class="v" id="nwt-nx"></div></div>
+</div>
+<div class="msg" id="nwt-msg"></div>
+<canvas id="nwt-cv" width="680" height="520" role="img" aria-label="Top: the pika negative log-likelihood and Newton's parabola at the current guess. Bottom: its slope and Newton's straight line, which crosses zero at the next guess."></canvas>
+<div class="key">
+  <span><i class="sw" style="border-color:#222"></i>NLL (top) and its slope (bottom)</span>
+  <span><i class="sw" style="border-color:#e08a00;border-top-style:dashed"></i>Newton's parabola (top) and straight line (bottom)</span>
+  <span>&#9679; current guess &nbsp; &#9675; next guess &nbsp; | true minimum at &lambda; = 3</span>
+</div>
+<div class="hist" id="nwt-hist"></div>
+<script>
+(function(){
+const $=id=>document.getElementById('nwt-'+id);
+// pika data: 6 plots, 18 haypiles. NLL(lambda) = 6 lambda - 18 log(lambda)
+const nllL=l=>l>0?6*l-18*Math.log(l):NaN;
+// on the log scale, theta = log(lambda): NLL = 6 e^theta - 18 theta
+const nllT=t=>6*Math.exp(t)-18*t;
+const cv=$('cv'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
+const pad={l:52,r:12};const P1={t:10,b:240},P2={t:280,b:H-36};
+let path,stuck;
+const log=()=>$('scale').value==='log';
+const f=x=>log()?nllT(x):nllL(x);
+function derivs(x){
+  if($('deriv').value==='fd'){
+    const d=+$('delta').value,fm=f(x-d),f0=f(x),fp=f(x+d);
+    return {g:(fp-f0)/d,h:(fp-2*f0+fm)/(d*d)};
+  }
+  if(log()){const e=6*Math.exp(x);return {g:e-18,h:e};}
+  return {g:6-18/x,h:18/(x*x)};
+}
+const toL=x=>log()?Math.exp(x):x;
+function range(){return log()?{x0:-1.5,x1:2.6,y0:[-6,30],y1:[-20,40]}:{x0:-4,x1:10,y0:[-12,26],y1:[-14,8]};}
+function reset(){
+  const s=+$('start').value;path=[log()?Math.log(s):s];stuck='';draw();
+}
+function next(){const x=path[path.length-1],d=derivs(x);return {x,d,nx:x-d.g/d.h};}
+function step(){
+  if(stuck)return;const {nx}=next();path.push(nx);
+  if(!isFinite(nx))stuck='The step failed (a derivative was undefined).';
+  else if(!log()&&nx<=0)stuck='The new guess, λ = '+nx.toFixed(2)+', is not a valid Poisson mean, so the NLL is undefined there. Newton’s method has failed.';
+  draw();
+}
+function axes(P,yr,label){
+  const r=range(),sx=x=>pad.l+(x-r.x0)/(r.x1-r.x0)*(W-pad.l-pad.r);
+  const sy=y=>P.b-(y-yr[0])/(yr[1]-yr[0])*(P.b-P.t);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,P.t,W-pad.l-pad.r,P.b-P.t);
+  ctx.strokeStyle='#ddd';ctx.beginPath();ctx.moveTo(pad.l,sy(0));ctx.lineTo(W-pad.r,sy(0));ctx.stroke();
+  if(!log()){ctx.strokeStyle='#ccc';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(sx(0),P.t);ctx.lineTo(sx(0),P.b);ctx.stroke();ctx.setLineDash([]);}
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  const step=log()?0.5:2;for(let x=Math.ceil(r.x0/step)*step;x<=r.x1+1e-9;x+=step)ctx.fillText(+x.toFixed(1),sx(x),P.b+14);
+  const ys=(yr[1]-yr[0])>30?10:4;ctx.textAlign='right';
+  for(let y=Math.ceil(yr[0]/ys)*ys;y<=yr[1];y+=ys)ctx.fillText(y,pad.l-5,sy(y)+4);ctx.textAlign='center';
+  ctx.save();ctx.translate(12,(P.t+P.b)/2);ctx.rotate(-Math.PI/2);ctx.fillText(label,0,0);ctx.restore();
+  return {sx,sy};
+}
+function curve(fn,sx,sy,P,col,lw,dash){
+  const r=range();ctx.save();ctx.beginPath();ctx.rect(pad.l,P.t,W-pad.l-pad.r,P.b-P.t);ctx.clip();
+  ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.setLineDash(dash||[]);ctx.beginPath();let on=false;
+  for(let i=0;i<=400;i++){const x=r.x0+i/400*(r.x1-r.x0),y=fn(x);
+    if(isFinite(y)){if(on)ctx.lineTo(sx(x),sy(y));else{ctx.moveTo(sx(x),sy(y));on=true;}}else on=false;}
+  ctx.stroke();ctx.setLineDash([]);ctx.restore();
+}
+function dot(x,y,sx,sy,P,filled){
+  if(!isFinite(y))return;ctx.save();ctx.beginPath();ctx.rect(pad.l,P.t,W-pad.l-pad.r,P.b-P.t);ctx.clip();
+  ctx.beginPath();ctx.arc(sx(x),sy(y),5,0,2*Math.PI);
+  if(filled){ctx.fillStyle='#222';ctx.fill();}else{ctx.strokeStyle='#e08a00';ctx.lineWidth=2.5;ctx.stroke();}
+  ctx.restore();
+}
+function draw(){
+  $('start-o').textContent=(+$('start').value).toFixed(1);$('delta-o').textContent=(+$('delta').value).toFixed(2);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  const r=range(),xl=log()?'log λ':'λ';
+  const A=axes(P1,r.y0,'NLL'),B=axes(P2,r.y1,'slope, NLL′');
+  ctx.fillStyle='#666';ctx.textAlign='center';ctx.fillText(xl+' (pika density)',(pad.l+W-pad.r)/2,H-8);
+  const exactD1=x=>log()?6*Math.exp(x)-18:(x>0?6-18/x:NaN);
+  curve(f,A.sx,A.sy,P1,'#222',2.5);
+  curve(exactD1,B.sx,B.sy,P2,'#222',2.5);
+  const x=path[path.length-1],ok=!stuck&&isFinite(x)&&(log()||x>0);
+  if(ok){
+    const {d,nx}=next(),fx=f(x);
+    curve(t=>fx+d.g*(t-x)+0.5*d.h*(t-x)*(t-x),A.sx,A.sy,P1,'#e08a00',2,[6,4]);
+    curve(t=>d.g+d.h*(t-x),B.sx,B.sy,P2,'#e08a00',2,[6,4]);
+    dot(x,fx,A.sx,A.sy,P1,true);dot(x,d.g,B.sx,B.sy,P2,true);
+    dot(nx,fx+d.g*(nx-x)+0.5*d.h*(nx-x)*(nx-x),A.sx,A.sy,P1,false);dot(nx,0,B.sx,B.sy,P2,false);
+    $('d1').textContent=d.g.toFixed(3);$('d2').textContent=d.h.toFixed(3);
+    $('nx').textContent=toL(nx).toFixed(3);
+  }else{$('d1').textContent='-';$('d2').textContent='-';$('nx').textContent='-';}
+  $('it').textContent=path.length-1;
+  $('cur').textContent=isFinite(x)?toL(x).toFixed(3):'-';
+  $('msg').textContent=stuck;$('step').disabled=!!stuck;
+  $('hist').textContent='λ path: '+path.map(p=>isFinite(p)?toL(p).toFixed(3):'NaN').join(' → ');
+}
+$('step').addEventListener('click',step);
+$('reset').addEventListener('click',reset);
+['scale','deriv','start','delta'].forEach(id=>$(id).addEventListener(id==='start'||id==='delta'?'input':'change',reset));
+$('start').value=2;$('delta').value=0.5;reset();
+})();
+</script>
+</div>
