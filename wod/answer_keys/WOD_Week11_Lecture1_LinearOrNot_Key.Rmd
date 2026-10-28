@@ -1,0 +1,122 @@
+---
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+  - \usepackage{xcolor}
+  - \usepackage{sansmath}
+  - \usepackage{framed}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{\sffamily\sansmath{}#1}}
+  - \newcommand{\ansbegin}{\begin{leftbar}\begingroup\color{ans}\sffamily\sansmath}
+  - \newcommand{\ansend}{\endgroup\end{leftbar}}
+geometry: margin=0.9in
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+
+# fill-in table drawn with base graphics; columns after the first hold answers
+# (magenta italic)
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5, cex = 0.95) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = "serif")
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  for (j in seq_len(nc)) {
+    text((cx[j] + cx[j + 1]) / 2, h_total - header_height / 2, headers[[j]], font = 2, cex = cex)
+  }
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    for (j in seq_len(nc)) {
+      text((cx[j] + cx[j + 1]) / 2, y - row_height / 2, body[[i]][[j]], cex = cex,
+           col = if (j > 1) ans_col else "black", font = if (j > 1) 3 else 1)
+    }
+    y <- y - row_height
+  }
+}
+```
+
+**NRES 746, Week 11, Lecture 1: Linear or Not?**
+
+\ans{\textbf{Answer key.} Answers are in magenta sans-serif type; longer answers have a bar in the margin.}
+
+**Instructions:** Work alone on Part 1 (about 5 minutes), then compare
+with a neighbor for Part 2. Keep laptops closed.
+
+## Part 1: Sort the models (individual)
+
+Here are six models for a response $Y$ and a continuous predictor $x$.
+In (f), $a_{\text{site}}$ means a separate intercept for each of three
+sites.
+
+(a) $Y \sim \text{Normal}(a + bx + cx^2,\ \sigma^2)$
+
+(b) $Y \sim \text{Normal}(a x^b,\ \sigma^2)$
+
+(c) $Y \sim \text{Normal}(a + b \log x,\ \sigma^2)$
+
+(d) $Y \sim \text{Poisson}(e^{a + bx})$
+
+(e) $Y \sim \text{Normal}\left(\dfrac{ax}{b + x},\ \sigma^2\right)$
+
+(f) $Y \sim \text{Normal}(a_{\text{site}} + bx,\ \sigma^2)$
+
+**1a.** For each model, is the mean a linear function of the parameters
+(yes/no)? Could `lm()` fit it as written? Could `glm()`?
+
+```{r sort-table, fig.height=0.35 + 6 * 0.45}
+blank_table(c("Model", "Linear in the parameters?", "lm()?", "glm()?"),
+            list(c("(a)", "yes", "yes", "yes"), c("(b)", "no", "no", "no"),
+                 c("(c)", "yes", "yes", "yes"),
+                 c("(d)", "no (linear on the log scale)", "no", "yes"),
+                 c("(e)", "no", "no", "no"), c("(f)", "yes", "yes", "yes")),
+            col_widths = c(0.8, 2.2, 1.2, 1.2), row_height = 0.45)
+```
+
+\ansbegin
+
+(a), (c), and (f) are linear models; `glm()` fits them with
+`family = gaussian`. (d) is a Poisson GLM with a log link. (b) and (e)
+need `nls()` or a custom likelihood with `optim()`. (Strictly, (e) can be
+fit as a Normal GLM with an inverse link, since
+$1/\mu = 1/a + (b/a)(1/x)$; "no" is fine.)
+
+\ansend
+
+## Part 2: Compare (with a neighbor)
+
+**2a.** Taking logs of the mean in (b) gives
+$\log(ax^b) = \log a + b\log x$, which is linear. Does that mean
+`lm(log(y) ~ log(x))` fits model (b)? What would it assume about the
+noise?
+
+\ansbegin
+
+No. `lm(log(y) ~ log(x))` fits
+$\log Y \sim \text{Normal}(\log a + b\log x, \sigma^2)$, so $Y$ is
+lognormal: the noise is multiplicative, its spread grows with the mean,
+and $ax^b$ becomes the median of $Y$ rather than its mean. Model (b) has
+constant, additive Normal noise. They are different models and can give
+different estimates of $a$ and $b$.
+
+\ansend

@@ -512,7 +512,25 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Wed., Oct. 28, 2026 (end of Week 10).
+Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
+
+- **Week 11 (Nov. 2-4), built Oct. 28, not yet taught:** Veterans Day
+  is Wed., Nov. 11 (Week 12 has Monday + Lab 10 only). Page
+  `Week11_LinearModelsAndVariance.Rmd` (H1s `#standard` = Bolker Ch. 9,
+  lm/ANCOVA via `optim()`, model matrix, GLMs; `#linear-algebra` = Lab 9
+  pre-lab, a fuller App. A.8; `#variance` = random intercept -> block
+  $V$, AR(1) -> $\rho^{|s-t|}$ $V$, why harder: $O(n^3)$ cost,
+  flat $\sigma_b$ surface with 4 stands, trend-vs-$\rho$ fan; bonuses:
+  combined RI + AR(1) via `optim()` vs. `lme()` (replaces the take-home
+  WOD; there is none this week), integrating out $b_j$). Example: simulated pinyon ring widths (seed 21; 4 stands x 5
+  trees x 25 yr; truth stand SD 0.12, tree SD 0.10, $\rho$ 0.6, no
+  trend); stand A's `lm()` trend p = 0.045 vs. 0.17 with AR(1). Widget
+  `cov_structures.html`. WODs *Linear or Not?* and *Two Cores from One
+  Tree* + keys. Lab 9 is a single Act (`labs/Lab9_Act1.Rmd`, "Lab 9:
+  Matrices for Models", data `data/PinyonSeedlings.csv`, seed 4) + key;
+  its closing block-diagonal $V$ sets up Wednesday. Script
+  `CODE_Week11_LinearModelsAndVariance.R`, guide
+  `NOTES_Week11_WebPageGuide.Rmd`. Push the CSV before Lab 9 goes out.
 
 - **New format from Week 10:** one web page per week plus short
   per-meeting instructor notes (see "Weekly materials"). Week 10's page

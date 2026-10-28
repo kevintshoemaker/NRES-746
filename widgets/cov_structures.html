@@ -1,0 +1,142 @@
+<div class="w746cv" id="cv">
+<style>
+.w746cv{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746cv .modes{display:flex;gap:18px;margin-bottom:10px;font-size:15px;color:var(--ink2)}
+.w746cv .modes label{font-weight:400;margin:0;cursor:pointer}
+.w746cv .row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.w746cv .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746cv input[type=range]{flex:1}
+.w746cv .val{font-weight:600;min-width:46px}
+.w746cv .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746cv .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746cv .card .k{font-size:13px;color:var(--ink2)}
+.w746cv .card .v{font-size:20px;font-weight:600;color:var(--ink)}
+.w746cv .panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:14px;align-items:start}
+.w746cv .ax{stroke:var(--muted);stroke-width:1}
+.w746cv .lab{fill:var(--ink2);font-size:13px}
+.w746cv .tk{fill:var(--muted);font-size:11px}
+.w746cv button{font-size:14px;padding:3px 10px;margin-top:4px}
+@media (max-width:600px){.w746cv .panels{grid-template-columns:1fr}.w746cv .row label{min-width:110px}}
+</style>
+<div class="modes">
+  <label><input type="radio" name="cv-mode" value="ri" checked> Random intercept (3 groups of 4)</label>
+  <label><input type="radio" name="cv-mode" value="ar"> AR(1) time series</label>
+</div>
+<div class="row"><label for="cv-p1" id="cv-p1lab"></label><input type="range" id="cv-p1"><span class="val" id="cv-p1out"></span></div>
+<div class="row"><label for="cv-p2" id="cv-p2lab"></label><input type="range" id="cv-p2"><span class="val" id="cv-p2out"></span></div>
+<div class="cards">
+  <div class="card"><div class="k" id="cv-k1"></div><div class="v" id="cv-v1"></div></div>
+  <div class="card"><div class="k" id="cv-k2"></div><div class="v" id="cv-v2"></div></div>
+  <div class="card"><div class="k" id="cv-k3"></div><div class="v" id="cv-v3"></div></div>
+</div>
+<div class="panels">
+  <svg viewBox="0 0 260 270" width="100%" role="img" aria-label="Heatmap of the 12 by 12 correlation matrix."><g id="cv-hm"></g></svg>
+  <div>
+    <svg viewBox="0 0 420 270" width="100%" role="img" aria-label="One simulated data set from this covariance structure."><g id="cv-sim"></g></svg>
+    <button type="button" id="cv-new">New random draw</button>
+  </div>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+let seed=11;
+function rng(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+function rnorm(){let u=0,v=0;while(u===0)u=rng();v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+let z=[];
+function newDraw(){z=[];for(let i=0;i<60;i++)z.push(rnorm());}
+newDraw();
+const n=12,nT=40;
+const modes={
+  ri:{p1:['Among-group SD σ_b',0,0.3,0.005,0.12],p2:['Within-group SD σ',0.02,0.3,0.005,0.1]},
+  ar:{p1:['Correlation ρ',-0.9,0.95,0.01,0.6],p2:['Innovation SD σ',0.02,0.3,0.005,0.08]}
+};
+let mode='ri';
+const s1=document.getElementById('cv-p1'),s2=document.getElementById('cv-p2');
+function setMode(m){
+  mode=m;const c=modes[m];
+  document.getElementById('cv-p1lab').textContent=c.p1[0];
+  document.getElementById('cv-p2lab').textContent=c.p2[0];
+  s1.min=c.p1[1];s1.max=c.p1[2];s1.step=c.p1[3];s1.value=c.p1[4];
+  s2.min=c.p2[1];s2.max=c.p2[2];s2.step=c.p2[3];s2.value=c.p2[4];
+  draw();
+}
+function color(r){
+  const a=Math.min(Math.abs(r),1);
+  const base=r>=0?[70,130,180]:[178,34,34];
+  const c=base.map(b=>Math.round(255-(255-b)*a));
+  return 'rgb('+c.join(',')+')';
+}
+function draw(){
+  const a=parseFloat(s1.value),b=parseFloat(s2.value);
+  document.getElementById('cv-p1out').textContent=a.toFixed(mode==='ar'?2:3);
+  document.getElementById('cv-p2out').textContent=b.toFixed(3);
+  // correlation matrix
+  const C=[];let v;
+  if(mode==='ri'){
+    v=a*a+b*b;const icc=a*a/v;
+    for(let i=0;i<n;i++){C.push([]);for(let j=0;j<n;j++)C[i].push(i===j?1:(Math.floor(i/4)===Math.floor(j/4)?icc:0));}
+    setCards('Variance of one observation',v.toFixed(4),'Correlation, same group',icc.toFixed(2),'Correlation, different groups','0');
+  }else{
+    v=b*b/(1-a*a);
+    for(let i=0;i<n;i++){C.push([]);for(let j=0;j<n;j++)C[i].push(Math.pow(a,Math.abs(i-j)));}
+    setCards('Variance σ²/(1−ρ²)',v.toFixed(4),'Correlation, 1 step apart',a.toFixed(2),'Correlation, 5 steps apart',Math.pow(a,5).toFixed(3));
+  }
+  // heatmap
+  const hm=document.getElementById('cv-hm');hm.innerHTML='';
+  const x0=20,y0=8,w=230/n;
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+    el('rect',{x:x0+j*w,y:y0+i*w,width:w+0.3,height:w+0.3,fill:color(C[i][j])},hm);
+  }
+  el('rect',{x:x0,y:y0,width:230,height:230,fill:'none',stroke:'#8a8a8a'},hm);
+  if(mode==='ri')for(let g=1;g<3;g++){
+    el('line',{x1:x0+g*4*w,y1:y0,x2:x0+g*4*w,y2:y0+230,stroke:'#555','stroke-width':0.8,'stroke-dasharray':'2 2'},hm);
+    el('line',{x1:x0,y1:y0+g*4*w,x2:x0+230,y2:y0+g*4*w,stroke:'#555','stroke-width':0.8,'stroke-dasharray':'2 2'},hm);
+  }
+  txt('lab',x0+115,258,mode==='ri'?'observations 1-12 (grouped by 4)':'times 1-12',hm);
+  // simulated data
+  const sim=document.getElementById('cv-sim');sim.innerHTML='';
+  const P={x0:42,x1:410,y0:225,y1:12,ymax:0.9};
+  const py=y=>P.y0-(Math.max(-P.ymax,Math.min(P.ymax,y))+P.ymax)/(2*P.ymax)*(P.y0-P.y1);
+  el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x1,y2:P.y0},sim);
+  el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x0,y2:P.y1},sim);
+  [-0.8,-0.4,0,0.4,0.8].forEach(t=>txt('tk',P.x0-5,py(t)+4,t.toFixed(1),sim,'end'));
+  el('line',{x1:P.x0,y1:py(0),x2:P.x1,y2:py(0),stroke:'#ddd'},sim);
+  if(mode==='ri'){
+    const cols=['#222','#2a78d6','#c0392b'];
+    const gw=(P.x1-P.x0)/3;
+    for(let g=0;g<3;g++){
+      const bg=a*z[50+g];
+      const xm=P.x0+gw*(g+0.5);
+      el('line',{x1:xm-gw*0.35,y1:py(bg),x2:xm+gw*0.35,y2:py(bg),stroke:cols[g],'stroke-width':1.5,'stroke-dasharray':'4 3'},sim);
+      for(let i=0;i<4;i++){
+        const y=bg+b*z[g*4+i];
+        el('circle',{cx:xm-gw*0.24+i*gw*0.16,cy:py(y),r:5,fill:cols[g]},sim);
+      }
+      txt('lab',xm,P.y0+17,'group '+(g+1),sim);
+    }
+    txt('tk',P.x1,P.y1+8,'dashed: group effect b_j',sim,'end');
+  }else{
+    const e=[b/Math.sqrt(1-a*a)*z[0]];
+    for(let t=1;t<nT;t++)e.push(a*e[t-1]+b*z[t]);
+    const px=t=>P.x0+t/(nT-1)*(P.x1-P.x0);
+    let d='';e.forEach((y,t)=>{d+=(t?'L':'M')+px(t)+','+py(y);});
+    el('path',{d:d,fill:'none',stroke:'#2a78d6','stroke-width':2},sim);
+    e.forEach((y,t)=>el('circle',{cx:px(t),cy:py(y),r:2.5,fill:'#2a78d6'},sim));
+    txt('lab',(P.x0+P.x1)/2,P.y0+17,'time (40 steps)',sim);
+  }
+  txt('lab',14,(P.y0+P.y1)/2,'value',sim).setAttribute('transform','rotate(-90 14 '+(P.y0+P.y1)/2+')');
+}
+function setCards(k1,v1,k2,v2,k3,v3){
+  document.getElementById('cv-k1').textContent=k1;document.getElementById('cv-v1').textContent=v1;
+  document.getElementById('cv-k2').textContent=k2;document.getElementById('cv-v2').textContent=v2;
+  document.getElementById('cv-k3').textContent=k3;document.getElementById('cv-v3').textContent=v3;
+}
+s1.addEventListener('input',draw);s2.addEventListener('input',draw);
+document.querySelectorAll('#cv input[name=cv-mode]').forEach(r=>r.addEventListener('change',()=>setMode(r.value)));
+document.getElementById('cv-new').addEventListener('click',()=>{newDraw();draw();});
+setMode('ri');
+})();
+</script>
+</div>
