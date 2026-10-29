@@ -351,7 +351,8 @@ render script. LECTURE7 (Oct. 28) and LECTURE5 (Oct. 28, covered by
 the Week 8 and Week 9 pages) were archived this way, as was LECTURE6
 (Oct. 29, covered by the Week 7 and Week 8 pages) and LECTURE4 (Oct. 29,
 covered by the Week 6 page, with intervals and the LRT on the Week 7
-page). Ask before deleting anything.
+page), and LECTURE3 (Oct. 29, covered by the Week 5 page, with its power
+analysis on the Week 6 page). Ask before deleting anything.
 
 # Modeling workflow framing
 
@@ -515,7 +516,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
+Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 5-9 pages built after the fact).
 
 - **Week 11 (Nov. 2-4), built Oct. 28, not yet taught:** Veterans Day
   is Wed., Nov. 11 (Week 12 has Monday + Lab 10 only). Page
@@ -540,7 +541,26 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
   8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
-  1-5.
+  1-4.
+- **Week 5 page (built Oct. 29, after the week):**
+  `Week5_SimulatingData.Rmd` (H1s: simulating data `#simulation`, with
+  the WOD `#wod-dgm` worked for the lek counts, `r` functions, Bolker's
+  linear/hyperbolic signal and noise `#anatomy`, tree goodness of fit
+  `#gof` (straight line fails, girth-cubed lognormal fits, wide null),
+  a lek no-trend null simulation `#null-sim` (8 years p = 0.071, 10
+  years 0.011), and a process vs. observation noise bonus
+  `#process-obs`; the Lab 4 opening `#lab4`, with the lognormal, a
+  log-linear fit (lek index, 40% over 20 years, sigma 0.15, seed 2201),
+  coverage, and error rates/power pointing to Week 6 `#power`; a short
+  Wednesday H1 `#likelihood-wod` pointing to Week 6 `#wod-likelihood`).
+  Widgets `dgm_builder.html`, `ci_coverage.html` (coverage about 90%
+  with observation noise, about 24% with process noise),
+  `process_obs.html`. Script `CODE_Week5_SimulatingData.R`, guide
+  `NOTES_Week5_WebPageGuide.Rmd` (lists what not to give away before
+  Lab 4 Act 1). The Week 5 Monday and Lab 4 PDF NOTES are in
+  `lecture_notes/archive/`; LECTURE3 is in `archive/`, replaced in the
+  navbar by the Week 5 page. No as-taught report for Week 5 Monday or
+  the Lab 4 opening.
 - **Week 6 page (built Oct. 29, after the week):**
   `Week6_LikelihoodAndPowerAnalysis.Rmd` (H1s: likelihood and MLE
   `#likelihood`, with the nest WOD `#wod-likelihood`, pikas, three ways
@@ -594,14 +614,14 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-5 link
+  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-4 link
   legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
-  relink each to what was actually covered (Week 5 Wednesday and Week 6
-  now link the Week 6 page). Navbar updates: re-render
+  relink each to what was actually covered (Week 5 Monday and lab link
+  the Week 5 page; Week 5 Wednesday and Week 6 link the Week 6 page). Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
-  pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-3, LECTURE8, LECTURE9,
-  Links, Week6-Week11; schedule and the newest week page get it
+  pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-2, LECTURE8, LECTURE9,
+  Links, Week5-Week11; schedule and the newest week page get it
   by re-rendering); LECTURE6, 10, GIT-tutorial, and LAB1, 2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
   `sed`). Long menus scroll via

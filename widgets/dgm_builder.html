@@ -1,0 +1,110 @@
+<div class="w746dg" id="dgm">
+<style>
+.w746dg{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746dg .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
+.w746dg .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:190px}
+.w746dg .row input[type=range]{flex:1;min-width:160px}
+.w746dg .row output{font-weight:600;min-width:52px;text-align:right}
+.w746dg .lab{color:var(--ink2);font-size:14px;min-width:96px}
+.w746dg button{font-size:14px;padding:4px 10px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746dg button:hover{background:#eee}
+.w746dg button.on{background:#e6eef8;border-color:#7a9cc6}
+.w746dg .eq{font-family:monospace;font-size:15px;margin:6px 0 8px;color:var(--ink)}
+.w746dg .warn{color:#b03a2e;font-size:14px;min-height:1.2em;margin:2px 0 4px}
+.w746dg .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746dg .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746dg .card .k{font-size:13px;color:var(--ink2)}
+.w746dg .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746dg canvas{width:100%;height:auto;display:block;max-width:620px}
+@media (max-width:600px){.w746dg .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row"><span class="lab">Expected value:</span>
+  <button id="dgm-f-lin">Linear</button><button id="dgm-f-exp">Exponential decline</button><button id="dgm-f-hyp">Hyperbolic</button><button id="dgm-f-mm">Michaelis-Menten</button><button id="dgm-f-log">Logistic</button></div>
+<div class="row"><span class="lab">Noise:</span>
+  <button id="dgm-n-norm">Normal</button><button id="dgm-n-pois">Poisson</button><button id="dgm-n-nb">Negative binomial</button><button id="dgm-n-lnorm">Lognormal</button><button id="dgm-n-gam">Gamma</button><button id="dgm-n-bern">Bernoulli</button></div>
+<div class="eq" id="dgm-eq"></div>
+<div class="row"><label for="dgm-a" id="dgm-a-l">a</label><input type="range" id="dgm-a" step="any"><output id="dgm-a-o"></output></div>
+<div class="row"><label for="dgm-b" id="dgm-b-l">b</label><input type="range" id="dgm-b" step="any"><output id="dgm-b-o"></output></div>
+<div class="row" id="dgm-s-row"><label for="dgm-s" id="dgm-s-l"></label><input type="range" id="dgm-s" step="any"><output id="dgm-s-o"></output></div>
+<div class="row"><button id="dgm-new">Simulate a new data set</button></div>
+<div class="warn" id="dgm-warn"></div>
+<div class="cards">
+  <div class="card"><div class="k">Observations</div><div class="v" id="dgm-nobs"></div></div>
+  <div class="card"><div class="k">Spread around the curve, x &lt; 3 (SD)</div><div class="v" id="dgm-sd1"></div></div>
+  <div class="card"><div class="k">Spread around the curve, x &gt; 7 (SD)</div><div class="v" id="dgm-sd2"></div></div>
+</div>
+<canvas id="dgm-cv" width="620" height="330" role="img" aria-label="Simulated data with the expected-value curve."></canvas>
+<script>
+(function(){
+const $=id=>document.getElementById('dgm-'+id);
+const F={
+ lin:{name:'a + b x',f:(x,a,b)=>a+b*x,a:[0,20,2],b:[-2,2,1]},
+ exp:{name:'a exp(-b x)',f:(x,a,b)=>a*Math.exp(-b*x),a:[1,60,40],b:[0,0.6,0.15]},
+ hyp:{name:'a b / (b + x)',f:(x,a,b)=>a*b/(b+x),a:[1,30,20],b:[0.1,5,1]},
+ mm:{name:'a x / (b + x)',f:(x,a,b)=>a*x/(b+x),a:[1,30,20],b:[0.1,10,2]},
+ log:{name:'1 / (1 + exp(-(a + b x)))',f:(x,a,b)=>1/(1+Math.exp(-(a+b*x))),a:[-6,6,-3],b:[-2,2,0.6]}};
+const N={
+ norm:{lab:'SD, σ',r:[0.1,10,2],txt:s=>'Normal(mean = μ, sd = '+s+')'},
+ pois:{lab:null,txt:()=>'Poisson(λ = μ)'},
+ nb:{lab:'Overdispersion, k',r:[0.2,20,5],txt:s=>'NegBin(mean = μ, k = '+s+')'},
+ lnorm:{lab:'SD on the log scale',r:[0.05,1,0.3],txt:s=>'Lognormal(mean = μ, sdlog = '+s+')'},
+ gam:{lab:'Shape',r:[0.5,50,5],txt:s=>'Gamma(shape = '+s+', scale = μ / shape)'},
+ bern:{lab:null,txt:()=>'Bernoulli(p = μ)'}};
+let fk='lin',nk='norm',xs=[],us=[];
+function rnorm(){let u=0;while(u===0)u=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*Math.random());}
+function pnorm(z){const t=1/(1+0.2316419*Math.abs(z)),d=0.3989423*Math.exp(-z*z/2),p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p;}
+// each point keeps one standard normal draw z, so sliders move the data smoothly
+function qdisc(u,p0,next){let y=0,p=p0,c=p0;while(c<u&&y<5000){p=next(p,y);y++;c+=p;}return y;}
+const qpois=(u,l)=>qdisc(u,Math.exp(-l),(p,y)=>p*l/(y+1));
+const qnb=(u,m,k)=>qdisc(u,Math.pow(k/(k+m),k),(p,y)=>p*(y+k)/(y+1)*m/(k+m));
+const qgam=(z,k,sc)=>{const v=1/(9*k),q=1-v+z*Math.sqrt(v);return Math.max(1e-6,k*q*q*q)*sc;};
+function newdata(){xs=[];us=[];for(let i=0;i<50;i++){xs.push(10*Math.random());us.push(rnorm());}}
+function setf(k){fk=k;const p=F[k];[['a',p.a],['b',p.b]].forEach(([n,r])=>{const el=$(n);el.min=r[0];el.max=r[1];el.step="any";el.value=r[2];});}
+function setn(k){nk=k;const p=N[k];$('s-row').style.display=p.lab?'':'none';if(p.lab){const el=$("s");el.min=p.r[0];el.max=p.r[1];el.step="any";el.value=p.r[2];$('s-l').textContent=p.lab;}}
+function draw(){
+  Object.keys(F).forEach(k=>$('f-'+k).classList.toggle('on',k===fk));Object.keys(N).forEach(k=>$('n-'+k).classList.toggle('on',k===nk));
+  const a=+$('a').value,b=+$('b').value,s=+$('s').value,f=F[fk].f;
+  $('a-o').textContent=a.toFixed(2);$('b-o').textContent=b.toFixed(2);$('s-o').textContent=s.toFixed(2);
+  const sTxt=(+s.toFixed(2)).toString();
+  $('eq').textContent='μ = '+F[fk].name+',   Y ~ '+N[nk].txt(sTxt);
+  let bad=0;const pts=[];
+  xs.forEach((x,i)=>{const mu=f(x,a,b),z=us[i],u=pnorm(z);let y=null;
+    if(nk==='norm')y=mu+s*z;
+    else if(nk==='bern'){if(mu<0||mu>1){bad++;return;}y=u<mu?1:0;}
+    else{if(mu<=0){bad++;return;}
+      if(nk==='pois')y=qpois(u,mu);
+      else if(nk==='nb')y=qnb(u,mu,s);
+      else if(nk==='lnorm')y=Math.exp(Math.log(mu)-s*s/2+s*z);
+      else if(nk==='gam')y=qgam(z,s,mu/s);}
+    pts.push([x,y,mu]);});
+  let w='';
+  if(bad&&nk==='bern')w='The expected value leaves the range 0 to 1 at '+bad+' of 50 x values: a Bernoulli probability can’t go there, so those points can’t be simulated.';
+  else if(bad)w='The expected value is zero or negative at '+bad+' of 50 x values: this distribution can’t have a mean there, so those points can’t be simulated.';
+  $('warn').textContent=w;
+  const sdr=sel=>{const r=pts.filter(sel).map(p=>p[1]-p[2]);if(r.length<3)return '-';const m=r.reduce((u,v)=>u+v,0)/r.length;return Math.sqrt(r.reduce((u,v)=>u+(v-m)*(v-m),0)/(r.length-1)).toFixed(2);};
+  $('nobs').textContent=pts.length;$('sd1').textContent=sdr(p=>p[0]<3);$('sd2').textContent=sdr(p=>p[0]>7);
+  const cv=$('cv'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height,pad={l:48,r:10,t:10,b:36};
+  const grid=[];for(let i=0;i<=200;i++){const x=i/20;grid.push([x,f(x,a,b)]);}
+  let ys=pts.map(p=>p[1]).concat(grid.map(g=>g[1])).filter(v=>isFinite(v));
+  let y0=Math.min(0,...ys),y1=Math.max(...ys);if(y1-y0<1e-6)y1=y0+1;const padY=(y1-y0)*0.05;y0-=y0<0?padY:0;y1+=padY;
+  if(nk==='bern'||fk==='log'){y0=Math.min(y0,-0.1);y1=Math.max(y1,1.1);}
+  const sx=x=>pad.l+x/10*(W-pad.l-pad.r),sy=y=>H-pad.b-(y-y0)/(y1-y0)*(H-pad.t-pad.b);
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';[0,2,4,6,8,10].forEach(t=>ctx.fillText(t,sx(t),H-pad.b+15));ctx.fillText('x',(pad.l+W-pad.r)/2,H-6);
+  const span=y1-y0,raw=span/5,mag=Math.pow(10,Math.floor(Math.log10(raw))),st=[1,2,5,10].map(m=>m*mag).find(m=>m>=raw);
+  ctx.textAlign='right';for(let t=Math.ceil(y0/st)*st;t<=y1+1e-9;t+=st){ctx.fillText(+t.toFixed(6),pad.l-5,sy(t)+4);}
+  if(y0<0){ctx.strokeStyle='#ccc';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(pad.l,sy(0));ctx.lineTo(W-pad.r,sy(0));ctx.stroke();ctx.setLineDash([]);}
+  ctx.save();ctx.translate(13,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('y',0,0);ctx.restore();
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);ctx.clip();
+  ctx.fillStyle='rgba(34,34,34,0.75)';pts.forEach(p=>{ctx.beginPath();ctx.arc(sx(p[0]),sy(p[1]),3.4,0,2*Math.PI);ctx.fill();});
+  ctx.strokeStyle='#2a6bb0';ctx.lineWidth=2.5;ctx.beginPath();grid.forEach((g,i)=>{const X=sx(g[0]),Y=sy(g[1]);i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);});ctx.stroke();
+  ctx.restore();ctx.fillStyle='#2a6bb0';ctx.textAlign='left';ctx.fillText('expected value, μ',pad.l+8,pad.t+16);
+}
+Object.keys(F).forEach(k=>$('f-'+k).onclick=()=>{setf(k);draw();});
+Object.keys(N).forEach(k=>$('n-'+k).onclick=()=>{setn(k);draw();});
+['a','b','s'].forEach(k=>$(k).oninput=draw);
+$('new').onclick=()=>{newdata();draw();};
+newdata();setf('lin');setn('norm');draw();
+})();
+</script>
+</div>

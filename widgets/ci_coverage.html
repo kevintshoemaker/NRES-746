@@ -1,0 +1,110 @@
+<div class="w746cc" id="cic">
+<style>
+.w746cc{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746cc .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746cc .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:170px}
+.w746cc .row input[type=range]{flex:1;min-width:160px}
+.w746cc .row output{font-weight:600;min-width:52px;text-align:right}
+.w746cc .lab{color:var(--ink2);font-size:14px;min-width:60px}
+.w746cc button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746cc button:hover{background:#eee}
+.w746cc button.on{background:#e6eef8;border-color:#7a9cc6}
+.w746cc .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746cc .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746cc .card .k{font-size:13px;color:var(--ink2)}
+.w746cc .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746cc .plots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.w746cc canvas{width:100%;height:auto;display:block}
+@media (max-width:600px){.w746cc .plots{grid-template-columns:1fr}.w746cc .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row"><label for="cic-n">Years of surveys</label><input type="range" id="cic-n" min="5" max="30" step="1" value="20"><output id="cic-n-o"></output></div>
+<div class="row"><label for="cic-sd">Noise SD (log scale), &sigma;</label><input type="range" id="cic-sd" min="0.05" max="0.5" step="0.01" value="0.15"><output id="cic-sd-o"></output></div>
+<div class="row">
+  <span class="lab">Interval:</span>
+  <button id="cic-l80">80%</button><button id="cic-l90">90%</button><button id="cic-l95">95%</button>
+  <span class="lab" style="margin-left:12px">Noise:</span>
+  <button id="cic-obs">Observation noise</button><button id="cic-proc">Process noise</button>
+</div>
+<div class="row">
+  <button id="cic-one">Simulate one program</button>
+  <button id="cic-hund">Simulate 100 programs</button>
+  <button id="cic-reset">Reset</button>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Programs simulated</div><div class="v" id="cic-R"></div></div>
+  <div class="card"><div class="k">Intervals containing the true slope</div><div class="v" id="cic-hit"></div></div>
+  <div class="card"><div class="k">Coverage</div><div class="v" id="cic-cov"></div></div>
+  <div class="card"><div class="k">Nominal level</div><div class="v" id="cic-nom"></div></div>
+</div>
+<div class="plots">
+  <canvas id="cic-cv1" width="380" height="300" role="img" aria-label="The most recent simulated program: log index against year, with the true and fitted lines."></canvas>
+  <canvas id="cic-cv2" width="380" height="300" role="img" aria-label="Confidence intervals for the slope from the most recent programs, with the true slope marked; intervals that miss it are red."></canvas>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById('cic-'+id);
+const TQ={80:[1.6377,1.5332,1.4759,1.4398,1.4149,1.3968,1.3830,1.3722,1.3634,1.3562,1.3502,1.3450,1.3406,1.3368,1.3334,1.3304,1.3277,1.3253,1.3232,1.3212,1.3195,1.3178,1.3163,1.3150,1.3137,1.3125],
+90:[2.3534,2.1318,2.0150,1.9432,1.8946,1.8595,1.8331,1.8125,1.7959,1.7823,1.7709,1.7613,1.7531,1.7459,1.7396,1.7341,1.7291,1.7247,1.7207,1.7171,1.7139,1.7109,1.7081,1.7056,1.7033,1.7011],
+95:[3.1824,2.7764,2.5706,2.4469,2.3646,2.3060,2.2622,2.2281,2.2010,2.1788,2.1604,2.1448,2.1314,2.1199,2.1098,2.1009,2.0930,2.0860,2.0796,2.0739,2.0687,2.0639,2.0595,2.0555,2.0518,2.0484]};
+const B=Math.log(0.6)/20,LI0=Math.log(40);
+let level=90,noise='obs',R=0,hits=0,ivs=[],last=null;
+function rnorm(){let u=0,v=0;while(u===0)u=Math.random();v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function program(){
+  const n=+$('n').value,sd=+$('sd').value,y=[];let w=LI0;
+  for(let t=1;t<=n;t++){if(noise==='obs')y.push(LI0+B*t+sd*rnorm());else{w+=B+sd*rnorm();y.push(w);}}
+  let tb=(n+1)/2,yb=y.reduce((a,b)=>a+b,0)/n,stt=0,sty=0;
+  for(let i=0;i<n;i++){const d=i+1-tb;stt+=d*d;sty+=d*(y[i]-yb);}
+  const b=sty/stt,a=yb-b*tb;let ss=0;for(let i=0;i<n;i++){const r=y[i]-a-b*(i+1);ss+=r*r;}
+  const se=Math.sqrt(ss/(n-2)/stt),h=TQ[level][n-5]*se,lo=b-h,hi=b+h,hit=lo<=B&&B<=hi;
+  R++;if(hit)hits++;ivs.push({lo,hi,b,hit});if(ivs.length>40)ivs.shift();last={y,a,b};
+}
+function axes(ctx,W,H,pad,x0,x1,y0,y1,xl,yl,xt,yt,fmt){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  const sx=x=>pad.l+(x-x0)/(x1-x0)*(W-pad.l-pad.r),sy=y=>H-pad.b-(y-y0)/(y1-y0)*(H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  xt.forEach(t=>ctx.fillText(fmt?fmt(t):t,sx(t),H-pad.b+15));ctx.fillText(xl,(pad.l+W-pad.r)/2,H-6);
+  ctx.textAlign='right';yt.forEach(t=>ctx.fillText(t,pad.l-5,sy(t)+4));
+  ctx.save();ctx.translate(12,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(yl,0,0);ctx.restore();
+  return {sx,sy};
+}
+function draw(){
+  const n=+$('n').value;
+  $('n-o').textContent=n;$('sd-o').textContent=(+$('sd').value).toFixed(2);
+  [80,90,95].forEach(l=>$('l'+l).classList.toggle('on',l===level));
+  $('obs').classList.toggle('on',noise==='obs');$('proc').classList.toggle('on',noise==='proc');
+  $('R').textContent=R;$('hit').textContent=hits;$('cov').textContent=R?(100*hits/R).toFixed(1)+'%':'-';$('nom').textContent=level+'%';
+  const c1=$('cv1'),x1=c1.getContext('2d'),W=c1.width,H=c1.height,pad={l:44,r:8,t:24,b:34};
+  const A=axes(x1,W,H,pad,0,31,1.5,5,'Year','log(index)',[0,10,20,30],[2,3,4,5]);
+  x1.save();x1.beginPath();x1.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);x1.clip();
+  x1.setLineDash([5,4]);x1.strokeStyle='#555';x1.lineWidth=1.5;x1.beginPath();x1.moveTo(A.sx(0),A.sy(LI0));x1.lineTo(A.sx(31),A.sy(LI0+B*31));x1.stroke();x1.setLineDash([]);
+  if(last){
+    x1.fillStyle='#222';last.y.forEach((v,i)=>{x1.beginPath();x1.arc(A.sx(i+1),A.sy(v),3.2,0,2*Math.PI);x1.fill();});
+    x1.strokeStyle='#2a6bb0';x1.lineWidth=2;x1.beginPath();x1.moveTo(A.sx(1),A.sy(last.a+last.b));x1.lineTo(A.sx(last.y.length),A.sy(last.a+last.b*last.y.length));x1.stroke();
+  }
+  x1.restore();
+  x1.font='12px sans-serif';x1.textAlign='left';x1.fillStyle='#555';x1.fillText('dashed: true trend',pad.l,15);
+  x1.fillStyle='#2a6bb0';x1.fillText('blue: fitted line',pad.l+130,15);
+  const c2=$('cv2'),x2=c2.getContext('2d');
+  const lo=-0.12,hi=0.08;
+  const A2=axes(x2,W,H,pad,lo,hi,0,41,'Slope estimate with interval','Most recent programs',[-0.1,-0.05,0,0.05],[],v=>v.toFixed(2));
+  x2.save();x2.beginPath();x2.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);x2.clip();
+  ivs.forEach((v,i)=>{const yy=A2.sy(i+1);x2.strokeStyle=v.hit?'#7a9cc6':'#c0392b';x2.lineWidth=v.hit?2:3;
+    x2.beginPath();x2.moveTo(A2.sx(v.lo),yy);x2.lineTo(A2.sx(v.hi),yy);x2.stroke();
+    x2.fillStyle='#222';x2.beginPath();x2.arc(A2.sx(v.b),yy,2.2,0,2*Math.PI);x2.fill();});
+  x2.strokeStyle='#222';x2.lineWidth=1.5;x2.setLineDash([5,4]);x2.beginPath();x2.moveTo(A2.sx(B),pad.t);x2.lineTo(A2.sx(B),H-pad.b);x2.stroke();x2.setLineDash([]);
+  x2.restore();
+  x2.font='12px sans-serif';x2.textAlign='left';x2.fillStyle='#c0392b';x2.fillText('red: misses the true slope (dashed)',pad.l,15);
+}
+function reset(){R=0;hits=0;ivs=[];last=null;}
+$('one').onclick=()=>{program();draw();};
+$('hund').onclick=()=>{for(let i=0;i<100;i++)program();draw();};
+$('reset').onclick=()=>{reset();draw();};
+[80,90,95].forEach(l=>$('l'+l).onclick=()=>{level=l;reset();draw();});
+$('obs').onclick=()=>{noise='obs';reset();draw();};
+$('proc').onclick=()=>{noise='proc';reset();draw();};
+['n','sd'].forEach(k=>$(k).oninput=()=>{reset();draw();});
+draw();
+})();
+</script>
+</div>

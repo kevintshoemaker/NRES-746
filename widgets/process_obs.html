@@ -1,0 +1,63 @@
+<div class="w746po" id="pon">
+<style>
+.w746po{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746po .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746po .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:170px}
+.w746po .row input[type=range]{flex:1;min-width:160px}
+.w746po .row output{font-weight:600;min-width:52px;text-align:right}
+.w746po button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746po button:hover{background:#eee}
+.w746po .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746po .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746po .card .k{font-size:13px;color:var(--ink2)}
+.w746po .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746po .plots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.w746po canvas{width:100%;height:auto;display:block}
+@media (max-width:600px){.w746po .plots{grid-template-columns:1fr}}
+</style>
+<div class="row"><label for="pon-sd">Noise SD (log scale), &sigma;</label><input type="range" id="pon-sd" min="0.02" max="0.4" step="0.01" value="0.15"><output id="pon-sd-o"></output></div>
+<div class="row"><button id="pon-new">Simulate 20 new runs</button></div>
+<div class="cards">
+  <div class="card"><div class="k">Observation noise: SD of log(index) across runs in year 30</div><div class="v" id="pon-s1"></div></div>
+  <div class="card"><div class="k">Process noise: SD of log(index) across runs in year 30</div><div class="v" id="pon-s2"></div></div>
+</div>
+<div class="plots">
+  <canvas id="pon-cv1" width="380" height="300" role="img" aria-label="Twenty runs with observation noise scattered around the true decline."></canvas>
+  <canvas id="pon-cv2" width="380" height="300" role="img" aria-label="Twenty runs with process noise wandering away from the expected decline."></canvas>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById('pon-'+id);
+const T=30,L0=Math.log(100),B=Math.log(0.6)/20;
+let Z=[];
+function rnorm(){let u=0;while(u===0)u=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*Math.random());}
+function sim(){Z=[];for(let r=0;r<20;r++){const z=[];for(let t=1;t<=T;t++)z.push(rnorm());Z.push(z);}}
+function sd(v){const m=v.reduce((a,b)=>a+b,0)/v.length;return Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/(v.length-1));}
+function panel(cv,runs,title){
+  const ctx=cv.getContext('2d'),W=cv.width,H=cv.height,pad={l:44,r:8,t:24,b:34},y1=250;
+  const sx=x=>pad.l+x/T*(W-pad.l-pad.r),sy=y=>H-pad.b-Math.min(y,y1*1.2)/y1*(H-pad.t-pad.b);
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';[0,10,20,30].forEach(t=>ctx.fillText(t,sx(t),H-pad.b+15));ctx.fillText('Year',(pad.l+W-pad.r)/2,H-6);
+  ctx.textAlign='right';[0,50,100,150,200,250].forEach(t=>ctx.fillText(t,pad.l-5,sy(t)+4));
+  ctx.save();ctx.translate(12,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('Index',0,0);ctx.restore();
+  ctx.fillStyle='#222';ctx.font='bold 13px sans-serif';ctx.textAlign='left';ctx.fillText(title,pad.l,15);
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);ctx.clip();
+  runs.forEach((r,i)=>{ctx.strokeStyle=i===0?'#2a6bb0':'rgba(122,156,198,0.45)';ctx.lineWidth=i===0?2.2:1;ctx.beginPath();
+    r.forEach((v,t)=>{const X=sx(t+1),Y=sy(Math.exp(v));t?ctx.lineTo(X,Y):ctx.moveTo(X,Y);});ctx.stroke();});
+  ctx.strokeStyle='#222';ctx.lineWidth=2;ctx.setLineDash([6,4]);ctx.beginPath();
+  for(let t=0;t<=T;t++){const X=sx(t),Y=sy(Math.exp(L0+B*t));t?ctx.lineTo(X,Y):ctx.moveTo(X,Y);}ctx.stroke();ctx.setLineDash([]);
+  ctx.restore();
+}
+function draw(){
+  const s=+$('sd').value;$('sd-o').textContent=s.toFixed(2);
+  const obs=Z.map(z=>z.map((v,i)=>L0+B*(i+1)+s*v));
+  const proc=Z.map(z=>{let w=L0;return z.map(v=>(w+=B+s*v));});
+  $('s1').textContent=sd(obs.map(r=>r[T-1])).toFixed(2)+'  (σ = '+s.toFixed(2)+')';
+  $('s2').textContent=sd(proc.map(r=>r[T-1])).toFixed(2)+'  (σ√30 = '+(s*Math.sqrt(30)).toFixed(2)+')';
+  panel($('cv1'),obs,'Observation noise');panel($('cv2'),proc,'Process noise');
+}
+$('sd').oninput=draw;$('new').onclick=()=>{sim();draw();};
+sim();draw();
+})();
+</script>
+</div>
