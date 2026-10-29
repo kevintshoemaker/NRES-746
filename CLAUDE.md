@@ -349,9 +349,9 @@ point remaining `href="LECTUREn.html"` links in older pages at the new
 page (sed on the HTML), and comment out its line in `index.Rmd`'s
 render script. LECTURE7 (Oct. 28) and LECTURE5 (Oct. 28, covered by
 the Week 8 and Week 9 pages) were archived this way, as was LECTURE6
-(Oct. 29, covered by the Week 7 and Week 8 pages). LECTURE4 (likelihood
-and MLE) stays until a Week 6 page covers the MLE material. Ask before
-deleting anything.
+(Oct. 29, covered by the Week 7 and Week 8 pages) and LECTURE4 (Oct. 29,
+covered by the Week 6 page, with intervals and the LRT on the Week 7
+page). Ask before deleting anything.
 
 # Modeling workflow framing
 
@@ -540,7 +540,22 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
   8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
-  1-6.
+  1-5.
+- **Week 6 page (built Oct. 29, after the week):**
+  `Week6_LikelihoodAndPowerAnalysis.Rmd` (H1s: likelihood and MLE
+  `#likelihood`, with the nest WOD `#wod-likelihood`, pikas, three ways
+  to the MLE, and bonuses on fitting by simulation `#by-eye`; the Lab 5
+  opening `#lab5`, with R's `trees` data (power law, normal noise; MLE
+  a = 0.087, b = 2.24, sigma = 3.18), densities and units, NLL anatomy,
+  starting values, checking the fit, and a deviance bonus; the Lab 4
+  power analysis `#power`, with the two-bug WOD, the four functions,
+  the k x s grid (cheapest k = 10, s = 4, 0.750), and an AI-prompting
+  bonus). Widgets `likelihood_product.html` and `power_design.html`
+  (the latter embeds the page's seed-746 power grid; regenerate it if
+  the grid code changes). Script `CODE_Week6_LikelihoodAndPowerAnalysis.R`,
+  guide `NOTES_Week6_WebPageGuide.Rmd`. The two Week 6 PDF NOTES are
+  in `lecture_notes/archive/`; LECTURE4 is in `archive/`, replaced in
+  the navbar by the Week 6 page.
 - **Week 7 page (built Oct. 29, after the week):**
   `Week7_IntervalsAndBayes.Rmd` (H1s: likelihood intervals `#intervals`,
   with the chytrid WOD `#wod-interval`, pikas 6 vs. 24 plots, the 1.92
@@ -579,14 +594,15 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-6 link
+  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-5 link
   legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
-  relink each to what was actually covered. Navbar updates: re-render
+  relink each to what was actually covered (Week 5 Wednesday and Week 6
+  now link the Week 6 page). Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
   pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-3, LECTURE8, LECTURE9,
-  Links, Week9, Week10, Week11; schedule and the newest week page get it
-  by re-rendering); LECTURE4, 6, 10 and LAB1, 2, 5 carry older navbars
+  Links, Week6-Week11; schedule and the newest week page get it
+  by re-rendering); LECTURE6, 10, GIT-tutorial, and LAB1, 2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
   `sed`). Long menus scroll via
   `styles.css` (`css:` in `_site.yml`); pages not re-rendered got its

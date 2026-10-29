@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="NRES 746" />
+
+
+<title>Week 6: Likelihood, Maximum Likelihood, and a Power Analysis in Code</title>
+
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.13.2/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+<link rel="stylesheet" href="styles.css" type="text/css" />
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">NRES 746</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Schedule
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="schedule.html">Course Schedule</a>
+    </li>
+    <li>
+      <a href="Syllabus.pdf">Syllabus</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Lectures
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="INTRO.html">Introduction to NRES 746</a>
+    </li>
+    <li>
+      <a href="LECTURE1.html">Computational statistics</a>
+    </li>
+    <li>
+      <a href="LECTURE2.html">Working with probabilities</a>
+    </li>
+    <li>
+      <a href="LECTURE3.html">Data Generating Models</a>
+    </li>
+    <li>
+      <a href="LECTURE8.html">Model Selection</a>
+    </li>
+    <li>
+      <a href="LECTURE9.html">Performance Evaluation</a>
+    </li>
+    <li>
+      <a href="Week6_LikelihoodAndPowerAnalysis.html">Week 6: Likelihood, maximum likelihood, and a power analysis</a>
+    </li>
+    <li>
+      <a href="Week7_IntervalsAndBayes.html">Week 7: Likelihood intervals and Bayes' rule</a>
+    </li>
+    <li>
+      <a href="Week8_PosteriorsAndOptimization.html">Week 8: Priors, posteriors, and derivative-based optimization</a>
+    </li>
+    <li>
+      <a href="Week9_MCMC.html">Week 9: Derivative-free optimization and MCMC</a>
+    </li>
+    <li>
+      <a href="Week10_ModelComparison.html">Week 10: Model comparison and regularization</a>
+    </li>
+    <li>
+      <a href="Week11_LinearModelsAndVariance.html">Week 11: Linear models, matrices, and modeling variance</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    WODs
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="wod/WOD_Week1_Lecture1_Diagnostic.pdf">Week 1: Math and stats self-diagnostic</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week1_Lecture2_PermutationPseudocode.pdf">Week 1: Pseudocoding a permutation test</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week2_Lecture1_RSyntaxAndNotation.pdf">Week 2: R syntax and function adjustments</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week2_Lecture2_BestiaryLimits.pdf">Week 2: Limits and a derivative</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week3_Lecture2_ProbabilityPuzzle.pdf">Week 3: A probability puzzle</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week4_Lecture2_SampleMeanVariance.pdf">Week 4: Expectation and the sample mean</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week5_Lecture1_ChooseDataGeneratingModel.pdf">Week 5: Choosing a data-generating model</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week5_Lecture2_WritingTheLikelihood.pdf">Week 5: Writing the likelihood</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week6_Lecture2_FindTheBugs.pdf">Week 6: Find the bugs</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week7_Lecture1_ReadTheInterval.pdf">Week 7: Reading the interval</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture1_HowMuchDidThePriorMatter.pdf">Week 8: How much did the prior matter?</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture1_NewtonByHand.pdf">Week 8: Newton's method by hand (take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture2_CurvatureByHand.pdf">Week 8: Curvature by hand (optional take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week9_Lecture2_GettingStanRunning.pdf">Week 9: Getting Stan running (take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week10_Lecture1_ConnectTheDots.pdf">Week 10: Connect the dots</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week11_Lecture1_LinearOrNot.pdf">Week 11: Linear or not?</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week11_Lecture2_TwoCores.pdf">Week 11: Two cores from one tree</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Labs
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="labs/Lab1_Act1.pdf">Lab 1, Act 1: Predation risk and tadpole size</a>
+    </li>
+    <li>
+      <a href="labs/Lab1_Act2.pdf">Lab 1, Act 2: From a shape to an equation</a>
+    </li>
+    <li>
+      <a href="labs/Lab1_Act3.pdf">Lab 1, Act 3: Does the evidence support it?</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act1.pdf">Lab 2, Act 1: Systematic search</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act2.pdf">Lab 2, Act 2: A better-fitting function?</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act3.pdf">Lab 2, Act 3: Trusting the best fit</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act1.pdf">Lab 3, Act 1: Trusting a positive detection</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act2.pdf">Lab 3, Act 2: Binomial or Poisson?</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act3.pdf">Lab 3, Act 3: A continuous measurement</a>
+    </li>
+    <li>
+      <a href="labs/Lab4_Act1.pdf">Lab 4, Act 1: Would the trend analysis find it?</a>
+    </li>
+    <li>
+      <a href="labs/Lab5_Act1.pdf">Lab 5, Act 1: Finding the peak</a>
+    </li>
+    <li>
+      <a href="labs/Lab5_Act2.pdf">Lab 5, Act 2: Finding the peak numerically</a>
+    </li>
+    <li>
+      <a href="labs/Lab6_Act1.pdf">Lab 6, Act 1: Reading the surface</a>
+    </li>
+    <li>
+      <a href="labs/Lab6_Act2.pdf">Lab 6, Act 2: An interval for the lethal dose</a>
+    </li>
+    <li>
+      <a href="labs/Lab7_Act1.pdf">Lab 7, Act 1: Running a chain by hand</a>
+    </li>
+    <li>
+      <a href="labs/Lab7_Act2.pdf">Lab 7, Act 2: Your own sampler</a>
+    </li>
+    <li>
+      <a href="labs/Lab8_Act1.pdf">Lab 8, Act 1: Which pond features matter?</a>
+    </li>
+    <li>
+      <a href="labs/Lab8_Act2.pdf">Lab 8, Act 2: Shrinking the coefficients</a>
+    </li>
+    <li>
+      <a href="labs/Lab9_Act1.pdf">Lab 9: Matrices for models</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Data sets
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li class="dropdown-header">Lab data</li>
+    <li>
+      <a href="data/ReedfrogSizepred.csv">Labs 1-2: Reed frog size and predation</a>
+    </li>
+    <li>
+      <a href="data/FrogChorus.csv">Lab 5: Frog chorus</a>
+    </li>
+    <li>
+      <a href="data/BeetleFumigation.csv">Lab 6: Beetle fumigation</a>
+    </li>
+    <li>
+      <a href="data/BdPondSurvey.csv">Lab 7: Bd pond survey</a>
+    </li>
+    <li>
+      <a href="data/BdRegionalSurvey.csv">Lab 8: Bd regional survey</a>
+    </li>
+    <li>
+      <a href="data/PinyonSeedlings.csv">Lab 9: Pinyon seedlings</a>
+    </li>
+    <li class="divider"></li>
+    <li class="dropdown-header">Other</li>
+    <li>
+      <a href="data/other/TreeData.csv">Tree Data</a>
+    </li>
+    <li>
+      <a href="data/ReedfrogPred.csv">Reed Frog Predation Data</a>
+    </li>
+    <li>
+      <a href="data/ReedfrogFuncresp.csv">Reed Frog Func Resp</a>
+    </li>
+  </ul>
+</li>
+<li>
+  <a href="Links.html">Links</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Week 6: Likelihood, Maximum Likelihood, and a Power Analysis in Code</h1>
+<h4 class="author">NRES 746</h4>
+<h4 class="date">Sept. 28-30, 2026</h4>
+
+</div>
+
+
+<p>R code from this page is also in the <a href="lecture_notes/CODE_Week6_LikelihoodAndPowerAnalysis.R">companion script</a>. No packages beyond base R are needed.</p>
+<p>This material follows Bolker, <em>Ecological Models and Data in R</em>, sections 6.1-6.2.1 and 6.3.1 (likelihood and maximum likelihood, pp. 227-236 and 243-247) and 5.3 (power analysis, pp. 209-226).</p>
+<div id="likelihood" class="section level1">
+<h1>Likelihood and maximum likelihood estimation</h1>
+<p>Simulation runs a model forward: choose the parameters, then generate data. Inference runs it backward: the data are fixed, and the question is which parameter values could have produced them. This part defines the likelihood, explains why we work with its negative logarithm, and shows three ways to find the parameter values that make the data most probable.</p>
+<div id="big-picture" class="section level2">
+<h2>1. Big picture</h2>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/workflow-likelihood-1.png" width="1750" style="display: block; margin: auto;" /></p>
+<p>A data-generating model (the MODELS box) says how data arise for given parameter values. The FIT step confronts that model with real data. Nearly every fitting method in this course, from maximum likelihood to Markov chain Monte Carlo, is built on one quantity: the <strong>likelihood</strong>, the probability of the data we actually observed under a fully specified model (Bolker p. 228).</p>
+</div>
+<div id="wod-likelihood" class="section level2">
+<h2>2. WOD: writing the likelihood</h2>
+<p>The WOD (a short warm-up exercise at the start of class) asked students to write a likelihood from scratch. Four sage-grouse nests were monitored; each either hatched at least one egg (<span class="math inline">\(y_i = 1\)</span>) or failed (<span class="math inline">\(y_i = 0\)</span>):</p>
+<table>
+<thead>
+<tr class="header">
+<th align="center">Nest</th>
+<th align="center">Sagebrush cover (%)</th>
+<th align="center">Outcome (1 = hatched, 0 = failed)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">1</td>
+<td align="center">30</td>
+<td align="center">1</td>
+</tr>
+<tr class="even">
+<td align="center">2</td>
+<td align="center">20</td>
+<td align="center">1</td>
+</tr>
+<tr class="odd">
+<td align="center">3</td>
+<td align="center">10</td>
+<td align="center">0</td>
+</tr>
+<tr class="even">
+<td align="center">4</td>
+<td align="center">30</td>
+<td align="center">1</td>
+</tr>
+</tbody>
+</table>
+<p>If every nest has the same success probability <span class="math inline">\(p\)</span>, one nest's outcome has probability <span class="math inline">\(P(y \mid p) = p^{y}(1-p)^{1-y}\)</span>: <span class="math inline">\(p\)</span> when <span class="math inline">\(y = 1\)</span> and <span class="math inline">\(1 - p\)</span> when <span class="math inline">\(y = 0\)</span>. Read the other way, with the outcome fixed and <span class="math inline">\(p\)</span> allowed to vary, the same formula is the <strong>likelihood</strong> of <span class="math inline">\(p\)</span>. The likelihood is written as a function of the parameter alone, <span class="math inline">\(\mathcal{L}_1(p)\)</span>, with no conditioning bar, because it is not a probability distribution over <span class="math inline">\(p\)</span>. The subscript counts the observations.</p>
+<p>If the nests are independent, the probability of all four outcomes is the product of the four probabilities:</p>
+<p><span class="math display">\[\mathcal{L}_4(p) = \prod_{i=1}^{4} p^{y_i}(1-p)^{1-y_i} = p^3 (1-p).\]</span></p>
+<pre class="r"><code>p_grid &lt;- seq(0, 1, by = 0.005)
+lik_nests &lt;- function(p) p^3 * (1 - p)
+p_three &lt;- c(0.25, 0.5, 0.75)
+
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(p_grid, lik_nests(p_grid), type = &quot;l&quot;, lwd = 2,
+     xlab = &quot;Nest success probability, p&quot;, ylab = &quot;Likelihood&quot;)
+points(p_three, lik_nests(p_three), pch = 16, cex = 1.2)</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/nest-likelihood-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>The dots are the values the WOD asked for: <span class="math inline">\(3/256\)</span>, <span class="math inline">\(16/256\)</span>, and <span class="math inline">\(27/256\)</span>. The WOD went on to let <span class="math inline">\(p\)</span> depend on sagebrush cover through a logistic function (see the <a href="Week7_IntervalsAndBayes.html#logistic">logistic regression section</a> on the next page).</p>
+<blockquote>
+<p><strong>Question:</strong> Add up the three likelihood values. Do they sum to 1? Should they?</p>
+</blockquote>
+</div>
+<div id="nll" class="section level2">
+<h2>3. From likelihood to negative log-likelihood</h2>
+<p>Take counts of active pika haypiles in six talus plots of equal size: 2, 5, 3, 0, 4, and 4. Model each count as Poisson with an unknown mean <span class="math inline">\(\lambda\)</span> (haypiles per plot). The likelihood is the product of the six Poisson probabilities:</p>
+<p><span class="math display">\[\mathcal{L}_6(\lambda) = \prod_{i=1}^{6} P(y_i \mid \lambda)
+  = \prod_{i=1}^{6} \frac{\lambda^{y_i} e^{-\lambda}}{y_i!}.\]</span></p>
+<p>In practice we almost never work with this product directly. We take its logarithm and change the sign:</p>
+<p><span class="math display">\[\ell_6(\lambda) = \log \mathcal{L}_6(\lambda) = \sum_{i=1}^{6} \log P(y_i \mid \lambda),
+  \qquad \text{NLL}(\lambda) = -\ell_6(\lambda).\]</span></p>
+<ul>
+<li><strong>Why the log?</strong> A product of many numbers below 1 shrinks toward zero. The WOD imagined 1,852 nests, each with likelihood about 0.5: their product is about <span class="math inline">\(10^{-558}\)</span>, far below the smallest positive number a computer can store, so R rounds it to exactly 0. The sum of the logs is -1283.71, an ordinary number. Sums are also much easier to differentiate than products.</li>
+<li><strong>Why the minus sign?</strong> Optimization software, including R's <code>optim()</code>, is written to <em>minimize</em> a function. Flipping the sign turns &quot;find the highest point of the likelihood&quot; into &quot;find the lowest point of the negative log-likelihood (NLL).&quot; There is no deeper reason.</li>
+</ul>
+<pre class="r"><code>haypiles &lt;- c(2, 5, 3, 0, 4, 4)
+
+nll_pois &lt;- function(lambda, y) {
+  -sum(dpois(y, lambda = lambda, log = TRUE))
+}
+
+lambda_grid &lt;- seq(0.5, 7, by = 0.01)
+lik_vals &lt;- sapply(lambda_grid, function(l) prod(dpois(haypiles, l)))
+nll_vals &lt;- sapply(lambda_grid, nll_pois, y = haypiles)
+
+par(mfrow = c(1, 2), mar = c(4, 4.5, 0.5, 0.5))
+plot(lambda_grid, lik_vals, type = &quot;l&quot;, lwd = 2,
+     xlab = &quot;lambda (haypiles per plot)&quot;, ylab = &quot;Likelihood&quot;)
+abline(v = 3, lty = 3)
+plot(lambda_grid, nll_vals, type = &quot;l&quot;, lwd = 2,
+     xlab = &quot;lambda (haypiles per plot)&quot;, ylab = &quot;Negative log-likelihood&quot;)
+abline(v = 3, lty = 3)</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/pika-nll-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))</code></pre>
+<p>The widget shows where the product comes from. At each candidate mean, the left panel draws the Poisson probabilities, and the red dots mark the probability of each observed count. The likelihood multiplies the heights of the red dots; the right panel shows the NLL across all candidate means.</p>
+<div class="w746lp" id="lpr">
+<style>
+.w746lp{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746lp .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746lp .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746lp .row input[type=range]{flex:1;min-width:160px}
+.w746lp .row output{font-weight:600;min-width:52px;text-align:right}
+.w746lp button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746lp button:hover{background:#eee}
+.w746lp button.on{background:#e6eef8;border-color:#7a9cc6}
+.w746lp .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746lp .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746lp .card .k{font-size:13px;color:var(--ink2)}
+.w746lp .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746lp .plots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.w746lp canvas{width:100%;height:auto;display:block}
+.w746lp .probs{font-size:14px;color:var(--ink2);margin:4px 0 2px;font-family:monospace;overflow-wrap:anywhere}
+@media (max-width:600px){.w746lp .plots{grid-template-columns:1fr}.w746lp .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row">
+  <span style="color:var(--ink2);font-size:14px">Data:</span>
+  <button id="lpr-d1">Pika haypiles: 2, 5, 3, 0, 4, 4</button>
+  <button id="lpr-d2">Four times as many plots</button>
+  <button id="lpr-d3">Sparser plots: 1, 0, 2, 1, 0, 0</button>
+</div>
+<div class="row"><label for="lpr-lam">Candidate mean, &lambda;</label><input type="range" id="lpr-lam" min="0.2" max="8" step="0.05"><output id="lpr-lam-o"></output></div>
+<div class="probs" id="lpr-probs"></div>
+<div class="cards">
+  <div class="card"><div class="k">Likelihood (product)</div><div class="v" id="lpr-lik"></div></div>
+  <div class="card"><div class="k">Log-likelihood (sum)</div><div class="v" id="lpr-ll"></div></div>
+  <div class="card"><div class="k">NLL</div><div class="v" id="lpr-nll"></div></div>
+  <div class="card"><div class="k">MLE (sample mean)</div><div class="v" id="lpr-mle"></div></div>
+</div>
+<div class="plots">
+  <canvas id="lpr-cv1" width="380" height="300" role="img" aria-label="Poisson probabilities for counts 0 to 12 at the chosen mean, with the observed counts marked."></canvas>
+  <canvas id="lpr-cv2" width="380" height="300" role="img" aria-label="Negative log-likelihood across candidate means, with the chosen mean marked."></canvas>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById('lpr-'+id);
+const sets={d1:[2,5,3,0,4,4],d2:[2,5,3,0,4,4,2,5,3,0,4,4,2,5,3,0,4,4,2,5,3,0,4,4],d3:[1,0,2,1,0,0]};
+let data=sets.d1,cur='d1';
+const lf=[0];for(let i=1;i<=40;i++)lf[i]=lf[i-1]+Math.log(i);
+const logp=(y,l)=>y*Math.log(l)-l-lf[y];
+const nll=l=>-data.reduce((s,y)=>s+logp(y,l),0);
+function sci(v){if(v===0)return '0';const e=Math.floor(Math.log10(v));if(e>=-2)return v.toFixed(4);return (v/Math.pow(10,e)).toFixed(2)+'e'+e;}
+function axes(ctx,W,H,pad,x0,x1,y0,y1,xl,yl,xt,yt){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  const sx=x=>pad.l+(x-x0)/(x1-x0)*(W-pad.l-pad.r),sy=y=>H-pad.b-(y-y0)/(y1-y0)*(H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  xt.forEach(t=>ctx.fillText(t,sx(t),H-pad.b+15));ctx.fillText(xl,(pad.l+W-pad.r)/2,H-6);
+  ctx.textAlign='right';yt.forEach(t=>ctx.fillText(t,pad.l-5,sy(t)+4));
+  ctx.save();ctx.translate(12,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(yl,0,0);ctx.restore();
+  return {sx,sy};
+}
+function draw(){
+  ['d1','d2','d3'].forEach(k=>$(k).classList.toggle('on',k===cur));
+  const l=+$('lam').value;$('lam-o').textContent=l.toFixed(2);
+  const n=data.length,mle=data.reduce((a,b)=>a+b,0)/n;
+  const ll=-nll(l);
+  $('lik').textContent=sci(Math.exp(ll));$('ll').textContent=ll.toFixed(2);$('nll').textContent=(-ll).toFixed(2);
+  $('mle').textContent=mle.toFixed(2);
+  if(n<=6){$('probs').textContent='P(y) for each plot: '+data.map(y=>Math.exp(logp(y,l)).toFixed(3)).join(' × ')+' = '+sci(Math.exp(ll));}
+  else{$('probs').textContent=n+' plots: the likelihood multiplies '+n+' probabilities, so it shrinks fast; the NLL adds '+n+' terms.';}
+  // left: pmf bars with observed counts
+  const c1=$('cv1'),x1=c1.getContext('2d'),W=c1.width,H=c1.height,pad={l:44,r:8,t:10,b:34};
+  const ymax=Math.max(0.25,Math.ceil(Math.max(...Array.from({length:13},(_,y)=>Math.exp(logp(y,l))))*10+0.5)/10);
+  const yt=[];for(let t=0;t<=ymax+1e-9;t+=ymax>0.5?0.2:0.1)yt.push(+t.toFixed(1));
+  const A=axes(x1,W,H,pad,-0.7,12.7,0,ymax,'Count per plot','Probability',[0,2,4,6,8,10,12],yt);
+  const counts={};data.forEach(y=>counts[y]=(counts[y]||0)+1);
+  for(let y=0;y<=12;y++){const p=Math.exp(logp(y,l)),obs=counts[y];
+    x1.fillStyle=obs?'#7a9cc6':'#ddd';x1.fillRect(A.sx(y-0.35),A.sy(p),A.sx(y+0.35)-A.sx(y-0.35),A.sy(0)-A.sy(p));
+    if(obs){x1.fillStyle='#c0392b';x1.beginPath();x1.arc(A.sx(y),A.sy(p),4,0,2*Math.PI);x1.fill();
+      if(obs>1){x1.fillStyle='#222';x1.font='12px sans-serif';x1.textAlign='center';x1.fillText('×'+obs,A.sx(y),A.sy(p)-8);}}}
+  // right: NLL curve
+  const c2=$('cv2'),x2=c2.getContext('2d');
+  const ls=[];for(let i=0;i<=300;i++)ls.push(0.2+i/300*7.8);
+  const vals=ls.map(nll),lo=Math.min(...vals),hi=Math.min(Math.max(...vals),lo+(n>6?80:25));
+  const top=Math.ceil(hi/5)*5,bot=Math.floor(lo/5)*5,st=(top-bot)>40?20:5,yt2=[];for(let t=bot;t<=top;t+=st)yt2.push(t);
+  const B=axes(x2,W,H,pad,0,8,bot,top,'Candidate mean, λ','Negative log-likelihood',[0,2,4,6,8],yt2);
+  x2.save();x2.beginPath();x2.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);x2.clip();
+  x2.strokeStyle='#222';x2.lineWidth=2;x2.beginPath();ls.forEach((v,i)=>{const y=B.sy(vals[i]);i?x2.lineTo(B.sx(v),y):x2.moveTo(B.sx(v),y);});x2.stroke();
+  x2.setLineDash([4,4]);x2.strokeStyle='#888';x2.lineWidth=1;x2.beginPath();x2.moveTo(B.sx(mle),pad.t);x2.lineTo(B.sx(mle),H-pad.b);x2.stroke();x2.setLineDash([]);
+  x2.fillStyle='#c0392b';x2.beginPath();x2.arc(B.sx(l),B.sy(nll(l)),5,0,2*Math.PI);x2.fill();x2.restore();
+}
+function pick(k){cur=k;data=sets[k];draw();}
+['d1','d2','d3'].forEach(k=>$(k).addEventListener('click',()=>pick(k)));
+$('lam').addEventListener('input',draw);
+$('lam').value=1.5;pick('d1');
+})();
+</script>
+</div>
+<blockquote>
+<p><strong>Question:</strong> Slide <span class="math inline">\(\lambda\)</span> from 1.5 to 3 to 6. Which observed count is most to blame for the poor likelihood at each end? Then switch to &quot;Four times as many plots.&quot; What happens to the likelihood at the MLE, and what happens to the shape of the NLL curve?</p>
+</blockquote>
+</div>
+<div id="mle" class="section level2">
+<h2>4. The maximum likelihood estimate</h2>
+<p>The <strong>maximum likelihood estimate</strong> (MLE) is the parameter value that makes the observed data most probable:</p>
+<p><span class="math display">\[\hat{\lambda} = \arg\max_{\lambda} \mathcal{L}_6(\lambda)
+  = \arg\min_{\lambda} \text{NLL}(\lambda).\]</span></p>
+<p>Both panels above peak (or bottom out) at the same place, because taking the log never changes which of two numbers is larger. For the pikas, <span class="math inline">\(\hat\lambda = 3\)</span>.</p>
+<p>What matters is <em>where</em> the peak is, not how high it is. The likelihood at the MLE is only about <span class="math inline">\(7.1 \times 10^{-6}\)</span>, and it would be smaller still with more plots: each extra observation multiplies in another probability below 1. A small likelihood is not a sign of a bad model. Only comparisons between parameter values (or models) on the same data carry information.</p>
+<p>There are three ways to find the MLE (Bolker pp. 229-231 works through the first and third for a binomial example):</p>
+<ol style="list-style-type: decimal">
+<li><strong>Calculus.</strong> Set the derivative of <span class="math inline">\(\ell(\lambda)\)</span> to zero and solve. For the Poisson this gives <span class="math inline">\(\hat\lambda = \bar y\)</span>, the sample mean. Exact, but it works only when the algebra cooperates.</li>
+<li><strong>Grid search.</strong> Compute the NLL at many candidate values and keep the smallest. Easy to understand and check, but slow, and hopeless with many parameters: 100 values for each of 5 parameters is <span class="math inline">\(100^5 = 10^{10}\)</span> evaluations.</li>
+<li><strong>A numerical optimizer.</strong> Start from a guess and move downhill until the NLL stops improving. R's <code>optim()</code> needs the NLL function and a starting value.</li>
+</ol>
+<pre class="r"><code>lambda_grid[which.min(nll_vals)]           # grid search</code></pre>
+<pre><code>## [1] 3</code></pre>
+<pre class="r"><code>fit_pika &lt;- optim(par = 2, fn = nll_pois, y = haypiles,
+                  method = &quot;Brent&quot;, lower = 0.01, upper = 20)
+fit_pika$par                               # optimizer</code></pre>
+<pre><code>## [1] 3</code></pre>
+<pre class="r"><code>fit_pika$value                             # NLL at the MLE</code></pre>
+<pre><code>## [1] 11.85348</code></pre>
+<p><code>method = &quot;Brent&quot;</code> is <code>optim()</code>'s option for a single parameter. With two or more parameters the default method (Nelder-Mead, described on the <a href="Week9_MCMC.html#nelder-mead">MCMC page</a>) works.</p>
+<pre class="r"><code>coarse &lt;- seq(1, 6, by = 0.5)
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(lambda_grid, nll_vals, type = &quot;l&quot;, lwd = 2, col = &quot;grey40&quot;,
+     xlab = &quot;lambda (haypiles per plot)&quot;, ylab = &quot;Negative log-likelihood&quot;)
+points(coarse, sapply(coarse, nll_pois, y = haypiles), pch = 16)
+points(fit_pika$par, fit_pika$value, pch = 4, cex = 2, lwd = 3, col = &quot;red&quot;)
+legend(&quot;top&quot;, c(&quot;grid points&quot;, &quot;optim() result&quot;), pch = c(16, 4),
+       col = c(&quot;black&quot;, &quot;red&quot;), bty = &quot;n&quot;)</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/pika-grid-vs-optim-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="discussion" class="section level2">
+<h2>Discussion</h2>
+<ol style="list-style-type: decimal">
+<li>A labmate fits the Poisson model to the pika counts and reports that the likelihood at the MLE is only <span class="math inline">\(7.1 \times 10^{-6}\)</span>, so &quot;the model must fit badly.&quot; Is that a fair conclusion? What would you look at instead?</li>
+<li>Multiplying the six probabilities assumes the plots are independent. Give an ecological reason that could fail for neighboring talus plots. Would it change the MLE, our confidence in it, or both?</li>
+</ol>
+</div>
+<div id="by-eye" class="section level2">
+<h2>Bonus: fitting by simulation</h2>
+<p>Before likelihood, one way to fit a model is by trial and error with simulation: guess the parameters, simulate many data sets, and see whether the real data look like they could have come from the same model. The data here are R's built-in <code>trees</code> data set: diameter (labeled <code>Girth</code> in the data; inches, at 4.5 ft) and timber volume (cubic feet) of 31 felled black cherry trees. A power law, the usual form for allometry, is a natural model:</p>
+<p><span class="math display">\[V_i \sim \text{Normal}\left(a D_i^{\,b},\ \sigma\right).\]</span></p>
+<pre class="r"><code>data(trees)
+diam &lt;- trees$Girth      # diameter in inches (mislabeled &quot;Girth&quot;)
+vol &lt;- trees$Volume      # cubic feet
+
+power_curve &lt;- function(d, a, b) a * d^b
+
+# 95% range of volumes simulated at each diameter, for parameters (a, b, sigma)
+sim_band &lt;- function(par, d_seq, n_sims = 1000) {
+  sims &lt;- replicate(n_sims, rnorm(length(d_seq), power_curve(d_seq, par[1], par[2]), par[3]))
+  apply(sims, 1, quantile, probs = c(0.025, 0.975))
+}</code></pre>
+<pre class="r"><code>set.seed(6)
+d_seq &lt;- seq(8, 21, length.out = 50)
+guesses &lt;- list(c(0.1, 2.2, 3), c(0.5, 1.6, 3), c(0.5, 1.6, 15))
+
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 0.5))
+for (g in guesses) {
+  band &lt;- sim_band(g, d_seq)
+  plot(diam, vol, pch = 16, ylim = c(-20, 110), xlab = &quot;Diameter (in)&quot;,
+       ylab = &quot;Volume (cubic ft)&quot;,
+       main = paste0(&quot;a = &quot;, g[1], &quot;, b = &quot;, g[2], &quot;, sigma = &quot;, g[3]), cex.main = 1)
+  polygon(c(d_seq, rev(d_seq)), c(band[1, ], rev(band[2, ])),
+          col = adjustcolor(&quot;steelblue&quot;, 0.25), border = NA)
+  lines(d_seq, power_curve(d_seq, g[1], g[2]), lwd = 2, col = &quot;steelblue4&quot;)
+}</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/trees-by-eye-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))</code></pre>
+<p>The first guess puts most trees inside the 95% band. The second runs too high for the smallest trees and too low for the largest. The third &quot;fixes&quot; the second by making the noise huge.</p>
+<blockquote>
+<p><strong>Question:</strong> Why not simply increase <span class="math inline">\(\sigma\)</span> until every point falls inside the band?</p>
+</blockquote>
+<p>Likelihood replaces judging by eye with one number per guess. The NLLs for the three guesses:</p>
+<pre class="r"><code>nll_power &lt;- function(par, d, v) {
+  -sum(dnorm(v, mean = power_curve(d, par[1], par[2]), sd = par[3], log = TRUE))
+}</code></pre>
+<pre class="r"><code>sapply(guesses, nll_power, d = diam, v = vol)</code></pre>
+<pre><code>## [1]  83.91204 113.81103 114.48733</code></pre>
+<p>The first guess has by far the lowest NLL. Widening the band in the third guess doesn't rescue the badly shaped curve: when the distribution is spread over a wide range, including impossible negative volumes, every observed volume gets a low density. The <a href="#lab5">next part</a> fits this model properly.</p>
+</div>
+</div>
+<div id="lab5" class="section level1">
+<h1>Fitting a model with several parameters</h1>
+<p>These topics opened the lab on maximum likelihood. They cover the pieces needed to fit any model by likelihood: densities for continuous data, writing a negative log-likelihood function, starting values and <code>optim()</code>, and checking that the fit makes sense. The example is the black cherry tree data from the <a href="#by-eye">bonus section above</a>.</p>
+<div id="continuous" class="section level2">
+<h2>1. Likelihood for continuous data</h2>
+<pre class="r"><code>par(mar = c(4, 4.5, 0.5, 0.5))
+plot(diam, vol, pch = 16, xlab = &quot;Diameter (in)&quot;, ylab = &quot;Volume (cubic ft)&quot;)</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/trees-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>Why a power law? A tree trunk is roughly a cylinder or cone, with volume proportional to diameter<span class="math inline">\(^2 \times\)</span> height. If height didn't change with diameter, <span class="math inline">\(b\)</span> would be 2. Wider trees also tend to be taller, so we expect <span class="math inline">\(b\)</span> somewhat above 2.</p>
+<p>For continuous data, the probability of any exact value is zero, so the likelihood uses the probability <strong>density</strong> instead (Bolker p. 229). For the first tree (diameter 8.3 in, volume 10.3 cubic ft), with parameters close to the best fit:</p>
+<pre class="r"><code>par_try &lt;- c(a = 0.087, b = 2.24, sigma = 3.2)
+mu_1 &lt;- power_curve(diam[1], par_try[&quot;a&quot;], par_try[&quot;b&quot;])   # expected volume
+dens_1 &lt;- dnorm(vol[1], mean = mu_1, sd = par_try[&quot;sigma&quot;])
+c(expected = unname(mu_1), density = unname(dens_1))</code></pre>
+<pre><code>##  expected   density 
+## 9.9598817 0.1239673</code></pre>
+<pre class="r"><code>par(mar = c(4, 4.5, 0.5, 0.5))
+curve(dnorm(x, mu_1, par_try[&quot;sigma&quot;]), from = 0, to = 22, lwd = 2,
+      xlab = &quot;Volume (cubic ft) of a tree with diameter 8.3 in&quot;, ylab = &quot;Probability density&quot;)
+abline(v = vol[1], col = &quot;red&quot;, lwd = 2)</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/one-tree-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>The likelihood of this one observation is the height of the curve where the red line crosses it, 0.124.</p>
+<ul>
+<li>A density isn't a probability, and it depends on the units. Measure volume in cubic meters instead of cubic feet, and the same tree's density is 4.38. The change is the same for every parameter value, though, so it doesn't move the MLE or change any comparison between parameter values.</li>
+<li>For all 31 trees, the likelihood is the product of 31 densities, <span class="math inline">\(1.4 \times 10^{-35}\)</span>, and the log-likelihood is the sum of their logs, -80.24.</li>
+</ul>
+</div>
+<div id="nll-function" class="section level2">
+<h2>2. Writing a negative log-likelihood function</h2>
+<p>Every NLL function has the same structure (Bolker pp. 243-244):</p>
+<ul>
+<li><strong>Input:</strong> a vector of candidate parameter values (and the data).</li>
+<li><strong>Deterministic part:</strong> compute each observation's expected value from the parameters (here, <span class="math inline">\(a D_i^b\)</span>).</li>
+<li><strong>Stochastic part:</strong> compute the log probability (or log density) of each observation, given its expected value and any noise parameters.</li>
+<li><strong>Output:</strong> the negative of their sum.</li>
+</ul>
+<p><code>nll_power()</code>, written in the <a href="#by-eye">bonus section</a>, follows this pattern:</p>
+<pre class="r"><code>nll_power &lt;- function(par, d, v) {
+  -sum(dnorm(v, mean = power_curve(d, par[1], par[2]), sd = par[3], log = TRUE))
+}</code></pre>
+<pre class="r"><code>nll_power(par_try, d = diam, v = vol)</code></pre>
+<pre><code>## [1] 80.24198</code></pre>
+<p>Check a new NLL function on values you can verify another way, for example against a one-observation calculation like the one in <a href="#continuous">section 1</a>, before handing it to an optimizer.</p>
+</div>
+<div id="optim" class="section level2">
+<h2>3. Starting values and optim()</h2>
+<p><code>optim()</code> needs a starting guess for every parameter. It doesn't have to be good, but it should be in the right neighborhood, especially for nonlinear models. Two strategies (Bolker uses both on pp. 244 and 246):</p>
+<ul>
+<li><strong>Use what the parameters mean.</strong> <span class="math inline">\(b \approx 2\)</span> from the geometry above. Then the first tree, volume 10.3 at diameter 8.3, suggests <span class="math inline">\(a \approx 10.3 / 8.3^2 =  0.15\)</span>. The points scatter a few cubic feet around any smooth curve, so <span class="math inline">\(\sigma \approx 3\)</span>.</li>
+<li><strong>Plot the guess against the data</strong>, and adjust until it is close.</li>
+</ul>
+<pre class="r"><code>start &lt;- c(a = 0.15, b = 2, sigma = 3)
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(diam, vol, pch = 16, xlab = &quot;Diameter (in)&quot;, ylab = &quot;Volume (cubic ft)&quot;)
+curve(power_curve(x, start[&quot;a&quot;], start[&quot;b&quot;]), add = TRUE, lwd = 2, lty = 2)</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/trees-start-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>The guess runs a little high for large trees, but it is close enough for <code>optim()</code>:</p>
+<pre class="r"><code>fit_trees &lt;- optim(par = start, fn = nll_power, d = diam, v = vol)
+fit_trees$par           # MLEs of a, b, and sigma</code></pre>
+<pre><code>##         a         b     sigma 
+## 0.0866026 2.2364132 3.1817626</code></pre>
+<pre class="r"><code>fit_trees$value         # NLL at the MLE</code></pre>
+<pre><code>## [1] 79.86371</code></pre>
+<pre class="r"><code>fit_trees$convergence   # 0 means optim() thinks it converged</code></pre>
+<pre><code>## [1] 0</code></pre>
+<ul>
+<li><code>optim()</code> passes the extra arguments (<code>d</code> and <code>v</code>) on to <code>nll_power()</code>.</li>
+<li><strong>Always check <code>convergence</code></strong>, and try a second starting point. A different start that reaches the same answer is reassuring:</li>
+</ul>
+<pre class="r"><code>round(optim(c(a = 0.05, b = 2.5, sigma = 5), nll_power, d = diam, v = vol)$par, 3)</code></pre>
+<pre><code>##     a     b sigma 
+## 0.087 2.236 3.181</code></pre>
+<ul>
+<li>The estimate <span class="math inline">\(\hat b = 2.24\)</span> is above 2, as the geometry suggested.</li>
+<li><span class="math inline">\(\sigma\)</span> must be positive. A common trick is to estimate <span class="math inline">\(\log \sigma\)</span> instead and exponentiate inside the NLL function, so the optimizer can never try a negative value.</li>
+</ul>
+</div>
+<div id="check-fit" class="section level2">
+<h2>4. Checking the fit</h2>
+<p>An MLE is the best parameter set <em>for this model</em>. It says nothing about whether the model describes the data well. Bolker (p. 245) recommends always plotting the fit. Simulating many data sets from the fitted model, as in the <a href="#by-eye">bonus section</a>, shows the range of data the model expects:</p>
+<pre class="r"><code>set.seed(7)
+band_fit &lt;- sim_band(fit_trees$par, d_seq)
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(diam, vol, pch = 16, xlab = &quot;Diameter (in)&quot;, ylab = &quot;Volume (cubic ft)&quot;,
+     ylim = c(0, 85))
+polygon(c(d_seq, rev(d_seq)), c(band_fit[1, ], rev(band_fit[2, ])),
+        col = adjustcolor(&quot;steelblue&quot;, 0.25), border = NA)
+curve(power_curve(x, fit_trees$par[&quot;a&quot;], fit_trees$par[&quot;b&quot;]), add = TRUE,
+      lwd = 2, col = &quot;steelblue4&quot;)</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/trees-check-1.png" width="672" style="display: block; margin: auto;" /></p>
+<blockquote>
+<p><strong>Question:</strong> The model assumes the same noise (<span class="math inline">\(\sigma\)</span>) for small and large trees. Does the plot support that? If not, what kind of distribution might describe volume better?</p>
+</blockquote>
+<blockquote>
+<p><strong>Question:</strong> The same recipe fits any other curve. An exponential curve, <span class="math inline">\(V = a e^{bD}\)</span>, has its best NLL at 81.57, compared with 79.86 for the power law. Is a difference that size enough to prefer the power law? What else would you want to know?</p>
+</blockquote>
+</div>
+<div id="deviance" class="section level2">
+<h2>Bonus: deviance and goodness of fit</h2>
+<p>The NLL compares parameter values for one model, but on its own it doesn't say whether the model fits. One classical check compares the model with a <strong>saturated</strong> model, which gives every observation its own parameter and so fits perfectly. For the pikas, the saturated Poisson model sets each plot's mean equal to its own count.</p>
+<p>The <strong>deviance</strong> is twice the difference in NLL between the fitted and saturated models. If the model is correct, the deviance approximately follows a <span class="math inline">\(\chi^2\)</span> distribution (see the <a href="Week7_IntervalsAndBayes.html#lr-interval">likelihood ratio section</a> on the next page), with degrees of freedom equal to the difference in the number of parameters, here <span class="math inline">\(6 - 1 = 5\)</span>:</p>
+<pre class="r"><code>nll_saturated &lt;- -sum(dpois(haypiles, lambda = haypiles, log = TRUE))
+deviance_pika &lt;- 2 * (nll_pois(3, haypiles) - nll_saturated)
+c(deviance = deviance_pika, df = 5,
+  p_value = pchisq(deviance_pika, df = 5, lower.tail = FALSE))</code></pre>
+<pre><code>##  deviance        df   p_value 
+## 8.0893090 5.0000000 0.1513818</code></pre>
+<p>The expected value of a <span class="math inline">\(\chi^2\)</span> distribution is its degrees of freedom, so for a model that fits, the deviance divided by its degrees of freedom should be near 1. Here it is 1.62, and the <span class="math inline">\(p\)</span>-value of 0.15 gives no strong evidence against the Poisson model. That is why model summaries in R (for example, from <code>glm()</code>) report the residual deviance and its degrees of freedom. With only six small counts the <span class="math inline">\(\chi^2\)</span> approximation is rough, so a simulation check like the <a href="#check-fit">one above</a> is worth doing too.</p>
+</div>
+</div>
+<div id="power" class="section level1">
+<h1>A power analysis in code</h1>
+<p>This part builds a power analysis for a wildlife monitoring program, one tested function at a time. A power analysis uses simulated data from a model we specify to ask how often a study design would detect an effect of a given size, before anyone collects data. The design question: how much survey effort, and how often, does it take to detect a 25% decline in a rare toad population?</p>
+<div id="big-picture-1" class="section level2">
+<h2>1. Big picture</h2>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/workflow-power-1.png" width="1750" style="display: block; margin: auto;" /></p>
+<p>The dashed side box is study design. A fully specified model (MODELS) can generate data for any proposed sampling plan, and analyzing those simulated data sets the way we'd analyze the real ones (FIT) shows how often the plan would work. Bolker's section 5.3 works through power analysis this way.</p>
+<p>The code below also shows a way of working that applies to any simulation or likelihood code: write one small function at a time, and test each one against a case where you already know the answer before building on it.</p>
+</div>
+<div id="wod-bugs" class="section level2">
+<h2>2. WOD: find the bugs</h2>
+<p>The WOD showed two short functions, each with one bug. Both run without an error. <code>detect_prob(k)</code> should give the probability that <span class="math inline">\(k\)</span> person-days of searching detect an animal that each person-day detects with probability 0.02, which is <span class="math inline">\(1 - (1 - 0.02)^k\)</span>. <code>sim_detect()</code> should simulate many surveys (3 visits each, detection probability 0.4 per visit) and return the fraction with at least one detection.</p>
+<pre class="r"><code>detect_prob &lt;- function(k, pobs = 0.02) {
+  1 - pobs^k
+}
+
+sim_detect &lt;- function(R = 1000, visits = 3, p = 0.4) {
+  detected &lt;- logical(R)
+  for (i in seq_len(R)) {
+    n_det &lt;- rbinom(1, size = visits, prob = p)
+    detected &lt;- n_det &gt; 0
+  }
+  mean(detected)
+}</code></pre>
+<blockquote>
+<p><strong>Question:</strong> Find each bug. For one of them, what quick check (one line of code and the answer you'd expect) would have caught it?</p>
+</blockquote>
+</div>
+<div id="design-problem" class="section level2">
+<h2>3. The design problem</h2>
+<p>A state wildlife agency is planning a 25-year monitoring program for a rare, secretive toad. The management goal is a program with <strong>at least a 75% chance of detecting a decline of 25% or more over 25 years</strong>.</p>
+<ul>
+<li><strong>Population:</strong> <span class="math inline">\(N_0 = 1000\)</span> toads in year 0, declining by the same proportion each year, <span class="math inline">\(N_t = N_0 \lambda^t\)</span> with <span class="math inline">\(\lambda = 0.75^{1/25}\)</span>, so <span class="math inline">\(N_{25} = 750\)</span>.</li>
+<li><strong>Surveys:</strong> each person-day of searching detects a given toad with probability 0.02. A survey uses <span class="math inline">\(k\)</span> person-days and is repeated every <span class="math inline">\(s\)</span> years, starting in year 1. Each survey's count is Binomial(<span class="math inline">\(N_t\)</span>, detection probability).</li>
+<li><strong>Analysis:</strong> fit a straight line to log(count) against year. A decline is detected if the slope is negative <strong>and</strong> its <span class="math inline">\(p\)</span>-value is at most 0.05. (Fitting on the log scale gives an unbiased estimate of the yearly rate of decline.)</li>
+<li><strong>Costs:</strong> $200 per person-day, plus $2,000 for each survey expedition.</li>
+</ul>
+<p>What is the cheapest design that meets the goal?</p>
+</div>
+<div id="pieces" class="section level2">
+<h2>4. Building and testing the pieces</h2>
+<p><strong>Detection probability.</strong> A toad is missed on one person-day with probability <span class="math inline">\(1 - 0.02\)</span>, and on all <span class="math inline">\(k\)</span> person-days with probability <span class="math inline">\((1 - 0.02)^k\)</span>, so a survey detects it with probability <span class="math inline">\(q(k) = 1 - (1 - 0.02)^k\)</span>.</p>
+<pre class="r"><code>detect_prob &lt;- function(k, pobs = 0.02) {
+  1 - (1 - pobs)^k
+}
+detect_prob(1)   # one person-day should equal pobs</code></pre>
+<pre><code>## [1] 0.02</code></pre>
+<pre class="r"><code>detect_prob(3)</code></pre>
+<pre><code>## [1] 0.058808</code></pre>
+<p><strong>True abundance.</strong> Test it with a vector of years, since that's how the next function will call it:</p>
+<pre class="r"><code>true_abundance &lt;- function(t, N0 = 1000, lambda = 0.75^(1/25)) {
+  N0 * lambda^t
+}
+true_abundance(c(0, 25))   # should return 1000 and 750 together</code></pre>
+<pre><code>## [1] 1000  750</code></pre>
+<p><strong>Simulated counts.</strong> One binomial draw per survey year:</p>
+<pre class="r"><code>simulate_counts &lt;- function(t_survey, k, N0 = 1000, lambda = 0.75^(1/25),
+                            pobs = 0.02) {
+  N_t &lt;- true_abundance(t_survey, N0, lambda)
+  rbinom(length(t_survey), size = round(N_t), prob = detect_prob(k, pobs))
+}
+set.seed(11)
+counts &lt;- simulate_counts(1:25, k = 3)
+length(counts)   # should be 25</code></pre>
+<pre><code>## [1] 25</code></pre>
+<pre class="r"><code>par(mar = c(4, 4.5, 0.5, 0.5))
+plot(1:25, counts, pch = 16, xlab = &quot;Year&quot;, ylab = &quot;Count&quot;,
+     ylim = c(0, max(counts) * 1.1))</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/simulate-counts-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p><code>round()</code> is there because a binomial's number of trials must be a whole number. The counts sit far below the true abundance (1000 falling to 750) because each survey detects fewer than 6% of the toads.</p>
+<p><strong>The decision rule.</strong> A negative slope <em>and</em> <span class="math inline">\(p \le 0.05\)</span>:</p>
+<pre class="r"><code>detect_decline &lt;- function(t_survey, counts, alpha = 0.05) {
+  s &lt;- summary(lm(log(counts) ~ t_survey))$coefficients[2, ]
+  unname(s[1] &lt; 0 &amp;&amp; s[4] &lt;= alpha)
+}
+detect_decline(1:25, counts)</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<p>A test with a known answer: simulate a stable population (<span class="math inline">\(\lambda = 1\)</span>) many times. A significant slope should turn up about 5% of the time, but only about half of those slopes are negative, so the rule should report a decline about 2.5% of the time.</p>
+<pre class="r"><code>set.seed(12)
+null_hits &lt;- replicate(1000, {
+  detect_decline(1:25, simulate_counts(1:25, 3, lambda = 1))
+})
+mean(null_hits)</code></pre>
+<pre><code>## [1] 0.023</code></pre>
+</div>
+<div id="design-space" class="section level2">
+<h2>5. Power across designs</h2>
+<p><code>estimate_power()</code> simulates <code>R</code> monitoring programs for one design and returns the fraction that detect the decline:</p>
+<pre class="r"><code>estimate_power &lt;- function(k, s, R = 1000, lambda = 0.75^(1/25),
+                           alpha = 0.05) {
+  t_survey &lt;- seq(1, 25, by = s)
+  mean(replicate(R, {
+    counts &lt;- simulate_counts(t_survey, k, lambda = lambda)
+    detect_decline(t_survey, counts, alpha)
+  }))
+}
+set.seed(14)
+estimate_power(3, 1, lambda = 1)   # false-decline rate</code></pre>
+<pre><code>## [1] 0.025</code></pre>
+<pre class="r"><code>estimate_power(3, 1)               # power</code></pre>
+<pre><code>## [1] 0.822</code></pre>
+<p>Before trusting a power estimate, check that the same function gives the expected false-decline rate (about 0.025) when there is no decline.</p>
+<p>Now every combination of <span class="math inline">\(k\)</span> from 1 to 15 and <span class="math inline">\(s\)</span> from 1 to 5:</p>
+<pre class="r"><code>set.seed(746)
+grid &lt;- expand.grid(k = 1:15, s = 1:5)
+grid$power &lt;- mapply(estimate_power, grid$k, grid$s,
+                     MoreArgs = list(R = 1000))</code></pre>
+<pre class="r"><code>par(mar = c(4, 4.5, 0.5, 0.5))
+plot(NA, xlim = c(1, 15), ylim = c(0, 1), xlab = &quot;Person-days per survey, k&quot;,
+     ylab = &quot;Estimated power&quot;)
+abline(h = 0.75, lty = 2, col = &quot;grey40&quot;)
+for (ss in 1:5) {
+  lines(grid$k[grid$s == ss], grid$power[grid$s == ss], col = ss, lwd = 2)
+}
+legend(&quot;bottomright&quot;, legend = paste(&quot;s =&quot;, 1:5), col = 1:5, lwd = 2,
+       bty = &quot;n&quot;, cex = 0.8)</code></pre>
+<p><img src="Week6_LikelihoodAndPowerAnalysis_files/figure-html/power-grid-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>Power rises with effort per survey and falls with the interval between surveys. Next, the cost of each design and the cheapest ones that meet the goal:</p>
+<pre class="r"><code>cost_of &lt;- function(k, s) length(seq(1, 25, by = s)) * (2000 + 200 * k)
+grid$cost &lt;- mapply(cost_of, grid$k, grid$s)
+ok &lt;- grid[grid$power &gt;= 0.75, ]
+head(ok[order(ok$cost), ], 5)</code></pre>
+<pre><code>##     k s power  cost
+## 55 10 4 0.750 28000
+## 56 11 4 0.834 29400
+## 37  7 3 0.753 30600
+## 57 12 4 0.850 30800
+## 58 13 4 0.861 32200</code></pre>
+<p>The cheapest designs sit right at the 0.75 line, and each estimate comes from a finite number of simulations. With 1,000 simulations, the Monte Carlo standard error of a power near 0.75 is <span class="math inline">\(\sqrt{0.75 \times 0.25 / 1000} \approx 0.014\)</span>. Re-checking the three cheapest candidates with 5,000 simulations each:</p>
+<pre class="r"><code>top3 &lt;- head(ok[order(ok$cost), ], 3)
+set.seed(999)
+top3$power_5000 &lt;- mapply(estimate_power, top3$k, top3$s, MoreArgs = list(R = 5000))
+top3$mc_se &lt;- sqrt(top3$power_5000 * (1 - top3$power_5000) / 5000)
+top3</code></pre>
+<pre><code>##     k s power  cost power_5000       mc_se
+## 55 10 4 0.750 28000     0.7568 0.006067186
+## 56 11 4 0.834 29400     0.8052 0.005600946
+## 37  7 3 0.753 30600     0.7380 0.006218617</code></pre>
+<p>Explore the design space in the widget. Each move of a slider simulates one new monitoring program (left) and shows that design's estimated power from the grid above (right).</p>
+<div class="w746pd" id="pdw">
+<style>
+.w746pd{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746pd .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746pd .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:230px}
+.w746pd .row input[type=range]{flex:1;min-width:160px}
+.w746pd .row output{font-weight:600;min-width:40px;text-align:right}
+.w746pd button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746pd button:hover{background:#eee}
+.w746pd .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746pd .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746pd .card .k{font-size:13px;color:var(--ink2)}
+.w746pd .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746pd .plots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.w746pd canvas{width:100%;height:auto;display:block}
+.w746pd .note{font-size:14px;color:var(--ink2);margin-top:4px;min-height:1.2em}
+@media (max-width:600px){.w746pd .plots{grid-template-columns:1fr}.w746pd .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row"><label for="pdw-k">Person-days per survey, k</label><input type="range" id="pdw-k" min="1" max="15" step="1"><output id="pdw-k-o"></output></div>
+<div class="row"><label for="pdw-s">Years between surveys, s</label><input type="range" id="pdw-s" min="1" max="5" step="1"><output id="pdw-s-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">Surveys in 25 years</div><div class="v" id="pdw-n"></div></div>
+  <div class="card"><div class="k">Cost</div><div class="v" id="pdw-cost"></div></div>
+  <div class="card"><div class="k">Power (1,000 sims)</div><div class="v" id="pdw-pow"></div></div>
+  <div class="card"><div class="k">Meets 0.75 goal?</div><div class="v" id="pdw-ok"></div></div>
+</div>
+<div class="plots">
+  <canvas id="pdw-cv1" width="380" height="300" role="img" aria-label="One simulated monitoring program: log counts by year with the fitted trend line."></canvas>
+  <canvas id="pdw-cv2" width="380" height="300" role="img" aria-label="Estimated power against person-days per survey, one line per survey interval, with the chosen design marked."></canvas>
+</div>
+<div class="row"><button id="pdw-new">Simulate another program</button></div>
+<div class="note" id="pdw-note"></div>
+<script>
+(function(){
+const $=id=>document.getElementById('pdw-'+id);
+// power from 1,000 simulated programs per design (rows: s = 1..5; columns: k = 1..15)
+const POW=[[0.342,0.636,0.827,0.898,0.963,0.983,0.993,0.998,1,1,1,1,1,1,1],[0.206,0.4,0.533,0.656,0.78,0.849,0.891,0.919,0.967,0.979,0.987,0.993,0.994,0.993,0.998],[0.177,0.316,0.394,0.515,0.594,0.666,0.753,0.809,0.841,0.863,0.898,0.948,0.957,0.977,0.982],[0.127,0.268,0.289,0.394,0.48,0.528,0.597,0.666,0.737,0.75,0.834,0.85,0.861,0.898,0.92],[0.071,0.114,0.142,0.19,0.245,0.273,0.311,0.328,0.386,0.415,0.478,0.488,0.54,0.56,0.577]];
+// two-sided 5% critical t values for df = 1..23
+const TCRIT=[12.7062,4.3027,3.1824,2.7764,2.5706,2.4469,2.3646,2.306,2.2622,2.2281,2.201,2.1788,2.1604,2.1448,2.1314,2.1199,2.1098,2.1009,2.093,2.086,2.0796,2.0739,2.0687];
+const COLS=['#222','#d1495b','#3c9d4e','#2a6fb0','#2ab7c4'];
+const N0=1000,LAM=Math.pow(0.75,1/25),POBS=0.02;
+let seed=1;
+function rand(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+function rbinom(n,p){let c=0;for(let i=0;i<n;i++)if(rand()<p)c++;return c;}
+function years(s){const t=[];for(let y=1;y<=25;y+=s)t.push(y);return t;}
+function frame(ctx,W,H,pad,x0,x1,y0,y1,xl,yl,xt,yt,fmt){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  const sx=x=>pad.l+(x-x0)/(x1-x0)*(W-pad.l-pad.r),sy=y=>H-pad.b-(y-y0)/(y1-y0)*(H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  xt.forEach(t=>ctx.fillText(t,sx(t),H-pad.b+15));ctx.fillText(xl,(pad.l+W-pad.r)/2,H-6);
+  ctx.textAlign='right';yt.forEach(t=>ctx.fillText(fmt?fmt(t):t,pad.l-5,sy(t)+4));
+  ctx.save();ctx.translate(12,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(yl,0,0);ctx.restore();
+  return {sx,sy};
+}
+function draw(){
+  const k=+$('k').value,s=+$('s').value;$('k-o').textContent=k;$('s-o').textContent=s;
+  const t=years(s),n=t.length,q=1-Math.pow(1-POBS,k),pw=POW[s-1][k-1],cost=n*(2000+200*k);
+  $('n').textContent=n;$('cost').textContent='$'+cost.toLocaleString('en-US');
+  $('pow').textContent=pw.toFixed(3)+' ± '+(Math.sqrt(pw*(1-pw)/1000)).toFixed(3);
+  $('ok').textContent=pw>=0.75?'yes':'no';
+  // one simulated program
+  const y=t.map(yr=>Math.log(Math.max(rbinom(Math.round(N0*Math.pow(LAM,yr)),q),0.5)));
+  const mt=t.reduce((a,b)=>a+b,0)/n,my=y.reduce((a,b)=>a+b,0)/n;
+  let sxx=0,sxy=0;t.forEach((x,i)=>{sxx+=(x-mt)*(x-mt);sxy+=(x-mt)*(y[i]-my);});
+  const b=sxy/sxx,a=my-b*mt;let sse=0;t.forEach((x,i)=>{const r=y[i]-a-b*x;sse+=r*r;});
+  const se=Math.sqrt(sse/(n-2)/sxx),tstat=b/se,det=b<0&&Math.abs(tstat)>=TCRIT[n-3];
+  const truth=t.map(yr=>Math.log(N0*Math.pow(LAM,yr)*q));
+  const lo=Math.floor(Math.min(...y,...truth)-0.3),hi=Math.ceil(Math.max(...y,...truth)+0.3);
+  const c1=$('cv1'),x1=c1.getContext('2d'),W=c1.width,H=c1.height,pad={l:44,r:8,t:10,b:34};
+  const yt=[];for(let v=lo;v<=hi;v+=hi-lo>4?1:0.5)yt.push(v);
+  const A=frame(x1,W,H,pad,0,26,lo,hi,'Year','log(count)',[1,5,10,15,20,25],yt,v=>v.toFixed(1));
+  x1.strokeStyle='#aaa';x1.lineWidth=2;x1.setLineDash([5,4]);x1.beginPath();x1.moveTo(A.sx(1),A.sy(truth[0]));x1.lineTo(A.sx(25),A.sy(Math.log(N0*Math.pow(LAM,25)*q)));x1.stroke();x1.setLineDash([]);
+  x1.strokeStyle=det?'#2a6fb0':'#c0392b';x1.lineWidth=2.5;x1.beginPath();x1.moveTo(A.sx(1),A.sy(a+b)); x1.lineTo(A.sx(25),A.sy(a+25*b));x1.stroke();
+  x1.fillStyle='#222';t.forEach((x,i)=>{x1.beginPath();x1.arc(A.sx(x),A.sy(y[i]),3.5,0,2*Math.PI);x1.fill();});
+  $('note').textContent='This program: slope '+b.toFixed(4)+' per year, t = '+tstat.toFixed(2)+' (cutoff '+TCRIT[n-3].toFixed(2)+' with '+(n-2)+' df): decline '+(det?'detected (blue line).':'not detected (red line).')+' Dashed grey: the true expected log count.';
+  // power curves
+  const c2=$('cv2'),x2=c2.getContext('2d');
+  const B=frame(x2,W,H,pad,0.5,15.5,0,1,'Person-days per survey, k','Estimated power',[1,3,5,7,9,11,13,15],[0,0.25,0.5,0.75,1]);
+  x2.strokeStyle='#999';x2.setLineDash([5,4]);x2.lineWidth=1;x2.beginPath();x2.moveTo(B.sx(0.5),B.sy(0.75));x2.lineTo(B.sx(15.5),B.sy(0.75));x2.stroke();x2.setLineDash([]);
+  POW.forEach((row,j)=>{x2.strokeStyle=COLS[j];x2.globalAlpha=j===s-1?1:0.3;x2.lineWidth=j===s-1?2.5:1.5;x2.beginPath();
+    row.forEach((p,i)=>{i?x2.lineTo(B.sx(i+1),B.sy(p)):x2.moveTo(B.sx(i+1),B.sy(p));});x2.stroke();
+    const ly=B.sy(0.04)-(4-j)*15;x2.beginPath();x2.moveTo(B.sx(11),ly);x2.lineTo(B.sx(12.3),ly);x2.stroke();
+    x2.fillStyle=COLS[j];x2.font='12px sans-serif';x2.textAlign='left';x2.fillText('s = '+(j+1),B.sx(12.6),ly+4);});
+  x2.globalAlpha=1;x2.fillStyle=COLS[s-1];x2.beginPath();x2.arc(B.sx(k),B.sy(pw),6,0,2*Math.PI);x2.fill();
+}
+$('k').addEventListener('input',draw);$('s').addEventListener('input',draw);
+$('new').addEventListener('click',()=>{seed=(seed*48271+12345)%2147483647||7;draw();});
+$('k').value=3;$('s').value=1;seed=2026;draw();
+})();
+</script>
+</div>
+<blockquote>
+<p><strong>Question:</strong> Set <span class="math inline">\(k = 10\)</span> and <span class="math inline">\(s = 4\)</span>, the cheapest design that meets the goal, and click &quot;Simulate another program&quot; ten times. How many of your programs detected the decline? Why is the answer for any single program so unpredictable, even when the power is 0.75?</p>
+</blockquote>
+</div>
+<div id="discussion-1" class="section level2">
+<h2>Discussion</h2>
+<ol style="list-style-type: decimal">
+<li>The cheapest design (<span class="math inline">\(k = 10\)</span>, <span class="math inline">\(s = 4\)</span>, $28,000) had estimated power 0.750 from 1,000 simulations and 0.757 from 5,000. The next design (<span class="math inline">\(k = 11\)</span>, <span class="math inline">\(s = 4\)</span>, $29,400) came in at 0.805. Which would you recommend to the agency, and why?</li>
+<li>Every check above used a case with a known answer: one person-day, a vector of two years, a stable population. Pick one function and describe a check you would add.</li>
+<li>The simulation assumes the population declines smoothly, with all the year-to-year scatter coming from imperfect detection. Real populations also have good and bad years that carry over to the next year. How do you think that would change the power, and the false-decline rate?</li>
+</ol>
+</div>
+<div id="ai-prompts" class="section level2">
+<h2>Bonus: prompting an AI assistant</h2>
+<p>Code like this is a natural job for an AI assistant, as long as the thinking (the model and the plan) comes first and every piece is tested. Some pairs of prompts for the same task:</p>
+<p><strong>The whole problem at once.</strong></p>
+<ul>
+<li><em>Weak:</em> &quot;Write R code for a power analysis for a declining toad population.&quot;</li>
+<li><em>Better:</em> &quot;Write an R function <code>estimate_power(k, s, R)</code> that calls my existing functions <code>simulate_counts(t_survey, k)</code> and <code>detect_decline(t_survey, counts)</code>. Survey years are <code>seq(1, 25, by = s)</code>. For each of <code>R</code> replicates, simulate new counts and record whether a decline was detected. Return the fraction detected. Base R only.&quot;</li>
+<li>The weak prompt leaves the model unstated, so the assistant fills it in with its own defaults (a canned <span class="math inline">\(t\)</span>-test, a power package, a different noise model). The code may run and still answer a different question.</li>
+</ul>
+<p><strong>Words or equations.</strong></p>
+<ul>
+<li><em>Weak:</em> &quot;Simulate survey counts for a population that declines 25% over 25 years with imperfect detection.&quot;</li>
+<li><em>Better:</em> give the equations: <span class="math inline">\(N_t = N_0\lambda^t\)</span>, detection probability <span class="math inline">\(1 - (1 - p_{obs})^k\)</span>, and each count Binomial(<span class="math inline">\(N_t\)</span> rounded, detection probability), one per survey year.</li>
+<li>&quot;Declines 25%&quot; could mean a straight-line or an exponential decline, and &quot;imperfect detection&quot; can be modeled many ways.</li>
+</ul>
+<p><strong>Debugging.</strong></p>
+<ul>
+<li><em>Weak:</em> &quot;Fix my code.&quot; (with the whole script pasted)</li>
+<li><em>Better:</em> &quot;This function should return 25 counts, but <code>length(simulate_counts(1:25, 3))</code> returns 1. Here is the function. Explain why before suggesting a fix.&quot;</li>
+<li>A symptom, the expected behavior, and a short example make the problem checkable, and asking for an explanation first means you learn what went wrong.</li>
+</ul>
+<p><strong>Testing.</strong></p>
+<ul>
+<li><em>Weak:</em> &quot;Is this code correct?&quot;</li>
+<li><em>Better:</em> &quot;Write three tests for <code>detect_decline()</code> with known answers: a clearly declining series should return <code>TRUE</code>, and flat and increasing series should return <code>FALSE</code>.&quot;</li>
+<li>&quot;Is this correct?&quot; usually gets a confident yes. Check AI-written tests too: a test that compares a function with itself always passes.</li>
+</ul>
+<p><strong>Leading questions.</strong></p>
+<ul>
+<li><em>Weak:</em> &quot;Show that survey frequency matters more than effort per survey.&quot;</li>
+<li><em>Better:</em> &quot;Compute power for <span class="math inline">\(k = 1, \ldots, 15\)</span> and <span class="math inline">\(s = 1, \ldots, 5\)</span> and plot it, one line per <span class="math inline">\(s\)</span>.&quot;</li>
+<li>Ask for the computation and interpret it yourself.</li>
+</ul>
+<p>Some general habits for writing code with an assistant:</p>
+<ul>
+<li>Work out the model and the steps on paper first. The assistant is good at turning a clear plan into code and poor at choosing the right model for your question.</li>
+<li>Decide your checks before you see any code, and run them afterward: lengths, edge cases, and scenarios with a known answer.</li>
+<li>Ask one function at a time, with its inputs, output, and equations.</li>
+<li>Read the code before running it, and ask the assistant to explain anything you couldn't explain to a classmate.</li>
+<li>Don't paste sensitive data (unpublished data, locations of sensitive species); use a small made-up example with the same structure.</li>
+<li>Keep track of where AI helped, and say so in your own work.</li>
+</ul>
+</div>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

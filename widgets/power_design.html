@@ -1,0 +1,92 @@
+<div class="w746pd" id="pdw">
+<style>
+.w746pd{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746pd .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746pd .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:230px}
+.w746pd .row input[type=range]{flex:1;min-width:160px}
+.w746pd .row output{font-weight:600;min-width:40px;text-align:right}
+.w746pd button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746pd button:hover{background:#eee}
+.w746pd .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746pd .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746pd .card .k{font-size:13px;color:var(--ink2)}
+.w746pd .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746pd .plots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.w746pd canvas{width:100%;height:auto;display:block}
+.w746pd .note{font-size:14px;color:var(--ink2);margin-top:4px;min-height:1.2em}
+@media (max-width:600px){.w746pd .plots{grid-template-columns:1fr}.w746pd .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row"><label for="pdw-k">Person-days per survey, k</label><input type="range" id="pdw-k" min="1" max="15" step="1"><output id="pdw-k-o"></output></div>
+<div class="row"><label for="pdw-s">Years between surveys, s</label><input type="range" id="pdw-s" min="1" max="5" step="1"><output id="pdw-s-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">Surveys in 25 years</div><div class="v" id="pdw-n"></div></div>
+  <div class="card"><div class="k">Cost</div><div class="v" id="pdw-cost"></div></div>
+  <div class="card"><div class="k">Power (1,000 sims)</div><div class="v" id="pdw-pow"></div></div>
+  <div class="card"><div class="k">Meets 0.75 goal?</div><div class="v" id="pdw-ok"></div></div>
+</div>
+<div class="plots">
+  <canvas id="pdw-cv1" width="380" height="300" role="img" aria-label="One simulated monitoring program: log counts by year with the fitted trend line."></canvas>
+  <canvas id="pdw-cv2" width="380" height="300" role="img" aria-label="Estimated power against person-days per survey, one line per survey interval, with the chosen design marked."></canvas>
+</div>
+<div class="row"><button id="pdw-new">Simulate another program</button></div>
+<div class="note" id="pdw-note"></div>
+<script>
+(function(){
+const $=id=>document.getElementById('pdw-'+id);
+// power from 1,000 simulated programs per design (rows: s = 1..5; columns: k = 1..15)
+const POW=[[0.342,0.636,0.827,0.898,0.963,0.983,0.993,0.998,1,1,1,1,1,1,1],[0.206,0.4,0.533,0.656,0.78,0.849,0.891,0.919,0.967,0.979,0.987,0.993,0.994,0.993,0.998],[0.177,0.316,0.394,0.515,0.594,0.666,0.753,0.809,0.841,0.863,0.898,0.948,0.957,0.977,0.982],[0.127,0.268,0.289,0.394,0.48,0.528,0.597,0.666,0.737,0.75,0.834,0.85,0.861,0.898,0.92],[0.071,0.114,0.142,0.19,0.245,0.273,0.311,0.328,0.386,0.415,0.478,0.488,0.54,0.56,0.577]];
+// two-sided 5% critical t values for df = 1..23
+const TCRIT=[12.7062,4.3027,3.1824,2.7764,2.5706,2.4469,2.3646,2.306,2.2622,2.2281,2.201,2.1788,2.1604,2.1448,2.1314,2.1199,2.1098,2.1009,2.093,2.086,2.0796,2.0739,2.0687];
+const COLS=['#222','#d1495b','#3c9d4e','#2a6fb0','#2ab7c4'];
+const N0=1000,LAM=Math.pow(0.75,1/25),POBS=0.02;
+let seed=1;
+function rand(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+function rbinom(n,p){let c=0;for(let i=0;i<n;i++)if(rand()<p)c++;return c;}
+function years(s){const t=[];for(let y=1;y<=25;y+=s)t.push(y);return t;}
+function frame(ctx,W,H,pad,x0,x1,y0,y1,xl,yl,xt,yt,fmt){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  const sx=x=>pad.l+(x-x0)/(x1-x0)*(W-pad.l-pad.r),sy=y=>H-pad.b-(y-y0)/(y1-y0)*(H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  xt.forEach(t=>ctx.fillText(t,sx(t),H-pad.b+15));ctx.fillText(xl,(pad.l+W-pad.r)/2,H-6);
+  ctx.textAlign='right';yt.forEach(t=>ctx.fillText(fmt?fmt(t):t,pad.l-5,sy(t)+4));
+  ctx.save();ctx.translate(12,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(yl,0,0);ctx.restore();
+  return {sx,sy};
+}
+function draw(){
+  const k=+$('k').value,s=+$('s').value;$('k-o').textContent=k;$('s-o').textContent=s;
+  const t=years(s),n=t.length,q=1-Math.pow(1-POBS,k),pw=POW[s-1][k-1],cost=n*(2000+200*k);
+  $('n').textContent=n;$('cost').textContent='$'+cost.toLocaleString('en-US');
+  $('pow').textContent=pw.toFixed(3)+' ± '+(Math.sqrt(pw*(1-pw)/1000)).toFixed(3);
+  $('ok').textContent=pw>=0.75?'yes':'no';
+  // one simulated program
+  const y=t.map(yr=>Math.log(Math.max(rbinom(Math.round(N0*Math.pow(LAM,yr)),q),0.5)));
+  const mt=t.reduce((a,b)=>a+b,0)/n,my=y.reduce((a,b)=>a+b,0)/n;
+  let sxx=0,sxy=0;t.forEach((x,i)=>{sxx+=(x-mt)*(x-mt);sxy+=(x-mt)*(y[i]-my);});
+  const b=sxy/sxx,a=my-b*mt;let sse=0;t.forEach((x,i)=>{const r=y[i]-a-b*x;sse+=r*r;});
+  const se=Math.sqrt(sse/(n-2)/sxx),tstat=b/se,det=b<0&&Math.abs(tstat)>=TCRIT[n-3];
+  const truth=t.map(yr=>Math.log(N0*Math.pow(LAM,yr)*q));
+  const lo=Math.floor(Math.min(...y,...truth)-0.3),hi=Math.ceil(Math.max(...y,...truth)+0.3);
+  const c1=$('cv1'),x1=c1.getContext('2d'),W=c1.width,H=c1.height,pad={l:44,r:8,t:10,b:34};
+  const yt=[];for(let v=lo;v<=hi;v+=hi-lo>4?1:0.5)yt.push(v);
+  const A=frame(x1,W,H,pad,0,26,lo,hi,'Year','log(count)',[1,5,10,15,20,25],yt,v=>v.toFixed(1));
+  x1.strokeStyle='#aaa';x1.lineWidth=2;x1.setLineDash([5,4]);x1.beginPath();x1.moveTo(A.sx(1),A.sy(truth[0]));x1.lineTo(A.sx(25),A.sy(Math.log(N0*Math.pow(LAM,25)*q)));x1.stroke();x1.setLineDash([]);
+  x1.strokeStyle=det?'#2a6fb0':'#c0392b';x1.lineWidth=2.5;x1.beginPath();x1.moveTo(A.sx(1),A.sy(a+b)); x1.lineTo(A.sx(25),A.sy(a+25*b));x1.stroke();
+  x1.fillStyle='#222';t.forEach((x,i)=>{x1.beginPath();x1.arc(A.sx(x),A.sy(y[i]),3.5,0,2*Math.PI);x1.fill();});
+  $('note').textContent='This program: slope '+b.toFixed(4)+' per year, t = '+tstat.toFixed(2)+' (cutoff '+TCRIT[n-3].toFixed(2)+' with '+(n-2)+' df): decline '+(det?'detected (blue line).':'not detected (red line).')+' Dashed grey: the true expected log count.';
+  // power curves
+  const c2=$('cv2'),x2=c2.getContext('2d');
+  const B=frame(x2,W,H,pad,0.5,15.5,0,1,'Person-days per survey, k','Estimated power',[1,3,5,7,9,11,13,15],[0,0.25,0.5,0.75,1]);
+  x2.strokeStyle='#999';x2.setLineDash([5,4]);x2.lineWidth=1;x2.beginPath();x2.moveTo(B.sx(0.5),B.sy(0.75));x2.lineTo(B.sx(15.5),B.sy(0.75));x2.stroke();x2.setLineDash([]);
+  POW.forEach((row,j)=>{x2.strokeStyle=COLS[j];x2.globalAlpha=j===s-1?1:0.3;x2.lineWidth=j===s-1?2.5:1.5;x2.beginPath();
+    row.forEach((p,i)=>{i?x2.lineTo(B.sx(i+1),B.sy(p)):x2.moveTo(B.sx(i+1),B.sy(p));});x2.stroke();
+    const ly=B.sy(0.04)-(4-j)*15;x2.beginPath();x2.moveTo(B.sx(11),ly);x2.lineTo(B.sx(12.3),ly);x2.stroke();
+    x2.fillStyle=COLS[j];x2.font='12px sans-serif';x2.textAlign='left';x2.fillText('s = '+(j+1),B.sx(12.6),ly+4);});
+  x2.globalAlpha=1;x2.fillStyle=COLS[s-1];x2.beginPath();x2.arc(B.sx(k),B.sy(pw),6,0,2*Math.PI);x2.fill();
+}
+$('k').addEventListener('input',draw);$('s').addEventListener('input',draw);
+$('new').addEventListener('click',()=>{seed=(seed*48271+12345)%2147483647||7;draw();});
+$('k').value=3;$('s').value=1;seed=2026;draw();
+})();
+</script>
+</div>
