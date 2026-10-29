@@ -333,7 +333,7 @@ unless material moves to another week's page); (3) update
 `rmarkdown::render_site("schedule.Rmd")`; (4) update the calibration
 paragraph above.
 
-## Backlog: web pages for Weeks 1-7
+## Backlog: web pages for Weeks 1-6
 
 Build a web page (and companion script, if the week lacks one) for
 each earlier week, with widgets where they help. Sources: that week's
@@ -348,9 +348,10 @@ once week pages cover all of its material: drop it from the navbar,
 point remaining `href="LECTUREn.html"` links in older pages at the new
 page (sed on the HTML), and comment out its line in `index.Rmd`'s
 render script. LECTURE7 (Oct. 28) and LECTURE5 (Oct. 28, covered by
-the Week 8 and Week 9 pages) were archived this way. LECTURE6 stays
-until a Week 7 page covers Bayes' rule and the brute-force grid
-material. Ask before deleting anything.
+the Week 8 and Week 9 pages) were archived this way, as was LECTURE6
+(Oct. 29, covered by the Week 7 and Week 8 pages). LECTURE4 (likelihood
+and MLE) stays until a Week 6 page covers the MLE material. Ask before
+deleting anything.
 
 # Modeling workflow framing
 
@@ -539,7 +540,20 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
   8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
-  1-7.
+  1-6.
+- **Week 7 page (built Oct. 29, after the week):**
+  `Week7_IntervalsAndBayes.Rmd` (H1s: likelihood intervals `#intervals`,
+  with the chytrid WOD `#wod-interval`, pikas 6 vs. 24 plots, the 1.92
+  cutoff; the Lab 6 opening `#lab6`, with the quadratic approximation,
+  tadpole slices vs. profiles, and a bonus on why the MLE is normal;
+  logistic regression and Bayes' rule `#bayes`, with nests on a grid,
+  conjugacy, and a frog brute-force bonus from LECTURE6). Widgets
+  `lr_wald.html`, `logistic.html`, `bayes_grid.html`. Script
+  `CODE_Week7_IntervalsAndBayes.R`, guide `NOTES_Week7_WebPageGuide.Rmd`.
+  The Week 7 and Lab 6 PDF NOTES and the two old Week 7 scripts are in
+  `lecture_notes/archive/`; LECTURE6 is in `archive/`. The Week 8 page's
+  grid-posterior bonus gained a 95% region contour so LECTURE6's 2-D
+  material is covered.
 - **Week 8 page (built Oct. 28, after the week):**
   `Week8_PosteriorsAndOptimization.Rmd` (H1s: priors and posteriors
   `#priors`, with the tortoise WOD `#wod-priors`, germination, summaries,
@@ -565,7 +579,7 @@ Snapshot: Wed., Oct. 28, 2026 (end of Week 10; Week 11 built).
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-7 link
+  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-6 link
   legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
   relink each to what was actually covered. Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through

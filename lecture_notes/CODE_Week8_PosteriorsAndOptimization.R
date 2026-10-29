@@ -137,7 +137,10 @@ apply(draws_grid, 2, quantile, c(0.025, 0.5, 0.975))
 
 plot(draws_grid[1:2000, ], pch = 16, cex = 0.4, col = adjustcolor("steelblue", 0.3),
      xlim = range(shape_g), ylim = range(scale_g), xlab = "shape", ylab = "scale")
-contour(shape_g, scale_g, post_grid, levels = max(post_grid) * c(0.05, 0.3, 0.7),
+# 95% region: the highest grid cells that together hold 95% of the probability
+cell_sorted <- sort(post_grid, decreasing = TRUE)
+level_95 <- cell_sorted[which(cumsum(cell_sorted) >= 0.95)[1]]
+contour(shape_g, scale_g, post_grid, levels = level_95, lwd = 2,
         drawlabels = FALSE, add = TRUE)
 
 # Bonus: posteriors with two peaks --------------------------------------------

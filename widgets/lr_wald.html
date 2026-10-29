@@ -1,0 +1,136 @@
+<div class="w746lw" id="lrw">
+<style>
+.w746lw{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746lw .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746lw .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:170px}
+.w746lw .row input[type=range]{flex:1;min-width:160px}
+.w746lw .row output{font-weight:600;min-width:52px;text-align:right}
+.w746lw button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746lw button:hover{background:#eee}
+.w746lw button.on{background:#e6eef8;border-color:#7a9cc6}
+.w746lw .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746lw .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746lw .card .k{font-size:13px;color:var(--ink2)}
+.w746lw .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746lw canvas{width:100%;height:auto;display:block}
+.w746lw .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2);margin-top:4px}
+.w746lw .key span{display:flex;align-items:center;gap:6px}
+.w746lw .sw{display:inline-block;width:20px;height:0;border-top:3px solid}
+.w746lw .note{font-size:14px;color:#a33;min-height:1.2em;margin-top:4px}
+</style>
+<div class="row">
+  <button id="lrw-pois">Counts (Poisson)</button>
+  <button id="lrw-binom">Proportion (binomial)</button>
+</div>
+<div class="row">
+  <span style="color:var(--ink2);font-size:14px">Examples:</span>
+  <button id="lrw-ex1">6 plots, mean 3</button>
+  <button id="lrw-ex2">24 plots, mean 3</button>
+  <button id="lrw-ex3">2 of 20 positive</button>
+  <button id="lrw-ex4">8 of 80 positive</button>
+</div>
+<div id="lrw-pbox">
+  <div class="row"><label for="lrw-n">Number of plots</label><input type="range" id="lrw-n" min="1" max="100" step="1"><output id="lrw-n-o"></output></div>
+  <div class="row"><label for="lrw-m">Mean count per plot</label><input type="range" id="lrw-m" min="0.1" max="8" step="0.1"><output id="lrw-m-o"></output></div>
+</div>
+<div id="lrw-bbox">
+  <div class="row"><label for="lrw-bn">Number sampled</label><input type="range" id="lrw-bn" min="2" max="200" step="1"><output id="lrw-bn-o"></output></div>
+  <div class="row"><label for="lrw-bk">Number positive</label><input type="range" id="lrw-bk" min="1" max="199" step="1"><output id="lrw-bk-o"></output></div>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">MLE</div><div class="v" id="lrw-mle"></div></div>
+  <div class="card"><div class="k">Curvature at the MLE</div><div class="v" id="lrw-cur"></div></div>
+  <div class="card"><div class="k">Likelihood ratio 95%</div><div class="v" id="lrw-lr"></div></div>
+  <div class="card"><div class="k">Hessian (quadratic) 95%</div><div class="v" id="lrw-wd"></div></div>
+</div>
+<canvas id="lrw-cv" width="680" height="340" role="img" aria-label="Negative log-likelihood minus its minimum, its quadratic approximation, and the two 95% intervals."></canvas>
+<div class="key">
+  <span><i class="sw" style="border-color:#222"></i>NLL minus its minimum</span>
+  <span><i class="sw" style="border-color:#2a6fb0;border-top-style:dashed"></i>quadratic approximation</span>
+  <span><i class="sw" style="border-color:#c0392b;border-top-width:1px"></i>cutoff 1.92</span>
+</div>
+<div class="note" id="lrw-note"></div>
+<script>
+(function(){
+const $=id=>document.getElementById('lrw-'+id);
+const CUT=1.920729,Z=1.959964;
+let mode='pois';
+const cv=$('cv'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height,pad={l:46,r:12,t:12,b:62};
+function model(){
+  if(mode==='pois'){
+    const n=+$('n').value,m=+$('m').value;
+    return {lo:0,hi:Infinity,mle:m,cur:n/m,
+      f:l=>l<=0?Infinity:n*(l-m-m*Math.log(l/m)),label:'Mean count, lambda',
+      txt:n+' plots, total count '+Math.round(n*m*10)/10};
+  }
+  const n=+$('bn').value;let k=Math.min(+$('bk').value,n-1);$('bk').max=n-1;if(+$('bk').value>n-1)$('bk').value=n-1;
+  const p=k/n;
+  return {lo:0,hi:1,mle:p,cur:n/(p*(1-p)),
+    f:q=>(q<=0||q>=1)?Infinity:-(k*Math.log(q/p)+(n-k)*Math.log((1-q)/(1-p))),label:'Proportion, p',
+    txt:k+' of '+n};
+}
+// bisection for f(x) = CUT between a (inside) and b (outside)
+function root(f,a,b){for(let i=0;i<80;i++){const c=(a+b)/2;if(f(c)<CUT)a=c;else b=c;}return (a+b)/2;}
+function fmt(v){const a=Math.abs(v);return a>=10?v.toFixed(1):a>=1?v.toFixed(2):v.toFixed(3);}
+function draw(){
+  $('pbox').style.display=mode==='pois'?'':'none';$('bbox').style.display=mode==='binom'?'':'none';
+  $('pois').classList.toggle('on',mode==='pois');$('binom').classList.toggle('on',mode==='binom');
+  $('n-o').textContent=$('n').value;$('m-o').textContent=(+$('m').value).toFixed(1);
+  $('bn-o').textContent=$('bn').value;$('bk-o').textContent=Math.min(+$('bk').value,+$('bn').value-1);
+  const M=model(),se=1/Math.sqrt(M.cur);
+  const wd=[M.mle-Z*se,M.mle+Z*se];
+  const lrLo=root(M.f,M.mle,M.lo+1e-12),lrHi=root(M.f,M.mle,Math.min(M.hi-1e-12,M.mle+50*se+50));
+  $('mle').textContent=fmt(M.mle);$('cur').textContent=fmt(M.cur);
+  $('lr').textContent=fmt(lrLo)+' to '+fmt(lrHi);$('wd').textContent=fmt(wd[0])+' to '+fmt(wd[1]);
+  const bad=wd[0]<M.lo||wd[1]>M.hi;
+  $('note').textContent=bad?'The Hessian interval reaches impossible values (shaded).':'';
+  // x range covering both intervals
+  let x0=Math.min(lrLo,wd[0]),x1=Math.max(lrHi,wd[1]);const w=x1-x0;x0-=0.25*w;x1+=0.25*w;
+  if(M.hi===1)x1=Math.min(x1,1.02);
+  const sx=x=>pad.l+(x-x0)/(x1-x0)*(W-pad.l-pad.r),ymax=5;
+  const sy=y=>H-pad.b-Math.min(y,ymax)/ymax*(H-pad.t-pad.b),y0=H-pad.b;
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  // impossible region
+  ctx.fillStyle='#ececec';
+  if(x0<M.lo)ctx.fillRect(sx(x0),pad.t,sx(M.lo)-sx(x0),y0-pad.t);
+  if(x1>M.hi)ctx.fillRect(sx(M.hi),pad.t,sx(x1)-sx(M.hi),y0-pad.t);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,y0-pad.t);
+  // axes ticks
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  const step=Math.pow(10,Math.floor(Math.log10((x1-x0)/5)));const st=[1,2,5].map(s=>s*step).find(s=>(x1-x0)/s<=8)||10*step;
+  for(let t=Math.ceil(x0/st)*st;t<=x1;t+=st){ctx.fillText(+t.toFixed(6),sx(t),y0+15);ctx.beginPath();ctx.moveTo(sx(t),y0);ctx.lineTo(sx(t),y0+4);ctx.stroke();}
+  ctx.fillText(M.label,(pad.l+W-pad.r)/2,y0+30);
+  ctx.textAlign='right';for(let g=0;g<=5;g++){ctx.fillText(g,pad.l-6,sy(g)+4);}
+  ctx.save();ctx.translate(13,(pad.t+y0)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('NLL minus its minimum',0,0);ctx.restore();
+  // cutoff
+  ctx.strokeStyle='#c0392b';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.l,sy(CUT));ctx.lineTo(W-pad.r,sy(CUT));ctx.stroke();
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,y0-pad.t);ctx.clip();
+  // quadratic
+  ctx.strokeStyle='#2a6fb0';ctx.lineWidth=2.5;ctx.setLineDash([7,5]);ctx.beginPath();
+  for(let i=0;i<=400;i++){const x=x0+i/400*(x1-x0),y=0.5*M.cur*(x-M.mle)*(x-M.mle);if(i===0)ctx.moveTo(sx(x),sy(y));else ctx.lineTo(sx(x),sy(y));}
+  ctx.stroke();ctx.setLineDash([]);
+  // true NLL
+  ctx.strokeStyle='#222';ctx.lineWidth=2.5;ctx.beginPath();let started=false;
+  for(let i=0;i<=600;i++){const x=x0+i/600*(x1-x0),y=M.f(x);if(!isFinite(y)){started=false;continue;}
+    if(!started){ctx.moveTo(sx(x),sy(y));started=true;}else ctx.lineTo(sx(x),sy(y));}
+  ctx.stroke();ctx.restore();
+  // interval bars under the axis
+  function bar(a,b,yy,col,dash,lab){ctx.strokeStyle=col;ctx.lineWidth=3;ctx.setLineDash(dash);ctx.beginPath();ctx.moveTo(sx(a),yy);ctx.lineTo(sx(b),yy);ctx.stroke();ctx.setLineDash([]);
+    ctx.lineWidth=2;[a,b].forEach(v=>{ctx.beginPath();ctx.moveTo(sx(v),yy-5);ctx.lineTo(sx(v),yy+5);ctx.stroke();});
+    ctx.fillStyle=col;ctx.textAlign='left';ctx.font='12px sans-serif';ctx.fillText(lab,sx(b)+8,yy+4);}
+  bar(lrLo,lrHi,y0+42,'#222',[],'likelihood ratio');
+  bar(wd[0],wd[1],y0+54,'#2a6fb0',[6,4],'Hessian');
+  ctx.fillStyle='#222';ctx.beginPath();ctx.arc(sx(M.mle),sy(0),4,0,2*Math.PI);ctx.fill();
+}
+function preset(o){if(o.mode)mode=o.mode;Object.keys(o).forEach(k=>{if(k!=='mode')$(k).value=o[k];});draw();}
+$('pois').addEventListener('click',()=>{mode='pois';draw();});
+$('binom').addEventListener('click',()=>{mode='binom';draw();});
+$('ex1').addEventListener('click',()=>preset({mode:'pois',n:6,m:3}));
+$('ex2').addEventListener('click',()=>preset({mode:'pois',n:24,m:3}));
+$('ex3').addEventListener('click',()=>preset({mode:'binom',bn:20,bk:2}));
+$('ex4').addEventListener('click',()=>preset({mode:'binom',bn:80,bk:8}));
+['n','m','bn','bk'].forEach(id=>$(id).addEventListener('input',draw));
+preset({mode:'pois',n:6,m:3,bn:20,bk:2});
+})();
+</script>
+</div>

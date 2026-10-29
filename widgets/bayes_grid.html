@@ -1,0 +1,88 @@
+<div class="w746bg" id="bgw">
+<style>
+.w746bg{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746bg .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746bg .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:170px}
+.w746bg .row input[type=range]{flex:1;min-width:160px}
+.w746bg .row output{font-weight:600;min-width:44px;text-align:right}
+.w746bg button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746bg button:hover{background:#eee}
+.w746bg button.on{background:#e6eef8;border-color:#7a9cc6}
+.w746bg .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746bg .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746bg .card .k{font-size:13px;color:var(--ink2)}
+.w746bg .card .v{font-size:18px;font-weight:600;color:var(--ink)}
+.w746bg canvas{width:100%;height:auto;display:block}
+.w746bg .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2);margin-top:4px}
+.w746bg .key span{display:flex;align-items:center;gap:6px}
+.w746bg .sw{display:inline-block;width:20px;height:0;border-top:3px solid}
+</style>
+<div class="row">
+  <span style="color:var(--ink2);font-size:14px">Bar heights:</span>
+  <button id="bgw-prob">Probability</button>
+  <button id="bgw-dens">Probability / spacing</button>
+  <button id="bgw-nest">Nests: 3 of 4</button>
+</div>
+<div class="row"><label for="bgw-g">Number of hypotheses</label><input type="range" id="bgw-g" min="3" max="201" step="2"><output id="bgw-g-o"></output></div>
+<div class="row"><label for="bgw-n">Nests watched, n</label><input type="range" id="bgw-n" min="1" max="40" step="1"><output id="bgw-n-o"></output></div>
+<div class="row"><label for="bgw-k">Nests that succeeded, k</label><input type="range" id="bgw-k" min="0" max="40" step="1"><output id="bgw-k-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">Spacing between values</div><div class="v" id="bgw-sp"></div></div>
+  <div class="card"><div class="k">Tallest bar (probability)</div><div class="v" id="bgw-tb"></div></div>
+  <div class="card"><div class="k">Tallest bar / spacing</div><div class="v" id="bgw-td"></div></div>
+  <div class="card"><div class="k">Peak of the Beta curve</div><div class="v" id="bgw-pk"></div></div>
+</div>
+<canvas id="bgw-cv" width="680" height="320" role="img" aria-label="Posterior probabilities on a grid of hypotheses for a success probability, with the limiting Beta density."></canvas>
+<div class="key">
+  <span><i class="sw" style="border-color:#888"></i>posterior on the grid (flat prior)</span>
+  <span><i class="sw" style="border-color:#e08a00;border-top-style:dashed"></i>Beta(k + 1, n - k + 1) density</span>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById('bgw-'+id);
+let dens=false;
+function lgam(z){const g=7,c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,
+  -176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(z<0.5)return Math.log(Math.PI/Math.sin(Math.PI*z))-lgam(1-z);z-=1;let x=c[0];for(let i=1;i<g+2;i++)x+=c[i]/(z+i);
+  const t=z+g+0.5;return 0.5*Math.log(2*Math.PI)+(z+0.5)*Math.log(t)-t+Math.log(x);}
+const dbeta=(x,a,b)=>Math.exp((a-1)*Math.log(x)+(b-1)*Math.log(1-x)-(lgam(a)+lgam(b)-lgam(a+b)));
+const cv=$('cv'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height,pad={l:52,r:12,t:12,b:38};
+const sx=x=>pad.l+x*(W-pad.l-pad.r);
+function draw(){
+  const G=+$('g').value,n=+$('n').value;$('k').max=n;if(+$('k').value>n)$('k').value=n;const k=+$('k').value;
+  $('g-o').textContent=G;$('n-o').textContent=n;$('k-o').textContent=k;
+  $('prob').classList.toggle('on',!dens);$('dens').classList.toggle('on',dens);
+  const sp=1/(G+1),ps=[],w=[];
+  for(let i=1;i<=G;i++){const p=i*sp;ps.push(p);w.push(Math.exp(k*Math.log(p)+(n-k)*Math.log(1-p)));}
+  const tot=w.reduce((s,v)=>s+v,0),prob=w.map(v=>v/tot);
+  const tb=Math.max(...prob);
+  const mode=n>0?k/n:0.5,pk=dbeta(Math.min(Math.max(mode,1e-6),1-1e-6),k+1,n-k+1);
+  $('sp').textContent=sp.toFixed(4);$('tb').textContent=tb.toFixed(3);$('td').textContent=(tb/sp).toFixed(2);$('pk').textContent=pk.toFixed(2);
+  const scale=dens?1/sp:1;
+  const xs=[];for(let i=1;i<600;i++)xs.push(i/600);
+  const bc=xs.map(x=>dbeta(x,k+1,n-k+1)*(dens?1:sp));
+  let ymax=Math.max(tb*scale,...bc)*1.1;
+  const sy=y=>H-pad.b-y/ymax*(H-pad.t-pad.b);
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  for(let g=0;g<=10;g+=2)ctx.fillText((g/10).toFixed(1),sx(g/10),H-pad.b+15);
+  ctx.fillText('Nest success probability, p',(pad.l+W-pad.r)/2,H-5);
+  ctx.textAlign='right';
+  const st=[0.001,0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10].find(s=>ymax/s<=6);
+  for(let t=0;t<=ymax;t+=st)ctx.fillText(+t.toFixed(4),pad.l-5,sy(t)+4);
+  ctx.save();ctx.translate(12,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';
+  ctx.fillText(dens?'Probability / spacing (density)':'Posterior probability',0,0);ctx.restore();
+  ctx.strokeStyle='#888';ctx.lineWidth=G<30?6:G<80?3:1.5;
+  ps.forEach((p,i)=>{ctx.beginPath();ctx.moveTo(sx(p),sy(0));ctx.lineTo(sx(p),sy(prob[i]*scale));ctx.stroke();});
+  ctx.strokeStyle='#e08a00';ctx.lineWidth=2.5;ctx.setLineDash([7,5]);ctx.beginPath();
+  xs.forEach((x,i)=>{if(i===0)ctx.moveTo(sx(x),sy(bc[i]));else ctx.lineTo(sx(x),sy(bc[i]));});ctx.stroke();ctx.setLineDash([]);
+}
+$('prob').addEventListener('click',()=>{dens=false;draw();});
+$('dens').addEventListener('click',()=>{dens=true;draw();});
+$('nest').addEventListener('click',()=>{$('n').value=4;$('k').value=3;draw();});
+['g','n','k'].forEach(id=>$(id).addEventListener('input',draw));
+$('g').value=3;$('n').value=4;$('k').value=3;draw();
+})();
+</script>
+</div>

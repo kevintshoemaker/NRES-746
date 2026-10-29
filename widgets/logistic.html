@@ -1,0 +1,88 @@
+<div class="w746lg" id="lgw">
+<style>
+.w746lg{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746lg .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746lg .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:190px}
+.w746lg .row input[type=range]{flex:1;min-width:160px}
+.w746lg .row output{font-weight:600;min-width:48px;text-align:right}
+.w746lg button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746lg button:hover{background:#eee}
+.w746lg .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746lg .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746lg .card .k{font-size:13px;color:var(--ink2)}
+.w746lg .card .v{font-size:18px;font-weight:600;color:var(--ink)}
+.w746lg .plots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.w746lg canvas{width:100%;height:auto;display:block}
+</style>
+<div class="row">
+  <button id="lgw-reset">Nest example (a = -2, b = 0.8)</button>
+  <button id="lgw-flat">Slope 0</button>
+  <button id="lgw-neg">Negative slope</button>
+</div>
+<div class="row"><label for="lgw-a">Intercept a</label><input type="range" id="lgw-a" min="-6" max="4" step="0.1"><output id="lgw-a-o"></output></div>
+<div class="row"><label for="lgw-b">Slope b</label><input type="range" id="lgw-b" min="-2" max="2" step="0.05"><output id="lgw-b-o"></output></div>
+<div class="row"><label for="lgw-x">Distance from edge, x (100 m)</label><input type="range" id="lgw-x" min="0" max="6" step="0.1"><output id="lgw-x-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">Log-odds at x</div><div class="v" id="lgw-lo"></div></div>
+  <div class="card"><div class="k">Odds at x</div><div class="v" id="lgw-od"></div></div>
+  <div class="card"><div class="k">Probability at x</div><div class="v" id="lgw-pr"></div></div>
+  <div class="card"><div class="k">Odds multiplier per unit x, e<sup>b</sup></div><div class="v" id="lgw-eb"></div></div>
+</div>
+<div class="plots">
+  <canvas id="lgw-c1" width="340" height="280" role="img" aria-label="Logistic curve on the probability scale."></canvas>
+  <canvas id="lgw-c2" width="340" height="280" role="img" aria-label="The same model as a straight line on the log-odds scale."></canvas>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById('lgw-'+id);
+const pad={l:44,r:10,t:22,b:36};
+function frame(ctx,W,H,ylo,yhi,ylab,title,yticks){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  const sx=x=>pad.l+x/6*(W-pad.l-pad.r),sy=y=>H-pad.b-(y-ylo)/(yhi-ylo)*(H-pad.t-pad.b);
+  ctx.strokeStyle='#e4e4e4';ctx.lineWidth=1;
+  yticks.forEach(t=>{ctx.beginPath();ctx.moveTo(pad.l,sy(t));ctx.lineTo(W-pad.r,sy(t));ctx.stroke();});
+  ctx.strokeStyle='#999';ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  for(let g=0;g<=6;g++)ctx.fillText(g,sx(g),H-pad.b+14);
+  ctx.fillText('x (100 m from edge)',(pad.l+W-pad.r)/2,H-4);
+  ctx.font='bold 13px sans-serif';ctx.fillStyle='#333';ctx.fillText(title,(pad.l+W-pad.r)/2,15);
+  ctx.font='12px sans-serif';ctx.fillStyle='#666';ctx.textAlign='right';
+  yticks.forEach(t=>ctx.fillText(t,pad.l-5,sy(t)+4));
+  ctx.save();ctx.translate(11,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(ylab,0,0);ctx.restore();
+  return {sx,sy};
+}
+function draw(){
+  const a=+$('a').value,b=+$('b').value,x=+$('x').value;
+  $('a-o').textContent=a.toFixed(1);$('b-o').textContent=b.toFixed(2);$('x-o').textContent=x.toFixed(1);
+  const lo=a+b*x,od=Math.exp(lo),pr=1/(1+Math.exp(-lo));
+  $('lo').textContent=lo.toFixed(2);$('od').textContent=od<100?od.toFixed(2):od.toExponential(1);
+  $('pr').textContent=pr.toFixed(3);$('eb').textContent=Math.exp(b).toFixed(2);
+  const mid=b!==0?-a/b:NaN;
+  const panels=[
+    {c:$('c1'),ylo:0,yhi:1,lab:'P(nest succeeds)',title:'Probability scale',ticks:[0,0.25,0.5,0.75,1],f:t=>1/(1+Math.exp(-(a+b*t))),yv:pr,h:0.5},
+    {c:$('c2'),ylo:-6,yhi:6,lab:'log(p / (1 - p))',title:'Log-odds scale',ticks:[-6,-3,0,3,6],f:t=>a+b*t,yv:lo,h:0}
+  ];
+  panels.forEach(P=>{
+    const ctx=P.c.getContext('2d'),W=P.c.width,H=P.c.height;
+    const {sx,sy}=frame(ctx,W,H,P.ylo,P.yhi,P.lab,P.title,P.ticks);
+    ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);ctx.clip();
+    ctx.strokeStyle='#888';ctx.setLineDash([3,3]);ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(pad.l,sy(P.h));ctx.lineTo(W-pad.r,sy(P.h));ctx.stroke();
+    if(isFinite(mid)&&mid>=0&&mid<=6){ctx.beginPath();ctx.moveTo(sx(mid),pad.t);ctx.lineTo(sx(mid),H-pad.b);ctx.stroke();}
+    ctx.setLineDash([]);
+    ctx.strokeStyle='#222';ctx.lineWidth=2.5;ctx.beginPath();
+    for(let i=0;i<=300;i++){const t=6*i/300,y=P.f(t);if(i===0)ctx.moveTo(sx(t),sy(y));else ctx.lineTo(sx(t),sy(y));}
+    ctx.stroke();
+    ctx.fillStyle='#2a6fb0';ctx.beginPath();ctx.arc(sx(x),sy(Math.max(P.ylo,Math.min(P.yhi,P.yv))),5,0,2*Math.PI);ctx.fill();
+    ctx.restore();
+  });
+}
+function preset(o){Object.keys(o).forEach(k=>$(k).value=o[k]);draw();}
+$('reset').addEventListener('click',()=>preset({a:-2,b:0.8,x:2.5}));
+$('flat').addEventListener('click',()=>preset({b:0}));
+$('neg').addEventListener('click',()=>preset({a:2,b:-0.8}));
+['a','b','x'].forEach(id=>$(id).addEventListener('input',draw));
+preset({a:-2,b:0.8,x:2.5});
+})();
+</script>
+</div>
