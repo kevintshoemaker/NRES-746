@@ -516,7 +516,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 5-9 pages built after the fact).
+Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 4-9 pages built after the fact).
 
 - **Week 11 (Nov. 2-4), built Oct. 28, not yet taught:** Veterans Day
   is Wed., Nov. 11 (Week 12 has Monday + Lab 10 only). Page
@@ -541,7 +541,25 @@ Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 5-9 pages bui
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
   8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
-  1-4.
+  1-3.
+- **Week 4 page (built Oct. 29, after the week):**
+  `Week4_ProbabilityDistributions.Rmd` (H1s: counting, random variables,
+  and expectation `#expectation` (Monday), with the reused probability
+  puzzle WOD `#wod-puzzle`, permutations/combinations with 4 of 12 ponds,
+  the binomial coefficient from 6 nests (p = 0.25), the birthday problem
+  `#birthday`, pmf vs. pdf `#pmf-pdf` (Bolker's pH example, trout
+  Normal(22, 4)), expectation and variance `#moments`, and a log-scale
+  bonus; probability distributions `#distributions` (Wednesday), with the
+  sample-mean WOD `#wod-sample-mean`, d/p/q/r, discrete and continuous
+  bestiaries, choosing a distribution with seed counts (seed 14, method
+  of moments k = 1.65), and a gamma-Poisson bonus `#compounding`). No lab
+  H1 (Tuesday was project pitches). Widgets `birthday.html`,
+  `density_area.html`, `distribution_explorer.html`. Script
+  `CODE_Week4_ProbabilityDistributions.R`, guide
+  `NOTES_Week4_WebPageGuide.Rmd`. The Week 4 Monday PDF NOTES are in
+  `lecture_notes/archive/` (Wednesday had none). LECTURE2 stays: its
+  first half (axioms, urns, Bayes' rule, Monty Hall) is Week 3 material;
+  archive it once a Week 3 page exists.
 - **Week 5 page (built Oct. 29, after the week):**
   `Week5_SimulatingData.Rmd` (H1s: simulating data `#simulation`, with
   the WOD `#wod-dgm` worked for the lek counts, `r` functions, Bolker's
@@ -614,14 +632,15 @@ Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 5-9 pages bui
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-4 link
+  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-3 link
   legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
-  relink each to what was actually covered (Week 5 Monday and lab link
-  the Week 5 page; Week 5 Wednesday and Week 6 link the Week 6 page). Navbar updates: re-render
+  relink each to what was actually covered (Week 4 links the Week 4
+  page; Week 5 Monday and lab link the Week 5 page; Week 5 Wednesday
+  and Week 6 link the Week 6 page). Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
   pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-2, LECTURE8, LECTURE9,
-  Links, Week5-Week11; schedule and the newest week page get it
+  Links, Week4-Week11; schedule and the newest week page get it
   by re-rendering); LECTURE6, 10, GIT-tutorial, and LAB1, 2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
   `sed`). Long menus scroll via

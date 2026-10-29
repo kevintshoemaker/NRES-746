@@ -1,0 +1,104 @@
+<div class="w746bd" id="bdw">
+<style>
+.w746bd{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746bd .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746bd .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746bd .row input[type=range]{flex:1;min-width:160px}
+.w746bd .row output{font-weight:600;min-width:52px;text-align:right}
+.w746bd button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746bd button:hover{background:#eee}
+.w746bd button.on{background:#e6eef8;border-color:#7a9cc6}
+.w746bd .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746bd .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746bd .card .k{font-size:13px;color:var(--ink2)}
+.w746bd .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746bd canvas{width:100%;height:auto;display:block}
+.w746bd .note{font-size:14px;color:var(--ink2);margin:4px 0}
+@media (max-width:600px){.w746bd .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row">
+  <span style="color:var(--ink2);font-size:14px">Equally likely values:</span>
+  <button id="bdw-d365">365 (birthdays)</button>
+  <button id="bdw-d1000">1,000</button>
+  <button id="bdw-d10000">10,000</button>
+</div>
+<div class="row"><label for="bdw-n">Group size, n</label><input type="range" id="bdw-n" min="2" max="200" step="1" value="25"><output id="bdw-n-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">Pairs, C(n, 2)</div><div class="v" id="bdw-pairs"></div></div>
+  <div class="card"><div class="k">P(all different)</div><div class="v" id="bdw-p0"></div></div>
+  <div class="card"><div class="k">P(at least one match)</div><div class="v" id="bdw-p1"></div></div>
+  <div class="card"><div class="k">1 &minus; exp(&minus;pairs / values)</div><div class="v" id="bdw-ap"></div></div>
+</div>
+<canvas id="bdw-cv1" width="760" height="260" role="img" aria-label="Probability of at least one match against group size, with the chosen group size marked."></canvas>
+<div class="row" style="margin-top:10px">
+  <button id="bdw-one">Fill one group</button>
+  <button id="bdw-hundred">Fill 100 groups</button>
+  <span class="note" id="bdw-tally"></span>
+</div>
+<canvas id="bdw-cv2" width="760" height="120" role="img" aria-label="The values drawn for the last simulated group, with shared values marked."></canvas>
+<script>
+(function(){
+const $=id=>document.getElementById('bdw-'+id);
+let D=365,groups=0,hits=0,last=null;
+function pNoMatch(n,D){if(n>D)return 0;let s=0;for(let i=0;i<n;i++)s+=Math.log((D-i)/D);return Math.exp(s);}
+function fmt(p){if(p>0.9995)return '>0.999';if(p<0.0005&&p>0)return '<0.001';return p.toFixed(3);}
+function fill(n){const v=[];for(let i=0;i<n;i++)v.push(1+Math.floor(Math.random()*D));return v;}
+function hasMatch(v){const s=new Set(v);return s.size<v.length;}
+function axes(ctx,W,H,pad,x0,x1,y0,y1,xl,yl,xt,yt){
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  const sx=x=>pad.l+(x-x0)/(x1-x0)*(W-pad.l-pad.r),sy=y=>H-pad.b-(y-y0)/(y1-y0)*(H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  xt.forEach(t=>ctx.fillText(t,sx(t),H-pad.b+15));if(xl)ctx.fillText(xl,(pad.l+W-pad.r)/2,H-6);
+  ctx.textAlign='right';yt.forEach(t=>ctx.fillText(t,pad.l-5,sy(t)+4));
+  if(yl){ctx.save();ctx.translate(12,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(yl,0,0);ctx.restore();}
+  return {sx,sy};
+}
+function drawCurve(){
+  const n=+$('n').value,c=$('cv1'),x=c.getContext('2d'),W=c.width,H=c.height,pad={l:48,r:12,t:10,b:36};
+  const A=axes(x,W,H,pad,2,200,0,1,'Group size, n','P(at least one match)',[2,25,50,75,100,125,150,175,200],[0,0.25,0.5,0.75,1]);
+  x.setLineDash([4,4]);x.strokeStyle='#bbb';x.beginPath();x.moveTo(A.sx(2),A.sy(0.5));x.lineTo(A.sx(200),A.sy(0.5));x.stroke();x.setLineDash([]);
+  x.strokeStyle='#2c5d8a';x.lineWidth=2;x.beginPath();
+  for(let m=2;m<=200;m++){const p=1-pNoMatch(m,D);m===2?x.moveTo(A.sx(m),A.sy(p)):x.lineTo(A.sx(m),A.sy(p));}x.stroke();x.lineWidth=1;
+  const p=1-pNoMatch(n,D);
+  x.strokeStyle='#c0392b';x.beginPath();x.moveTo(A.sx(n),A.sy(0));x.lineTo(A.sx(n),A.sy(p));x.stroke();
+  x.fillStyle='#c0392b';x.beginPath();x.arc(A.sx(n),A.sy(p),5,0,2*Math.PI);x.fill();
+}
+function drawGroup(){
+  const c=$('cv2'),x=c.getContext('2d'),W=c.width,H=c.height,pad={l:48,r:12,t:12,b:34};
+  x.clearRect(0,0,W,H);x.fillStyle='#fff';x.fillRect(0,0,W,H);
+  if(!last){x.fillStyle='#888';x.font='13px sans-serif';x.textAlign='center';x.fillText('Fill a group to see its values here.',W/2,H/2);return;}
+  const sx=v=>pad.l+(v-0.5)/D*(W-pad.l-pad.r);
+  x.strokeStyle='#999';x.beginPath();x.moveTo(pad.l,H-pad.b);x.lineTo(W-pad.r,H-pad.b);x.stroke();
+  x.fillStyle='#666';x.font='12px sans-serif';x.textAlign='center';
+  const ticks=D===365?[1,91,182,274,365]:[1,Math.round(D/4),Math.round(D/2),Math.round(3*D/4),D];
+  ticks.forEach(t=>x.fillText(t.toLocaleString(),sx(t),H-pad.b+15));
+  x.fillText(D===365?'Day of year':'Value',(pad.l+W-pad.r)/2,H-4);
+  const cnt={};last.forEach(v=>cnt[v]=(cnt[v]||0)+1);
+  const stack={};
+  last.slice().sort((a,b)=>a-b).forEach(v=>{const k=stack[v]=(stack[v]||0)+1;const shared=cnt[v]>1;
+    const cx=sx(v),cy=H-pad.b-8-(k-1)*12;
+    if(shared){x.fillStyle='#c0392b';x.beginPath();x.arc(cx,cy,5,0,2*Math.PI);x.fill();}
+    else{x.strokeStyle='#2c5d8a';x.lineWidth=1.5;x.beginPath();x.arc(cx,cy,4,0,2*Math.PI);x.stroke();x.lineWidth=1;}});
+}
+function tally(){
+  const n=+$('n').value;
+  $('tally').textContent=groups?('Groups filled: '+groups+'; with a match: '+hits+' ('+(hits/groups).toFixed(3)+'). Filled red dots share a value.'):'';
+}
+function update(){
+  ['d365','d1000','d10000'].forEach(k=>$(k).classList.toggle('on',k==='d'+D));
+  const n=+$('n').value;$('n-o').textContent=n;
+  const pairs=n*(n-1)/2,p0=pNoMatch(n,D);
+  $('pairs').textContent=pairs.toLocaleString();$('p0').textContent=fmt(p0);$('p1').textContent=fmt(1-p0);
+  $('ap').textContent=fmt(1-Math.exp(-pairs/D));
+  drawCurve();drawGroup();tally();
+}
+function reset(){groups=0;hits=0;last=null;}
+[365,1000,10000].forEach(d=>$('d'+d).addEventListener('click',()=>{D=d;reset();update();}));
+$('n').addEventListener('input',()=>{reset();update();});
+$('one').addEventListener('click',()=>{const n=+$('n').value;last=fill(n);groups++;if(hasMatch(last))hits++;drawGroup();tally();});
+$('hundred').addEventListener('click',()=>{const n=+$('n').value;for(let i=0;i<100;i++){last=fill(n);groups++;if(hasMatch(last))hits++;}drawGroup();tally();});
+$('n-o').textContent=$('n').value;update();
+})();
+</script>
+</div>
