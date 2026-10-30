@@ -1,0 +1,75 @@
+<div class="w746pa" id="paw">
+<style>
+.w746pa{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746pa .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746pa .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746pa .row input[type=range]{flex:1;min-width:160px}
+.w746pa .row output{font-weight:600;min-width:52px;text-align:right}
+.w746pa button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746pa button:hover{background:#eee}
+.w746pa .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746pa .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746pa .card .k{font-size:13px;color:var(--ink2)}
+.w746pa .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746pa canvas{width:100%;height:auto;display:block}
+.w746pa .note{font-size:14px;color:var(--ink2);margin:4px 0}
+@media (max-width:600px){.w746pa .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row">
+  <button id="paw-tree">Tree plot (A = pinyon, B = healthy)</button>
+  <button id="paw-indep">Make B independent of A</button>
+</div>
+<div class="row"><label for="paw-a">P(A)</label><input type="range" id="paw-a" min="0.05" max="0.95" step="0.001" value="0.523"><output id="paw-a-o"></output></div>
+<div class="row"><label for="paw-ba">P(B | A)</label><input type="range" id="paw-ba" min="0" max="1" step="0.001" value="0.198"><output id="paw-ba-o"></output></div>
+<div class="row"><label for="paw-bn">P(B | not A)</label><input type="range" id="paw-bn" min="0" max="1" step="0.001" value="0.661"><output id="paw-bn-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">P(A and B)</div><div class="v" id="paw-ab"></div></div>
+  <div class="card"><div class="k">P(B)</div><div class="v" id="paw-b"></div></div>
+  <div class="card"><div class="k">P(A | B)</div><div class="v" id="paw-agb"></div></div>
+  <div class="card"><div class="k">P(A) &times; P(B)</div><div class="v" id="paw-prod"></div></div>
+</div>
+<canvas id="paw-cv" width="760" height="380" role="img" aria-label="A unit square split into columns for A and not A, with the B part of each column shaded blue."></canvas>
+<p class="note" id="paw-msg"></p>
+<script>
+(function(){
+const $=id=>document.getElementById('paw-'+id);
+function fmt(p){return p.toFixed(3);}
+function draw(){
+  const a=+$('a').value,ba=+$('ba').value,bn=+$('bn').value;
+  $('a-o').textContent=a.toFixed(3);$('ba-o').textContent=ba.toFixed(3);$('bn-o').textContent=bn.toFixed(3);
+  const ab=a*ba,b=ab+(1-a)*bn,agb=b>0?ab/b:NaN;
+  $('ab').textContent=fmt(ab);$('b').textContent=fmt(b);
+  $('agb').textContent=b>0?fmt(agb):'undefined';$('prod').textContent=fmt(a*b);
+  const c=$('cv'),x=c.getContext('2d'),W=c.width,H=c.height,pad={l:70,r:150,t:24,b:40};
+  const S=Math.min(W-pad.l-pad.r,H-pad.t-pad.b);
+  const sx=u=>pad.l+u*S,sy=v=>pad.t+S-v*S;
+  x.clearRect(0,0,W,H);x.fillStyle='#fff';x.fillRect(0,0,W,H);
+  x.fillStyle='#2c5d8a';x.fillRect(sx(0),sy(ba),a*S,ba*S);
+  x.fillStyle='#9cc0de';x.fillRect(sx(a),sy(bn),(1-a)*S,bn*S);
+  x.fillStyle='#f6f6f4';x.fillRect(sx(0),sy(1),a*S,(1-ba)*S);x.fillRect(sx(a),sy(1),(1-a)*S,(1-bn)*S);
+  x.strokeStyle='#666';x.lineWidth=1;x.strokeRect(sx(0),sy(1),S,S);
+  x.beginPath();x.moveTo(sx(a),sy(0));x.lineTo(sx(a),sy(1));x.stroke();
+  x.strokeStyle='#c0392b';x.lineWidth=2;x.setLineDash([6,4]);
+  x.beginPath();x.moveTo(sx(0),sy(ba));x.lineTo(sx(a),sy(ba));x.lineTo(sx(a),sy(bn));x.lineTo(sx(1),sy(bn));x.stroke();
+  x.setLineDash([]);x.lineWidth=1;
+  x.fillStyle='#444';x.font='13px sans-serif';x.textAlign='center';
+  x.fillText('A',sx(a/2),sy(0)+18);x.fillText('not A',sx((1+a)/2),sy(0)+18);
+  x.fillText('width P(A) = '+a.toFixed(2),sx(a/2),sy(1)-8);
+  x.textAlign='left';
+  const lx=sx(1)+14;let ly=sy(1)+14;
+  [['#2c5d8a','A and B'],['#9cc0de','not A and B'],['#f6f6f4','not B']].forEach(([col,lab])=>{
+    x.fillStyle=col;x.fillRect(lx,ly-10,14,14);x.strokeStyle='#999';x.strokeRect(lx,ly-10,14,14);
+    x.fillStyle='#444';x.fillText(lab,lx+20,ly+2);ly+=22;});
+  x.strokeStyle='#c0392b';x.lineWidth=2;x.setLineDash([6,4]);x.beginPath();x.moveTo(lx,ly-3);x.lineTo(lx+14,ly-3);x.stroke();x.setLineDash([]);x.lineWidth=1;
+  x.fillStyle='#444';x.fillText('top of B',lx+20,ly+2);
+  x.save();x.translate(pad.l-40,sy(0.5));x.rotate(-Math.PI/2);x.textAlign='center';x.fillText('height = P(B | column)',0,0);x.restore();
+  const ind=Math.abs(ba-bn)<0.005;
+  $('msg').textContent=(ind?'B is independent of A: the top of B is level, and P(A and B) equals P(A) × P(B). ':'B depends on A: the top of B steps between the columns. ')+'P(A | B) is the dark area as a share of all the blue area.';
+}
+['a','ba','bn'].forEach(k=>$(k).addEventListener('input',draw));
+$('tree').addEventListener('click',()=>{$('a').value=(126/241).toFixed(3);$('ba').value=(25/126).toFixed(3);$('bn').value=(76/115).toFixed(3);draw();});
+$('indep').addEventListener('click',()=>{$('bn').value=$('ba').value;draw();});
+draw();
+})();
+</script>
+</div>

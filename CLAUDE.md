@@ -352,7 +352,9 @@ the Week 8 and Week 9 pages) were archived this way, as was LECTURE6
 (Oct. 29, covered by the Week 7 and Week 8 pages) and LECTURE4 (Oct. 29,
 covered by the Week 6 page, with intervals and the LRT on the Week 7
 page), and LECTURE3 (Oct. 29, covered by the Week 5 page, with its power
-analysis on the Week 6 page). Ask before deleting anything.
+analysis on the Week 6 page), and LECTURE2 (Oct. 30, covered by the
+Week 3 page, with its distributions half on the Week 4 page). Ask
+before deleting anything.
 
 # Modeling workflow framing
 
@@ -516,7 +518,28 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 4-9 pages built after the fact).
+Snapshot: Fri., Oct. 30, 2026 (end of Week 10; Week 11 built; Week 3-9 pages built after the fact).
+
+- **Week 3 page (built Oct. 30, after the week):**
+  `Week3_ProbabilityAndBayes.Rmd`. Labor Day cancelled Monday, so the
+  H1s are the Lab 3 opening `#lab3` (sample spaces and axioms with seed
+  fates, the complement rule, expected counts, a double-observer example
+  for independence and the general addition rule) and the Wednesday
+  lecture `#bayes-rule` (a 241-tree pinyon/juniper mistletoe table, which
+  is LECTURE2's urn with the same counts; joint, marginal, conditional,
+  independence, law of total probability, with a note that Bolker's p.
+  142 version omits the weights; Bayes' rule with Bolker's medical test
+  `#bayes`; liana classes `#many-hypotheses`; xkcd, nest-camera, and
+  eDNA discussion prompts; bonuses Monty Hall `#monty-hall` and
+  zero-inflated seeds `#zero-inflation`). The WOD (probability puzzle) is
+  only linked; its worked version is on the Week 4 page. Lab 3 Act
+  answers stay off the page. Widgets `prob_area.html`,
+  `screening.html`, `monty_hall.html`. Script
+  `CODE_Week3_ProbabilityAndBayes.R`, guide
+  `NOTES_Week3_WebPageGuide.Rmd` (carries the Lab 3 opening script and
+  Act quick checks). The Week 3 lecture NOTES and `NOTES_Lab3` are in
+  `lecture_notes/archive/`; LECTURE2 is in `archive/`, replaced in the
+  navbar by the Week 3 page. No as-taught report for Week 3.
 
 - **Week 11 (Nov. 2-4), built Oct. 28, not yet taught:** Veterans Day
   is Wed., Nov. 11 (Week 12 has Monday + Lab 10 only). Page
@@ -541,7 +564,7 @@ Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 4-9 pages bui
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
   8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
-  1-3.
+  1-2.
 - **Week 4 page (built Oct. 29, after the week):**
   `Week4_ProbabilityDistributions.Rmd` (H1s: counting, random variables,
   and expectation `#expectation` (Monday), with the reused probability
@@ -557,9 +580,8 @@ Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 4-9 pages bui
   `density_area.html`, `distribution_explorer.html`. Script
   `CODE_Week4_ProbabilityDistributions.R`, guide
   `NOTES_Week4_WebPageGuide.Rmd`. The Week 4 Monday PDF NOTES are in
-  `lecture_notes/archive/` (Wednesday had none). LECTURE2 stays: its
-  first half (axioms, urns, Bayes' rule, Monty Hall) is Week 3 material;
-  archive it once a Week 3 page exists.
+  `lecture_notes/archive/` (Wednesday had none). LECTURE2 was archived
+  once the Week 3 page covered its first half.
 - **Week 5 page (built Oct. 29, after the week):**
   `Week5_SimulatingData.Rmd` (H1s: simulating data `#simulation`, with
   the WOD `#wod-dgm` worked for the lek counts, `r` functions, Bolker's
@@ -632,16 +654,16 @@ Snapshot: Thu., Oct. 29, 2026 (end of Week 10; Week 11 built; Week 4-9 pages bui
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-3 link
+  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-2 link
   legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
-  relink each to what was actually covered (Week 4 links the Week 4
-  page; Week 5 Monday and lab link the Week 5 page; Week 5 Wednesday
+  relink each to what was actually covered (Week 3's lab and Wednesday
+  cells link the Week 3 page; Week 4 links the Week 4 page; Week 5 Monday and lab link the Week 5 page; Week 5 Wednesday
   and Week 6 link the Week 6 page). Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
-  pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1-2, LECTURE8, LECTURE9,
-  Links, Week4-Week11; schedule and the newest week page get it
-  by re-rendering); LECTURE6, 10, GIT-tutorial, and LAB1, 2, 5 carry older navbars
+  pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1, LECTURE8, LECTURE9,
+  Links, Week3-Week11; schedule and the newest week page get it
+  by re-rendering); LECTURE10, GIT-tutorial, MAIN, and LAB1, 2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
   `sed`). Long menus scroll via
   `styles.css` (`css:` in `_site.yml`); pages not re-rendered got its

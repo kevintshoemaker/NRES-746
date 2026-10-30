@@ -1,0 +1,499 @@
+---
+title: "Week 3: Probability Rules and Bayes' Rule"
+author: "NRES 746"
+date: "Sept. 8-9, 2026"
+output:
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 7, fig.height = 4.5, fig.align = "center")
+
+widget <- function(file) htmltools::includeHTML(file.path("widgets", file))
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+f3 <- function(v) formatC(v, format = "f", digits = 3)
+```
+
+```{r helpers, echo=FALSE}
+# scientific workflow schematic; 'highlight' shades one box
+draw_workflow <- function(highlight = NULL, cex = 0.9) {
+  boxes <- c("PROBLEM", "THEORIES", "MODELS", "FIT", "COMPARE")
+  subs <- c("what do we\nneed to know?", "candidate\nexplanations",
+            "data-generating\n(process + noise)", "confront each\nwith data",
+            "fit, prediction,\nrelevance")
+  x <- seq(1, 9, by = 2)
+  y <- 2
+  w <- 0.8
+  h <- 0.55
+  shade <- function(lab) if (!is.null(highlight) && lab == highlight) "lightskyblue1" else "white"
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 10), ylim = c(-0.2, 4), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_along(boxes)) {
+    rect(x[i] - w, y - h, x[i] + w, y + h, col = shade(boxes[i]), lwd = 1.5)
+    text(x[i], y + 0.18, boxes[i], font = 2, cex = cex)
+    text(x[i], y - 0.22, subs[i], cex = cex * 0.75)
+  }
+  arrows(x[-5] + w, y, x[-1] - w, y, length = 0.08, lwd = 1.5)
+  rect(6 - 0.7, 3.2 - 0.35, 6 + 0.7, 3.2 + 0.35, lty = 2, lwd = 1.5,
+       col = if (identical(highlight, "DATA")) "lightskyblue1" else NA)
+  text(6, 3.28, "DATA", font = 2, cex = cex)
+  text(6, 3.0, "study design", cex = cex * 0.75)
+  arrows(x[3], y + h, 6 - 0.7, 3.2, length = 0.08, lty = 2, lwd = 1.2)
+  arrows(6 + 0.7, 3.2, x[4], y + h, length = 0.08, lty = 2, lwd = 1.2)
+  segments(x[5], y - h, x[5], 0.4, lwd = 1.5)
+  segments(x[5], 0.4, x[1], 0.4, lwd = 1.5)
+  arrows(x[c(1, 2)], 0.4, x[c(1, 2)], y - h, length = 0.08, lwd = 1.5)
+  text(6, 0.15, "REVISE the problem and theories; drop or down-weight poor models",
+       cex = cex * 0.85, font = 3)
+}
+```
+
+R code from this page is also in the
+[companion script](lecture_notes/CODE_Week3_ProbabilityAndBayes.R).
+No packages beyond base R are needed.
+
+This material follows Bolker, *Ecological Models and Data in R*,
+sections 4.1 (why variability matters, pp. 140-141), 4.2 (basic
+probability theory, pp. 141-145), and 4.3 (Bayes' rule, pp. 145-152).
+
+# Adding and multiplying probabilities {#lab3}
+
+Two rules do most of the work of combining probabilities: add the
+probabilities of outcomes that can't happen together, and multiply the
+probabilities of independent events. This part sets up those rules,
+plus the language of sample spaces and events. Everything else on the
+page is built from them.
+
+## 1. Big picture
+
+```{r workflow-models, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow("MODELS")
+```
+
+Ecological data vary for several reasons (Bolker 4.1). Measurements
+are imprecise. Individuals with the same expected fate live or die by
+chance (demographic stochasticity). Rates themselves change from place
+to place and year to year (environmental stochasticity). A
+data-generating model (MODELS) describes that variation with
+probability, so the rules of probability are the grammar for writing
+models down and, later, for fitting them.
+
+## 2. Sample spaces and events {#sample-space}
+
+A pine seed that lands on the forest floor ends up with exactly one of
+four fates: eaten by a rodent, eaten by a bird, germinating, or dying in
+the soil. Those four outcomes make up the **sample space**, the set of
+everything that could happen. An **event** is any set of outcomes:
+"eaten" is the event {rodent, bird}. A **probability** assigns each
+event a number, following three rules (Kolmogorov's axioms):
+
+1. No probability is negative: $P(A) \ge 0$.
+2. Something in the sample space happens: $P(\text{all outcomes}) = 1$.
+3. If $A$ and $B$ can't happen together (they are **mutually
+   exclusive**), $P(A \text{ or } B) = P(A) + P(B)$.
+
+```{r seed-fates}
+fates <- c(rodent = 0.35, bird = 0.15, germinate = 0.10, soil = 0.40)
+sum(fates)                              # rule 2
+fates["rodent"] + fates["bird"]         # P(eaten), by rule 3
+1 - fates["germinate"]                  # P(does not germinate)
+```
+
+A seed can't be eaten by a rodent and by a bird, so
+$P(\text{eaten}) = 0.35 + 0.15 = 0.50$. The last line uses a
+consequence of rules 2 and 3, the **complement rule**:
+$P(\text{not } A) = 1 - P(A)$, since $A$ and "not $A$" are mutually
+exclusive and together cover everything.
+
+## 3. Multiplying probabilities {#multiplication}
+
+**A probability times a count gives an expected count.** If 200 seeds
+fall and each is eaten by a rodent with probability 0.35, expect
+$200 \times 0.35 = 70$ rodent-eaten seeds. The actual number will vary
+around 70 from one batch of seeds to the next.
+
+**Independent events multiply.** Two observers search the same plot
+for nests without talking to each other. Each finds a given nest with
+probability 0.6. If finding a nest is independent between observers,
+the chance that both find it is $0.6 \times 0.6$. The four possible
+outcomes for one nest:
+
+```{r double-observer}
+p_find <- 0.6
+outcomes <- c(both     = p_find * p_find,
+              only_1   = p_find * (1 - p_find),
+              only_2   = (1 - p_find) * p_find,
+              neither  = (1 - p_find) * (1 - p_find))
+outcomes
+sum(outcomes)
+1 - outcomes["neither"]                 # P(at least one observer finds it)
+```
+
+The four outcomes are mutually exclusive and add to 1. "At least one
+observer finds it" has probability `r f2(1 - (1 - p_find)^2)`, which
+is easiest to get from the complement (neither finds it, 0.16).
+
+Adding the two observers' probabilities, $0.6 + 0.6 = 1.2$, can't be
+right. The two events overlap (both observers can find the same nest),
+so the overlap gets counted twice. The general addition rule subtracts
+it once:
+
+$$P(A \text{ or } B) = P(A) + P(B) - P(A \text{ and } B) = 0.6 + 0.6 - 0.36 = 0.84.$$
+
+> **Question:** Real nests differ in how well they are hidden, so a
+> nest one observer misses is often missed by the other too. Is the
+> true chance that both miss a nest more or less than 0.16? What does
+> that do to an estimate of how many nests nobody found?
+
+# Conditional probability and Bayes' rule {#bayes-rule}
+
+Conditional probability describes how knowing one thing changes the
+probability of another. Rearranged, it gives Bayes' rule, which turns
+the probability of the data under a hypothesis into the probability of
+the hypothesis given the data. The WOD for this class (WODs are short
+warm-up exercises that open each lecture) was a puzzle about dice,
+lottery tickets, and shared birthdays; it is worked through with the
+[counting material](Week4_ProbabilityDistributions.html#wod-puzzle).
+
+## 1. Big picture
+
+```{r workflow-fit, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow("FIT")
+```
+
+A model tells us how likely the data are if a hypothesis is true,
+$P(\text{data} \mid \text{hypothesis})$. What we usually want is the
+reverse: how believable is each hypothesis, given the data? The two
+are different numbers, and Bayes' rule converts one into the other.
+The probability of the data under a hypothesis is called the
+**likelihood**, and it drives the FIT step for the rest of the course.
+
+## 2. Joint, marginal, and conditional probability {#conditional}
+
+A survey of a woodland plot records 241 trees by species and by
+whether they carry mistletoe:
+
+```{r tree-table}
+trees <- matrix(c(39, 76, 101, 25), nrow = 2,
+                dimnames = list(status = c("infested", "healthy"),
+                                species = c("juniper", "pinyon")))
+trees
+p_trees <- trees / sum(trees)           # joint probabilities
+round(p_trees, 3)
+```
+
+Pick one tree at random. The **joint probability** that it is both a
+healthy tree and a pinyon is one cell divided by the total,
+$P(\text{healthy and pinyon}) = 25/241 =$ `r f3(25/241)`. A
+**marginal probability** ignores one attribute by summing over it:
+
+```{r tree-marginal}
+p_status  <- rowSums(trees) / sum(trees)
+p_species <- colSums(trees) / sum(trees)
+p_status
+p_species
+```
+
+**Multiplying marginals doesn't give the joint probability here:**
+
+```{r tree-product}
+p_status["healthy"] * p_species["pinyon"]   # product of marginals
+p_trees["healthy", "pinyon"]                # actual joint probability
+```
+
+The product, `r f3(p_status["healthy"] * p_species["pinyon"])`, is
+about twice the true value, `r f3(p_trees["healthy", "pinyon"])`.
+Multiplying only works for independent events, and these two aren't:
+pinyons here are mostly infested.
+
+**Conditional probability** narrows the sample space. Among pinyons
+only, what fraction are healthy?
+
+$$P(\text{healthy} \mid \text{pinyon}) =
+\frac{P(\text{healthy and pinyon})}{P(\text{pinyon})}.$$
+
+```{r tree-conditional}
+p_trees["healthy", "pinyon"] / p_species["pinyon"]    # = 25 / 126
+p_trees["healthy", "juniper"] / p_species["juniper"]  # = 76 / 115
+```
+
+Dividing by $P(\text{pinyon})$ throws out the junipers and rescales
+what's left so it adds to 1. A pinyon is healthy with probability
+`r f3(25/126)`; a juniper, `r f3(76/115)`.
+
+Rearranging the definition gives the **multiplication rule**, which
+holds whether or not the events are independent:
+
+$$P(A \text{ and } B) = P(A \mid B)\, P(B).$$
+
+Two events are **independent** when $P(A \mid B) = P(A)$: knowing $B$
+doesn't change the probability of $A$. Only then does the rule
+simplify to $P(A)\,P(B)$. Nearly every likelihood in this course
+multiplies probabilities of separate observations, so it quietly
+assumes independence.
+
+**Law of total probability.** A tree is either a pinyon or a juniper,
+so the chance it is healthy is a weighted average of the two
+conditional probabilities:
+
+$$P(\text{healthy}) = P(\text{healthy} \mid \text{pinyon})\,P(\text{pinyon})
++ P(\text{healthy} \mid \text{juniper})\,P(\text{juniper}).$$
+
+```{r total-probability}
+(25 / 126) * p_species["pinyon"] + (76 / 115) * p_species["juniper"]
+```
+
+This matches the marginal, `r f3(p_status["healthy"])`. (Bolker writes
+this rule on p. 142 as $P(A) = P(A \mid B) + P(A \mid \text{not } B)$,
+leaving out the weights; the weights are needed.)
+
+In the widget, the square has area 1. The column widths are $P(A)$ and
+$P(\text{not } A)$, and the blue height in each column is the
+conditional probability of $B$ in that column, so every area is a joint
+probability. The "Tree plot" button sets $A$ = pinyon and $B$ =
+healthy.
+
+```{r area-widget, echo=FALSE}
+widget("prob_area.html")
+```
+
+> **Question:** Start from the tree plot settings and move
+> $P(B \mid \text{not } A)$ until the top of the blue region is level
+> across both columns. What happens to $P(A \mid B)$, and how does it
+> compare with $P(A)$? What does a level line say about whether species
+> tells you anything about infestation?
+
+## 3. Bayes' rule {#bayes}
+
+The multiplication rule works in either order:
+
+$$P(A \text{ and } B) = P(A \mid B)\,P(B) = P(B \mid A)\,P(A).$$
+
+Divide by $P(B)$:
+
+$$P(A \mid B) = \frac{P(B \mid A)\,P(A)}{P(B)}.$$
+
+That's **Bayes' rule**, a recipe for turning a conditional probability
+around. For the trees, the chance that a healthy tree is a pinyon:
+
+```{r bayes-trees}
+p_healthy_given_pinyon <- 25 / 126
+p_healthy_given_pinyon * p_species["pinyon"] / p_status["healthy"]
+25 / 101                                    # straight from the table
+```
+
+$P(\text{healthy} \mid \text{pinyon}) =$ `r f3(25/126)` and
+$P(\text{pinyon} \mid \text{healthy}) =$ `r f3(25/101)`. They answer
+different questions, and confusing them is the most common error with
+conditional probability.
+
+**False positives in medical testing** (Bolker 4.3.1). A disease
+infects one person in a million, $P(I) = 10^{-6}$. A test never misses
+an infection, $P(+ \mid I) = 1$, but gives a false positive to 1% of
+uninfected people, $P(+ \mid U) = 0.01$. If you test positive, how
+likely are you to be infected?
+
+Bayes' rule needs $P(+)$, the overall chance of a positive test. A
+positive comes from either an infected or an uninfected person, so the
+law of total probability gives
+
+$$P(+) = P(+ \mid I)\,P(I) + P(+ \mid U)\,P(U).$$
+
+```{r medical-test}
+p_inf <- 1e-6
+p_pos_inf <- 1
+p_pos_unf <- 0.01
+
+p_pos <- p_pos_inf * p_inf + p_pos_unf * (1 - p_inf)
+p_pos
+p_inf_pos <- p_pos_inf * p_inf / p_pos
+p_inf_pos
+```
+
+A positive test means a `r format(signif(p_inf_pos, 2), scientific = FALSE)`
+chance of infection, about 1 in 10,000. Almost all positives come from the uninfected
+majority: the first term of $P(+)$ is $10^{-6}$ and the second is about
+$10^{-2}$, so the second dominates. In counts, among 100 million people
+the 100 infected all test positive, along with about a million
+uninfected people.
+
+Ignoring how rare the condition is (the prior probability) is called
+the **base rate fallacy**. The test's accuracy, $P(+ \mid I) = 1$,
+answers "if infected, will the test catch it?", not "if positive, am I
+infected?".
+
+The widget runs the same calculation for 10,000 samples. Think of a
+test for a condition, such as an invasive species in a water sample:
+prevalence is the fraction of samples that truly contain it.
+
+```{r screening-widget, echo=FALSE}
+widget("screening.html")
+```
+
+> **Question:** Start at the default settings. Move sensitivity across
+> its full range, then put it back and do the same with the false
+> positive rate. Which one matters more for
+> $P(\text{present} \mid +)$, and why? What happens when the false
+> positive rate is 0?
+
+## 4. More than two hypotheses {#many-hypotheses}
+
+With hypotheses $H_1, H_2, \ldots$ that are mutually exclusive and
+cover all possibilities, the law of total probability expands the
+denominator into a sum (Bolker eq. 4.3.7):
+
+$$P(H_i \mid D) = \frac{P(D \mid H_i)\,P(H_i)}{\sum_j P(D \mid H_j)\,P(H_j)}.$$
+
+The parts have names. $P(H_i)$ is the **prior**, $P(D \mid H_i)$ the
+**likelihood**, $P(H_i \mid D)$ the **posterior**, and the denominator
+makes the posteriors add to 1.
+
+**Liana infestation** (Bolker 4.3.2). Saplings in a tropical forest
+fall into four liana classes, from liana-free to heavily infested. In
+the forest as a whole the classes make up 50%, 25%, 20%, and 5% of
+saplings. A new sapling has 3 infested neighbors; field data say the
+chance of 3 infested neighbors is 0.05, 0.1, 0.3, and 0.6 for saplings
+in each class.
+
+```{r liana}
+prior <- c(0.50, 0.25, 0.20, 0.05)
+lik <- c(0.05, 0.10, 0.30, 0.60)       # P(3 infested neighbors | class)
+post <- lik * prior / sum(lik * prior)
+round(rbind(prior, likelihood = lik, posterior = post), 3)
+sum(lik)                               # likelihoods need not add to 1
+```
+
+```{r liana-plot, echo=FALSE, fig.width=7, fig.height=3.4}
+par(mar = c(4, 4, 0.5, 0.5))
+barplot(rbind(prior, post), beside = TRUE, col = c("grey75", "steelblue"),
+        border = NA, names.arg = c("liana-free", "light", "moderate", "heavy"),
+        xlab = "Liana class", ylab = "Probability", ylim = c(0, 0.55))
+legend("topright", c("prior", "posterior, 3 infested neighbors"),
+       fill = c("grey75", "steelblue"), border = NA, bty = "n")
+```
+
+The chance the sapling is heavily infested rises from 0.05 to
+`r f2(post[4])`. The likelihoods add to `r sum(lik)`, not 1: each comes
+from a different class, so they are not a probability distribution over
+the classes. Multiplying by the prior and dividing by the total
+converts them into one.
+
+The prior here is a frequency, the share of each class in the forest,
+so nobody disputes it. Disagreement between Bayesian and frequentist
+statisticians starts when the hypotheses are values of a parameter
+(a survival rate, a slope) and the prior expresses a degree of belief
+rather than a frequency. That use of Bayes' rule is covered with
+[Bayesian inference](Week7_IntervalsAndBayes.html#grid).
+
+> **Question:** Suppose you knew nothing about how common each class
+> is and gave all four the same prior, 0.25. What would the posterior
+> for heavy infestation be? Why is it so different from
+> `r f2(post[4])`?
+
+## Discussion
+
+1. In an [xkcd comic](https://xkcd.com/1132/), a detector reports
+   whether the sun has gone nova. It rolls two dice and lies if both
+   come up six (probability 1/36); otherwise it tells the truth. It
+   says "yes." A frequentist notes that this answer has probability
+   1/36 < 0.05 if the sun is fine, and concludes the sun has exploded.
+   Write the problem as Bayes' rule. How large would the prior
+   probability of a nova have to be for the posterior to pass 0.5?
+2. In a nest-monitoring study, 80% of failed nests had a predator
+   recorded on camera. A manager concludes that a nest with a predator
+   on camera has an 80% chance of failing. Which conditional
+   probability did the study measure, which one does the manager want,
+   and what else would you need to know to get it?
+3. A water sample from a reservoir where invasive mussels have never
+   been found tests positive for their DNA. A second sample, taken the
+   same day, also tests positive. How much should the second positive
+   change your belief, and what could make the two results less
+   independent than they look?
+
+## Bonus: the Monty Hall problem {#monty-hall}
+
+A game show has three doors, a car behind one and goats behind the
+other two. You pick door 1. The host, who knows where the car is, opens
+door 2 to show a goat, then offers you the chance to switch to door 3.
+Should you?
+
+Use Bayes' rule with three hypotheses (car behind door 1, 2, or 3),
+each with prior 1/3. The data are "the host opened door 2." If the car
+is behind door 1, the host could open door 2 or door 3, so the
+likelihood is 1/2. If the car is behind door 2, he would never open it:
+likelihood 0. If the car is behind door 3, door 2 is his only choice:
+likelihood 1.
+
+```{r monty-bayes}
+prior_door <- rep(1/3, 3)
+lik_door <- c(1/2, 0, 1)       # P(host opens door 2 | car behind door i)
+lik_door * prior_door / sum(lik_door * prior_door)
+```
+
+Staying wins with probability 1/3 and switching with 2/3. A simulation
+gives the same answer:
+
+```{r monty-sim}
+# one game; returns TRUE if the final choice has the car
+play_monty <- function(switch_door) {
+  doors <- 1:3
+  car <- sample(doors, 1)
+  pick <- sample(doors, 1)
+  goats <- setdiff(doors, c(pick, car))          # doors the host may open
+  opened <- goats[sample(length(goats), 1)]
+  if (switch_door) pick <- setdiff(doors, c(pick, opened))
+  pick == car
+}
+
+set.seed(31)
+mean(replicate(10000, play_monty(switch_door = FALSE)))
+mean(replicate(10000, play_monty(switch_door = TRUE)))
+```
+
+The widget plays the game with more doors. The host opens every door
+except your pick and one other, never revealing the car.
+
+```{r monty-widget, echo=FALSE}
+widget("monty_hall.html")
+```
+
+## Bonus: many zeros from two processes {#zero-inflation}
+
+Bolker (4.2) applies these rules to seed-removal stations. A predator
+visits a station with probability $v$; if it visits, it takes each of
+the $N$ seeds independently with probability $p$. Zero seeds can go
+missing in two mutually exclusive ways: no visit, or a visit that takes
+nothing. Adding them (law of total probability) gives
+
+$$P(0 \text{ taken}) = (1 - v) + v\,(1 - p)^N, \qquad
+P(x \text{ taken}) = v \binom{N}{x} p^x (1 - p)^{N - x} \;\; (x > 0).$$
+
+```{r zero-inflated}
+v <- 0.7
+p_take <- 0.4
+n_seeds <- 5
+x_taken <- 0:n_seeds
+p_zi <- v * dbinom(x_taken, n_seeds, p_take)
+p_zi[1] <- p_zi[1] + (1 - v)
+round(p_zi, 3)
+sum(p_zi)
+```
+
+```{r zero-inflated-plot, echo=FALSE, fig.width=7, fig.height=3.4}
+par(mar = c(4, 4, 0.5, 0.5))
+barplot(rbind(dbinom(x_taken, n_seeds, p_take), p_zi), beside = TRUE,
+        names.arg = x_taken, col = c("grey75", "steelblue"), border = NA,
+        xlab = "Seeds taken (of 5)", ylab = "Probability", ylim = c(0, 0.4))
+legend("topright", c("binomial (predator always visits)", "zero-inflated (visits 70% of the time)"),
+       fill = c("grey75", "steelblue"), border = NA, bty = "n")
+```
+
+The extra `r f2(1 - v)` of probability on zero comes from the stations
+no predator found. Data with more zeros than a standard distribution
+allows often have two processes behind them like this: one deciding
+whether anything can happen, and one deciding how much.
