@@ -74,10 +74,12 @@ Chapter 9 (pp. 394-417), Appendix A.8 (pp. 484-485), and Chapter 10
 # Standard statistics as likelihood models {#standard}
 
 Regression, ANOVA, ANCOVA, and generalized linear models are usually
-taught as separate procedures with their own tables and tests. Each one
-is a data-generating model with a likelihood we could write ourselves.
-This part fits one of them both ways, shows how R turns a model formula
-into a matrix, and extends the idea to non-normal responses.
+introduced as separate procedures with their own tables, tests etc. BUT, each one
+is a data-generating model - a pretty simple one at that. We can write the
+likelihood functions ourselves!
+
+Here, we (1) play with fitting them both ways, (2) show how R turns a model formula
+into a matrix, and (3) extend the idea to non-normal responses.
 
 ## 1. Big picture
 
@@ -85,49 +87,62 @@ into a matrix, and extends the idea to non-normal responses.
 draw_workflow("MODELS")
 ```
 
-So far we have built custom models: pick a deterministic function, pick
+So far we have built *custom models*: pick a deterministic function, pick
 a distribution for the noise, write the negative log-likelihood (NLL),
-and minimize it. Bolker's Chapter 9 makes a useful point: the
-procedures in an intro stats course are special cases of the same
-recipe, with a linear deterministic part and (usually) Normal noise.
+and minimize it. 
+
+Bolker's Chapter 9 points out that the
+procedures in an intro stats course are just special cases of the same procedure, with a 
+linear deterministic component and (at least at first) a Gaussian noise component.
 
 - `lm()` fits $Y \sim \text{Normal}(\text{linear function}, \sigma^2)$.
   Regression, ANOVA, and ANCOVA differ only in what goes into the linear
   function.
-- `glm()` keeps the linear function but passes it through a link and
-  swaps the Normal for another distribution.
-- Both assume every observation is **independent** given the
-  predictors. That is the assumption we'll relax in
-  [Modeling variance](#variance).
+- In `glm()`, the expectation of the response is still modeled as a linear function 
+  of the predictors, but on a different scale (defined by the 'link function'), and you can
+  swap the Gaussian/Normal for another distribution.
+- Both `lm()` and `glm()` assume every observation is **independent** after conditioning on the
+  predictors. Later this week we'll start relaxing the independence assumption (i.e., by
+  [Modeling variance](#variance)).
 
-Canned procedures are fast and well tested, so use them when the model
-fits. Knowing the model behind each one tells you when it doesn't.
+Canned procedures are fast and well tested, so use them if you can (that is, if the key assumptions are met). 
+But to know this, you need to understand the underlying model and its assumptions!
 
 ## 2. WOD: linear or not? {#wod-linear}
 
-The WOD (a short warm-up exercise at the start of class) listed several
-models and asked which ones `lm()` or `glm()` could fit. The key word in
-"linear model" is linear **in the parameters**, not in $x$:
+Today's WOD listed several
+models and asked which ones could reasonably be fit using `lm()` or `glm()`. 
+
+In "linear model", 'linear' means linear **in the parameters**, not in the predictor $x$:
 
 - $\mu = a + bx + cx^2$ is a curve, but each parameter enters as a
-  coefficient times something we know. Rename $x^2$ as $w$ and it's
-  multiple regression.
-- $\mu = ax^b$ is nonlinear: $b$ sits in an exponent. (Taking logs
+  simple linear coefficient times some pre-defined number. Rename $x^2$ as $w$ and it's
+  multiple regression!
+- $\mu = ax^b$ is nonlinear because $b$ is an exponent, not a simple linear 'slope' term. (Taking logs
   makes it linear, but only if the noise is multiplicative.)
-- $\mu = \exp(a + bx)$ is nonlinear as written, but its log is linear.
-  That is a GLM with a log link.
+- $\mu = \exp(a + bx)$ is nonlinear as written, but its log is linear (GLM with log link!).
 
-A model is linear in a parameter if its second derivative with respect
+Formally, a model is linear in a parameter if its second derivative with respect
 to that parameter is 0 (Bolker p. 398).
 
-## 3. One model behind lm() {#lm-likelihood}
+## 3. The model underlying lm() {#lm-likelihood}
 
-Here's the example for the week. Pinyon pine ring widths track
-precipitation: wet winters make wide rings. We have increment cores
-from 5 trees in each of 4 stands, with ring widths for 1996-2020.
-These data are simulated, so we know the true model. Averaging the 5
-trees in a stand gives one **chronology** per stand: 4 stands $\times$
+To explore this topic, here's an example (we'll use this all week). 
+Pinyon pine ring widths are a function of precipitation, where
+wet winters tend to produce wider rings. We have increment cores
+from 5 trees in each of 4 stands, with ring widths for 1996-2020 (25 years).
+NOTE: these data are simulated, so the true model is known! 
+Averaging the 5 trees in a stand gives one **chronology** per stand: 4 stands $\times$
 25 years = 100 values.
+
+Before we start with this example, it's important to recognize that 
+averaging all the trees within each stand is a shortcut, and it isn't always a good one! It works here
+because every stand has the same number of trees and no missing years.
+But it throws away the variation among trees, and with unequal sample
+sizes it would give a stand with 2 cored trees the same weight as one
+with 20. Mixed models (see the [random intercept](#random-intercept)
+section) can use each tree's measurements directly and estimate how
+much trees within a stand differ.
 
 ```{r pinyon-data}
 # pinyon ring widths (mm): 4 stands x 5 trees x 25 years; simulated
@@ -197,11 +212,14 @@ c(optim = exp(fit_ancova$par[6]), lm = summary(fit_lm)$sigma)
 
 The coefficients agree to several decimal places. The two $\sigma$
 values differ slightly: the MLE divides the sum of squared residuals by
-$n = 100$, while `lm()` divides by $n - 5$ to remove a small bias.
+$n = 100$, while `lm()` divides by $n - 5$ to remove a small bias (the residual
+degrees of freedom are $n - k$, where $k$ counts every coefficient: here
+4 stand intercepts and the slope).
 
 What `lm()` adds is speed and exactness. For a Normal linear model the
 MLE has a closed form (see [Linear algebra](#least-squares)), so `lm()`
-solves for it directly instead of searching.
+solves for it directly instead of searching (the lm() approach is much more 
+computationally efficient!).
 
 > **Question:** Each precipitation value is shared by all four stands in
 > a year. Does that matter for the independence assumption?
@@ -245,7 +263,8 @@ A GLM keeps the linear predictor $\eta = X\boldsymbol\beta$ and changes
 two things (Bolker 9.4):
 
 - a **link function** $g$ connects the mean to the linear predictor,
-  $g(\mu) = \eta$, so the mean stays in its allowed range;
+  $g(\mu) = \eta$, so the mean (expected value of the response, after 
+  accounting for predictors) stays in its allowed range;
 - the Normal is replaced by another distribution (Poisson, binomial,
   Gamma, and others).
 
@@ -276,10 +295,11 @@ cbind(optim = fit_pois$par, glm = coef(fit_glm))
 
 Same answer again. `glm()` gets there by iteratively reweighted least
 squares, which repeats a weighted `lm()`-style solve until it
-converges. It's fast but limited to the families and links it knows.
+converges. It's fast but limited to the specific families/links it knows.
 Overdispersed counts need a negative binomial (`MASS::glm.nb()`), and
 anything outside the list (a nonlinear mean, a mixture) needs a custom
-likelihood.
+likelihood (or use a different package that has already efficiently implemented your 
+target likelihood).
 
 ## Discussion {#standard-discussion}
 
@@ -309,10 +329,17 @@ coef(fit_nls)
 
 # Linear algebra for statistics {#linear-algebra}
 
+Before we start modeling variance (mixed models, spatial regression, time series models)
+it really helps to have a little background in matrices (linear algebra).
+
+When we start relaxing the independence assumption, we can no longer
+multiply one likelihood per observation; we need the joint likelihood of
+a whole set of correlated observations at once.
+
 Models with structured variance are written with vectors and matrices.
-This part covers the matrix operations we need: multiplying, transposing,
+This section covers several key matrix operations: multiplying, transposing,
 inverting, and the determinant. It closes with the multivariate normal
-distribution, which ties them together. It follows and extends Bolker's
+distribution, which uses all these concepts. This section extends Bolker's
 "cheater's guide" (Appendix A.8).
 
 ## 1. Vectors and matrices
