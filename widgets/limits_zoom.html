@@ -1,0 +1,99 @@
+<div class="w746lz" id="lzw">
+<style>
+.w746lz{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746lz .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746lz .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746lz .row input[type=range]{flex:1;min-width:160px}
+.w746lz .row output{font-weight:600;min-width:60px;text-align:right}
+.w746lz select{font-size:15px;padding:2px 6px}
+.w746lz .formula{font-size:15px;color:var(--ink);margin:4px 0 8px}
+.w746lz .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746lz .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746lz .card .k{font-size:13px;color:var(--ink2)}
+.w746lz .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746lz canvas{width:100%;height:auto;display:block}
+.w746lz .note{font-size:14px;color:var(--ink2);margin-top:4px}
+</style>
+<div class="row"><label for="lzw-fam">Function</label><select id="lzw-fam">
+  <option value="mm">Michaelis-Menten, ax/(b + x)</option>
+  <option value="hyp">Hyperbolic, a/(b + x)</option>
+  <option value="h3">Holling type III, ax&sup2;/(b&sup2; + x&sup2;)</option>
+  <option value="rk">Ricker, ax e<sup>-bx</sup></option>
+</select></div>
+<div class="row"><label for="lzw-b">Parameter b</label><input type="range" id="lzw-b" min="-1" max="1" step="0.05" value="0"><output id="lzw-b-o"></output></div>
+<div class="row"><label for="lzw-x">x (log scale)</label><input type="range" id="lzw-x" min="-3" max="3" step="0.05" value="-2"><output id="lzw-x-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">f(x)</div><div class="v" id="lzw-f"></div></div>
+  <div class="card"><div class="k" id="lzw-sk">Small-x approximation</div><div class="v" id="lzw-s"></div></div>
+  <div class="card"><div class="k" id="lzw-lk">Large-x approximation</div><div class="v" id="lzw-l"></div></div>
+</div>
+<canvas id="lzw-c" width="680" height="340" role="img" aria-label="A function and its small-x and large-x approximations on log-log axes."></canvas>
+<div class="note" id="lzw-note"></div>
+<script>
+(function(){
+const $=id=>document.getElementById('lzw-'+id);
+const a=10;
+const fams={
+  mm:{f:(x,b)=>a*x/(b+x),s:(x,b)=>a*x/b,l:(x,b)=>a,sl:'ax/b',ll:'a',
+      note:'Small x: b dominates the denominator, so f is close to the line ax/b. Large x: x dominates, so f levels off at a.'},
+  hyp:{f:(x,b)=>a/(b+x),s:(x,b)=>a/b,l:(x,b)=>a/x,sl:'a/b',ll:'a/x',
+      note:'Small x: f is close to the constant a/b. Large x: f falls like a/x, a straight line of slope -1 on log-log axes.'},
+  h3:{f:(x,b)=>a*x*x/(b*b+x*x),s:(x,b)=>a*x*x/(b*b),l:(x,b)=>a,sl:'ax²/b²',ll:'a',
+      note:'Small x: f grows like x² (slope 2 on log-log axes), so it leaves the origin flat. Large x: both x² terms dominate and f levels off at a.'},
+  rk:{f:(x,b)=>a*x*Math.exp(-b*x),s:(x,b)=>a*x,l:null,sl:'ax',ll:'none',
+      note:'Small x: e^(-bx) is close to 1, so f is close to ax. Large x: the exponential beats any power of x and f plunges toward 0; the peak is at x = 1/b.'}
+};
+const W=680,H=340,pad={l:58,r:12,t:16,b:40};
+const lx0=-3,lx1=3;
+const fmt=v=>{if(!isFinite(v))return'—';const A=Math.abs(v);if(A===0)return'0';if(A>=1e4||A<1e-3)return v.toExponential(2);return A>=100?v.toFixed(1):A>=1?v.toFixed(3):v.toPrecision(3);};
+function draw(){
+  const F=fams[$('fam').value];
+  const bexp=+$('b').value,b=Math.pow(10,bexp),lxv=+$('x').value,xv=Math.pow(10,lxv);
+  $('b-o').textContent=fmt(b);
+  $('x-o').textContent=fmt(xv);
+  const fx=F.f(xv,b);
+  $('f').textContent=fmt(fx);
+  const sv=F.s(xv,b);$('sk').textContent='Small-x approximation, '+F.sl;
+  $('s').textContent=fmt(sv)+'  (ratio '+(sv/fx).toFixed(3)+')';
+  $('lk').textContent='Large-x approximation, '+F.ll;
+  if(F.l){const lv=F.l(xv,b);$('l').textContent=fmt(lv)+'  (ratio '+(lv/fx).toFixed(3)+')';}
+  else $('l').textContent='→ 0 faster than any power';
+  $('note').textContent=F.note;
+  const ctx=$('c').getContext('2d');
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  // y range from the function itself
+  let ys=[];for(let i=0;i<=300;i++){const x=Math.pow(10,lx0+(lx1-lx0)*i/300),v=F.f(x,b);if(v>0&&isFinite(v))ys.push(Math.log10(v));}
+  let ly1=Math.ceil(Math.max(...ys)+0.5),ly0=Math.floor(Math.min(...ys)-0.5);
+  if(ly1-ly0>8)ly0=ly1-8;
+  const sx=l=>pad.l+(l-lx0)/(lx1-lx0)*(W-pad.l-pad.r),sy=l=>H-pad.b-(l-ly0)/(ly1-ly0)*(H-pad.t-pad.b);
+  ctx.strokeStyle='#e6e6e6';ctx.lineWidth=1;ctx.font='12px sans-serif';ctx.fillStyle='#666';
+  ctx.textAlign='center';
+  for(let g=lx0;g<=lx1;g++){ctx.beginPath();ctx.moveTo(sx(g),pad.t);ctx.lineTo(sx(g),H-pad.b);ctx.stroke();ctx.textAlign=g===lx1?'right':'center';ctx.fillText(g<0?'10^'+g:Math.pow(10,g),sx(g),H-pad.b+15);}
+  ctx.textAlign='center';
+  ctx.fillText('x (log scale)',(pad.l+W-pad.r)/2,H-6);
+  ctx.textAlign='right';
+  const step=Math.max(1,Math.ceil((ly1-ly0)/6));
+  for(let g=ly0;g<=ly1;g+=step){ctx.beginPath();ctx.moveTo(pad.l,sy(g));ctx.lineTo(W-pad.r,sy(g));ctx.stroke();ctx.fillText('10^'+g,pad.l-5,sy(g)+4);}
+  ctx.save();ctx.translate(13,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('f(x) (log scale)',0,0);ctx.restore();
+  ctx.strokeStyle='#999';ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);ctx.clip();
+  function line(g,col,dash,lw){ctx.strokeStyle=col;ctx.setLineDash(dash);ctx.lineWidth=lw;ctx.beginPath();let on=false;
+    for(let i=0;i<=400;i++){const l=lx0+(lx1-lx0)*i/400,v=g(Math.pow(10,l),b);
+      if(!(v>0)||!isFinite(v)){on=false;continue;}const Y=sy(Math.log10(v));
+      if(!on){ctx.moveTo(sx(l),Y);on=true;}else ctx.lineTo(sx(l),Y);}
+    ctx.stroke();ctx.setLineDash([]);}
+  line(F.s,'#2a6fb0',[7,5],2);
+  if(F.l)line(F.l,'#d9822b',[2,4],2.5);
+  line(F.f,'#222',[],2.5);
+  ctx.strokeStyle='#888';ctx.setLineDash([3,3]);ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(sx(lxv),pad.t);ctx.lineTo(sx(lxv),H-pad.b);ctx.stroke();ctx.setLineDash([]);
+  if(fx>0){ctx.fillStyle='#222';ctx.beginPath();ctx.arc(sx(lxv),sy(Math.log10(fx)),5,0,2*Math.PI);ctx.fill();}
+  ctx.restore();
+  ctx.font='12px sans-serif';ctx.textAlign='left';
+  const lg=[['#222',[],'f(x)'],['#2a6fb0',[7,5],'small-x approx.']];if(F.l)lg.push(['#d9822b',[2,4],'large-x approx.']);
+  lg.forEach((e,i)=>{const y0=pad.t+14+16*i;ctx.strokeStyle=e[0];ctx.setLineDash(e[1]);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(W-pad.r-150,y0);ctx.lineTo(W-pad.r-120,y0);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#333';ctx.fillText(e[2],W-pad.r-114,y0+4);});
+}
+['fam','b','x'].forEach(k=>$(k).addEventListener('input',draw));
+draw();
+})();
+</script>
+</div>

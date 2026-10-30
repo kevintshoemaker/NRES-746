@@ -1,0 +1,140 @@
+<div class="w746bs" id="bsw">
+<style>
+.w746bs{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746bs .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746bs .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746bs .row input[type=range]{flex:1;min-width:160px}
+.w746bs .row output{font-weight:600;min-width:52px;text-align:right}
+.w746bs select{font-size:15px;padding:2px 6px}
+.w746bs .formula{font-size:17px;color:var(--ink);margin:2px 0 10px;font-family:Georgia,serif}
+.w746bs .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746bs .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746bs .card .k{font-size:13px;color:var(--ink2)}
+.w746bs .card .v{font-size:15px;font-weight:600;color:var(--ink)}
+.w746bs canvas{width:100%;height:auto;display:block}
+.w746bs .note{font-size:14px;color:var(--ink2);margin-top:6px}
+</style>
+<div class="row"><label for="bsw-fam">Function</label><select id="bsw-fam"></select></div>
+<div class="formula" id="bsw-formula"></div>
+<div id="bsw-sliders"></div>
+<div class="cards">
+  <div class="card"><div class="k">At x = 0</div><div class="v" id="bsw-c0"></div></div>
+  <div class="card"><div class="k">As x grows</div><div class="v" id="bsw-ci"></div></div>
+  <div class="card"><div class="k">Landmark</div><div class="v" id="bsw-cs"></div></div>
+</div>
+<canvas id="bsw-c" width="680" height="320" role="img" aria-label="Graph of the selected bestiary function."></canvas>
+<div class="note" id="bsw-note"></div>
+<script>
+(function(){
+const $=id=>document.getElementById('bsw-'+id);
+const r2=v=>(Math.round(v*100)/100).toString();
+const P=(id,lab,min,max,step,val)=>({id,lab,min,max,step,val});
+const fams=[
+ {grp:'Polynomial',name:'Line',fm:'f(x) = a + bx',xmax:10,ps:[P('a','Intercept a',-5,5,0.1,1),P('b','Slope b',-2,2,0.05,0.5)],
+  f:(x,p)=>p.a+p.b*x,c0:p=>'f = a = '+r2(p.a),ci:p=>p.b===0?'stays at a':(p.b>0?'→ +∞':'→ −∞')+' at a constant rate',
+  sp:p=>null,lab:p=>'Constant slope b = '+r2(p.b),note:'The simplest model, and often a fine local approximation. It never levels off, so extrapolating far beyond the data can give impossible values (negative counts).'},
+ {grp:'Polynomial',name:'Quadratic',fm:'f(x) = a + bx + cx²',xmax:10,ps:[P('a','a',-5,5,0.1,1),P('b','b',-3,3,0.05,2),P('c','c',-0.6,0.6,0.01,-0.2)],
+  f:(x,p)=>p.a+p.b*x+p.c*x*x,c0:p=>'f = a = '+r2(p.a),ci:p=>p.c===0?'like a line':(p.c>0?'→ +∞ (x² term wins)':'→ −∞ (x² term wins)'),
+  sp:p=>p.c!==0?{x:-p.b/(2*p.c),t:(p.c<0?'Peak':'Trough')+' at x = −b/(2c) = '+r2(-p.b/(2*p.c))}:null,lab:null,
+  note:'One hump or one dip, always symmetric. Like any polynomial it heads off to ±∞ outside the data.'},
+ {grp:'Piecewise',name:'Hockey stick',fm:'f(x) = ax for x < s;  f(x) = as for x ≥ s',xmax:10,ps:[P('a','Slope a',0.1,3,0.05,1),P('s','Breakpoint s',0.5,9.5,0.1,5)],
+  f:(x,p)=>x<p.s?p.a*x:p.a*p.s,c0:p=>'f = 0',ci:p=>'flat at as = '+r2(p.a*p.s),
+  sp:p=>({x:p.s,t:'Breakpoint at x = s = '+r2(p.s)}),lab:null,hl:p=>[p.a*p.s],
+  note:'A linear rise that stops abruptly: a filter feeder that eats everything until its gut is full (Holling type I). The slope jumps at the breakpoint, which makes fitting harder.'},
+ {grp:'Rational',name:'Hyperbolic',fm:'f(x) = a / (b + x)',xmax:20,ps:[P('a','a',0.5,10,0.1,5),P('b','b',0.2,5,0.05,1)],
+  f:(x,p)=>p.a/(p.b+x),c0:p=>'f = a/b = '+r2(p.a/p.b),ci:p=>'→ 0, like a/x',
+  sp:p=>({x:p.b,t:'Half its starting value at x = b = '+r2(p.b)}),lab:null,hl:p=>[0],
+  note:'Decreasing and always positive, e.g. seed production per plant as plant density rises.'},
+ {grp:'Rational',name:'Michaelis-Menten (Holling type II)',fm:'f(x) = ax / (b + x)',xmax:20,ps:[P('a','Asymptote a',0.5,10,0.1,5),P('b','Half-max b',0.2,8,0.05,2)],
+  f:(x,p)=>p.a*x/(p.b+x),c0:p=>'f = 0, initial slope a/b = '+r2(p.a/p.b),ci:p=>'→ a = '+r2(p.a),
+  sp:p=>({x:p.b,t:'Half-max a/2 at x = b = '+r2(p.b)}),lab:null,hl:p=>[p.a],
+  note:'Saturating. Enzyme kinetics, predator functional responses (handling time sets the asymptote), Beverton-Holt recruitment. It approaches a slowly: at x = 9b it is still only 90% of the way there.'},
+ {grp:'Rational',name:'Holling type III',fm:'f(x) = ax² / (b² + x²)',xmax:10,ps:[P('a','Asymptote a',0.5,10,0.1,5),P('b','Half-max b',0.2,6,0.05,2)],
+  f:(x,p)=>p.a*x*x/(p.b*p.b+x*x),c0:p=>'f = 0, initial slope 0',ci:p=>'→ a = '+r2(p.a),
+  sp:p=>({x:p.b,t:'Half-max at x = b = '+r2(p.b)+'; inflection at b/√3 = '+r2(p.b/Math.sqrt(3))}),lab:null,hl:p=>[p.a],
+  note:'Sigmoid: flat at the origin, so rare prey are hardly eaten (predators switching to common prey, or prey refuges).'},
+ {grp:'Exponential-based',name:'Negative exponential',fm:'f(x) = a e^(−bx)',xmax:10,ps:[P('a','Start a',0.5,10,0.1,5),P('b','Rate b',0.05,2,0.01,0.5)],
+  f:(x,p)=>p.a*Math.exp(-p.b*x),c0:p=>'f = a = '+r2(p.a),ci:p=>'→ 0',
+  sp:p=>({x:Math.log(2)/p.b,t:'Half-life ln(2)/b = '+r2(Math.log(2)/p.b)}),lab:null,hl:p=>[0],
+  note:'Loses a constant fraction per unit x: decay, light through a canopy (Beer’s law), survival at a constant hazard. 1/b is the e-folding distance.'},
+ {grp:'Exponential-based',name:'Monomolecular',fm:'f(x) = a (1 − e^(−bx))',xmax:10,ps:[P('a','Asymptote a',0.5,10,0.1,5),P('b','Rate b',0.05,2,0.01,0.5)],
+  f:(x,p)=>p.a*(1-Math.exp(-p.b*x)),c0:p=>'f = 0, initial slope ab = '+r2(p.a*p.b),ci:p=>'→ a = '+r2(p.a),
+  sp:p=>({x:Math.log(2)/p.b,t:'Half-max at ln(2)/b = '+r2(Math.log(2)/p.b)}),lab:null,hl:p=>[p.a],
+  note:'Saturating like Michaelis-Menten, but it closes the gap to a by a constant fraction per unit x, so it gets there faster. Simplest von Bertalanffy growth curve.'},
+ {grp:'Exponential-based',name:'Ricker',fm:'f(x) = ax e^(−bx)',xmax:15,ps:[P('a','Initial slope a',0.2,5,0.05,2),P('b','b',0.1,2,0.01,0.5)],
+  f:(x,p)=>p.a*x*Math.exp(-p.b*x),c0:p=>'f = 0, initial slope a = '+r2(p.a),ci:p=>'→ 0 (exponential beats x)',
+  sp:p=>({x:1/p.b,t:'Peak at x = 1/b = '+r2(1/p.b)+', height a/(be) = '+r2(p.a/(p.b*Math.E))}),lab:null,hl:p=>[0],
+  note:'Rises, peaks, and decays: density-dependent recruitment when per-capita fecundity falls exponentially with density. The tail is long and skewed to the right.'},
+ {grp:'Exponential-based',name:'Logistic',fm:'f(x) = e^(a+bx) / (1 + e^(a+bx))',xmax:10,ps:[P('a','Location a',-10,5,0.1,-4),P('b','Steepness b',0.1,4,0.05,0.8)],
+  f:(x,p)=>1/(1+Math.exp(-(p.a+p.b*x))),c0:p=>'f = e^a/(1 + e^a) = '+r2(1/(1+Math.exp(-p.a))),ci:p=>'→ 1',
+  sp:p=>({x:-p.a/p.b,t:'Midpoint (inflection) at −a/b = '+r2(-p.a/p.b)+', slope b/4 = '+r2(p.b/4)}),lab:null,hl:p=>[0,1],
+  note:'Sigmoid and symmetric about its midpoint, where it rises fastest. Bounded between 0 and 1, so it is the standard curve for a probability that changes with x.'},
+ {grp:'Exponential-based',name:'Gompertz',fm:'f(x) = e^(−a e^(−bx))',xmax:10,ps:[P('a','a',1.1,20,0.1,5),P('b','b',0.1,3,0.05,0.8)],
+  f:(x,p)=>Math.exp(-p.a*Math.exp(-p.b*x)),c0:p=>'f = e^(−a) = '+r2(Math.exp(-p.a)),ci:p=>'→ 1',
+  sp:p=>({x:Math.log(p.a)/p.b,t:'Inflection at ln(a)/b = '+r2(Math.log(p.a)/p.b)+', height 1/e ≈ 0.37'}),lab:null,hl:p=>[0,1],
+  note:'A lopsided sigmoid: the inflection sits about a third of the way up rather than halfway, so the slow approach to the top is longer than the start.'},
+ {grp:'Power-based',name:'Power law',fm:'f(x) = a x^b',xmax:10,ps:[P('a','a',0.1,5,0.05,1),P('b','Exponent b',-1.5,3,0.05,0.5)],
+  f:(x,p)=>p.a*Math.pow(x,p.b),c0:p=>p.b>0?'f = 0':(p.b===0?'f = a':'→ ∞'),ci:p=>p.b>0?'→ ∞':(p.b===0?'stays at a':'→ 0'),
+  sp:p=>null,lab:p=>'b > 1 accelerates; 0 < b < 1 decelerates; b < 0 decreases',
+  note:'Allometry (mass and length, metabolic rate and mass), species-area curves. On log-log axes it is a straight line with slope b.'},
+ {grp:'Power-based',name:'Shepherd',fm:'f(x) = ax / (b + x^c)',xmax:15,ps:[P('a','a',0.5,10,0.1,5),P('b','b',0.2,8,0.05,2),P('c','c',0.5,3,0.05,2)],
+  f:(x,p)=>p.a*x/(p.b+Math.pow(x,p.c)),c0:p=>'f = 0, initial slope a/b = '+r2(p.a/p.b),
+  ci:p=>p.c>1.001?'→ 0 (overcompensation)':(p.c<0.999?'→ ∞, slowly':'→ a (Michaelis-Menten)'),
+  sp:p=>p.c>1.001?(()=>{const x=Math.pow(p.b/(p.c-1),1/p.c);return {x,t:'Peak at x = (b/(c − 1))^(1/c) = '+r2(x)};})():null,lab:p=>p.c<=1.001?'No peak when c ≤ 1':null,
+  note:'Adds an exponent to Michaelis-Menten. c = 1 gives Michaelis-Menten back; c > 1 adds a peak (scramble competition), c < 1 never levels off.'}
+];
+const sel=$('fam');
+fams.forEach((F,i)=>{const o=document.createElement('option');o.value=i;o.textContent=F.grp+': '+F.name;sel.appendChild(o);});
+let vals={};
+function build(){
+  const F=fams[+sel.value];vals={};
+  const box=$('sliders');box.innerHTML='';
+  F.ps.forEach(q=>{vals[q.id]=q.val;
+    const row=document.createElement('div');row.className='row';
+    row.innerHTML='<label for="bsw-p-'+q.id+'">'+q.lab+'</label><input type="range" id="bsw-p-'+q.id+'" min="'+q.min+'" max="'+q.max+'" step="'+q.step+'" value="'+q.val+'"><output id="bsw-p-'+q.id+'-o"></output>';
+    box.appendChild(row);
+    row.querySelector('input').addEventListener('input',e=>{vals[q.id]=+e.target.value;draw();});
+  });
+  $('formula').textContent=F.fm;$('note').textContent=F.note;
+  draw();
+}
+const W=680,H=320,pad={l:52,r:12,t:12,b:36};
+function draw(){
+  const F=fams[+sel.value],p=vals;
+  F.ps.forEach(q=>$('p-'+q.id+'-o').textContent=r2(p[q.id]));
+  $('c0').textContent=F.c0(p);$('ci').textContent=F.ci(p);
+  const sp=F.sp(p);$('cs').textContent=sp?sp.t:(F.lab&&F.lab(p)?F.lab(p):'none');
+  const n=400,xs=[],ys=[];
+  for(let i=0;i<=n;i++){const x=F.xmax*i/n;xs.push(x);ys.push(F.f(x,p));}
+  const fin=ys.filter(v=>isFinite(v)).slice().sort((a,b)=>a-b);
+  let lo=fin[0],hi=fin[fin.length-1];
+  const q97=fin[Math.floor(0.95*(fin.length-1))],q03=fin[Math.floor(0.05*(fin.length-1))];
+  if(hi-q97>3*(q97-q03+1e-9))hi=q97*1.3;
+  if(q03-lo>3*(q97-q03+1e-9))lo=q03;
+  (F.hl?F.hl(p):[]).forEach(h=>{hi=Math.max(hi,h);lo=Math.min(lo,h);});
+  lo=Math.min(lo,0);const span=(hi-lo)||1;hi+=0.08*span;
+  const ctx=$('c').getContext('2d');
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  const sx=x=>pad.l+x/F.xmax*(W-pad.l-pad.r),sy=y=>H-pad.b-(y-lo)/(hi-lo)*(H-pad.t-pad.b);
+  ctx.strokeStyle='#e6e6e6';ctx.lineWidth=1;ctx.font='12px sans-serif';ctx.fillStyle='#666';ctx.textAlign='center';
+  for(let i=0;i<=5;i++){const x=F.xmax*i/5;ctx.beginPath();ctx.moveTo(sx(x),pad.t);ctx.lineTo(sx(x),H-pad.b);ctx.stroke();ctx.fillText(r2(x),sx(x),H-pad.b+15);}
+  ctx.fillText('x',(pad.l+W-pad.r)/2,H-5);
+  ctx.textAlign='right';
+  for(let i=0;i<=4;i++){const y=lo+(hi-lo)*i/4;ctx.beginPath();ctx.moveTo(pad.l,sy(y));ctx.lineTo(W-pad.r,sy(y));ctx.stroke();ctx.fillText(Math.abs(y)>=10?y.toFixed(0):y.toFixed(2),pad.l-5,sy(y)+4);}
+  ctx.strokeStyle='#999';ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);ctx.clip();
+  ctx.strokeStyle='#888';ctx.setLineDash([5,4]);
+  (F.hl?F.hl(p):[]).forEach(h=>{ctx.beginPath();ctx.moveTo(pad.l,sy(h));ctx.lineTo(W-pad.r,sy(h));ctx.stroke();});
+  if(sp&&sp.x>=0&&sp.x<=F.xmax){ctx.beginPath();ctx.moveTo(sx(sp.x),pad.t);ctx.lineTo(sx(sp.x),H-pad.b);ctx.stroke();}
+  ctx.setLineDash([]);
+  ctx.strokeStyle='#222';ctx.lineWidth=2.5;ctx.beginPath();let on=false;
+  xs.forEach((x,i)=>{const y=ys[i];if(!isFinite(y)){on=false;return;}const Y=Math.max(-50,Math.min(H+50,sy(y)));if(!on){ctx.moveTo(sx(x),Y);on=true;}else ctx.lineTo(sx(x),Y);});
+  ctx.stroke();
+  if(sp&&sp.x>=0&&sp.x<=F.xmax){const y=F.f(sp.x,p);if(isFinite(y)){ctx.fillStyle='#2a6fb0';ctx.beginPath();ctx.arc(sx(sp.x),sy(y),5,0,2*Math.PI);ctx.fill();}}
+  ctx.restore();
+}
+sel.addEventListener('change',build);
+sel.value=4;build();
+})();
+</script>
+</div>

@@ -1,0 +1,128 @@
+<div class="w746tg" id="tgw">
+<style>
+.w746tg{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746tg .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746tg .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:120px}
+.w746tg .row input[type=range]{flex:1;min-width:160px}
+.w746tg .row output{font-weight:600;min-width:52px;text-align:right}
+.w746tg select{font-size:15px;padding:2px 6px}
+.w746tg button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746tg button:hover{background:#eee}
+.w746tg button:disabled{color:#aaa;cursor:default;background:#fafafa}
+.w746tg .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746tg .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746tg .card .k{font-size:13px;color:var(--ink2)}
+.w746tg .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746tg canvas{width:100%;height:auto;display:block}
+.w746tg .key{font-size:13px;color:var(--ink2);margin:2px 0 6px}
+.w746tg .sw{display:inline-block;width:14px;height:10px;margin:0 4px 0 10px;vertical-align:middle}
+</style>
+<div class="row"><label for="tgw-fam">Function</label><select id="tgw-fam">
+  <option value="rk">Ricker, 2x e<sup>-0.5x</sup></option>
+  <option value="lg">Logistic, 1/(1 + e<sup>-(x - 5)</sup>)</option>
+  <option value="mm">Michaelis-Menten, 5x/(2 + x)</option>
+  <option value="h3">Holling type III, 5x&sup2;/(4 + x&sup2;)</option>
+  <option value="sn">Seasonal sine, 5 + 5 sin(2&pi;(t - 91)/365)</option>
+</select></div>
+<div class="row"><label for="tgw-x">Position x</label><input type="range" id="tgw-x" min="0" max="1000" step="1" value="200"><output id="tgw-x-o"></output></div>
+<div class="row">
+  <button id="tgw-crit">Go to the critical point</button>
+  <button id="tgw-infl">Go to the inflection point</button>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">f(x)</div><div class="v" id="tgw-f"></div></div>
+  <div class="card"><div class="k">Slope, f'(x)</div><div class="v" id="tgw-d1"></div></div>
+  <div class="card"><div class="k">Curvature, f''(x)</div><div class="v" id="tgw-d2"></div></div>
+  <div class="card"><div class="k">At this point</div><div class="v" id="tgw-st" style="font-size:14px"></div></div>
+</div>
+<div class="key"><span class="sw" style="background:#dbe9f6"></span>concave up (f'' &gt; 0)<span class="sw" style="background:#fbe5cf"></span>concave down (f'' &lt; 0)</div>
+<canvas id="tgw-c" width="680" height="430" role="img" aria-label="A function with its tangent line at a chosen point, and its slope below."></canvas>
+<script>
+(function(){
+const $=id=>document.getElementById('tgw-'+id);
+const fams={
+  rk:{f:x=>2*x*Math.exp(-0.5*x),lo:0,hi:12,xl:'x'},
+  lg:{f:x=>1/(1+Math.exp(-(x-5))),lo:0,hi:10,xl:'x'},
+  mm:{f:x=>5*x/(2+x),lo:0,hi:20,xl:'x'},
+  h3:{f:x=>5*x*x/(4+x*x),lo:0,hi:10,xl:'x'},
+  sn:{f:t=>5+5*Math.sin(2*Math.PI*(t-91)/365),lo:1,hi:365,xl:'day of year, t'}
+};
+const W=680,H=430,pad={l:56,r:12,t:12,b:36},gap=34,h1=230;
+function d1(F,x){const h=(F.hi-F.lo)*1e-4;return (F.f(x+h)-F.f(x-h))/(2*h);}
+function d2(F,x){const h=(F.hi-F.lo)*1e-3;return (F.f(x+h)-2*F.f(x)+F.f(x-h))/(h*h);}
+function special(F){
+  const n=2000,xs=[],g1=[],g2=[];
+  for(let i=0;i<=n;i++){const x=F.lo+(F.hi-F.lo)*i/n;xs.push(x);g1.push(d1(F,x));g2.push(d2(F,x));}
+  let crit=null,infl=null;
+  for(let i=5;i<n-5;i++){
+    if(crit===null&&(g1[i]>0)!==(g1[i+1]>0))crit=xs[i]-g1[i]*(xs[i+1]-xs[i])/(g1[i+1]-g1[i]);
+    if(infl===null&&(g2[i]>0)!==(g2[i+1]>0))infl=xs[i]-g2[i]*(xs[i+1]-xs[i])/(g2[i+1]-g2[i]);
+  }
+  return {crit,infl,xs,g1,g2};
+}
+let S=null,famKey=null;
+const fmt=v=>Math.abs(v)<5e-4?'0.000':Math.abs(v)>=100?v.toFixed(1):v.toFixed(3);
+function xFromSlider(F){return F.lo+(F.hi-F.lo)*(+$('x').value)/1000;}
+function setX(F,x){$('x').value=Math.round(1000*(x-F.lo)/(F.hi-F.lo));draw();}
+function draw(){
+  const F=fams[$('fam').value];
+  if(famKey!==$('fam').value){famKey=$('fam').value;S=special(F);}
+  $('crit').disabled=S.crit===null;$('infl').disabled=S.infl===null;
+  const x=xFromSlider(F),fx=F.f(x),s1=d1(F,x),s2=d2(F,x);
+  $('x-o').textContent=F.hi>100?x.toFixed(0):x.toFixed(2);
+  $('f').textContent=fmt(fx);$('d1').textContent=fmt(s1);$('d2').textContent=fmt(s2);
+  const m1=Math.max(...S.g1.map(Math.abs)),m2=Math.max(...S.g2.slice(5,-5).map(Math.abs));
+  let st;
+  if(S.crit!==null&&Math.abs(x-S.crit)<(F.hi-F.lo)*0.006)st='Critical point: slope 0 ('+(s2<0?'a peak':'a trough')+')';
+  else if(S.infl!==null&&Math.abs(x-S.infl)<(F.hi-F.lo)*0.006)st='Inflection point: f\'\' = 0, slope '+(s1>0?'steepest':'most negative')+' here';
+  else st=(s1>0?'Increasing':'Decreasing')+', concave '+(s2>0?'up':'down');
+  $('st').textContent=st;
+  const ctx=$('c').getContext('2d');
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  const sx=v=>pad.l+(v-F.lo)/(F.hi-F.lo)*(W-pad.l-pad.r);
+  // value range
+  let ys=S.xs.map(F.f);let ylo=Math.min(0,...ys),yhi=Math.max(...ys)*1.08;
+  let glo=Math.min(...S.g1),ghi=Math.max(...S.g1);const gp=(ghi-glo)*0.1;glo-=gp;ghi+=gp;if(glo>0)glo=-gp;if(ghi<0)ghi=gp;
+  const top={y0:pad.t,y1:pad.t+h1},bot={y0:pad.t+h1+gap,y1:H-pad.b};
+  const sy1=v=>top.y1-(v-ylo)/(yhi-ylo)*(top.y1-top.y0),sy2=v=>bot.y1-(v-glo)/(ghi-glo)*(bot.y1-bot.y0);
+  // concavity bands in the top panel
+  for(let i=0;i<S.xs.length-1;i++){
+    ctx.fillStyle=S.g2[i]>0?'#dbe9f6':'#fbe5cf';
+    ctx.fillRect(sx(S.xs[i]),top.y0,sx(S.xs[i+1])-sx(S.xs[i])+1,top.y1-top.y0);
+  }
+  [[top,sy1,ylo,yhi,'f(x)'],[bot,sy2,glo,ghi,"slope f'(x)"]].forEach(([P,sy,lo,hi,lab])=>{
+    ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,P.y0,W-pad.l-pad.r,P.y1-P.y0);
+    ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='right';
+    [lo,(lo+hi)/2,hi].forEach(t=>ctx.fillText(Math.abs(t)>=10?t.toFixed(0):t.toFixed(2),pad.l-5,sy(t)+4));
+    ctx.save();ctx.translate(13,(P.y0+P.y1)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(lab,0,0);ctx.restore();
+  });
+  ctx.textAlign='center';ctx.fillStyle='#666';
+  for(let i=0;i<=5;i++){const v=F.lo+(F.hi-F.lo)*i/5;ctx.fillText(F.hi>100?v.toFixed(0):String(Number(v.toFixed(1))),sx(v),H-pad.b+15);}
+  ctx.fillText(F.xl,(pad.l+W-pad.r)/2,H-5);
+  // zero line in slope panel
+  ctx.strokeStyle='#888';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(pad.l,sy2(0));ctx.lineTo(W-pad.r,sy2(0));ctx.stroke();
+  // special point markers
+  [[S.crit,'critical'],[S.infl,'inflection']].forEach(([v,lab])=>{if(v===null)return;
+    ctx.strokeStyle='#aaa';ctx.beginPath();ctx.moveTo(sx(v),top.y0);ctx.lineTo(sx(v),bot.y1);ctx.stroke();
+    ctx.fillStyle='#777';ctx.textAlign='left';ctx.fillText(lab,sx(v)+3,top.y0+12);});
+  ctx.setLineDash([]);
+  // curves
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,top.y0,W-pad.l-pad.r,top.y1-top.y0);ctx.clip();
+  ctx.strokeStyle='#222';ctx.lineWidth=2.5;ctx.beginPath();S.xs.forEach((v,i)=>{const Y=sy1(F.f(v));i?ctx.lineTo(sx(v),Y):ctx.moveTo(sx(v),Y);});ctx.stroke();
+  const half=(F.hi-F.lo)*0.18;
+  ctx.strokeStyle='#2a6fb0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(sx(x-half),sy1(fx-s1*half));ctx.lineTo(sx(x+half),sy1(fx+s1*half));ctx.stroke();
+  ctx.fillStyle='#2a6fb0';ctx.beginPath();ctx.arc(sx(x),sy1(fx),5,0,2*Math.PI);ctx.fill();
+  ctx.restore();
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,bot.y0,W-pad.l-pad.r,bot.y1-bot.y0);ctx.clip();
+  ctx.strokeStyle='#222';ctx.lineWidth=2;ctx.beginPath();S.xs.forEach((v,i)=>{const Y=sy2(S.g1[i]);i?ctx.lineTo(sx(v),Y):ctx.moveTo(sx(v),Y);});ctx.stroke();
+  ctx.fillStyle='#2a6fb0';ctx.beginPath();ctx.arc(sx(x),sy2(s1),5,0,2*Math.PI);ctx.fill();
+  ctx.restore();
+}
+$('fam').addEventListener('change',()=>{famKey=null;$('x').value=200;draw();});
+$('x').addEventListener('input',draw);
+$('crit').addEventListener('click',()=>{const F=fams[$('fam').value];if(S.crit!==null)setX(F,S.crit);});
+$('infl').addEventListener('click',()=>{const F=fams[$('fam').value];if(S.infl!==null)setX(F,S.infl);});
+draw();
+})();
+</script>
+</div>

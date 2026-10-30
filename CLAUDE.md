@@ -518,7 +518,31 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Fri., Oct. 30, 2026 (end of Week 10; Week 11 built; Week 3-9 pages built after the fact).
+Snapshot: Fri., Oct. 30, 2026 (end of Week 10; Week 11 built; Week 2-9 pages built after the fact).
+
+- **Week 2 page (built Oct. 30, after the week):**
+  `Week2_DeterministicFunctions.Rmd` (Bolker 3.3-3.5, 3.7). H1s:
+  reading a function `#functions` (Monday: tadpole hump, the WOD
+  `#wod-syntax` worked (three R bugs, the day-91 seasonal sine), `x`
+  first with defaults, `curve()`, the `if` hockey stick vs. `ifelse()`,
+  limits `#limits` with Michaelis-Menten, Ricker critical point
+  `#critical-points`); repeating a calculation `#lab2` (new; no Lab 2
+  opening NOTES existed: loops vs. vectorization vs. `sapply()`,
+  `outer()` risk surface, `replicate()` quadrat means; it avoids an SSR
+  grid search and a bootstrap loop, which are Lab 2 Acts 1 and 3);
+  the bestiary `#bestiary` (Wednesday: WOD `#wod-limits` worked,
+  inflection vs. critical points `#inflection`, family map `#map`,
+  logistic from an Euler loop and Michaelis-Menten vs. monomolecular
+  `#mechanism` (closest MM asymptote 5.93 vs. 5), bonuses Taylor
+  `#taylor` and parameters/transformations `#parameters`). The page
+  doesn't solve Holling IV's limit or the flexible Ricker's peak (Lab 2
+  Act 2). Widgets `limits_zoom.html`, `tangent_slope.html`,
+  `bestiary.html` (Holling IV left out of the explorer). Script
+  `CODE_Week2_DeterministicFunctions.R`, guide
+  `NOTES_Week2_WebPageGuide.Rmd`. The two Week 2 PDF NOTES are in
+  `lecture_notes/archive/`. No legacy `LECTUREn` page covered Week 2,
+  so none was archived (LECTURE1 is Week 1 material). No as-taught
+  report.
 
 - **Week 3 page (built Oct. 30, after the week):**
   `Week3_ProbabilityAndBayes.Rmd`. Labor Day cancelled Monday, so the
@@ -563,8 +587,8 @@ Snapshot: Fri., Oct. 30, 2026 (end of Week 10; Week 11 built; Week 3-9 pages bui
   per-meeting instructor notes (see "Weekly materials"). Week 10's page
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
-  8 PDF NOTES are in `lecture_notes/archive/`. Backlog: pages for Weeks
-  1-2.
+  8 PDF NOTES are in `lecture_notes/archive/`. Backlog: a page for
+  Week 1.
 - **Week 4 page (built Oct. 29, after the week):**
   `Week4_ProbabilityDistributions.Rmd` (H1s: counting, random variables,
   and expectation `#expectation` (Monday), with the reused probability
@@ -654,15 +678,16 @@ Snapshot: Fri., Oct. 30, 2026 (end of Week 10; Week 11 built; Week 3-9 pages bui
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Weeks 1-2 link
+  `stopifnot` checks weeks and files). Lecture cells for Week 1 link
   legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
-  relink each to what was actually covered (Week 3's lab and Wednesday
+  relink each to what was actually covered (Week 2's cells, including
+  the lab, link the Week 2 page; Week 3's lab and Wednesday
   cells link the Week 3 page; Week 4 links the Week 4 page; Week 5 Monday and lab link the Week 5 page; Week 5 Wednesday
   and Week 6 link the Week 6 page). Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
   pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1, LECTURE8, LECTURE9,
-  Links, Week3-Week11; schedule and the newest week page get it
+  Links, Week2-Week11; schedule and the newest week page get it
   by re-rendering); LECTURE10, GIT-tutorial, MAIN, and LAB1, 2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
   `sed`). Long menus scroll via
