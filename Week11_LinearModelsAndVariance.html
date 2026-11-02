@@ -639,7 +639,7 @@ head(chron)</code></pre>
 ## 73     A 2000   28.8 1.202
 ## 89     A 2001   33.0 1.268</code></pre>
 <p><img src="Week11_LinearModelsAndVariance_files/figure-html/pinyon-plot-1.png" width="864" style="display: block; margin: auto;" /></p>
-<p>An ANCOVA (analysis of covariance) gives each stand its own intercept and shares one precipitation slope:</p>
+<p>An ANCOVA (analysis of covariance) combines a grouping factor with a continuous covariate. Its classic use is to ask whether groups differ after accounting for the covariate: do the stands grow differently once we account for the winter precipitation they all share? A usual first check is whether the covariate has the same effect in every group (parallel slopes). The model gives each stand its own intercept and shares one precipitation slope:</p>
 <p><span class="math display">\[\text{width}_{jt} \sim \text{Normal}(a_j + b\,\text{precip}_t, \sigma^2)\]</span></p>
 <p>for stand <span class="math inline">\(j\)</span> in year <span class="math inline">\(t\)</span>. Written as a custom likelihood:</p>
 <pre class="r"><code># ANCOVA: one intercept per stand (a[1:4]), shared slope b; sigma on the log scale
@@ -667,6 +667,34 @@ cbind(optim = fit_ancova$par[1:5], lm = coef(fit_lm))</code></pre>
 ## 0.1105699 0.1134400</code></pre>
 <p>The coefficients agree to several decimal places. The two <span class="math inline">\(\sigma\)</span> values differ slightly: the MLE divides the sum of squared residuals by <span class="math inline">\(n = 100\)</span>, while <code>lm()</code> divides by <span class="math inline">\(n - 5\)</span> to remove a small bias (the residual degrees of freedom are <span class="math inline">\(n - k\)</span>, where <span class="math inline">\(k\)</span> counts every coefficient: here 4 stand intercepts and the slope).</p>
 <p>What <code>lm()</code> adds is speed and exactness. For a Normal linear model the MLE has a closed form (see <a href="#least-squares">Linear algebra</a>), so <code>lm()</code> solves for it directly instead of searching (the lm() approach is much more computationally efficient!).</p>
+<p>The classic ANCOVA tests are F-tests between nested models:</p>
+<pre class="r"><code>fit_precip &lt;- lm(width ~ precip, data = chron)
+fit_slopes &lt;- lm(width ~ 0 + stand * precip, data = chron)   # one slope per stand
+anova(fit_precip, fit_lm)    # do stands differ, given precipitation?</code></pre>
+<pre><code>## Analysis of Variance Table
+## 
+## Model 1: width ~ precip
+## Model 2: width ~ 0 + stand + precip
+##   Res.Df    RSS Df Sum of Sq      F    Pr(&gt;F)    
+## 1     98 3.3800                                  
+## 2     95 1.2225  3    2.1574 55.884 &lt; 2.2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code>anova(fit_lm, fit_slopes)    # same precipitation slope in every stand?</code></pre>
+<pre><code>## Analysis of Variance Table
+## 
+## Model 1: width ~ 0 + stand + precip
+## Model 2: width ~ 0 + stand * precip
+##   Res.Df    RSS Df Sum of Sq      F  Pr(&gt;F)  
+## 1     95 1.2225                              
+## 2     92 1.1274  3  0.095122 2.5874 0.05776 .
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p>Stands differ strongly (F = 55.9 on 3 and 95 df), and the slopes test gives p = 0.058, close to rejecting even though the true slopes are identical. Two cautions:</p>
+<ul>
+<li>Precipitation doesn't change the estimated stand differences here, because every stand had the same precipitation series. It only reduces the residual noise (residual SD 0.21 without it, 0.11 with it), which makes the stand test more powerful. A covariate shifts group means only when the groups differ in the covariate.</li>
+<li>The F-test treats the 100 stand-years as independent replicates of the stand differences. They aren't. Each stand's level partly reflects which 5 trees were cored, an error that repeats every year, and residuals are correlated from year to year. So the p-value overstates how sure we can be that the <em>stands</em> differ; the <a href="#random-intercept">random intercept</a> and <a href="#ar1">AR(1)</a> sections take this up.</li>
+</ul>
 <blockquote>
 <p><strong>Question:</strong> Each precipitation value is shared by all four stands in a year. Does that matter for the independence assumption?</p>
 </blockquote>

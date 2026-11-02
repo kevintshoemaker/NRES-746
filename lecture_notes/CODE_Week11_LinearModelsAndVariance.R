@@ -52,6 +52,12 @@ fit_lm <- lm(width ~ 0 + stand + precip, data = chron)   # 0 + : one intercept p
 cbind(optim = fit_ancova$par[1:5], lm = coef(fit_lm))
 c(optim = exp(fit_ancova$par[6]), lm = summary(fit_lm)$sigma)   # MLE divides by n; lm by n - 5
 
+# classic ANCOVA tests: F-tests between nested models
+fit_precip <- lm(width ~ precip, data = chron)
+fit_slopes <- lm(width ~ 0 + stand * precip, data = chron)   # one slope per stand
+anova(fit_precip, fit_lm)    # do stands differ, given precipitation?
+anova(fit_lm, fit_slopes)    # same precipitation slope in every stand?
+
 #  [PAUSE] Each precipitation value is shared by all four stands in a year. Does that matter for independence?
 
 # 4. The model matrix -----------------------------------------------------------------

@@ -193,8 +193,13 @@ for (s in 1:4) {
 }
 ```
 
-An ANCOVA (analysis of covariance) gives each stand its own intercept
-and shares one precipitation slope:
+An ANCOVA (analysis of covariance) combines a grouping factor with a
+continuous covariate. Its classic use is to ask whether groups differ
+after accounting for the covariate: do the stands grow differently once
+we account for the winter precipitation they all share? A usual first
+check is whether the covariate has the same effect in every group
+(parallel slopes). The model gives each stand its own intercept and
+shares one precipitation slope:
 
 $$\text{width}_{jt} \sim \text{Normal}(a_j + b\,\text{precip}_t, \sigma^2)$$
 
@@ -228,6 +233,40 @@ What `lm()` adds is speed and exactness. For a Normal linear model the
 MLE has a closed form (see [Linear algebra](#least-squares)), so `lm()`
 solves for it directly instead of searching (the lm() approach is much more 
 computationally efficient!).
+
+The classic ANCOVA tests are F-tests between nested models:
+
+```{r ancova-tests}
+fit_precip <- lm(width ~ precip, data = chron)
+fit_slopes <- lm(width ~ 0 + stand * precip, data = chron)   # one slope per stand
+anova(fit_precip, fit_lm)    # do stands differ, given precipitation?
+anova(fit_lm, fit_slopes)    # same precipitation slope in every stand?
+```
+
+```{r ancova-numbers, echo=FALSE}
+test_stand <- anova(fit_precip, fit_lm)
+test_slopes <- anova(fit_lm, fit_slopes)
+sd_stand_only <- summary(lm(width ~ stand, data = chron))$sigma
+```
+
+Stands differ strongly (F = `r round(test_stand$F[2], 1)` on 3 and
+`r test_stand$Res.Df[2]` df), and the slopes test gives
+p = `r round(test_slopes[["Pr(>F)"]][2], 3)`, close to rejecting even
+though the true slopes are identical. Two cautions:
+
+- Precipitation doesn't change the estimated stand differences here,
+  because every stand had the same precipitation series. It only
+  reduces the residual noise (residual SD
+  `r f2(sd_stand_only)` without it, `r f2(summary(fit_lm)$sigma)` with
+  it), which makes the stand test more powerful. A covariate shifts
+  group means only when the groups differ in the covariate.
+- The F-test treats the 100 stand-years as independent replicates of
+  the stand differences. They aren't. Each stand's level partly reflects
+  which 5 trees were cored, an error that repeats every year, and
+  residuals are correlated from year to year. So the p-value overstates
+  how sure we can be that the *stands* differ; the
+  [random intercept](#random-intercept) and [AR(1)](#ar1) sections take
+  this up.
 
 > **Question:** Each precipitation value is shared by all four stands in
 > a year. Does that matter for the independence assumption?
