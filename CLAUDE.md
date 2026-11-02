@@ -234,9 +234,11 @@ Root-level `Week<N>_<Topic>.Rmd` (model:
   with a 2-3 sentence summary; numbered H2 sections inside; "Bonus" for
   extras. The lab's lecture portion gets its own H1; lab Act answers and
   anything the Acts ask students to work out stay off the page.
-- **Public audience:** no class-day or week references ("Monday's
-  creepers", "Week 7's cutoff"); link the relevant section instead,
-  with explicit `{#id}` anchors on referenced headers. Explain course
+- **Public audience:** no references to particular class days or other
+  weeks ("Monday's creepers", "today's WOD", "Week 7's cutoff"); link
+  the relevant section instead, with explicit `{#id}` anchors on
+  referenced headers. "This week" for the page's own week is fine (the
+  page is labeled by week). Explain course
   jargon on first use (e.g. what a WOD is).
 - **Prompts:** `> **Question:**` blockquotes and a `## Discussion`
   section, with no answers on the page (answers go in the instructor
