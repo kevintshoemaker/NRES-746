@@ -353,8 +353,10 @@ the Week 8 and Week 9 pages) were archived this way, as was LECTURE6
 covered by the Week 6 page, with intervals and the LRT on the Week 7
 page), and LECTURE3 (Oct. 29, covered by the Week 5 page, with its power
 analysis on the Week 6 page), and LECTURE2 (Oct. 30, covered by the
-Week 3 page, with its distributions half on the Week 4 page). Ask
-before deleting anything.
+Week 3 page, with its distributions half on the Week 4 page), and
+LECTURE1 and INTRO (Nov. 1, covered by the Week 1 page). The backlog
+is done: every week through 11 has a page. Ask before deleting
+anything.
 
 # Modeling workflow framing
 
@@ -518,7 +520,30 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Fri., Oct. 30, 2026 (end of Week 10; Week 11 built; Week 2-9 pages built after the fact).
+Snapshot: Sun., Nov. 1, 2026 (end of Week 10; Week 11 built; Week 1-9 pages built after the fact).
+
+- **Week 1 page (built Nov. 1, after the week):**
+  `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
+  appendix A.1-A.4). H1s: what the course is about `#intro` (Monday:
+  workflow as a course map, how the course runs `#course` (WODs, Acts,
+  pitches, AI policy, Stats Chats; absorbs INTRO), the diagnostic WOD
+  worked `#wod-diagnostic`, two discussion prompts); math tools for
+  Lab 1 `#lab1` (from `NOTES_Lab1_MathRefresher`: logs with a
+  power-law example `#logs`, power/product/chain rules on $x^2e^{-x}$
+  `#derivatives`, Riemann sums and the FTC on a 0-to-4 ramp
+  `#integration`; none of Act 2's numbers or the $ae^{-bx}$
+  linearization); algorithms for inference `#algorithms` (Wednesday:
+  permutation WOD `#wod-permutation`, salmon z-test analytical vs.
+  100,000-sample loop `#ztest` (p 0.00016 vs. 0.00021, seed 746),
+  lizard permutation test `#permutation` (p 0.37; t-test 0.36), a fixed
+  `permutation_test()`, bonus trees $R^2$ bootstrap `#bootstrap`).
+  Widgets `growing_rectangle.html`, `accumulation.html`,
+  `resampling.html`. Script `CODE_Week1_IntroAndAlgorithms.R`, guide
+  `NOTES_Week1_WebPageGuide.Rmd`. The Week 1 Lecture 2 and Lab 1 PDF
+  NOTES are in `lecture_notes/archive/`; LECTURE1 and INTRO are in
+  `archive/`, replaced in the navbar by the Week 1 page. No as-taught
+  report beyond the archived notes (Monday was syllabus + WOD; the
+  workflow opener moved to Week 2).
 
 - **Week 2 page (built Oct. 30, after the week):**
   `Week2_DeterministicFunctions.Rmd` (Bolker 3.3-3.5, 3.7). H1s:
@@ -587,8 +612,7 @@ Snapshot: Fri., Oct. 30, 2026 (end of Week 10; Week 11 built; Week 2-9 pages bui
   per-meeting instructor notes (see "Weekly materials"). Week 10's page
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
   (`NOTES_Week10_WebPageGuide.Rmd`) are built; the old Week 10 and Lab
-  8 PDF NOTES are in `lecture_notes/archive/`. Backlog: a page for
-  Week 1.
+  8 PDF NOTES are in `lecture_notes/archive/`.
 - **Week 4 page (built Oct. 29, after the week):**
   `Week4_ProbabilityDistributions.Rmd` (H1s: counting, random variables,
   and expectation `#expectation` (Monday), with the reused probability
@@ -678,16 +702,15 @@ Snapshot: Fri., Oct. 30, 2026 (end of Week 10; Week 11 built; Week 2-9 pages bui
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
   1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
-  `stopifnot` checks weeks and files). Lecture cells for Week 1 link
-  legacy `LECTUREn.html` pages as a stopgap; the instructor plans to
-  relink each to what was actually covered (Week 2's cells, including
+  `stopifnot` checks weeks and files). Week 1's cells (both lectures
+  and the lab) link the Week 1 page (Week 2's cells, including
   the lab, link the Week 2 page; Week 3's lab and Wednesday
   cells link the Week 3 page; Week 4 links the Week 4 page; Week 5 Monday and lab link the Week 5 page; Week 5 Wednesday
   and Week 6 link the Week 6 page). Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
-  pages (FINALPROJ, INTRO, LAB3, LAB4, LECTURE1, LECTURE8, LECTURE9,
-  Links, Week2-Week11; schedule and the newest week page get it
+  pages (FINALPROJ, LAB3, LAB4, LECTURE8, LECTURE9, Links,
+  Week1-Week11; schedule and the newest week page get it
   by re-rendering); LECTURE10, GIT-tutorial, MAIN, and LAB1, 2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
   `sed`). Long menus scroll via

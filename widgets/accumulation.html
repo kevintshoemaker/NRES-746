@@ -1,0 +1,79 @@
+<div class="w746ac" id="acw">
+<style>
+.w746ac{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746ac .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746ac .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:170px}
+.w746ac .row input[type=range]{flex:1;min-width:160px}
+.w746ac .row output{font-weight:600;min-width:52px;text-align:right}
+.w746ac button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746ac button:hover{background:#eee}
+.w746ac button.on{background:#e6eef8;border-color:#7a9cc6}
+.w746ac .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746ac .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746ac .card .k{font-size:13px;color:var(--ink2)}
+.w746ac .card .v{font-size:17px;font-weight:600;color:var(--ink)}
+.w746ac canvas{width:100%;height:auto;display:block}
+.w746ac .lab{color:var(--ink2);font-size:14px}
+@media (max-width:600px){.w746ac .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row"><span class="lab">Rate curve:</span>
+  <button id="acw-fc">Constant: r(t) = 2</button>
+  <button id="acw-fr">Ramp: r(t) = 0.8t</button>
+  <button id="acw-fh">Rise and fall: r(t) = 2.5t e<sup>&minus;t/2</sup></button>
+</div>
+<div class="row"><span class="lab">Rectangle height from:</span>
+  <button id="acw-rl">Left edge</button>
+  <button id="acw-rm">Midpoint</button>
+  <button id="acw-rr">Right edge</button>
+</div>
+<div class="row"><label for="acw-n">Number of rectangles</label><input type="range" id="acw-n" min="1" max="100" step="1" value="5"><output id="acw-n-o"></output></div>
+<div class="cards">
+  <div class="card"><div class="k">Sum of rectangle areas</div><div class="v" id="acw-sum"></div></div>
+  <div class="card"><div class="k">Exact area, F(5) &minus; F(0)</div><div class="v" id="acw-ex"></div></div>
+  <div class="card"><div class="k">Error</div><div class="v" id="acw-err"></div></div>
+</div>
+<canvas id="acw-cv" width="760" height="300" role="img" aria-label="A rate curve over five days with rectangles approximating the area under it."></canvas>
+<script>
+(function(){
+const $=id=>document.getElementById('acw-'+id);
+const T=5;
+const fns={
+  c:{r:t=>2,F:t=>2*t,ymax:3},
+  r:{r:t=>0.8*t,F:t=>0.4*t*t,ymax:4.5},
+  h:{r:t=>2.5*t*Math.exp(-t/2),F:t=>2.5*(-2*t*Math.exp(-t/2)-4*Math.exp(-t/2)),ymax:2.2}
+};
+let fk='r',rule='l';
+function update(){
+  ['c','r','h'].forEach(k=>$('f'+k).classList.toggle('on',k===fk));
+  ['l','m','r'].forEach(k=>$('r'+k).classList.toggle('on',k===rule));
+  const n=+$('n').value;$('n-o').textContent=n;
+  const fn=fns[fk],w=T/n;let s=0;
+  const c=$('cv'),x=c.getContext('2d'),W=c.width,H=c.height,pad={l:52,r:14,t:12,b:40};
+  const sx=t=>pad.l+t/T*(W-pad.l-pad.r),sy=y=>H-pad.b-y/fn.ymax*(H-pad.t-pad.b);
+  x.clearRect(0,0,W,H);x.fillStyle='#fff';x.fillRect(0,0,W,H);
+  for(let i=0;i<n;i++){
+    const t0=i*w,tt=rule==='l'?t0:rule==='m'?t0+w/2:t0+w,h=fn.r(tt);s+=h*w;
+    x.fillStyle='rgba(122,166,209,0.55)';x.fillRect(sx(t0),sy(h),sx(t0+w)-sx(t0),sy(0)-sy(h));
+    if(n<=40){x.strokeStyle='#4f7fae';x.strokeRect(sx(t0),sy(h),sx(t0+w)-sx(t0),sy(0)-sy(h));}
+  }
+  x.strokeStyle='#222';x.lineWidth=2.5;x.beginPath();
+  for(let k=0;k<=200;k++){const t=k/200*T;k?x.lineTo(sx(t),sy(fn.r(t))):x.moveTo(sx(t),sy(fn.r(t)));}
+  x.stroke();x.lineWidth=1;
+  x.strokeStyle='#999';x.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  x.fillStyle='#666';x.font='12px sans-serif';x.textAlign='center';
+  for(let t=0;t<=T;t++)x.fillText(t,sx(t),H-pad.b+15);
+  x.fillText('Time (days)',(pad.l+W-pad.r)/2,H-6);
+  x.textAlign='right';const step=fn.ymax>3?1:0.5;
+  for(let y=0;y<=fn.ymax+1e-9;y+=step)x.fillText(y,pad.l-5,sy(y)+4);
+  x.save();x.translate(14,(pad.t+H-pad.b)/2);x.rotate(-Math.PI/2);x.textAlign='center';x.fillText('Rate (per day)',0,0);x.restore();
+  const ex=fn.F(T)-fn.F(0);
+  $('sum').textContent=s.toFixed(3);$('ex').textContent=ex.toFixed(3);
+  $('err').textContent=(s-ex>=0?'+':'')+(s-ex).toFixed(3);
+}
+['c','r','h'].forEach(k=>$('f'+k).addEventListener('click',()=>{fk=k;update();}));
+['l','m','r'].forEach(k=>$('r'+k).addEventListener('click',()=>{rule=k;update();}));
+$('n').addEventListener('input',update);
+update();
+})();
+</script>
+</div>
