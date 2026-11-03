@@ -133,8 +133,9 @@ but writing that signals it makes them take exercises less seriously.
   After each coding question: `AI use (circle one): no AI / AI helped
   (e.g., debugging) / AI wrote the code`. Explain the labels at the
   start of the laptop section. Don't add "using AI never costs
-  points." Close with one reflection question (where AI helped and
-  what you had to fix; or, if none, what was hardest). Keys treat a
+  points." Labs get no closing AI-use reflection question (dropped
+  Nov. 3, 2026); take-home WODs may close with one (where AI helped
+  and what you had to fix; or, if none, what was hardest). Keys treat a
   label/disclosure mismatch as a conversation, not a penalty.
 - **Students submit outputs, not code:** filled-in values,
   interpretation, and named figures/tables. Prefer outputs that show
