@@ -40,21 +40,63 @@ d0 <- 13
 g13 <- grad_at(d0)
 ```
 
+```{r boot, cache=TRUE}
+# parametric bootstrap of (a, b), and the profile deviance surface for (a, b)
+set.seed(746)
+mu_fit <- a * diam^b
+boot_ab <- t(replicate(2000, {
+  v_sim <- rnorm(length(diam), mu_fit, sig)
+  nll_sim <- function(p) -sum(dnorm(v_sim, p[1] * diam^p[2], exp(p[3]), log = TRUE))
+  optim(theta, nll_sim, control = ctrl)$par[1:2]
+}))
+nll_prof <- function(aa, bb) {
+  s2 <- mean((vol - aa * diam^bb)^2)
+  length(vol) / 2 * (log(2 * pi * s2) + 1)
+}
+bg_prof <- seq(b - 4 * se[2], b + 4 * se[2], length.out = 600)
+ag_prof <- seq(a - 4 * se[1], a + 4 * se[1], length.out = 600)
+dev_prof <- 2 * (outer(bg_prof, ag_prof, Vectorize(function(bb, aa) nll_prof(aa, bb))) - fit$value)
+```
+
+```{r regions}
+r <- 1.96
+ellipse_pts <- function(S, r) {
+  t <- seq(0, 2 * pi, length.out = 200)
+  pts <- t(c(a, b) + r * t(chol(S)) %*% rbind(cos(t), sin(t)))
+  pts[, 2:1]
+}
+prof_region <- contourLines(bg_prof, ag_prof, dev_prof, levels = r^2)[[1]]
+intervals <- function(d_pred) {
+  s <- se_delta(d_pred); f_hat <- vol_at(d_pred)
+  list(f_hat = f_hat, s = s, delta = f_hat + c(-1, 1) * r * s,
+       prof = range(prof_region$y * d_pred^prof_region$x),
+       boot = quantile(boot_ab[, 1] * d_pred^boot_ab[, 2], c(0.025, 0.975)))
+}
+iv13 <- intervals(13); iv30 <- intervals(30)
+```
+
 A fitted model hands you estimates of its parameters and, from the
 Hessian, their variances and covariances. The number you care about is
-often something else: a prediction, a ratio, a back-transformed
-parameter, a population growth rate built from several vital rates.
-The **delta method** turns the uncertainty in the parameters into an
-approximate standard error for any smooth function of them. It needs
-two things: the variance-covariance matrix of the estimates, and the
-derivatives of the function. Bolker covers it in Section 7.5.2 and
-Appendix A.7 of *Ecological Models and Data in R*; this handout adds
-the derivation and a geometric picture of why it works.
+often something other than the fitted parameters themselves: a
+prediction, a ratio of parameters, a back-transformed parameter (e.g.,
+on the original response scale rather than the log-transformed response
+scale), a population growth rate built from several vital rates (often
+called a "derived quantity").
 
-The background assumed is derivatives (including partial derivatives)
-and the rules for the variance of a sum. The running example is the
-power-law fit to R's `trees` data, timber volume $V$ against diameter
-$D$ for 31 black cherry trees:
+The **delta method** turns the uncertainty in the parameters into an
+approximate standard error for any smooth function of them (i.e., a
+function that has a derivative!). It needs two things: the
+variance-covariance matrix of the fitted parameters (usually computed
+from the Hessian at the MLE, which is returned from an optimization
+routine like `optim()`), and the derivatives of the function. Bolker
+covers it in Section 7.5.2 and Appendix A.7 of *Ecological Models and
+Data in R*; this handout adds more details, including a derivation and a
+geometric intuition.
+
+This handout assumes you know about derivatives (including partial
+derivatives) and how to compute the variance of a sum. The example we'll
+use is the power-law fit to R's built-in `trees` data, timber volume
+$V$ against diameter $D$ for 31 black cherry trees:
 $$V_i \sim \text{Normal}\left(a D_i^{\,b},\ \sigma^2\right).$$
 Fitting by maximum likelihood with `optim()`, estimating $\log\sigma$
 so that $\sigma$ stays positive, gives $\hat a = `r f3(a)`$,
@@ -63,36 +105,43 @@ from the inverse of the Hessian, standard errors
 `r f3(se[1])`, `r f3(se[2])`, and `r f3(se[3])`. The correlation between
 $\hat a$ and $\hat b$ is $`r f3(r_ab)`$.
 
-# 1. Why we need it
+# 1. Why we need the delta method
 
-Two derived quantities come up with this model.
+Two derived quantities arise with this model.
 
 - **The residual SD.** We estimated $\log\sigma$, but we want to report
   $\sigma = e^{\log\sigma} = `r f2(sig)`$ cubic feet, with a standard
-  error. The Hessian only gives the standard error of $\log\sigma$.
+  error. But... the Hessian only gives the standard error of
+  $\log\sigma$.
 - **A prediction.** The expected volume of a 13-inch tree is
-  $\hat a \cdot 13^{\hat b} = `r f2(vol_at(13))`$ cubic feet. How
-  uncertain is it?
+  $\hat a \cdot 13^{\hat b} = `r f2(vol_at(13))`$ cubic feet. It's easy
+  to compute this prediction, but how uncertain is this prediction?
 
-The prediction shows why a shortcut fails. Both $\hat a$ and $\hat b$
-are uncertain, so the obvious move is to combine their two variances.
-Treating them as independent gives a standard error of
-`r f2(se_nocov(13))` cubic feet (calculated in Section 2), a third of
-the prediction itself.
-That's absurd for a curve that runs through the middle of 31 tightly
-scattered points. The missing piece is the correlation of
-$`r f3(r_ab)`$: when the data push $\hat a$ up, they push $\hat b$ down,
-and the two changes nearly cancel where the data are. The delta method
-keeps that covariance and gives `r f2(se_delta(13))` cubic feet.
+The parameters $\hat a$ and $\hat b$ are both uncertain, so the obvious
+solution is to combine their two variances. But if we treat the
+parameters as independent (calculated in Section 2) we get an estimated
+standard error of `r f2(se_nocov(13))` cubic feet -- a third of the
+prediction itself! That's absurd for a curve that runs through the
+middle of 31 tightly scattered points. The missing piece is the
+correlation of $`r f3(r_ab)`$: when the data push $\hat a$ up, they push
+$\hat b$ down (and vice versa), so for trees within the range of the
+data, the predicted volume barely moves. The delta method uses that
+covariance information and gives a much more reasonable estimate of
+`r f2(se_delta(13))` cubic feet.
 
 Other places the same question comes up:
 
-- back-transforming any parameter fit on a log, logit, or atanh scale;
+- back-transforming any parameter fit on a log, logit, or atanh scale
+  (correlation parameters are commonly fitted on the atanh scale, and
+  tanh is the back-transformation that puts them back on the
+  correlation scale, $-1$ to 1);
 - a ratio of curve parameters, such as the initial slope $a/b$ of a
   Michaelis-Menten curve $ax/(b + x)$;
-- the predictor value where a logistic curve crosses 0.5, which is
-  $-\beta_0/\beta_1$;
-- mean survival time from a Weibull fit (Bolker's example in 7.5.2);
+- the predictor value where a logistic curve crosses 0.5 (like we saw in
+  the LD50 example in lab), which is $-\beta_0/\beta_1$;
+- mean survival time from a Weibull fit (Bolker's example in 7.5.2;
+  Weibull is a very common probability distribution in survival
+  analysis);
 - standard errors of GLM predictions on the response scale.
   `predict(..., type = "response", se.fit = TRUE)` uses the delta
   method behind the scenes.
@@ -105,21 +154,37 @@ $$\text{Var}\big(f(\hat a, \hat b)\big) \approx
   \text{Var}(\hat a)\left(\frac{\partial f}{\partial a}\right)^2 +
   \text{Var}(\hat b)\left(\frac{\partial f}{\partial b}\right)^2 +
   2\,\text{Cov}(\hat a, \hat b)\,\frac{\partial f}{\partial a}\frac{\partial f}{\partial b}.$$
-With one parameter, only the first term is left:
-$\text{Var}(f(\hat\theta)) \approx f'(\hat\theta)^2\,\text{Var}(\hat\theta)$,
-so $\text{SE}(f) \approx |f'(\hat\theta)|\,\text{SE}(\hat\theta)$.
+With one parameter, only the first term is left, so the standard error
+of $f$ is the absolute derivative times the standard error of the
+estimate:
+$$\text{Var}(f(\hat\theta)) \approx f'(\hat\theta)^2\,\text{Var}(\hat\theta), \qquad
+  \text{SE}(f) \approx |f'(\hat\theta)|\,\text{SE}(\hat\theta).$$
 
 **Matrix notation.** For $k$ parameters, collect the partial derivatives
-into a column vector, the gradient
+of $f$ into a column vector, the gradient of $f$,
 $\mathbf{g} = (\partial f/\partial\theta_1, \ldots, \partial f/\partial\theta_k)^T$,
 and write $\Sigma$ for the variance-covariance matrix of the estimates
-(the inverse of the Hessian, `solve(fit$hessian)` after `optim()`). Then
+(the inverse of the Hessian, `solve(fit$hessian)` after `optim()`). This
+is not the gradient you've seen in optimization, the slopes of the
+log-likelihood with respect to each parameter (which are zero at the
+MLE). Here $\mathbf{g}$ holds the slopes of the derived quantity $f$,
+and the log-likelihood's curvature enters only through $\Sigma$. Then
 $$\text{Var}\big(f(\hat{\boldsymbol\theta})\big) \approx \mathbf{g}^T \Sigma\, \mathbf{g}
   = \sum_{i=1}^{k}\sum_{j=1}^{k} g_i\, g_j\, \Sigma_{ij}.$$
 The double sum has a squared derivative times a variance for each
 diagonal entry ($i = j$) and a cross term for each off-diagonal pair.
 With $k = 2$, the two off-diagonal entries are equal and give Bolker's
 $2\,\text{Cov}$ term, so the two notations say the same thing.
+
+Note that the matrix version is more compact and more general! This is
+one of the many reasons statisticians love matrix notation!! Note also
+that the format (vector transpose times matrix times vector) is called a
+**quadratic form**, and occurs frequently in statistics because in some
+sense it defines a multivariate "distance" or "size/magnitude". For
+example, the kernel of the multivariate normal distribution is a
+quadratic form representing the effective/standardized "distance" from
+the mean (called **Mahalanobis distance**), where probability density
+is lower as this standardized distance increases.
 
 **One parameter: the residual SD.** With $f(\theta) = e^{\theta}$ and
 $\theta = \log\sigma$, the derivative is $e^{\theta} = \sigma$, so
@@ -131,14 +196,14 @@ Taking the square root gives the standard error:
 $$\text{SE}(\hat\sigma) \approx \sqrt{`r f3(sig^2 * se[3]^2)`} = `r f3(sig * se[3])`,$$
 which is the same as $\hat\sigma\cdot\text{SE}(\widehat{\log\sigma}) =
 `r f2(sig)` \times `r f3(se[3])`$.
-Fitting $\sigma$ directly and inverting that Hessian gives the same
-number. At the MLE, the two curvatures differ by exactly the squared
-derivative, so estimating on the log scale costs nothing.
+Fitting $\sigma$ directly and inverting the Hessian gives exactly the
+same number (at the MLE, the two curvatures differ by exactly the
+squared derivative, so estimating on the log scale costs nothing!).
 
 **Two parameters: the prediction at 13 inches.** For
 $f(a, b) = a \cdot 13^{b}$, the derivative with respect to $a$ is just
 $13^b$. For $b$, the exponent is the variable, so first rewrite the
-power with the natural base: $13^{b} = e^{b\log 13}$ (log is the
+power with the natural base ($e$): $13^{b} = e^{b\log 13}$ (log is the
 natural log throughout). The chain rule then gives
 $$\frac{\partial}{\partial b}\,13^{b} = \frac{\partial}{\partial b}\,e^{b\log 13}
   = \log 13 \cdot e^{b\log 13} = 13^{b}\log 13,$$
@@ -156,45 +221,66 @@ $$\begin{aligned}
    = `r f3(se_delta(13)^2)`,
 \end{aligned}$$
 a standard error of `r f2(se_delta(13))`. The two variance terms are
-large; the negative covariance term cancels nearly all of them.
-Treating $\hat a$ and $\hat b$ as independent means dropping that term:
+large, and the negative covariance term cancels nearly all of their
+combined variance. Treating $\hat a$ and $\hat b$ as independent
+(erroneously!) would mean dropping that term:
 $$`r f3(g13[1]^2 * Sab[1, 1])` + `r f3(g13[2]^2 * Sab[2, 2])`
   = `r f3(se_nocov(13)^2)`, \qquad \sqrt{`r f3(se_nocov(13)^2)`} = `r f2(se_nocov(13))`,$$
-the inflated standard error from Section 1.
+which results in the heavily inflated standard error we introduced in
+Section 1 (`r f2(se_nocov(13))`).
 
-In R, `emdbook::deltavar()` does this calculation from a formula, and
-`numericDeriv()` or a finite difference can stand in for derivatives
-you'd rather not work out by hand.
+In R, `emdbook::deltavar()` does the whole calculation. You give it the
+function itself (not its derivatives), the estimates, and $\Sigma$; it
+differentiates the function with R's symbolic differentiator `D()`, and
+switches to numerical derivatives if `D()` can't handle it. For the
+13-inch prediction,
+`deltavar(a * 13^b, meanval = c(a = a_hat, b = b_hat), Sigma = Sigma_ab)`
+returns `r f3(se_delta(13)^2)`. To do the calculation yourself without
+working out the derivatives, approximate each one by a finite
+difference, such as $(f(a + h, b) - f(a, b))/h$ for a small $h$, and
+put the resulting gradient into $\mathbf{g}^T\Sigma\,\mathbf{g}$.
 
 # 3. Where it comes from
 
-The delta method is a first-order Taylor expansion followed by the
-variance of a linear function.
+The delta method can be derived from (1) a first-order Taylor expansion
+(to linearize the target function of the random estimator) followed by
+(2) an application of the formula for computing the variance of a
+linear function (which you already know).
 
 **One parameter.** Near the true value $\theta_0$, replace $f$ with its
-tangent line:
+linearization, where the difference between $f(\hat\theta)$ and
+$f(\theta_0)$ is approximated by the first derivative at $\theta_0$
+multiplied by the difference between $\hat\theta$ and $\theta_0$
+(another way to say this is that the approximation lies on the
+**tangent line** to the function at the true value $\theta_0$):
 $$f(\hat\theta) \approx f(\theta_0) + f'(\theta_0)\,(\hat\theta - \theta_0).$$
 The right side is a constant plus a constant times $\hat\theta$. Adding
 a constant doesn't change a variance, and multiplying by $c$ multiplies
 it by $c^2$, so
 $$\text{Var}\big(f(\hat\theta)\big) \approx f'(\theta_0)^2\,\text{Var}(\hat\theta).$$
-We don't know $\theta_0$, so the derivative is evaluated at
-$\hat\theta$, which is close to it when the standard error is small.
+In practice, we don't know $\theta_0$, so the derivative is evaluated
+at $\hat\theta$, which is close to it when the standard error is small.
 
-**Several parameters.** The tangent line becomes a tangent plane:
+**Several parameters.** The tangent line becomes a tangent *plane*:
 $$f(\hat{\boldsymbol\theta}) \approx f(\boldsymbol\theta_0) +
   \sum_i g_i\,(\hat\theta_i - \theta_{0,i})
   = f(\boldsymbol\theta_0) + \mathbf{g}^T(\hat{\boldsymbol\theta} - \boldsymbol\theta_0).$$
 The variance of a weighted sum $\sum_i g_i X_i$ is
 $\sum_i\sum_j g_i g_j\,\text{Cov}(X_i, X_j)$, which is $\mathbf{g}^T\Sigma\,\mathbf{g}$.
 For two parameters,
-$\text{Var}(g_a X_a + g_b X_b) = g_a^2\text{Var}(X_a) + g_b^2\text{Var}(X_b) + 2 g_a g_b\text{Cov}(X_a, X_b)$,
-which is Bolker's formula.
+$$\text{Var}(g_a X_a + g_b X_b) = g_a^2\text{Var}(X_a) + g_b^2\text{Var}(X_b) + 2 g_a g_b\text{Cov}(X_a, X_b),$$
+which is the 2-parameter formula Bolker presents.
 
-**The shape of the distribution, too.** The MLEs are approximately
-multivariate normal (see the companion handout below), and a linear
-function of normal variables is normal. So to the same approximation,
-$f(\hat{\boldsymbol\theta}) \approx \text{Normal}\big(f(\boldsymbol\theta_0),\ \mathbf{g}^T\Sigma\,\mathbf{g}\big)$,
+**The shape of the distribution, too.** The sampling distribution of
+the MLEs is approximately (with a large enough sample) multivariate
+normal (see the companion handout at the end), and a linear function of
+normal variables is also normal. That gives two approximations working
+together. If the estimates are close to normal (a large-sample result),
+and $f$ is close to its tangent plane over the range where they fall
+(the delta method's assumption), then $f(\hat{\boldsymbol\theta})$ is
+close to a linear function of normal variables, and so close to normal
+itself:
+$$f(\hat{\boldsymbol\theta}) \approx \text{Normal}\big(f(\boldsymbol\theta_0),\ \mathbf{g}^T\Sigma\,\mathbf{g}\big),$$
 and a 95% interval is $f(\hat{\boldsymbol\theta}) \pm 1.96\,\text{SE}$.
 For the 13-inch tree, that's
 [`r f1(vol_at(13) - 1.96 * se_delta(13))`, `r f1(vol_at(13) + 1.96 * se_delta(13))`]
@@ -267,72 +353,136 @@ the delta method is.
 
 # 5. The geometry with two parameters
 
-With two parameters, the sampling distribution is a tilted ellipse,
-and the function is a landscape over the $(b, a)$ plane. Its contour
-lines connect parameter pairs that give the same prediction.
+With two parameters, the estimates live in the $(b, a)$ plane, and the
+prediction is a landscape over that plane. Its contour lines connect
+parameter pairs that give the same prediction. The delta method makes
+two straight-line approximations here: it treats the region of
+plausible estimates as an ellipse, and it treats the prediction's
+contours as straight, evenly spaced lines.
 
-```{r fig-ellipse, fig.height=3.6}
-ellipse_pts <- function(S, r = sqrt(qchisq(0.95, 2))) {
-  t <- seq(0, 2 * pi, length.out = 200)
-  L <- t(chol(S))
-  pts <- t(c(a, b) + r * L %*% rbind(cos(t), sin(t)))
-  pts[, 2:1]
-}
-contour_panel <- function(d_pred, step) {
-  bg <- seq(b - 3.4 * se[2], b + 3.4 * se[2], length.out = 200)
-  ag <- seq(a - 3.4 * se[1], a + 3.4 * se[1], length.out = 200)
-  z <- outer(bg, ag, function(bb, aa) aa * d_pred^bb)
-  f_hat <- vol_at(d_pred)
-  levs <- f_hat + step * (-40:40)
-  contour(bg, ag, z, levels = levs, drawlabels = FALSE, col = "grey60",
-          xlab = "b", ylab = "a", xaxs = "i", yaxs = "i",
-          main = paste0("Predicted volume at ", d_pred, " in."), cex.main = 0.9)
-  lines(ellipse_pts(Sab), lwd = 2)
-  lines(ellipse_pts(diag(diag(Sab))), lwd = 2, lty = 2)
-  abline(a = a + a * log(d_pred) * b, b = -a * log(d_pred), lty = 3, lwd = 1.5)
-  points(b, a, pch = 16)
-}
-par(mfrow = c(1, 2), mar = c(4, 4, 2, 0.5), oma = c(1.8, 0, 0, 0))
-contour_panel(13, 2)
-contour_panel(30, 10)
-par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
-plot.new()
-legend("bottom", c("95% region for the estimates", "if independent", "tangent contour"),
-       lwd = c(2, 2, 1.5), lty = c(1, 2, 3), bty = "n", cex = 0.75, horiz = TRUE)
+**The region of plausible estimates.**
+
+```{r fig-regions, fig.width=4.6, fig.height=4.2}
+par(mar = c(4, 4, 0.5, 0.5))
+plot(NA, xlim = b + c(-2.6, 2.6) * se[2], ylim = a + c(-2.6, 2.9) * se[1],
+     xaxs = "i", yaxs = "i", xlab = "b", ylab = "a")
+lines(ellipse_pts(diag(diag(Sab)), r), col = "grey60", lty = 3)
+points(boot_ab[, 2], boot_ab[, 1], pch = 16, cex = 0.3, col = "grey55")
+polygon(ellipse_pts(Sab, r), border = "black", lwd = 1.5, lty = 2)
+lines(prof_region$x, prof_region$y, lwd = 1.5)
+points(b, a, pch = 16)
+legend("bottomleft", c("profile confidence region", "ellipse from the Hessian",
+                       "bootstrap estimates", "if independent"),
+       lwd = c(1.5, 1.5, NA, 1), lty = c(1, 2, NA, 3), pch = c(NA, NA, 16, NA),
+       col = c("black", "black", "grey55", "grey60"), bty = "n", cex = 0.75)
 ```
 
-- **The solid ellipse** is where the estimates
-  $(\hat b, \hat a)$ plausibly fall (a 95% region from $\Sigma$). It is
-  long and thin and runs downhill: the data constrain the combination
-  of $a$ and $b$ far better than either alone.
-- **The grey contours** are levels of the prediction, every 2 cubic
-  feet on the left and every 10 on the right. Within a panel,
-  the uncertainty in the prediction is how many contours the ellipse
-  crosses.
-- **Left, 13 inches (the middle of the data).** The ellipse lies
-  almost along a contour, so it crosses only one or two: SE
-  `r f2(se_delta(13))` cubic feet. The dashed ellipse is what you'd
-  assume if $\hat a$ and $\hat b$ were independent. It cuts straight
-  across the contours, which is the inflated SE of
-  `r f2(se_nocov(13))` from Section 1. The covariance term is what tilts
-  the ellipse.
-- **Right, 30 inches (beyond the largest tree, 20.6).** The contours
-  have rotated: the dotted tangent contour now crosses the ellipse at
-  an angle instead of running along it, so moving along the ellipse
-  changes the prediction. SE `r f2(se_delta(30))` cubic feet, about
-  `r round(100 * se_delta(30) / vol_at(30))`% of the prediction instead
-  of `r round(100 * se_delta(13) / vol_at(13), 1)`%. Extrapolating
-  points the prediction in a direction the data don't constrain.
+- **The solid curve** is the profile likelihood confidence region (the
+  confidence region, for short): every $(a, b)$ pair whose deviance,
+  with $\sigma$ profiled out, is within $3.84 = 1.96^2$ of the minimum.
+  It is thin and curved. The data constrain the combination of $a$ and
+  $b$ far better than either alone.
+- **The dashed ellipse** is the Hessian's quadratic approximation to
+  that region, the set of points where
+  $(\boldsymbol\theta - \hat{\boldsymbol\theta})^T\Sigma^{-1}(\boldsymbol\theta - \hat{\boldsymbol\theta}) = 1.96^2$.
+  It is drawn at 1.96 rather than at the joint 95% radius (2.45) so
+  that its shadow on any direction is a 95% interval for one quantity.
+- **The grey dots** are 2,000 bootstrap estimates (see Section 6). They
+  follow the curved confidence region, not the straight ellipse.
+- **The faint dotted ellipse** is what you'd assume if $\hat a$ and
+  $\hat b$ were independent: the same variances with no tilt. Its width
+  across the confidence region is where the inflated SE of
+  `r f2(se_nocov(13))` in Section 1 comes from. The covariance is what
+  tilts the ellipse to line up with the confidence region.
 
-**What the delta method does in this picture.** It replaces the curved
-contours with straight, evenly spaced lines parallel to the tangent
-contour (dotted). The gradient $\mathbf{g}$ points straight across
-these lines, and its length says how close together they are.
-$\mathbf{g}^T\Sigma\,\mathbf{g}$ is then the variance of the ellipse
-measured in that one direction: squash the ellipse onto the gradient's
-direction, take the variance of that shadow, and scale by
-$|\mathbf{g}|^2$. That's why the cross term matters. An ellipse's
-shadow depends on its tilt, and the tilt is the covariance.
+**From the region to a prediction.** In each top panel of the next
+figure, the two regions appear again, with two pairs of contours:
+
+- **Straight dashed lines** are the delta method's contours at
+  $\hat f \pm 1.96\,\text{SE}$. They just touch the ellipse.
+- **Curved grey lines** are the true prediction contours that just
+  touch the confidence region. The range of predictions across that
+  region is the profile likelihood 95% interval for the prediction.
+
+The strips under them put both intervals on the prediction scale, over
+a histogram of the bootstrap predictions and the delta method's normal
+curve (dashed). The table gives the same intervals, with the bootstrap
+percentile interval for comparison.
+
+```{r fig-contours, fig.height=5.4}
+main_panel <- function(d_pred) {
+  iv <- intervals(d_pred); g <- grad_at(d_pred)
+  bg <- seq(b - 2.7 * se[2], b + 2.7 * se[2], length.out = 300)
+  ag <- seq(a - 2.7 * se[1], a + 2.7 * se[1], length.out = 300)
+  z <- outer(bg, ag, function(bb, aa) aa * d_pred^bb)
+  plot(NA, xlim = range(bg), ylim = range(ag), xaxs = "i", yaxs = "i", xlab = "b", ylab = "a",
+       main = paste0("Predicted volume at ", d_pred, " in."), cex.main = 0.9)
+  for (lev in iv$delta) abline(a = a + (lev - iv$f_hat + g[2] * b) / g[1], b = -g[2] / g[1],
+                               lty = 2, lwd = 2.2)
+  contour(bg, ag, z, levels = iv$prof, drawlabels = FALSE, col = "grey35", lwd = 2.2, add = TRUE)
+  polygon(ellipse_pts(Sab, r), border = "black", lwd = 1.3, lty = 2)
+  lines(prof_region$x, prof_region$y, lwd = 1.3)
+  points(b, a, pch = 16)
+}
+shadow_panel <- function(d_pred) {
+  iv <- intervals(d_pred); step <- r * iv$s / 6
+  f_boot <- boot_ab[, 1] * d_pred^boot_ab[, 2]
+  xl <- iv$f_hat + c(-1, 1) * 4.2 * iv$s
+  h <- hist(f_boot, breaks = seq(min(f_boot, xl[1]) - step, max(f_boot, xl[2]) + step, by = step),
+            plot = FALSE)
+  plot(NA, xlim = xl, ylim = c(0, max(h$density, dnorm(0, 0, iv$s)) * 1.1), xaxs = "i", yaxs = "i",
+       xlab = "Predicted volume (cubic ft)", ylab = "", yaxt = "n", bty = "l")
+  rect(h$breaks[-length(h$breaks)], 0, h$breaks[-1], h$density, col = "grey88", border = "grey70")
+  abline(v = iv$delta, lty = 2, lwd = 2.2)
+  abline(v = iv$prof, col = "grey35", lwd = 2.2)
+  curve(dnorm(x, iv$f_hat, iv$s), add = TRUE, lwd = 2, lty = 2, n = 300)
+}
+layout(matrix(c(1, 2, 3, 4, 5, 5), 3, byrow = TRUE), heights = c(3, 1.5, 0.6))
+par(mar = c(4, 4, 2, 0.5)); main_panel(13); main_panel(30)
+par(mar = c(4, 4, 0.5, 0.5)); shadow_panel(13); shadow_panel(30)
+par(mar = c(0, 0, 0, 0)); plot.new()
+legend("center", c("profile confidence region", "ellipse from the Hessian", "bootstrap predictions",
+                   "true contours: profile 95% interval", "delta-method contours: 95% interval"),
+       col = c("black", "black", "grey70", "grey35", "black"), lwd = c(1.3, 1.3, NA, 2.2, 2.2),
+       lty = c(1, 2, NA, 1, 2), pch = c(NA, NA, 15, NA, NA), pt.cex = 1.5,
+       bty = "n", cex = 0.7, ncol = 2)
+```
+
+```{r interval-table}
+ci <- function(x) paste0("[", f2(x[1]), ", ", f2(x[2]), "]")
+knitr::kable(data.frame(d = c(13, 30),
+                        delta = c(ci(iv13$delta), ci(iv30$delta)),
+                        prof = c(ci(iv13$prof), ci(iv30$prof)),
+                        boot = c(ci(iv13$boot), ci(iv30$boot))),
+             align = "c",
+             col.names = c("Diameter (in)", "Delta method", "Profile likelihood", "Bootstrap"))
+```
+
+At 13 inches (the middle of the data), the contours run almost along
+the confidence region, so the region spans only a narrow range of
+predictions: SE `r f2(se_delta(13))` cubic feet, and the two pairs of
+lines nearly coincide. At 30 inches (beyond the largest tree,
+`r max(diam)`), the contours have rotated to cross the confidence
+region at an angle. The SE grows to `r f2(se_delta(30))` cubic feet,
+about `r round(100 * se_delta(30) / vol_at(30))`% of the prediction
+instead of `r round(100 * se_delta(13) / vol_at(13), 1)`%. The true
+contours also bend across the confidence region, so the profile
+interval shifts up (upper limit `r f2(iv30$prof[2])` vs.
+`r f2(iv30$delta[2])`), the same right skew as in the Section 4 figure.
+Extrapolating points the prediction in a direction the data don't
+constrain.
+
+**Why the ellipse still works.** The ellipse misses the confidence
+region at both ends, but that miss runs along the contours, so it
+barely changes the prediction. The delta method only uses the ellipse's
+width across the contours, and that width is close to right (and it is
+often close to right- that's why the method is so commonly used!). The
+gradient of $f$, $\mathbf{g}$, points straight across the straight
+contours, and its length says how close together they are.
+$\mathbf{g}^T\Sigma\,\mathbf{g}$ is then the variance of the ellipse in
+that one direction: squash the ellipse onto the gradient's direction,
+take the variance of that shadow, and scale by $|\mathbf{g}|^2$. An
+ellipse's shadow depends on its tilt, and the tilt is the covariance.
 
 # 6. Checking it, and when it breaks
 
@@ -341,25 +491,9 @@ model, refit each one, and compute the prediction from each refit (a
 parametric bootstrap). The SD of those predictions is a check that
 doesn't use the delta method:
 
-```{r boot, cache=TRUE}
-set.seed(746)
-d_check <- c(8, 13, 21, 30)
-mu_fit <- a * diam^b
-boot <- t(replicate(2000, {
-  v_sim <- rnorm(length(diam), mu_fit, sig)
-  nll_sim <- function(p) -sum(dnorm(v_sim, p[1] * diam^p[2], exp(p[3]), log = TRUE))
-  p <- optim(theta, nll_sim, control = ctrl)$par
-  p[1] * d_check^p[2]
-}))
-mvn_ab <- MASS::mvrnorm(1e5, c(a, b), Sab)
-sd_mvn13 <- sd(mvn_ab[, 1] * 13^mvn_ab[, 2])
-nll_loga <- function(p) -sum(dnorm(vol, exp(p[1]) * diam^p[2], exp(p[3]), log = TRUE))
-S_loga <- solve(optimHess(c(log(a), b, log_sig), nll_loga))
-mvn_loga <- MASS::mvrnorm(1e5, c(log(a), b), S_loga[1:2, 1:2])
-sd_loga13 <- sd(exp(mvn_loga[, 1]) * 13^mvn_loga[, 2])
-```
-
 ```{r boot-table}
+d_check <- c(8, 13, 21, 30)
+boot <- sapply(d_check, function(d) boot_ab[, 1] * d^boot_ab[, 2])
 tab <- data.frame(d = d_check, pred = f1(vol_at(d_check)),
                   delta = f2(sapply(d_check, se_delta)),
                   nocov = f2(sapply(d_check, se_nocov)),
@@ -367,6 +501,16 @@ tab <- data.frame(d = d_check, pred = f1(vol_at(d_check)),
 knitr::kable(tab, align = "c",
              col.names = c("Diameter (in)", "Prediction (cubic ft)", "Delta-method SE",
                            "SE ignoring covariance", "Bootstrap SD"))
+```
+
+```{r mvn, cache=TRUE}
+set.seed(746)
+mvn_ab <- MASS::mvrnorm(1e5, c(a, b), Sab)
+sd_mvn13 <- sd(mvn_ab[, 1] * 13^mvn_ab[, 2])
+nll_loga <- function(p) -sum(dnorm(vol, exp(p[1]) * diam^p[2], exp(p[3]), log = TRUE))
+S_loga <- solve(optimHess(c(log(a), b, log_sig), nll_loga))
+mvn_loga <- MASS::mvrnorm(1e5, c(log(a), b), S_loga[1:2, 1:2])
+sd_loga13 <- sd(exp(mvn_loga[, 1]) * 13^mvn_loga[, 2])
 ```
 
 The delta method matches the bootstrap closely across the data and at
@@ -377,7 +521,7 @@ to `r round(max(sapply(d_check, se_nocov) / sapply(d_check, se_delta)))`.
 **When it breaks.** Each case is a way for $f$ to stop looking like its
 tangent over the plausible range of the estimates.
 
-- **Large standard errors relative to the curvature of $f$.** That's
+- **Large standard errors relative to the curvature of $f$.** Check out
   the right panel of the Section 4 figure: the real distribution of
   $f(\hat\theta)$ is skewed, and $\pm 1.96\,\text{SE}$ is symmetric.
   Bolker's Weibull example (7.5.5) shows the cost: for mean survival
@@ -412,16 +556,16 @@ tangent over the plausible range of the estimates.
   $(a, b)$ from the MVN gives an SD of `r f2(sd_mvn13)` cubic feet at 13
   inches, against the bootstrap's `r f2(sd(boot[, 2]))`. The real
   sampling distribution of $(\hat b, \hat a)$ bends along the curved
-  contours in the figure, and a straight ellipse can't follow it. On the
-  $(\log a, b)$ scale, where those contours are straight lines, the
-  draws give `r f2(sd_loga13)`.
+  contours (the bootstrap dots in the first Section 5 figure), and a
+  straight ellipse can't follow it. On the $(\log a, b)$ scale, where
+  those contours are straight lines, the draws give `r f2(sd_loga13)`.
 - **Go Bayesian.** With posterior draws, compute $f$ for each draw and
   summarize; nothing needs to be linearized.
 
 **A note on Bolker's Appendix A.7.** It lists the product of two
 independent variables as a case where the formula is exact. It isn't
 quite: the exact variance has an extra term,
-$\text{Var}(XY) = \mu_Y^2\,\text{Var}(X) + \mu_X^2\,\text{Var}(Y) + \text{Var}(X)\,\text{Var}(Y)$.
+$$\text{Var}(XY) = \mu_Y^2\,\text{Var}(X) + \mu_X^2\,\text{Var}(Y) + \text{Var}(X)\,\text{Var}(Y).$$
 The delta method drops the last term, which is small when both
 coefficients of variation are small. The formula is exact for linear
 functions, as A.7 also says.

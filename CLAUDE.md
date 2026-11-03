@@ -42,8 +42,10 @@ Applies to all student-facing prose (web pages, handouts, keys,
 discussion prompts). Students know AI helped make the materials,
 but writing that signals it makes them take exercises less seriously.
 
-- **No em-dashes**, and no `--` in knitted `.Rmd` files (pandoc turns
-  it into a dash). Use a comma, period, or parentheses.
+- **No em-dashes in text you write**, and no `--` in knitted `.Rmd`
+  files (pandoc turns it into a dash). Use a comma, period, or
+  parentheses. Dashes the instructor adds by hand stay; don't flag or
+  "fix" them.
 - **Avoid AI tics:** "it's not just X, it's Y"; rule-of-three lists;
   throat-clearing ("It's worth noting that", "Furthermore"); hedging
   ("arguably", "in many ways"); intensifiers ("exactly", "precisely",
