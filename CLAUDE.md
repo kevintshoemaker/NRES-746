@@ -610,8 +610,10 @@ Snapshot: Sun., Nov. 1, 2026 (end of Week 10; Week 11 built; Week 1-9 pages buil
   Tree* + keys. Lab 9 is a single Act (`labs/Lab9_Act1.Rmd`, "Lab 9:
   Matrices for Models", data `data/PinyonSeedlings.csv`, seed 4) + key;
   its optional bonus block-diagonal $V$ sets up Wednesday. Revised
-  Nov. 3 (laptop allowed in 1a if stuck; 2c walks through eigenvalues
-  as variances, Var($G_1 - G_2 + G_3$) = -2.4; closing discussion is
+  Nov. 3 (laptop allowed in 1a if stuck; 1d reminds how to invert a
+  diagonal matrix; 1e drops the independence comparison; 2c only
+  reminds that eigenvalues are variances, so must be nonnegative (no
+  eigenvector talk); closing discussion is
   Part 2 muddiest points; the one-sigma-per-plot bonus was dropped). Script
   `CODE_Week11_LinearModelsAndVariance.R`, guide
   `NOTES_Week11_WebPageGuide.Rmd`. Push the CSV before Lab 9 goes out.
