@@ -410,7 +410,8 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
   revision (~20 min); coding Acts run 40+ min.
 - **Estimates run short:** multiply gut estimates by ~1.5 for math and
   2+ for coding. Fit the period by cutting parts or moving them to an
-  "if you finish early" block, never by shrinking times or space.
+  "**Bonus (optional).**" block (the label for labs and WODs; not "If
+  you finish early"), never by shrinking times or space.
 - **Calibration:** Lab 5 was about right but only one group finished;
   plan slightly less than Lab 5. Lab 7: most groups got 45+ min on Act
   2 and made good progress; it went home to finish. Update this when
@@ -608,7 +609,10 @@ Snapshot: Sun., Nov. 1, 2026 (end of Week 10; Week 11 built; Week 1-9 pages buil
   `cov_structures.html`. WODs *Linear or Not?* and *Two Cores from One
   Tree* + keys. Lab 9 is a single Act (`labs/Lab9_Act1.Rmd`, "Lab 9:
   Matrices for Models", data `data/PinyonSeedlings.csv`, seed 4) + key;
-  its closing block-diagonal $V$ sets up Wednesday. Script
+  its optional bonus block-diagonal $V$ sets up Wednesday. Revised
+  Nov. 3 (laptop allowed in 1a if stuck; 2c walks through eigenvalues
+  as variances, Var($G_1 - G_2 + G_3$) = -2.4; closing discussion is
+  Part 2 muddiest points; the one-sigma-per-plot bonus was dropped). Script
   `CODE_Week11_LinearModelsAndVariance.R`, guide
   `NOTES_Week11_WebPageGuide.Rmd`. Push the CSV before Lab 9 goes out.
 

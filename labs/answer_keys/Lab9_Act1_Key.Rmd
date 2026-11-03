@@ -79,6 +79,8 @@ q_same <- as.numeric(t(c(1, 1)) %*% solve(V2) %*% c(1, 1))
 q_opp <- as.numeric(t(c(1, -1)) %*% solve(V2) %*% c(1, -1))
 C3 <- matrix(c(1, 0.9, -0.9, 0.9, 1, 0.9, -0.9, 0.9, 1), 3)
 eig_c <- eigen(C3)$values
+w3 <- c(1, -1, 1)
+var_comb <- as.numeric(t(w3) %*% C3 %*% w3)
 
 # Part 2 (all 24)
 X <- model.matrix(~ plot + moisture, data = seedlings)
@@ -91,13 +93,6 @@ ll_dnorm <- sum(dnorm(r, 0, sigma_mle, log = TRUE))
 ll_mvn <- dmvnorm(r, rep(0, 24), sigma_mle^2 * diag(24), log = TRUE)
 mvr_msg <- tryCatch({MASS::mvrnorm(1000, rep(0, 3), C3); "no error"},
                     error = function(e) conditionMessage(e))
-
-# early finish: one sigma per plot
-plot_id <- as.integer(factor(seedlings$plot))
-nll_3sig <- function(p) -sum(dnorm(y, X %*% p[1:4], exp(p[5:7])[plot_id], log = TRUE))
-fit_3sig <- optim(c(coef(fit_lm), log(c(1, 1, 1))), nll_3sig, method = "BFGS")
-aic_1 <- AIC(fit_lm)
-aic_3 <- 2 * fit_3sig$value + 2 * 7
 ```
 
 \ans{\textbf{Answer key.} Answers are in magenta sans-serif type; longer answers have a bar in the margin.}
@@ -127,13 +122,16 @@ where $[\text{plot B}]_i$ is 1 for a plot-B seedling and 0 otherwise.
 **How much does soil moisture matter, and what does this model assume
 about seedlings that grow side by side in the same plot?**
 
-Please keep laptops closed until the banner in Part 2. Part 1 and the
-group check-in are pen and paper.
+Please keep laptops closed until the banner in Part 2 (except as noted
+in 1a). Part 1 and the group check-in are pen and paper.
 
 ## Part 1: The model as matrices (individual, ~40 min)
 
 **1a.** Write the model matrix $X$ for the six seedlings, with columns
-for $\beta_0$, $\beta_B$, and $\beta_m$ in that order.
+for $\beta_0$, $\beta_B$, and $\beta_m$ in that order. If you're stuck,
+you may open a laptop, read in the data (the code is in Part 2), and
+look at `model.matrix(~ plot + moisture, data = seedlings[c(1:3, 9:11), ])`.
+Then close the laptop again.
 
 \ansbegin
 
@@ -239,8 +237,11 @@ negatively correlated.
 ## Group check-in (~15 min)
 
 Compare your answers with your group, especially 1c, 1e, and 1f, and
-revise as needed. Agree on what each piece of $X$, $V$, and the
-quadratic form means before you start coding.
+revise as needed. Before you start coding, agree on what the rows and
+columns of $X$ stand for, and what the diagonal and off-diagonal
+entries of $V$ say about the seedlings. For 1d and 1e, check that you
+agree on how changing $V$ changes how much each residual counts in
+$\mathbf{r}^TV^{-1}\mathbf{r}$.
 
 **Laptops open now.**
 
@@ -284,9 +285,12 @@ blank_table(c("Coefficient", "Normal equations", "lm()"),
 
 AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
 
-**2b.** *(Recommended: no AI.)* At your $\hat{\boldsymbol\beta}$ and the
-MLE $\hat\sigma = \sqrt{\sum r_i^2 / n}$, compute the log-likelihood two
-ways: with `sum(dnorm(..., log = TRUE))`, and with
+**2b.** *(Recommended: no AI.)* Let
+$\mathbf{r} = \mathbf{y} - X\hat{\boldsymbol\beta}$ be the vector of
+residuals at your $\hat{\boldsymbol\beta}$, with $r_i$ the residual for
+seedling $i$. At $\hat{\boldsymbol\beta}$ and the MLE
+$\hat\sigma = \sqrt{\sum r_i^2 / n}$ (with $n = 24$), compute the
+log-likelihood two ways: with `sum(dnorm(..., log = TRUE))`, and with
 `mvtnorm::dmvnorm(..., log = TRUE)` using $V = \hat\sigma^2 I$.
 
 $\hat\sigma =$ \ans{`r f2(sigma_mle)`} cm. &nbsp;&nbsp; `sum(dnorm())`:
@@ -297,17 +301,41 @@ AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
 **2c.** *(AI optional.)* Check your answers to 1e and 1f with `det()`,
 `solve()`, and `eigen()`. Then try to draw 1000 random values for three
 seedlings from a multivariate normal with correlation matrix $C$ from
-1f, using `MASS::mvrnorm()`. What happens? What do the eigenvalues of
-$C$ tell you?
+1f, using `MASS::mvrnorm()`. What happens?
+
+\ansbegin
+
+`mvrnorm()` stops with an error ("`r mvr_msg`").
+
+\ansend
+
+A reminder about eigenvalues: for a covariance or correlation matrix,
+each eigenvector picks out one weighted combination of the variables
+(here, of the three seedlings' growth), and its eigenvalue is the
+variance of that combination. A variance can't be negative, so every
+eigenvalue of a valid covariance or correlation matrix must be zero or
+positive.
+
+Run `eigen(C)` and fill in the eigenvalues. Which one breaks the rule?
+Its eigenvector (the matching column of `eigen(C)$vectors`) is
+proportional to $(1, -1, 1)$, the combination $G_1 - G_2 + G_3$, where
+$G_j$ is seedling $j$'s growth on a standardized scale (variance 1).
+Use the rule for the variance of a sum and the correlations in $C$ to
+compute $\text{Var}(G_1 - G_2 + G_3)$ by hand. What does your answer
+say about whether $C$ could describe real seedlings?
 
 Eigenvalues of $C$: \ans{`r f1(eig_c[1])`}, \ans{`r f1(eig_c[2])`},
 \ans{`r f1(eig_c[3])`}
 
 \ansbegin
 
-`mvrnorm()` stops with an error ("`r mvr_msg`"). One eigenvalue is
-negative, so $C$ isn't positive definite: some weighted combination of
-the three seedlings would have a negative variance.
+The third, `r f1(eig_c[3])`, is negative.
+
+$$\text{Var}(G_1 - G_2 + G_3) = 1 + 1 + 1 + 2\left[(-1)(0.9) + (1)(-0.9) + (-1)(0.9)\right] = 3 - 5.4 = `r f1(var_comb)`.$$
+
+A negative variance is impossible, so no three seedlings could have
+these correlations: $C$ is not a valid correlation matrix (not positive
+definite), which is why `mvrnorm()` refuses it.
 
 \ansend
 
@@ -320,9 +348,17 @@ check or fix? If you didn't use it, what was hardest to get working?
 
 ## Group discussion and revision (~15 min)
 
-Close laptops. Here is a different covariance matrix someone proposed
-for the six seedlings in the table (rows and columns in the same
-order: A1, A2, A3, B1, B2, B3):
+Close laptops. Compare your Part 2 results with your group, especially
+anything that didn't match in 2a or 2b and what the eigenvalues in 2c
+told you, and revise as needed. Record any changes you made to earlier
+answers, new insights, and any "muddiest points" or topics you want to
+review.
+
+\ans{Open-ended.}
+
+**Bonus (optional).** Here is a different covariance matrix someone
+proposed for the six seedlings in the table (rows and columns in the
+same order: A1, A2, A3, B1, B2, B3):
 
 $$V = \begin{pmatrix}
 1 & 0.6 & 0.6 & 0 & 0 & 0 \\
@@ -333,11 +369,9 @@ $$V = \begin{pmatrix}
 0 & 0 & 0 & 0.6 & 0.6 & 1
 \end{pmatrix}$$
 
-With your group, say what this $V$ claims about the seedlings, and what
-could make the 0.6s biologically reasonable. Should the crew treat its
-24 seedlings as 24 independent replicates when reporting the effect of
-plot? Record your answer, any changes you made to earlier answers, new
-insights, and any "muddiest points" or topics you want to review.
+What does this $V$ claim about the seedlings, and what could make the
+0.6s biologically reasonable? Should the crew treat its 24 seedlings as
+24 independent replicates when reporting the effect of plot?
 
 \ansbegin
 
@@ -349,18 +383,3 @@ independent replicates of "plot": plot differences rest on three plots,
 and treating seedlings as replicates overstates the evidence.
 
 \ansend
-
-**If you finish early.** *(Recommended: no AI.)* Plot C's seedlings
-look more scattered than the others. Write a negative log-likelihood
-that gives each plot its own $\sigma$ (a diagonal $V$ with unequal
-entries, as in 1d), fit it with `optim()`, and compare its AIC with the
-one-$\sigma$ model.
-
-$\hat\sigma_A =$ \ans{`r f2(exp(fit_3sig$par[5]))`} &nbsp;
-$\hat\sigma_B =$ \ans{`r f2(exp(fit_3sig$par[6]))`} &nbsp;
-$\hat\sigma_C =$ \ans{`r f2(exp(fit_3sig$par[7]))`}
-
-AIC (one $\sigma$): \ans{`r f1(aic_1)`} &nbsp;&nbsp; AIC (three):
-\ans{`r f1(aic_3)`}
-
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
