@@ -619,6 +619,30 @@ Snapshot: Sun., Nov. 1, 2026 (end of Week 10; Week 11 built; Week 1-9 pages buil
   `CODE_Week11_LinearModelsAndVariance.R`, guide
   `NOTES_Week11_WebPageGuide.Rmd`. Push the CSV before Lab 9 goes out.
 
+- **Week 12 plan (Nov. 9-10; decided Nov. 4, not yet built):**
+  Monday covers "standard" mixed models in R (`lmer()`, `nlme`,
+  `glmmTMB`), not Bayesian multilevel models. Bayesian mixed models
+  move to the Lab 10 lecture portion (Tuesday, before lab). No
+  Wednesday (Veterans Day). When building, update `CourseSchedule.csv`
+  (row "Nov. 9" still says "Bayesian multilevel models" for Monday) and
+  re-render `schedule.Rmd`.
+  - **Possible bonus section:** "multivariate" non-normal data (a
+    student asked about multivariate Poisson/gamma after the MVN). No
+    general multivariate gamma/Poisson exists (the MVN is unusual in
+    having mean and covariance as separate parameters); you choose where
+    the dependence lives: (1) a latent Gaussian process on the link
+    scale (GLMM; likelihood is an $n$-dimensional integral; MCMC,
+    Laplace/`glmmTMB` with `ar1()`, or Monte Carlo; the marginal isn't
+    gamma); (2) observation-driven models,
+    $\log\mu_t = \eta_t + \phi(\log y_{t-1} - \eta_{t-1})$, a product of
+    gamma densities ($k$ is then conditional: 5.5 vs. a true marginal
+    shape of 3 in a test); (3) a Gaussian copula with gamma margins and
+    AR(1) normal scores $z_t = \Phi^{-1}(F(y_t))$, closed-form for
+    continuous data (AR(1) term via $z_t \mid z_{t-1} \sim
+    N(\rho z_{t-1}, 1-\rho^2)$); messy for counts. Test (seed 746,
+    n = 200, truth $\beta$ = 1, 0.5, shape 3, $\rho$ 0.7): copula
+    `optim()` gave 0.95, 0.52, 3.10, 0.68.
+
 - **New format from Week 10:** one web page per week plus short
   per-meeting instructor notes (see "Weekly materials"). Week 10's page
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
