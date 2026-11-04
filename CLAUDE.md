@@ -169,7 +169,8 @@ materials".
 7-8 each covered 3-4 of 7-8 planned sections; Week 10 Wednesday
 dropped its whole planned topic (Bayesian comparison) for an unplanned
 sidebar (causal DAGs); Week 11 Wednesday got through the WOD and the
-random intercept, 2 of 4 planned sections. Plan **3-4 sub-topics**
+random intercept, 2 of 4 planned sections, though Week 11 Monday
+(standard statistics, 4 sections plus discussion) was covered in full. Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
 marked "Bonus" section. A derivation eats its whole slot, so put
@@ -627,7 +628,8 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
     block-diagonal $V$). **Not covered:** section 4 AR(1) (`#ar1`),
     section 5 why harder (`#harder`), the `#variance-discussion`
     prompts (both lean on sections 4-5), and both bonuses. The guide
-    has a dated note. Monday and Lab 9 not yet reported.
+    has a dated note. Monday (Nov. 2) covered the whole `#standard`
+    module. Lab 9 not yet reported.
 
 - **Week 12 plan (Nov. 9-10; decided Nov. 4, not yet built):**
   Monday opens with Week 11's uncovered sections 4 (AR(1)) and 5 (why
