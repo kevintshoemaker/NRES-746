@@ -55,6 +55,18 @@ lines(x_lin, y_det, lwd = 2, col = "steelblue4")
 plot(x_hyp, y_hyp, pch = 16, xlab = "Population density", ylab = "Offspring per female")
 curve(a * b / (b + x), add = TRUE, lwd = 2, col = "steelblue4")
 par(mfrow = c(1, 1))
+
+#  mu = a exp(-b x), Y ~ Gamma(shape = s, scale = mu / s): gamma mean = shape * scale = mu
+a <- 10
+b <- 0.3
+s <- 4
+set.seed(1002)
+x_gam <- runif(50, min = 0, max = 10)
+mu_gam <- a * exp(-b * x_gam)
+y_gam <- rgamma(50, shape = s, scale = mu_gam / s)
+plot(x_gam, y_gam, pch = 16, xlab = "x", ylab = "y",
+     ylim = c(0, max(a, y_gam)))
+curve(a * exp(-b * x), add = TRUE, lwd = 2, col = "steelblue4")
 #  [PAUSE] exponential decline with normal, Poisson, lognormal noise: which spreads shrink with the mean?
 
 # 5. Many replicates: could this model have produced our data? -----------------
