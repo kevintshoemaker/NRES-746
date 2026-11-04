@@ -643,6 +643,13 @@ Snapshot: Sun., Nov. 1, 2026 (end of Week 10; Week 11 built; Week 1-9 pages buil
     n = 200, truth $\beta$ = 1, 0.5, shape 3, $\rho$ 0.7): copula
     `optim()` gave 0.95, 0.52, 3.10, 0.68.
 
+- **For the time-series/dynamic models week (Nov. 30):** teach AR vs.
+  MA identification with ACF and PACF side by side on long simulated
+  AR(1) and MA(1) series (~500 points). Not added to Week 11: stand A's
+  25-year residuals are too short (ACF 0.33, 0.27; PACF 0.33, 0.18;
+  bounds +/-0.39, though true rho is 0.6), a useful example of how short
+  series hide real autocorrelation.
+
 - **New format from Week 10:** one web page per week plus short
   per-meeting instructor notes (see "Weekly materials"). Week 10's page
   (`Week10_ModelComparison.Rmd`, in the navbar) and delivery guide
