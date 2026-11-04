@@ -65,7 +65,7 @@ show_matrix <- function(M, main = "", zlim = c(-1, 1) * max(abs(M))) {
 
 R code from this page is also in the
 [companion script](lecture_notes/CODE_Week11_LinearModelsAndVariance.R).
-Packages: `mvtnorm`, `lme4`, `nlme`.
+Packages: `mvtnorm`, `lme4`.
 
 This material follows Bolker, *Ecological Models and Data in R*,
 Chapter 9 (pp. 394-417), Appendix A.8 (pp. 484-485), and Chapter 10
@@ -265,7 +265,8 @@ though the true slopes are identical. Two cautions:
   which 5 trees were cored, an error that repeats every year, and
   residuals are correlated from year to year. So the p-value overstates
   how sure we can be that the *stands* differ; the
-  [random intercept](#random-intercept) and [AR(1)](#ar1) sections take
+  [random intercept](#random-intercept) and
+  [AR(1)](Week12_MixedModels.html#ar1) sections take
   this up.
 
 > **Question:** Each precipitation value is shared by all four stands in
@@ -590,11 +591,11 @@ for (nm in names(mats)) {
 
 Every likelihood so far has been a product over independent
 observations. Trees in the same stand, or ring widths in consecutive
-years, aren't independent. This part shows how two common kinds of
-dependence (a shared random group effect, and correlation through time)
-each produce a structured covariance matrix, fits both by maximum
-likelihood, and shows why these fits are harder than anything we have
-done so far.
+years, aren't independent. This part shows how a shared random group
+effect produces a structured covariance matrix and fits it by maximum
+likelihood. Correlation through time, and why these fits are harder
+than anything we have done so far, are on the
+[Week 12 page](Week12_MixedModels.html).
 
 ## 1. Big picture
 
@@ -745,310 +746,15 @@ same stand are more alike than two trees from different stands.
 > **Question:** The variance among stands is estimated from only four
 > stands. How much would you trust $\hat\sigma_b =$ `r f2(sb_hat)`?
 
-## 4. Autocorrelation: AR(1) {#ar1}
+## 4. Autocorrelation and fitting {#ar1}
 
-Now take stand A's chronology over 25 years and ask a management
-question: is growth declining, after accounting for precipitation?
-Regress ring width on precipitation and year, and look at the
-residuals:
-
-```{r ar1-resid, fig.width=8, fig.height=3.2}
-chron_a <- chron[chron$stand == "A", ]
-chron_a$year_c <- chron_a$year - 2008          # centered year: 0 = 2008
-fit_lm_a <- lm(width ~ precip + year_c, data = chron_a)
-summary(fit_lm_a)$coefficients
-par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 1))
-plot(chron_a$year, resid(fit_lm_a), type = "b", pch = 19, xlab = "Year", ylab = "Residual")
-abline(h = 0, lty = 2)
-acf(resid(fit_lm_a), main = "", lag.max = 10)
-```
-
-The `acf()` panel shows the correlation between residuals $k$ years
-apart. The lag-1 value, `r f2(acf(resid(fit_lm_a), plot = FALSE)$acf[2])`,
-falls inside the dashed bounds, so this plot alone can't rule out
-independence. With 25 years the bounds are wide
-($\pm 1.96/\sqrt{25} \approx \pm 0.39$), and a series this short often
-hides real autocorrelation. A residual ACF inside the bounds means the
-correlation wasn't detected, not that it's absent.
-
-Other evidence helps. The lag-1 residual correlation is positive in all
-four stands:
-
-```{r ar1-lag1-stands}
-lag1 <- function(d) {
-  d$year_c <- d$year - 2008
-  acf(resid(lm(width ~ precip + year_c, data = d)), plot = FALSE)$acf[2]
-}
-round(sapply(split(chron, chron$stand), lag1), 2)
-```
-
-and there's a mechanism: in real pinyon, stored carbohydrates and
-needles that live several years carry one year's conditions into the
-next.
-
-The simplest model of this is the **first-order autoregressive** model,
-AR(1): each year's deviation is a fraction $\rho$ of last year's plus
-new noise,
-
-$$e_t = \rho\,e_{t-1} + \eta_t, \qquad \eta_t \sim \text{Normal}(0, \sigma^2), \qquad |\rho| < 1$$
-
-Taking variances of both sides, with $e_{t-1}$ and $\eta_t$ independent
-and $\text{Var}(e_t) = \text{Var}(e_{t-1})$ (a stationary series):
-
-$$\text{Var}(e_t) = \rho^2\text{Var}(e_t) + \sigma^2
-\quad\Longrightarrow\quad
-\text{Var}(e_t) = \frac{\sigma^2}{1 - \rho^2}$$
-
-and the correlation between deviations $k$ steps apart is $\rho^k$
-(Bolker eq. 10.3.7). So the covariance between years $s$ and $t$ is
-
-$$V_{st} = \frac{\sigma^2}{1 - \rho^2}\,\rho^{|s - t|}$$
-
-The `abs(row(M) - col(M))` trick from Bolker (p. 427) builds the matrix
-of lags:
-
-```{r ar1-matrix}
-lags <- abs(outer(1:25, 1:25, "-"))
-V_ar1 <- function(rho, sigma) sigma^2 / (1 - rho^2) * rho^lags
-round(V_ar1(0.6, 0.08)[1:5, 1:5], 4)
-```
-
-Fitting needs $|\rho| < 1$, so we optimize $\text{atanh}(\rho)$, which
-can be any number, and convert back with `tanh()`. Standard errors from
-the Hessian are then on the atanh and log scales; the delta method
-carries them back to $\rho$ and $\sigma$ (see the reference handout
-[*The Delta Method*](lecture_notes/NOTES_Reference_DeltaMethod.pdf)).
-
-```{r ar1-fit}
-# mean: a + b * precip + c * year_c; AR(1) errors with rho = tanh(par[4]), sigma = exp(par[5])
-nll_ar1 <- function(par) {
-  mu <- par[1] + par[2] * chron_a$precip + par[3] * chron_a$year_c
-  V <- V_ar1(tanh(par[4]), exp(par[5]))
-  -dmvnorm(chron_a$width, mu, V, log = TRUE)
-}
-fit_ar1 <- optim(c(coef(fit_lm_a), 0, log(0.1)), nll_ar1, method = "BFGS", hessian = TRUE)
-c(a = fit_ar1$par[1], b = fit_ar1$par[2], c = fit_ar1$par[3],
-  rho = tanh(fit_ar1$par[4]), sigma = exp(fit_ar1$par[5]))
-
-library(nlme)
-fit_gls <- gls(width ~ precip + year_c, data = chron_a,
-               correlation = corAR1(form = ~ year), method = "ML")
-coef(fit_gls)
-coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # rho
-```
-
-```{r ar1-se, echo=FALSE}
-trend_ind <- summary(fit_lm_a)$coefficients["year_c", ]
-se_ar1 <- sqrt(diag(solve(fit_ar1$hessian)))[3]
-p_ar1 <- 2 * pnorm(-abs(fit_ar1$par[3] / se_ar1))
-rho_hat <- tanh(fit_ar1$par[4])
-se_precip <- c(summary(fit_lm_a)$coefficients["precip", 2], sqrt(diag(solve(fit_ar1$hessian)))[2])
-f4 <- function(v) formatC(v, format = "f", digits = 4)
-```
-
-The estimated $\rho$ is `r f2(rho_hat)`. The trend estimate barely
-moves, but its standard error grows:
-
-- assuming independence: `r f4(trend_ind[1])` mm/yr, SE `r f4(trend_ind[2])`,
-  $p =$ `r f3(trend_ind[4])`;
-- with AR(1) errors: `r f4(fit_ar1$par[3])` mm/yr, SE `r f4(se_ar1)`
-  (from the Hessian, as earlier in the course), $p =$ `r f2(p_ar1)`.
-
-The simulation has no trend at all.
-
-The widget below builds both covariance structures for 12 observations
-and simulates data from them. The heatmap shows correlations (blue
-positive, red negative).
-
-```{r widget-cov, echo=FALSE}
-widget("cov_structures.html")
-```
-
-> **Question:** With $\rho$ near 0.9, what does a single AR(1) series look
-> like? How could you tell it apart from a slow trend?
-
-## 5. Why these models are harder to fit {#harder}
-
-We fit both models with the same `optim()` call as always. Three things
-make structured-variance models harder than their independent cousins.
-
-**Each NLL evaluation costs more.** Under independence the NLL is a sum
-of $n$ terms. The MVN needs the determinant and inverse of an
-$n \times n$ matrix (in practice a Cholesky factorization), which takes
-on the order of $n^3$ operations. Doubling the data multiplies the time
-per evaluation by about 8, and `optim()` evaluates the NLL hundreds of
-times.
-
-```{r timing, cache=TRUE}
-# milliseconds per NLL evaluation, averaged over 'reps' evaluations
-time_nll <- function(n, reps = 10) {
-  y <- rnorm(n)
-  V <- 0.5^abs(outer(1:n, 1:n, "-"))
-  ms <- function(expr) 1000 * system.time(for (i in 1:reps) expr)[["elapsed"]] / reps
-  c(n = n, independent = ms(sum(dnorm(y, 0, 1, log = TRUE))),
-    mvn = ms(dmvnorm(y, rep(0, n), V, log = TRUE)))
-}
-set.seed(1)
-timings <- t(sapply(c(250, 500, 1000, 2000), time_nll))
-timings
-```
-
-With 2000 observations, one MVN evaluation took about
-`r round(timings[4, "mvn"])` ms here; the independent NLL took a small
-fraction of a millisecond. An
-`optim()` run needing 300 evaluations would take about
-`r round(300 * timings[4, "mvn"] / 60000, 1)` minutes, against well
-under a second. (Packages like
-`lme4` and `nlme` exploit the structure of $V$, such as its blocks, to
-avoid most of this cost.)
-
-**The likelihood surface is awkward.** Below are NLL contours for the
-two models, with the other parameters set to their best values at each
-point (a profile). The shaded region is within 1.92 NLL units of the
-minimum, an approximate 95% confidence region.
-
-```{r surfaces, echo=FALSE, fig.width=9, fig.height=4.2, cache=TRUE}
-# profile out the mean parameters by generalized least squares at each (variance) grid point
-gls_nll <- function(y, X, V) {
-  Vi <- solve(V)
-  b <- solve(t(X) %*% Vi %*% X, t(X) %*% Vi %*% y)
-  -dmvnorm(y, as.vector(X %*% b), V, log = TRUE)
-}
-sb_grid <- seq(0.002, 0.45, length.out = 70)
-s_grid <- seq(0.04, 0.16, length.out = 70)
-X1 <- matrix(1, 20, 1)
-nll_grid_ri <- outer(sb_grid, s_grid, Vectorize(function(a, b) gls_nll(y_tree, X1, V_ri(a, b))))
-# AR(1): fix rho and the trend c; profile out a, b (GLS) and sigma (closed form)
-prof_ar1 <- function(rho, c_trend) {
-  R <- rho^lags / (1 - rho^2)
-  y <- chron_a$width - c_trend * chron_a$year_c
-  Xp <- cbind(1, chron_a$precip)
-  Ri <- solve(R)
-  b <- solve(t(Xp) %*% Ri %*% Xp, t(Xp) %*% Ri %*% y)
-  r <- as.vector(y - Xp %*% b)
-  s2 <- as.numeric(t(r) %*% Ri %*% r) / 25
-  -dmvnorm(r, rep(0, 25), s2 * R, log = TRUE)
-}
-rho_grid <- seq(-0.5, 0.95, length.out = 70)
-c_grid <- seq(-0.02, 0.01, length.out = 70)
-nll_grid_ar <- outer(rho_grid, c_grid, Vectorize(prof_ar1))
-par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
-draw_surface <- function(x, y, z, xlab, ylab, main, best) {
-  z <- z - min(z)
-  image(x, y, z <= 1.92, col = c("white", "lightskyblue1"), xlab = xlab, ylab = ylab, main = main)
-  contour(x, y, z, levels = c(0.5, 1, 1.92, 3, 5, 10, 20), add = TRUE, col = "grey30")
-  points(best[1], best[2], pch = 3, cex = 1.5, lwd = 2, col = "firebrick")
-  box()
-}
-draw_surface(sb_grid, s_grid, nll_grid_ri, expression(sigma[b] ~ "(among stands)"),
-             expression(sigma ~ "(among trees)"), "Random intercept, 4 stands",
-             c(sb_hat, s_hat))
-draw_surface(rho_grid, c_grid, nll_grid_ar, expression(rho),
-             "Trend (mm/yr)", "AR(1) with a trend, stand A", c(rho_hat, fit_ar1$par[3]))
-abline(h = 0, lty = 2)
-```
-
-```{r surface-ranges, echo=FALSE}
-in_ri <- (nll_grid_ri - min(nll_grid_ri)) <= 1.92
-sb_range <- range(sb_grid[apply(in_ri, 1, any)])
-in_ar <- (nll_grid_ar - min(nll_grid_ar)) <= 1.92
-trend_at <- function(r) range(c_grid[in_ar[which.min(abs(rho_grid - r)), ]])
-trend_0 <- trend_at(0)
-trend_hat <- trend_at(rho_hat)
-```
-
-- **Random intercept:** the region runs from about
-  $\sigma_b =$ `r f2(sb_range[1])` to `r f2(sb_range[2])`, more than a
-  fourfold range, while $\sigma$ (from 20 trees) is much better
-  determined. Four stands give four draws of $b_j$, so the data say
-  little about their spread. With fewer stands or smaller differences
-  among them, the region reaches $\sigma_b = 0$; the optimizer may stop
-  on that boundary, where the usual Hessian and LRT approximations fail
-  (the same problem as in
-  [comparing Poisson and negative binomial models](Week10_ModelComparison.html#frequentist)).
-- **AR(1) with a trend:** here the axes are $\rho$ and the trend, with
-  everything else profiled out. The region is a fan, not an ellipse. Near
-  $\rho = 0$ the plausible trends run from about
-  `r f4(trend_0[1])` to `r f4(trend_0[2])` mm/yr, all below 0 (dashed
-  line). At $\rho =$ `r f2(rho_hat)` they run from `r f4(trend_hat[1])`
-  to `r f4(trend_hat[2])`. A slow drift and strong autocorrelation can
-  explain the same wandering series, so what we conclude about a mean
-  parameter depends on a variance parameter, and the two have to be
-  estimated together. A lopsided region like this also makes
-  Hessian-based intervals, which assume an ellipse, less trustworthy.
-
-**Parameters must keep $V$ valid.** A variance must be positive,
-$|\rho|$ must be below 1, and in general $V$ must stay
-[positive definite](#valid-covariance). An unconstrained step can leave
-the allowed region, and `dmvnorm()` then fails. We avoided this by
-optimizing $\log\sigma$ and $\text{atanh}(\rho)$; richer structures
-need cleverer parameterizations (for example, building $V$ from its
-Cholesky factor).
-
-None of this is a reason to assume independence when it's false. It's
-why specialized software exists for these models, and why Bayesian
-methods, which sample the random effects instead of integrating over
-them, are popular for hierarchical models.
-
-## Discussion {#variance-discussion}
-
-**Q1.** Switching to AR(1) errors changed the trend's standard error
-from `r f4(trend_ind[2])` to `r f4(se_ar1)` mm/yr, but the
-precipitation slope's from `r f4(se_precip[1])` to `r f4(se_precip[2])`
-mm/cm. Why would autocorrelated errors matter more for a trend over
-time than for precipitation, which jumps around from year to year?
-
-**Q2.** A colleague says: "I have only four stands, so I'll treat stand
-as a fixed factor instead of a random intercept." Using the
-random-intercept surface above, argue for or against. What question is
-each model answering?
-
-## Bonus: a random intercept and AR(1) together {#bonus-combined}
-
-The two structures combine. Using all four chronologies (100
-stand-years), suppose each stand has its own random intercept and
-AR(1) deviations within the stand:
-
-$$\text{width}_{jt} = a + b_j + \beta\,\text{precip}_t + e_{jt},
-\qquad b_j \sim \text{Normal}(0, \sigma_b^2),
-\qquad e_{jt} = \rho\,e_{j,t-1} + \eta_{jt}$$
-
-$V$ is the sum of the two pieces: $\sigma_b^2$ wherever two values share
-a stand, plus an AR(1) block within each stand. `kronecker(A, B)`
-places a copy of `B` in every cell of `A`, scaled by that cell, so
-`kronecker(diag(4), B)` makes a block-diagonal matrix with four copies
-of `B`.
-
-```{r combined-fit}
-Z_chron <- model.matrix(~ 0 + stand, data = chron)
-V_combined <- function(sigma_b, rho, sigma) {
-  sigma_b^2 * Z_chron %*% t(Z_chron) + kronecker(diag(4), V_ar1(rho, sigma))
-}
-nll_combined <- function(par) {
-  mu <- par[1] + par[2] * chron$precip
-  V <- V_combined(exp(par[3]), tanh(par[4]), exp(par[5]))
-  -dmvnorm(chron$width, mu, V, log = TRUE)
-}
-fit_comb <- optim(c(0.4, 0.02, log(0.1), 0, log(0.1)), nll_combined, method = "BFGS",
-                  control = list(maxit = 1000))
-c(a = fit_comb$par[1], b = fit_comb$par[2], sigma_b = exp(fit_comb$par[3]),
-  rho = tanh(fit_comb$par[4]), sigma = exp(fit_comb$par[5]))
-
-fit_lme <- lme(width ~ precip, random = ~ 1 | stand, data = chron,
-               correlation = corAR1(form = ~ year | stand), method = "ML")
-fixef(fit_lme)
-coef(fit_lme$modelStruct$corStruct, unconstrained = FALSE)
-c(-fit_comb$value, logLik(fit_lme))       # same maximized log-likelihood
-```
-
-```{r combined-heatmap, echo=FALSE, fig.width=4.5, fig.height=4.5}
-show_matrix(V_combined(exp(fit_comb$par[3]), tanh(fit_comb$par[4]), exp(fit_comb$par[5])),
-            main = "Fitted V (100 stand-years)")
-```
-
-Each block mixes the two structures: correlation decays with the lag
-between years but levels off at the intraclass correlation instead of
-reaching 0.
+Correlation through time (the [AR(1) model](Week12_MixedModels.html#ar1)),
+[why models with structured covariance are harder to fit](Week12_MixedModels.html#harder),
+the [discussion prompts](Week12_MixedModels.html#variance-discussion)
+for this part, and a [model with a random intercept and AR(1)
+together](Week12_MixedModels.html#bonus-combined) are on the
+[Week 12 page](Week12_MixedModels.html), with random slopes and the
+standard R packages for mixed models.
 
 ## Bonus: integrating out a random effect {#integrating}
 

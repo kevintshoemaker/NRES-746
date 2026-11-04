@@ -1,0 +1,258 @@
+---
+title: "Week 12 web page: delivery guide"
+subtitle: "Instructor notes for Week12_MixedModels.html"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=3pt, parsep=0pt, topsep=3pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+# General
+
+- Page: <https://kevintshoemaker.github.io/NRES-746/Week12_MixedModels.html>.
+  Script: `CODE_Week12_MixedModels.R` (same seeds, same numbers; run its
+  first section before any later one).
+- Veterans Day: no class Wed., Nov. 11. The week is Monday plus Tuesday's
+  lab period.
+- Monday has **no WOD** (the lecture is full). The required take-home WOD
+  *Formula to Model* goes out Monday, due Mon., Nov. 16; budget 5-10 min
+  that day to go over it. Key: `wod/answer_keys/`.
+- Tuesday: ~60 min of lecture with laptops open (students run the Stan
+  model), then an open final-project work session. No lab Act or key.
+- Two simulated data sets; say so up front.
+    - Pinyon chronologies (seed 21; 4 stands $\times$ 5 trees $\times$
+      25 yr): truth stand SD 0.12, tree SD 0.10, precipitation slope
+      0.025 mm/cm, AR(1) $\rho = 0.6$, **no trend**.
+    - Drought sensitivity (seed 12): 12 stands, records of 30, 24, 18,
+      12, 8, 5 years (two stands each), 194 stand-years. Precipitation in
+      10-cm units centered at 20 cm. Truth: $\mu_a = 0.9$,
+      $\mu_b = 0.25$, $\tau_a = 0.15$, $\tau_b = 0.10$, $\rho = -0.6$,
+      $\sigma = 0.12$.
+- Questions on the page have no answers. *Land:* is where discussion
+  should end up.
+
+# Part 1: Autocorrelation and mixed models in R (Monday, ~45 min)
+
+Sections 2-3 are the Week 11 material that wasn't reached on Nov. 4;
+the Week 11 page now points here.
+
+**Big picture (~3 min)**
+
+- MODELS and FIT boxes. Recap in one breath: random intercept $\to$
+  block-diagonal $V$. Today: correlation through time, then groups that
+  differ in slope, then the software.
+
+**AR(1) (~10 min)**
+
+- Management question first: is growth declining? `lm()`: trend
+  $-0.0055$ mm/yr, SE 0.0026, $p = 0.045$. Stand A's lag-1 residual ACF
+  (0.33) is inside the $\pm 0.39$ bounds: not detected $\neq$ absent.
+  All four stands are positive (0.33, 0.33, 0.48, 0.41).
+- Derive $\text{Var}(e_t) = \sigma^2/(1-\rho^2)$ on the board (two
+  lines). AR(1) fit: $\hat\rho = 0.37$; trend $-0.0047$, SE 0.0034,
+  $p = 0.17$. `gls()` matches. Then tell them the truth has no trend.
+- Widget (`cov_structures.html`): switch to AR(1), default $\rho$ 0.6
+  (lag-1 0.60, lag-5 0.08). Ask students to predict the series at
+  $\rho = 0.9$ before moving the slider: it wanders like a trend (lag-5
+  still 0.59). Then $\rho = -0.7$: zigzag, checkerboard heatmap.
+- "With $\rho$ near 0.9, what does a single AR(1) series look like? How
+  could you tell it apart from a slow trend?" *Land:* long runs above
+  and below the mean that look like trends. From one short series you
+  often can't; you need a longer record, replicate series, or a
+  mechanism. This is the fan in section 3.
+
+**Why harder (~7 min)**
+
+- Three points, one line each: cost (about 150 ms per MVN evaluation at
+  $n = 2000$ on the render machine), awkward surfaces, constraints.
+- Random-intercept surface: $\sigma_b$ about 0.08 to 0.35; $\sigma$ much
+  tighter.
+- Fan: near $\rho = 0$ the trend runs about $-0.0074$ to $-0.0039$
+  (excludes 0); at $\hat\rho = 0.37$ it runs $-0.0113$ to 0.0017.
+- **Behind?** Skip the timing; show the two surfaces.
+
+**Random slopes (~8 min)**
+
+- Show the two-panel figure. Right panel: low-intercept stands have
+  steep slopes. Ask what ecology would produce that (low elevation,
+  closer to the water limit).
+- Write the model and $G$ on the board; count the six parameters. The
+  24 stand deviations are integrated out, not estimated.
+- $V_j = Z_jGZ_j^T + \sigma^2 I$: one block per stand. Don't expand
+  $\text{Var}(y)$ as a function of $x$ (the take-home WOD asks for it).
+- Formula table: `(1 | stand/tree)` expands to
+  `(1 | stand) + (1 | stand:tree)`. Don't count parameters for them out
+  loud beyond the table (the WOD uses different formulas).
+
+**Mixed models in R (~10 min)**
+
+- `lmer()`: $\hat\mu_a = 0.840$, $\hat\mu_b = 0.258$,
+  $\hat\tau_a = 0.131$, $\hat\tau_b = 0.092$, $\hat\rho = -0.57$,
+  $\hat\sigma = 0.118$. AIC $-180.9$ (random intercept) vs. $-216.9$
+  (random slope), a drop of 36.0.
+- If asked about an LRT: $\chi^2 = 40.0$ on 2 df, $p \approx 2\times 10^{-9}$;
+  conservative because $\tau_b = 0$ is on the boundary (same issue as
+  Poisson vs. negative binomial).
+- The comparison table: `optim()`, `lmer()`, `lme()`, and `glmmTMB()`
+  all give log-likelihood 114.4497. The point: the packages fit the
+  likelihood we could write ourselves, faster and with better
+  parameterizations.
+- Package bullets: lme4 for speed and crossed effects; nlme for
+  residual correlation and variance structures; glmmTMB for non-Normal
+  families and random-effect covariance structures.
+- "The estimated correlation between stand intercepts and slopes is
+  $-0.57$. What does that say about these stands, ecologically? What
+  does it say about a management plan that ranks stands by drought risk
+  using average growth alone?" *Land:* slow-growing stands are also the
+  most precipitation-sensitive, so in a dry year the gap between stands
+  widens; ranking by average growth puts the same stands at the top but
+  understates how badly they do in drought. Keep it tentative: Tuesday
+  shows the interval on $\rho$ is wide.
+- **Behind?** Show only the `lmer()` fits and the comparison table;
+  skip the `optim()` code walk-through.
+
+**Discussion (~5 min; pick one or two)**
+
+- Q1 (trend SE 0.0026 to 0.0034; precipitation SE 0.0026 to 0.0020)
+  *Land:* year is itself perfectly autocorrelated, so runs of correlated
+  errors line up with it and mimic a trend; precipitation jumps around,
+  so correlated errors don't line up with it. Errors matter most for
+  predictors that change slowly in time or space.
+- Q2 (four stands: fixed or random?) *Land:* the random-intercept model
+  answers "how variable are stands in general" and can predict a new
+  stand, but $\sigma_b$ from four stands is weak (wide surface). The
+  fixed model answers "how do these four stands differ." Choose by the
+  question; with few groups, say so and report the uncertainty.
+- Q3 (four short-record stands: $\hat\tau_a = 0.084$,
+  $\hat\tau_b = 0.063$, $\hat\rho = -1.00$, singular fit) *Land:* no;
+  26 stand-years in 4 stands can't support three variance parameters,
+  and $\hat\rho = -1$ is the boundary (the fit collapsed to one
+  dimension). Report it as singular; simplify to `(precip10 || stand)`
+  or a random intercept, get more stands, or use a prior (Tuesday).
+
+**Bonuses** (only if time): random intercept + AR(1) ($\hat\rho = 0.51$,
+log-likelihood 82.28, matches `lme()`); Poisson GLMM by hand
+(`integrate()`: 1.551, 0.382, $\sigma_b$ 0.542; `glmmTMB()` 1.548, 0.382,
+0.542).
+
+# Part 2: Bayesian hierarchical models (Tuesday lab lecture, ~60 min)
+
+**Before class:** remind students (Canvas) to bring a laptop with
+`cmdstanr`, `brms`, and `lme4` installed. In class they run sections 4
+and 5 of the script from the top (the Stan section needs `drought` and
+`compare` from earlier sections; running the whole script takes about 2
+min including compiles). First compile takes about a minute; sampling
+takes about a second.
+
+**Big picture (~3 min)**
+
+- FIT box. Same model as Monday. Hierarchical = multilevel = mixed. In
+  Bayesian terms, a random effect is a parameter whose prior has
+  estimated parameters.
+- Four bullets: no integral; uncertainty carries through; priors help
+  with few groups (callback to Monday's singular fit); the price.
+
+**Partial pooling (~10 min)**
+
+- Three choices on the board: complete, none, partial. Write $w_j$ and
+  read it as signal variance over (signal + sampling) variance.
+- Code check: the formula matches `lmer()` to three decimals.
+  $\hat\sigma_b = 0.113$, $\hat\sigma = 0.229$, $\hat\mu = 0.861$;
+  weights 0.88 (30 yr) down to 0.55 (5 yr).
+- Widget (`partial_pooling.html`): start at the defaults. Then
+  $\sigma_b = 0$: every stand sits on the dashed line (complete pooling;
+  both weight cards 0.00). Then $\sigma_b = 0.4$: weights 0.99 and 0.94,
+  nearly no pooling. Then raise $\sigma$ to 0.6 with $\sigma_b$ back at
+  0.114: short records collapse toward the mean first.
+- "Set $\sigma_b$ to 0, then drag it to 0.4. Which two pooling choices
+  are these? Then compare S10 and S12 ... Which moves more toward the
+  overall mean, and why?" *Land:* complete pooling, then (nearly) no
+  pooling. S12 (5 yr, $w = 0.55$) moves a larger share of its distance
+  (45% vs. 34% for S10, $w = 0.66$). The absolute moves are almost
+  equal (0.080 vs. 0.078 mm) because S10 starts farther from the mean;
+  shrinkage is proportional to distance.
+- Tie to the Normal-Normal posterior: the population is the prior.
+
+**Priors for a covariance matrix (~8 min)**
+
+- Board: $G = \text{diag}(\tau)\,\Omega\,\text{diag}(\tau)$; separate
+  priors on $\tau$ and $\Omega$. For 2 $\times$ 2, LKJ gives
+  $p(\rho) \propto (1-\rho^2)^{\eta-1}$.
+- Widget (`lkj_prior.html`), 2 $\times$ 2: $\eta = 1$ flat
+  ($P(|\rho| > 0.5) = 0.50$); $\eta = 2$ (the Stan model's prior) 0.31;
+  $\eta = 0.5$ U-shaped, 0.67. Ask students to predict 10 $\times$ 10
+  at $\eta = 1$ before switching.
+- "For a 10 $\times$ 10 correlation matrix with $\eta = 1$, how likely is
+  any one correlation to exceed 0.5 in absolute value? What does
+  'uniform' mean for a matrix that large?" *Land:* about 0.10 (prior SD
+  0.30). LKJ(1) is uniform over all valid correlation matrices, and most
+  valid big matrices have small correlations (large ones would break
+  positive definiteness), so each single correlation is pulled toward 0.
+- One sentence on inverse-Wishart (old BUGS/JAGS default) and why LKJ
+  replaced it.
+
+**Stan walkthrough (~25 min; laptops)**
+
+- Walk the blocks top to bottom. Two ideas to spend time on: the
+  Cholesky factor (always a valid $\Omega$; callback to Monday's third
+  "harder" point) and non-centering (callback to the Week 9 funnel).
+  `ab[stand, 1]` is multi-indexing: one row of `ab` per observation.
+- Students compile and sample. No divergences; all $\hat R$ = 1.00.
+- Table: everything matches `lmer()` closely except $\rho$: MLE
+  $-0.57$; posterior median $-0.37$, 90% interval $-0.76$ to 0.17;
+  truth $-0.6$.
+- Shrinkage figure: S11 (5 yr) moves most; S01 and S02 (30 yr) barely
+  move. Don't claim the arrows follow the correlation (they mostly head
+  toward the center).
+- Truth check: in this data set the short-record stands' slopes barely
+  improve (0.057 to 0.055) and their intercepts get worse (0.044 to
+  0.053). Over 500 simulated data sets (seed 746, `lmer()`), slope error
+  falls 0.070 to 0.051 and intercept error 0.044 to 0.041. Shrinkage
+  wins on average, not every time.
+- "Why is the posterior for $\rho$ so much wider ... closer to 0 than the
+  MLE? Which summary is more honest?" *Land:* $\rho$ is a correlation
+  among 12 stand-level pairs, each estimated with error; the MLE plugs
+  in one value. The LKJ(2) prior pulls toward 0, and integrating over
+  uncertainty in the $\tau$s spreads the posterior. The posterior (with
+  its interval) is more honest; the MLE alone overstates what 12 stands
+  say.
+- "Change to `lkj_corr_cholesky(1)`, then `(10)` ..." *Land:* $\eta = 1$:
+  median $-0.45$ (90% $-0.81$ to 0.12); $\eta = 10$: $-0.13$ ($-0.45$ to
+  0.21). The prior matters a lot for $\rho$ because the data say little,
+  but stand slopes move by at most 0.008 ($\eta = 1$) and 0.026
+  ($\eta = 10$) mm per 10 cm. Have half the room run each and compare.
+
+**brms (~7 min)**
+
+- One formula, same priors: cor $-0.33$ (95% $-0.81$ to 0.30), SDs 0.16
+  and 0.11. First compile ~20 s.
+- Have students run `stancode(fit_brms)` and find `lkj_corr_cholesky`,
+  `diag_pre_multiply`, and `z_1` in it (the same non-centered form).
+- Defaults without `prior`: LKJ(1), half-Student-$t$(3, 0, 2.5) on SDs,
+  flat on slopes. `prior_summary()` shows them.
+
+**Discussion (~5 min; Q3 leads into the work session)**
+
+- Q1 (12 more stands or 20 more years?) *Land:* more stands. $\rho$ and
+  the $\tau$s describe the population of stands, and there are only 12
+  draws of $(a_j, b_j)$. Longer records sharpen each stand's estimate
+  but can't add stands; past a point they stop helping.
+- Q2 (brms vs. your own Stan) *Land:* brms for anything a formula can
+  say (fast, well-tested, sensible parameterizations); your own Stan
+  for custom process models (nonlinear functions, latent states,
+  observation models) or when you need control over every prior.
+- Q3 (your project's groups) *Land:* open; push each student to name the
+  grouping factor, how many levels it has, and whether slopes plausibly
+  vary.
+
+**If time: ridge as a prior (~6 min)** (planned for Week 10, never done).
+The six board steps and the `ridge_prior.html` walkthrough are in
+`NOTES_Week10_WebPageGuide.pdf` ("Ridge is a prior"); the widget is on
+the Week 10 page (`#bayesian`). Close with the page's bonus point: a
+random effect is a ridge penalty on the stand deviations, with $\tau$
+estimated from the data instead of chosen by cross-validation.
+
+**Then:** final-project work session for the rest of the lab period.

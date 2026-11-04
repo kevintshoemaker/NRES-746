@@ -528,7 +528,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pages built after the fact).
+Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Week 1-9 pages built after the fact).
 
 - **Week 1 page (built Nov. 1, after the week):**
   `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
@@ -632,27 +632,34 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
     module. The Lab 9 pre-lab (Nov. 3) covered `#linear-algebra` much
     as written.
 
-- **Week 12 plan (Nov. 9-10; decided Nov. 4, not yet built):**
-  Monday opens with Week 11's uncovered sections 4 (AR(1)) and 5 (why
-  these models are harder to fit); the instructor wants them moved to
-  Week 12. When building, move them (with the `#variance-discussion`
-  prompts and the combined RI + AR(1) bonus) onto the Week 12 page and
-  its script/guide, leave a short pointer on the Week 11 page, and
-  repoint any links to `#ar1`/`#harder`. Then Monday covers "standard"
-  mixed models in R (`lmer()`, `nlme`, `glmmTMB`), not Bayesian
-  multilevel models; with AR(1) added, plan for Monday to run long and
-  mark the R-package tour's extras as bonus. Bayesian mixed models
-  move to the Lab 10 lecture portion (Tuesday, before lab). The
-  instructor also wants a whiteboard demo there, if time allows: ridge
-  regression = a Normal(0, $\tau^2$) prior on the coefficients
-  ($\lambda = 1/(2\tau^2)$; lasso = Laplace prior). It was planned for
-  Week 10 and never done; Week 10's page has it in the bonus
-  `#bayesian` H1 and the guide has a ~6-min version. No
-  Wednesday (Veterans Day). `CourseSchedule.csv` is already updated
-  (Nov. 2 Wednesday = random intercept; Nov. 9 Monday = AR(1) + mixed
-  models in R) and `schedule.Rmd` re-rendered; add the Week 12 page's
-  links to its `links` table when built.
-  - **Possible bonus section:** "multivariate" non-normal data (a
+- **Week 12 (Nov. 9-10), built Nov. 4, not yet taught:** Monday +
+  Tuesday only (Veterans Day). Page `Week12_MixedModels.Rmd`, H1s
+  `#mixed-models-r` (Monday: Week 11's AR(1) `#ar1`, why harder
+  `#harder`, and discussion `#variance-discussion` moved here verbatim;
+  random slopes `#random-slopes` and the R packages `#packages`; bonuses
+  RI + AR(1) `#bonus-combined` and Poisson GLMM by `integrate()` vs.
+  `glmmTMB` `#glmm-by-hand`) and `#bayesian-hierarchical` (Tuesday lab
+  lecture, ~60 min with laptops: partial pooling `#partial-pooling`,
+  LKJ `#lkj`, Stan `#stan-model`, brms `#brms`, discussion, ridge-as-
+  prior bonus `#ridge-prior`). Week 11's page keeps a pointer section
+  `#ar1`; its script lost sections 4-5. Example: simulated drought
+  sensitivity (seed 12; 12 stands, records 30/24/18/12/8/5 yr x 2,
+  194 stand-years; precip in 10-cm units centered at 20 cm; truth
+  $\mu$ 0.9, 0.25, $\tau$ 0.15, 0.10, $\rho$ -0.6, $\sigma$ 0.12).
+  `optim()`, `lmer`, `lme`, `glmmTMB` all give logLik 114.4497
+  ($\hat\rho$ -0.57); Stan (non-centered, `lkj_corr_cholesky(2)`,
+  seed 746) gives $\rho$ median -0.37 (90% -0.76 to 0.17); S09-S12
+  alone give a singular fit with $\hat\rho = -1$. Partial pooling did
+  *not* help the short-record stands in this data set; the page says
+  so and cites a 500-sim average (slope error 0.070 -> 0.051). Widgets
+  `partial_pooling.html`, `lkj_prior.html`. Script
+  `CODE_Week12_MixedModels.R`, guide `NOTES_Week12_WebPageGuide.Rmd`.
+  No Monday WOD; required take-home WOD *Formula to Model*
+  (`WOD_Week12_Lecture1_FormulaToModel`, due Nov. 16) + key. Tuesday
+  is Lab 10 = lecture + final-project work session, no Act. Legacy
+  `stan_demo2.stan` / `rcode/stan_demo.R` (Oct. 2025 random slope with
+  LKJ) has a bug: `rmvnorm()` never gets `sigma = vcv`; not used.
+  - **Possible bonus section (not built):** "multivariate" non-normal data (a
     student asked about multivariate Poisson/gamma after the MVN). No
     general multivariate gamma/Poisson exists (the MVN is unusual in
     having mean and covariance as separate parameters); you choose where
@@ -769,7 +776,7 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
   (one-page Stan setup) is linked from the page and the schedule.
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
-  1-8, then "Other"). `schedule.Rmd` has a `links` table (53 links;
+  1-8, then "Other"). `schedule.Rmd` has a `links` table (71 links;
   `stopifnot` checks weeks and files). Week 1's cells (both lectures
   and the lab) link the Week 1 page (Week 2's cells, including
   the lab, link the Week 2 page; Week 3's lab and Wednesday
@@ -778,7 +785,7 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
   pages (FINALPROJ, LAB3, LAB4, LECTURE8, LECTURE9, Links,
-  Week1-Week11; schedule and the newest week page get it
+  Week1-Week12; schedule and the newest week page get it
   by re-rendering); LECTURE10, GIT-tutorial, MAIN, and LAB1, 2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
   `sed`). Long menus scroll via
@@ -875,7 +882,7 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
     Wednesday cell links `#dags`.
   - **Monday and Lab 8 as taught** (reported Nov. 4): everything
     except the bonus Bayesian material; the ridge-as-prior demo moves
-    to Lab 10's lecture (see Week 12 plan).
+    to Lab 10's lecture (an "if time" item in the Week 12 guide).
 - **Open item:** archived `NOTES_Lab8` still says Act 1 2c "sets up
   Act 2 3b" (stale after the Part 3 rewrite; left because it's
   archived). Optional readings stay listed in `CourseSchedule.csv`,

@@ -1,0 +1,68 @@
+<div class="w746pp" id="pp">
+<style>
+.w746pp{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746pp .row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.w746pp .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:190px}
+.w746pp input[type=range]{flex:1}
+.w746pp .val{font-weight:600;min-width:46px}
+.w746pp .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746pp .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746pp .card .k{font-size:13px;color:var(--ink2)}
+.w746pp .card .v{font-size:20px;font-weight:600;color:var(--ink)}
+.w746pp .ax{stroke:var(--muted);stroke-width:1}
+.w746pp .lab{fill:var(--ink2);font-size:13px}
+.w746pp .tk{fill:var(--muted);font-size:11px}
+.w746pp .legend{font-size:13px;color:var(--ink2);margin-top:2px}
+@media (max-width:600px){.w746pp .row label{min-width:120px}.w746pp .cards{grid-template-columns:1fr}}
+</style>
+<div class="row"><label for="pp-tau">Among-stand SD &sigma;<sub>b</sub></label><input type="range" id="pp-tau" min="0" max="0.4" step="0.002" value="0.114"><span class="val" id="pp-tauout"></span></div>
+<div class="row"><label for="pp-sig">Within-stand SD &sigma;</label><input type="range" id="pp-sig" min="0.02" max="0.8" step="0.002" value="0.230"><span class="val" id="pp-sigout"></span></div>
+<div class="cards">
+  <div class="card"><div class="k">Weight on own mean, 30 years</div><div class="v" id="pp-v1"></div></div>
+  <div class="card"><div class="k">Weight on own mean, 5 years</div><div class="v" id="pp-v2"></div></div>
+  <div class="card"><div class="k">Overall mean &mu;&#770;</div><div class="v" id="pp-v3"></div></div>
+</div>
+<svg viewBox="0 0 640 320" width="100%" role="img" aria-label="Each stand's own mean ring width and its partially pooled estimate, with arrows showing the shrinkage toward the overall mean."><g id="pp-plot"></g></svg>
+<div class="legend">Open circles: each stand's own mean (no pooling). Filled circles: partially pooled estimates. Dashed line: the overall mean (complete pooling).</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+// pinyon drought-sensitivity data (seed 12): each stand's mean ring width and number of years
+const ybar=[0.704,0.838,0.593,0.911,0.881,0.867,0.895,0.916,0.955,1.090,0.772,1.038];
+const n=[30,30,24,24,18,18,12,12,8,8,5,5];
+const W=640,H=320,L=56,R=20,T=16,B=48,ylo=0.5,yhi=1.15;
+const sx=j=>L+(j+0.5)/12*(W-L-R);
+const sy=y=>H-B-(y-ylo)/(yhi-ylo)*(H-T-B);
+const tau=document.getElementById('pp-tau'),sig=document.getElementById('pp-sig');
+function draw(){
+  const t=parseFloat(tau.value),s=parseFloat(sig.value);
+  document.getElementById('pp-tauout').textContent=t.toFixed(3);
+  document.getElementById('pp-sigout').textContent=s.toFixed(3);
+  // weights w_j = t^2 / (t^2 + s^2/n_j); mu = precision-weighted mean of the stand means
+  const v=n.map(nj=>t*t+s*s/nj);
+  const mu=ybar.reduce((a,y,j)=>a+y/v[j],0)/v.reduce((a,vj)=>a+1/vj,0);
+  const w=n.map(nj=>t*t/(t*t+s*s/nj));
+  const est=ybar.map((y,j)=>mu+w[j]*(y-mu));
+  document.getElementById('pp-v1').textContent=w[0].toFixed(2);
+  document.getElementById('pp-v2').textContent=w[11].toFixed(2);
+  document.getElementById('pp-v3').textContent=mu.toFixed(3);
+  const g=document.getElementById('pp-plot');g.innerHTML='';
+  el('line',{class:'ax',x1:L,y1:H-B,x2:W-R,y2:H-B},g);
+  el('line',{class:'ax',x1:L,y1:T,x2:L,y2:H-B},g);
+  for(let y=0.5;y<=1.15+1e-9;y+=0.1){el('line',{class:'ax',x1:L-4,y1:sy(y),x2:L,y2:sy(y)},g);txt('tk',L-7,sy(y)+4,y.toFixed(1),g,'end');}
+  for(let j=0;j<12;j++){txt('tk',sx(j),H-B+15,'S'+String(j+1).padStart(2,'0'),g);txt('tk',sx(j),H-B+28,n[j]+' yr',g);}
+  const yl=txt('lab',16,(T+H-B)/2,'Mean ring width (mm)',g);yl.setAttribute('transform','rotate(-90 16 '+((T+H-B)/2)+')');
+  el('line',{x1:L,y1:sy(mu),x2:W-R,y2:sy(mu),stroke:'#8a8a8a','stroke-width':1.5,'stroke-dasharray':'5 4'},g);
+  for(let j=0;j<12;j++){
+    el('line',{x1:sx(j),y1:sy(ybar[j]),x2:sx(j),y2:sy(est[j]),stroke:'steelblue','stroke-width':2},g);
+    el('circle',{cx:sx(j),cy:sy(ybar[j]),r:5,fill:'white',stroke:'#222','stroke-width':1.5},g);
+    el('circle',{cx:sx(j),cy:sy(est[j]),r:4.5,fill:'steelblue'},g);
+  }
+}
+tau.addEventListener('input',draw);sig.addEventListener('input',draw);
+draw();
+})();
+</script>
+</div>

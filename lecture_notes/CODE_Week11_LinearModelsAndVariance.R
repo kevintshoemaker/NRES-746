@@ -1,6 +1,6 @@
 
 #  NRES 746, Week 11: linear models as likelihoods, linear algebra, modeling variance =========
-#  R demos only; sections match the Week 11 web page. Needs mvtnorm, lme4, nlme.
+#  R demos only; sections match the Week 11 web page. Needs mvtnorm, lme4.
 
 # STANDARD STATISTICS AS LIKELIHOOD MODELS ============================================
 
@@ -163,85 +163,7 @@ sb_hat^2 / (sb_hat^2 + s_hat^2)       # intraclass correlation
 
 #  [PAUSE] The among-stand SD comes from only four stands. How much would you trust it?
 
-# 4. Autocorrelation: AR(1) -----------------------------------------------------------
+# 4. Autocorrelation and fitting --------------------------------------------------------
 
-chron_a <- chron[chron$stand == "A", ]
-chron_a$year_c <- chron_a$year - 2008          # centered year: 0 = 2008
-fit_lm_a <- lm(width ~ precip + year_c, data = chron_a)
-summary(fit_lm_a)$coefficients
-par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 1))
-plot(chron_a$year, resid(fit_lm_a), type = "b", pch = 19, xlab = "Year", ylab = "Residual")
-abline(h = 0, lty = 2)
-acf(resid(fit_lm_a), main = "", lag.max = 10)
-par(mfrow = c(1, 1))
-
-# lag-1 residual correlation in each stand (stand A's is inside the bounds, +/-0.39)
-lag1 <- function(d) {
-  d$year_c <- d$year - 2008
-  acf(resid(lm(width ~ precip + year_c, data = d)), plot = FALSE)$acf[2]
-}
-round(sapply(split(chron, chron$stand), lag1), 2)
-
-# AR(1) covariance: V_st = sigma^2 / (1 - rho^2) * rho^|s - t|
-lags <- abs(outer(1:25, 1:25, "-"))
-V_ar1 <- function(rho, sigma) sigma^2 / (1 - rho^2) * rho^lags
-round(V_ar1(0.6, 0.08)[1:5, 1:5], 4)
-
-# mean: a + b * precip + c * year_c; AR(1) errors with rho = tanh(par[4]), sigma = exp(par[5])
-nll_ar1 <- function(par) {
-  mu <- par[1] + par[2] * chron_a$precip + par[3] * chron_a$year_c
-  V <- V_ar1(tanh(par[4]), exp(par[5]))
-  -dmvnorm(chron_a$width, mu, V, log = TRUE)
-}
-fit_ar1 <- optim(c(coef(fit_lm_a), 0, log(0.1)), nll_ar1, method = "BFGS", hessian = TRUE)
-c(a = fit_ar1$par[1], b = fit_ar1$par[2], c = fit_ar1$par[3],
-  rho = tanh(fit_ar1$par[4]), sigma = exp(fit_ar1$par[5]))
-
-library(nlme)
-fit_gls <- gls(width ~ precip + year_c, data = chron_a,
-               correlation = corAR1(form = ~ year), method = "ML")
-coef(fit_gls)
-coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # rho
-
-# trend: estimate, SE, p under independence vs. AR(1) (Hessian SE)
-se_ar1 <- sqrt(diag(solve(fit_ar1$hessian)))
-summary(fit_lm_a)$coefficients["year_c", ]
-c(estimate = fit_ar1$par[3], se = se_ar1[3], p = 2 * pnorm(-abs(fit_ar1$par[3] / se_ar1[3])))
-
-#  [PAUSE] With rho near 0.9, what does one AR(1) series look like? How would you tell it from a slow trend?
-
-# 5. Why these models are harder to fit -----------------------------------------------
-
-# milliseconds per NLL evaluation, averaged over 'reps' evaluations
-time_nll <- function(n, reps = 10) {
-  y <- rnorm(n)
-  V <- 0.5^abs(outer(1:n, 1:n, "-"))
-  ms <- function(expr) 1000 * system.time(for (i in 1:reps) expr)[["elapsed"]] / reps
-  c(n = n, independent = ms(sum(dnorm(y, 0, 1, log = TRUE))),
-    mvn = ms(dmvnorm(y, rep(0, n), V, log = TRUE)))
-}
-set.seed(1)
-timings <- t(sapply(c(250, 500, 1000, 2000), time_nll))
-timings
-
-# Bonus: a random intercept and AR(1) together ----------------------------------------
-
-Z_chron <- model.matrix(~ 0 + stand, data = chron)
-V_combined <- function(sigma_b, rho, sigma) {
-  sigma_b^2 * Z_chron %*% t(Z_chron) + kronecker(diag(4), V_ar1(rho, sigma))
-}
-nll_combined <- function(par) {
-  mu <- par[1] + par[2] * chron$precip
-  V <- V_combined(exp(par[3]), tanh(par[4]), exp(par[5]))
-  -dmvnorm(chron$width, mu, V, log = TRUE)
-}
-fit_comb <- optim(c(0.4, 0.02, log(0.1), 0, log(0.1)), nll_combined, method = "BFGS",
-                  control = list(maxit = 1000))
-c(a = fit_comb$par[1], b = fit_comb$par[2], sigma_b = exp(fit_comb$par[3]),
-  rho = tanh(fit_comb$par[4]), sigma = exp(fit_comb$par[5]))
-
-fit_lme <- lme(width ~ precip, random = ~ 1 | stand, data = chron,
-               correlation = corAR1(form = ~ year | stand), method = "ML")
-fixef(fit_lme)
-coef(fit_lme$modelStruct$corStruct, unconstrained = FALSE)
-c(-fit_comb$value, logLik(fit_lme))       # same maximized log-likelihood
+# AR(1), why structured-variance models are harder to fit, and the combined
+# random intercept + AR(1) bonus moved to CODE_Week12_MixedModels.R

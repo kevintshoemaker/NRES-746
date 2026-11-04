@@ -1,0 +1,93 @@
+<div class="w746lk" id="lk">
+<style>
+.w746lk{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746lk .modes{display:flex;flex-wrap:wrap;gap:18px;margin-bottom:10px;font-size:15px;color:var(--ink2)}
+.w746lk .modes label{font-weight:400;margin:0;cursor:pointer}
+.w746lk .row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.w746lk .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746lk input[type=range]{flex:1}
+.w746lk .val{font-weight:600;min-width:46px}
+.w746lk .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746lk .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746lk .card .k{font-size:13px;color:var(--ink2)}
+.w746lk .card .v{font-size:20px;font-weight:600;color:var(--ink)}
+.w746lk .ax{stroke:var(--muted);stroke-width:1}
+.w746lk .lab{fill:var(--ink2);font-size:13px}
+.w746lk .tk{fill:var(--muted);font-size:11px}
+@media (max-width:600px){.w746lk .row label{min-width:110px}.w746lk .cards{grid-template-columns:1fr}}
+</style>
+<div class="modes">
+  <span>Size of the correlation matrix:</span>
+  <label><input type="radio" name="lk-k" value="2" checked> 2 &times; 2 (intercept, slope)</label>
+  <label><input type="radio" name="lk-k" value="4"> 4 &times; 4</label>
+  <label><input type="radio" name="lk-k" value="10"> 10 &times; 10</label>
+</div>
+<div class="row"><label for="lk-eta">Shape &eta;</label><input type="range" id="lk-eta" min="0.5" max="10" step="0.1" value="2"><span class="val" id="lk-etaout"></span></div>
+<div class="cards">
+  <div class="card"><div class="k">Prior P(|&rho;| &gt; 0.5)</div><div class="v" id="lk-v1"></div></div>
+  <div class="card"><div class="k">Prior P(|&rho;| &gt; 0.8)</div><div class="v" id="lk-v2"></div></div>
+  <div class="card"><div class="k">Prior SD of &rho;</div><div class="v" id="lk-v3"></div></div>
+</div>
+<svg viewBox="0 0 640 300" width="100%" role="img" aria-label="Prior density of one correlation under the LKJ prior, with the uniform density for comparison."><g id="lk-plot"></g></svg>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+function lgamma(x){
+  const g=7,c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(x<0.5)return Math.log(Math.PI/Math.abs(Math.sin(Math.PI*x)))-lgamma(1-x);
+  x-=1;let a=c[0];const t=x+g+0.5;for(let i=1;i<9;i++)a+=c[i]/(x+i);
+  return 0.5*Math.log(2*Math.PI)+(x+0.5)*Math.log(t)-t+Math.log(a);
+}
+// marginal of one correlation under LKJ(eta) for a K x K matrix: (r+1)/2 ~ Beta(a, a), a = eta - 1 + K/2
+function dens(r,a){const lb=2*lgamma(a)-lgamma(2*a);return Math.exp((a-1)*Math.log(1-r*r)-(2*a-1)*Math.log(2)-lb);}
+// regularized incomplete beta I_x(a, b) by continued fraction (Numerical Recipes betacf)
+function betacf(x,a,b){
+  let qab=a+b,qap=a+1,qam=a-1,c=1,d=1-qab*x/qap;if(Math.abs(d)<1e-30)d=1e-30;d=1/d;let h=d;
+  for(let m=1;m<=200;m++){const m2=2*m;let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;
+    const del=d*c;h*=del;if(Math.abs(del-1)<1e-12)break;}
+  return h;
+}
+function pbeta(x,a,b){
+  if(x<=0)return 0;if(x>=1)return 1;
+  const bt=Math.exp(lgamma(a+b)-lgamma(a)-lgamma(b)+a*Math.log(x)+b*Math.log(1-x));
+  return x<(a+1)/(a+b+2)?bt*betacf(x,a,b)/a:1-bt*betacf(1-x,b,a)/b;
+}
+const W=640,H=300,L=56,R=20,T=16,B=44;
+const sx=r=>L+(r+1)/2*(W-L-R);
+const eta=document.getElementById('lk-eta');
+let K=2;
+function draw(){
+  const e=parseFloat(eta.value);
+  document.getElementById('lk-etaout').textContent=e.toFixed(1);
+  const a=e-1+K/2;
+  const n=400,rs=[],ds=[];
+  for(let i=1;i<n;i++){const r=-1+2*i/n;rs.push(r);ds.push(dens(r,a));}
+  // (r + 1)/2 ~ Beta(a, a): P(|r| > c) = 2 * pbeta((1 - c)/2), Var(r) = 1/(2a + 1)
+  document.getElementById('lk-v1').textContent=(2*pbeta(0.25,a,a)).toFixed(2);
+  document.getElementById('lk-v2').textContent=(2*pbeta(0.1,a,a)).toFixed(2);
+  document.getElementById('lk-v3').textContent=Math.sqrt(1/(2*a+1)).toFixed(2);
+  const ymax=Math.max(1.6,Math.min(6,Math.max(...ds)*1.1));
+  const sy=d=>H-B-Math.min(d,ymax)/ymax*(H-T-B);
+  const g=document.getElementById('lk-plot');g.innerHTML='';
+  el('line',{class:'ax',x1:L,y1:H-B,x2:W-R,y2:H-B},g);
+  el('line',{class:'ax',x1:L,y1:T,x2:L,y2:H-B},g);
+  [-1,-0.5,0,0.5,1].forEach(r=>{el('line',{class:'ax',x1:sx(r),y1:H-B,x2:sx(r),y2:H-B+4},g);txt('tk',sx(r),H-B+16,r.toString(),g);});
+  const step=ymax>3?1:0.5;
+  for(let y=0;y<=ymax+1e-9;y+=step){el('line',{class:'ax',x1:L-4,y1:sy(y),x2:L,y2:sy(y)},g);txt('tk',L-7,sy(y)+4,y.toString(),g,'end');}
+  txt('lab',(L+W-R)/2,H-8,'Correlation ρ',g);
+  const yl=txt('lab',16,(T+H-B)/2,'Prior density',g);yl.setAttribute('transform','rotate(-90 16 '+((T+H-B)/2)+')');
+  el('line',{x1:sx(-1),y1:sy(0.5),x2:sx(1),y2:sy(0.5),stroke:'#8a8a8a','stroke-width':1.5,'stroke-dasharray':'5 4'},g);
+  let dpath='';rs.forEach((r,i)=>{dpath+=(i?'L':'M')+sx(r).toFixed(1)+' '+sy(ds[i]).toFixed(1);});
+  el('path',{d:dpath,fill:'none',stroke:'steelblue','stroke-width':2.5},g);
+  txt('tk',W-R-4,sy(0.5)-6,'uniform',g,'end');
+}
+eta.addEventListener('input',draw);
+document.querySelectorAll('input[name=lk-k]').forEach(b=>b.addEventListener('change',()=>{K=parseInt(b.value);draw();}));
+draw();
+})();
+</script>
+</div>
