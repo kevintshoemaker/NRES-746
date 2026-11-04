@@ -168,7 +168,8 @@ materials".
 **Calibration: lectures cover about half of what's planned.** Weeks
 7-8 each covered 3-4 of 7-8 planned sections; Week 10 Wednesday
 dropped its whole planned topic (Bayesian comparison) for an unplanned
-sidebar (causal DAGs). Plan **3-4 sub-topics**
+sidebar (causal DAGs); Week 11 Wednesday got through the WOD and the
+random intercept, 2 of 4 planned sections. Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
 marked "Bonus" section. A derivation eats its whole slot, so put
@@ -526,7 +527,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Sun., Nov. 1, 2026 (end of Week 10; Week 11 built; Week 1-9 pages built after the fact).
+Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pages built after the fact).
 
 - **Week 1 page (built Nov. 1, after the week):**
   `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
@@ -596,7 +597,7 @@ Snapshot: Sun., Nov. 1, 2026 (end of Week 10; Week 11 built; Week 1-9 pages buil
   `lecture_notes/archive/`; LECTURE2 is in `archive/`, replaced in the
   navbar by the Week 3 page. No as-taught report for Week 3.
 
-- **Week 11 (Nov. 2-4), built Oct. 28, not yet taught:** Veterans Day
+- **Week 11 (Nov. 2-4), built Oct. 28, taught:** Veterans Day
   is Wed., Nov. 11 (Week 12 has Monday + Lab 10 only). Page
   `Week11_LinearModelsAndVariance.Rmd` (H1s `#standard` = Bolker Ch. 9,
   lm/ANCOVA via `optim()`, model matrix, GLMs; `#linear-algebra` = Lab 9
@@ -617,15 +618,32 @@ Snapshot: Sun., Nov. 1, 2026 (end of Week 10; Week 11 built; Week 1-9 pages buil
   eigenvector talk); closing discussion is
   Part 2 muddiest points; the one-sigma-per-plot bonus was dropped). Script
   `CODE_Week11_LinearModelsAndVariance.R`, guide
-  `NOTES_Week11_WebPageGuide.Rmd`. Push the CSV before Lab 9 goes out.
+  `NOTES_Week11_WebPageGuide.Rmd`. Lab 9 data CSV is pushed and loads.
+  Ring-width ACF text (Nov. 4): stand A's lag-1 residual ACF 0.33 is
+  inside the $\pm 0.39$ bounds ("not detected, not absent"); a chunk
+  shows all four stands positive (0.33, 0.33, 0.48, 0.41).
+  - **As taught:** Wednesday (Nov. 4) covered the Two Cores WOD and
+    sections 1-3 of `#variance` (through the random intercept's
+    block-diagonal $V$). **Not covered:** section 4 AR(1) (`#ar1`),
+    section 5 why harder (`#harder`), the `#variance-discussion`
+    prompts (both lean on sections 4-5), and both bonuses. The guide
+    has a dated note. Monday and Lab 9 not yet reported.
 
 - **Week 12 plan (Nov. 9-10; decided Nov. 4, not yet built):**
-  Monday covers "standard" mixed models in R (`lmer()`, `nlme`,
-  `glmmTMB`), not Bayesian multilevel models. Bayesian mixed models
+  Monday opens with Week 11's uncovered sections 4 (AR(1)) and 5 (why
+  these models are harder to fit); the instructor wants them moved to
+  Week 12. When building, move them (with the `#variance-discussion`
+  prompts and the combined RI + AR(1) bonus) onto the Week 12 page and
+  its script/guide, leave a short pointer on the Week 11 page, and
+  repoint any links to `#ar1`/`#harder`. Then Monday covers "standard"
+  mixed models in R (`lmer()`, `nlme`, `glmmTMB`), not Bayesian
+  multilevel models; with AR(1) added, plan for Monday to run long and
+  mark the R-package tour's extras as bonus. Bayesian mixed models
   move to the Lab 10 lecture portion (Tuesday, before lab). No
-  Wednesday (Veterans Day). When building, update `CourseSchedule.csv`
-  (row "Nov. 9" still says "Bayesian multilevel models" for Monday) and
-  re-render `schedule.Rmd`.
+  Wednesday (Veterans Day). `CourseSchedule.csv` is already updated
+  (Nov. 2 Wednesday = random intercept; Nov. 9 Monday = AR(1) + mixed
+  models in R) and `schedule.Rmd` re-rendered; add the Week 12 page's
+  links to its `links` table when built.
   - **Possible bonus section:** "multivariate" non-normal data (a
     student asked about multivariate Poisson/gamma after the MVN). No
     general multivariate gamma/Poisson exists (the MVN is unusual in
