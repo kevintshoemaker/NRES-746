@@ -599,7 +599,7 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Wee
   navbar by the Week 3 page. No as-taught report for Week 3.
 
 - **Week 11 (Nov. 2-4), built Oct. 28, taught:** Veterans Day
-  is Wed., Nov. 11 (Week 12 has Monday + Lab 10 only). Page
+  is Wed., Nov. 11 (Week 12 has Monday + the Tuesday lab period only). Page
   `Week11_LinearModelsAndVariance.Rmd` (H1s `#standard` = Bolker Ch. 9,
   lm/ANCOVA via `optim()`, model matrix, GLMs; `#linear-algebra` = Lab 9
   pre-lab, a fuller App. A.8; `#variance` = random intercept -> block
@@ -656,7 +656,8 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Wee
   `CODE_Week12_MixedModels.R`, guide `NOTES_Week12_WebPageGuide.Rmd`.
   No Monday WOD; required take-home WOD *Formula to Model*
   (`WOD_Week12_Lecture1_FormulaToModel`, due Nov. 16) + key. Tuesday
-  is Lab 10 = lecture + final-project work session, no Act. Legacy
+  ("Lab period, Week 12", not a numbered lab) = lecture + final-project
+  work session, no Act; the next formal lab is Lab 10 (Nov. 23). Legacy
   `stan_demo2.stan` / `rcode/stan_demo.R` (Oct. 2025 random slope with
   LKJ) has a bug: `rmvnorm()` never gets `sigma = vcv`; not used.
   - **Possible bonus section (not built):** "multivariate" non-normal data (a
@@ -882,7 +883,7 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Wee
     Wednesday cell links `#dags`.
   - **Monday and Lab 8 as taught** (reported Nov. 4): everything
     except the bonus Bayesian material; the ridge-as-prior demo moves
-    to Lab 10's lecture (an "if time" item in the Week 12 guide).
+    to the Week 12 lab period (an "if time" item in the Week 12 guide).
 - **Open item:** archived `NOTES_Lab8` still says Act 1 2c "sets up
   Act 2 3b" (stale after the Part 3 rewrite; left because it's
   archived). Optional readings stay listed in `CourseSchedule.csv`,
