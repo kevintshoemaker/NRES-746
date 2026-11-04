@@ -644,8 +644,8 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
   mark the R-package tour's extras as bonus. Bayesian mixed models
   move to the Lab 10 lecture portion (Tuesday, before lab). The
   instructor also wants a whiteboard demo there, if time allows: ridge
-  regression = a Normal(0, $	au^2$) prior on the coefficients
-  ($\lambda = 1/(2	au^2)$; lasso = Laplace prior). It was planned for
+  regression = a Normal(0, $\tau^2$) prior on the coefficients
+  ($\lambda = 1/(2\tau^2)$; lasso = Laplace prior). It was planned for
   Week 10 and never done; Week 10's page has it in the bonus
   `#bayesian` H1 and the guide has a ~6-min version. No
   Wednesday (Veterans Day). `CourseSchedule.csv` is already updated
