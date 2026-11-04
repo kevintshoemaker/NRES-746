@@ -175,6 +175,13 @@ abline(h = 0, lty = 2)
 acf(resid(fit_lm_a), main = "", lag.max = 10)
 par(mfrow = c(1, 1))
 
+# lag-1 residual correlation in each stand (stand A's is inside the bounds, +/-0.39)
+lag1 <- function(d) {
+  d$year_c <- d$year - 2008
+  acf(resid(lm(width ~ precip + year_c, data = d)), plot = FALSE)$acf[2]
+}
+round(sapply(split(chron, chron$stand), lag1), 2)
+
 # AR(1) covariance: V_st = sigma^2 / (1 - rho^2) * rho^|s - t|
 lags <- abs(outer(1:25, 1:25, "-"))
 V_ar1 <- function(rho, sigma) sigma^2 / (1 - rho^2) * rho^lags
