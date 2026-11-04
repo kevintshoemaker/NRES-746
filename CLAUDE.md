@@ -629,7 +629,8 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
     section 5 why harder (`#harder`), the `#variance-discussion`
     prompts (both lean on sections 4-5), and both bonuses. The guide
     has a dated note. Monday (Nov. 2) covered the whole `#standard`
-    module. Lab 9 not yet reported.
+    module. The Lab 9 pre-lab (Nov. 3) covered `#linear-algebra` much
+    as written.
 
 - **Week 12 plan (Nov. 9-10; decided Nov. 4, not yet built):**
   Monday opens with Week 11's uncovered sections 4 (AR(1)) and 5 (why
@@ -641,7 +642,12 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
   mixed models in R (`lmer()`, `nlme`, `glmmTMB`), not Bayesian
   multilevel models; with AR(1) added, plan for Monday to run long and
   mark the R-package tour's extras as bonus. Bayesian mixed models
-  move to the Lab 10 lecture portion (Tuesday, before lab). No
+  move to the Lab 10 lecture portion (Tuesday, before lab). The
+  instructor also wants a whiteboard demo there, if time allows: ridge
+  regression = a Normal(0, $	au^2$) prior on the coefficients
+  ($\lambda = 1/(2	au^2)$; lasso = Laplace prior). It was planned for
+  Week 10 and never done; Week 10's page has it in the bonus
+  `#bayesian` H1 and the guide has a ~6-min version. No
   Wednesday (Veterans Day). `CourseSchedule.csv` is already updated
   (Nov. 2 Wednesday = random intercept; Nov. 9 Monday = AR(1) + mixed
   models in R) and `schedule.Rmd` re-rendered; add the Week 12 page's
@@ -867,7 +873,9 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 not yet built; Week 1-9 pa
     now "Bonus: Bayesian model comparison and shrinkage priors"
     (`#bayesian`). Script and delivery guide match; the schedule's
     Wednesday cell links `#dags`.
-  - **Not yet reported:** what Monday and Lab 8 actually covered.
+  - **Monday and Lab 8 as taught** (reported Nov. 4): everything
+    except the bonus Bayesian material; the ridge-as-prior demo moves
+    to Lab 10's lecture (see Week 12 plan).
 - **Open item:** archived `NOTES_Lab8` still says Act 1 2c "sets up
   Act 2 3b" (stale after the Part 3 rewrite; left because it's
   archived). Optional readings stay listed in `CourseSchedule.csv`,
