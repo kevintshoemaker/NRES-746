@@ -711,12 +711,22 @@ round(data.frame(rho = rhos, conditional_sd = sqrt(1 - rhos^2),
 with coefficient $\rho^2$, which gives the last two columns.) Gibbs
 works well when parameters are close to independent, however many
 there are, and poorly when they are strongly correlated. The
-correlation, not the number of parameters, is what matters.
+correlation, not the number of parameters, is what matters, whether
+there are 2 parameters or 200. Gibbs looks good on the banana in
+[Chi Feng's gallery](https://chi-feng.github.io/mcmc-demo/app.html)
+because that banana is symmetric and lined up with the axes: its
+overall correlation is near zero, and one horizontal move can cross
+from one arm to the other. Tilt the banana, or stretch any posterior
+along a diagonal, and Gibbs slows down a lot.
 
 ## 3. Hamiltonian Monte Carlo {#hmc-algorithm}
 
-HMC uses the *gradient* (slope) of the log posterior to make long,
-well-aimed proposals. Picture the negative log posterior as a bowl, so
+HMC, the main advance behind Stan, borrows a physics analogy: a
+frictionless puck sliding over a curved surface, where the sum of its
+kinetic and potential energy stays constant. Unlike random-walk
+Metropolis, it uses the *gradient* of the log posterior (the vector of
+its partial derivatives with respect to each parameter) to know which
+way is downhill, and so makes long, well-aimed proposals. Picture the negative log posterior as a bowl, so
 "downhill" means toward more plausible parameter values, and slide a
 frictionless puck across it:
 
@@ -728,7 +738,8 @@ draw_puck()
    distribution.
 2. Let it **slide** for $L$ small time steps of size $\epsilon$. Going
    downhill it speeds up, converting potential energy into kinetic
-   energy; going uphill it slows, and eventually turns back. Each step
+   energy and gaining what it needs to climb the far side of the
+   valley; going uphill it slows, and eventually turns back. Each step
    uses the gradient to update the momentum ("leapfrog" steps).
 3. Where it stops is the **proposal**. Accept it with the Metropolis
    rule applied to the total energy,
@@ -738,6 +749,9 @@ draw_puck()
 Exact physics would conserve $H$, so every proposal would be accepted.
 The leapfrog steps are approximate, and the accept/reject step corrects
 for their error; with a small $\epsilon$ nearly everything is accepted.
+So the puck can travel a long way in one iteration while staying among
+the plausible values (the **typical set**), and those distant proposals
+are still almost always accepted.
 The momentum is drawn fresh each iteration and then discarded, so the
 recorded draws come from the posterior alone. HMC is still a
 Metropolis algorithm. What's new is a proposal that travels far and is
@@ -829,7 +843,21 @@ A few details matter in practice:
 ## 4. Stan: the myxomatosis model {#stan}
 
 Stan is a language for writing down a model; it compiles the model to
-C++ and samples it with NUTS. We run it from R with the `cmdstanr`
+C++ and samples it with NUTS. Like any MCMC sampler, it needs a
+description of the data, the parameter space to sample, the
+likelihood, the priors, and (optionally) starting values for the
+chains. It then proposes steps through parameter space and accepts or
+rejects each one, as the Metropolis sampler above does. Reasons to use
+it rather than writing your own sampler:
+
+- it uses advanced methods (NUTS) to explore the parameter space
+  thoroughly and efficiently;
+- compiled C++ runs much faster than an MCMC loop in R;
+- it scales to thousands of parameters;
+- its errors and warnings say whether the sampling is working.
+
+The main limitation is that the parameter space must be continuous
+(see [when HMC struggles](#hmc-failures)). We run it from R with the `cmdstanr`
 package (setup instructions:
 [cmdstanr quick start](lecture_notes/NOTES_Reference_CmdstanrQuickStart.pdf)).
 Here is the Gamma model for the myxomatosis titers, with flat priors
@@ -921,8 +949,9 @@ same banana.
   model's parameterization.
 - **Discrete parameters.** HMC needs gradients, so Stan can't sample
   discrete unknowns (for example, whether a site is truly occupied).
-  They must be summed out of the likelihood first. JAGS and NIMBLE
-  handle them directly.
+  They must be summed out of the likelihood first. That's less of a
+  limitation than it sounds: such models just need to be
+  reparameterized. JAGS and NIMBLE handle them directly.
 - **Several separate modes.** HMC explores locally; well-separated
   valleys can trap it. Run several chains from different starts.
 - **Overhead.** Compiling, and a C++ toolchain to install. For a

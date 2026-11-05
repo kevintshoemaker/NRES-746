@@ -1367,18 +1367,18 @@ round(data.frame(rho = rhos, conditional_sd = sqrt(1 - rhos^2),
 ## 1 0.50          0.866                0.250         0.600
 ## 2 0.95          0.312                0.902         0.051
 ## 3 0.99          0.141                0.980         0.010</code></pre>
-<p>(For this target each Gibbs sweep's <span class="math inline">\(\theta_1\)</span> chain is autocorrelated with coefficient <span class="math inline">\(\rho^2\)</span>, which gives the last two columns.) Gibbs works well when parameters are close to independent, however many there are, and poorly when they are strongly correlated. The correlation, not the number of parameters, is what matters.</p>
+<p>(For this target each Gibbs sweep's <span class="math inline">\(\theta_1\)</span> chain is autocorrelated with coefficient <span class="math inline">\(\rho^2\)</span>, which gives the last two columns.) Gibbs works well when parameters are close to independent, however many there are, and poorly when they are strongly correlated. The correlation, not the number of parameters, is what matters, whether there are 2 parameters or 200. Gibbs looks good on the banana in <a href="https://chi-feng.github.io/mcmc-demo/app.html">Chi Feng's gallery</a> because that banana is symmetric and lined up with the axes: its overall correlation is near zero, and one horizontal move can cross from one arm to the other. Tilt the banana, or stretch any posterior along a diagonal, and Gibbs slows down a lot.</p>
 </div>
 <div id="hmc-algorithm" class="section level2">
 <h2>3. Hamiltonian Monte Carlo</h2>
-<p>HMC uses the <em>gradient</em> (slope) of the log posterior to make long, well-aimed proposals. Picture the negative log posterior as a bowl, so &quot;downhill&quot; means toward more plausible parameter values, and slide a frictionless puck across it:</p>
+<p>HMC, the main advance behind Stan, borrows a physics analogy: a frictionless puck sliding over a curved surface, where the sum of its kinetic and potential energy stays constant. Unlike random-walk Metropolis, it uses the <em>gradient</em> of the log posterior (the vector of its partial derivatives with respect to each parameter) to know which way is downhill, and so makes long, well-aimed proposals. Picture the negative log posterior as a bowl, so &quot;downhill&quot; means toward more plausible parameter values, and slide a frictionless puck across it:</p>
 <p><img src="Week9_MCMC_files/figure-html/puck-1.png" width="480" style="display: block; margin: auto;" /></p>
 <ol style="list-style-type: decimal">
 <li>Give the puck a random <strong>kick</strong>: a momentum <span class="math inline">\(m\)</span> drawn from a normal distribution.</li>
-<li>Let it <strong>slide</strong> for <span class="math inline">\(L\)</span> small time steps of size <span class="math inline">\(\epsilon\)</span>. Going downhill it speeds up, converting potential energy into kinetic energy; going uphill it slows, and eventually turns back. Each step uses the gradient to update the momentum (&quot;leapfrog&quot; steps).</li>
+<li>Let it <strong>slide</strong> for <span class="math inline">\(L\)</span> small time steps of size <span class="math inline">\(\epsilon\)</span>. Going downhill it speeds up, converting potential energy into kinetic energy and gaining what it needs to climb the far side of the valley; going uphill it slows, and eventually turns back. Each step uses the gradient to update the momentum (&quot;leapfrog&quot; steps).</li>
 <li>Where it stops is the <strong>proposal</strong>. Accept it with the Metropolis rule applied to the total energy, <span class="math inline">\(H(\theta, m) = -\log P(\theta \mid y) + \tfrac12 \sum m^2\)</span>: accept with probability <span class="math inline">\(\min(1, e^{-\Delta H})\)</span>.</li>
 </ol>
-<p>Exact physics would conserve <span class="math inline">\(H\)</span>, so every proposal would be accepted. The leapfrog steps are approximate, and the accept/reject step corrects for their error; with a small <span class="math inline">\(\epsilon\)</span> nearly everything is accepted. The momentum is drawn fresh each iteration and then discarded, so the recorded draws come from the posterior alone. HMC is still a Metropolis algorithm. What's new is a proposal that travels far and is still likely to be accepted.</p>
+<p>Exact physics would conserve <span class="math inline">\(H\)</span>, so every proposal would be accepted. The leapfrog steps are approximate, and the accept/reject step corrects for their error; with a small <span class="math inline">\(\epsilon\)</span> nearly everything is accepted. So the puck can travel a long way in one iteration while staying among the plausible values (the <strong>typical set</strong>), and those distant proposals are still almost always accepted. The momentum is drawn fresh each iteration and then discarded, so the recorded draws come from the posterior alone. HMC is still a Metropolis algorithm. What's new is a proposal that travels far and is still likely to be accepted.</p>
 <pre class="r"><code># one HMC step: random momentum kick, L leapfrog steps along the gradient, then accept/reject
 hmc_step &lt;- function(p, log_post, grad, eps, L) {
   m &lt;- rnorm(length(p))
@@ -1570,7 +1570,14 @@ labels();run();
 </div>
 <div id="stan" class="section level2">
 <h2>4. Stan: the myxomatosis model</h2>
-<p>Stan is a language for writing down a model; it compiles the model to C++ and samples it with NUTS. We run it from R with the <code>cmdstanr</code> package (setup instructions: <a href="lecture_notes/NOTES_Reference_CmdstanrQuickStart.pdf">cmdstanr quick start</a>). Here is the Gamma model for the myxomatosis titers, with flat priors on the positive values as before:</p>
+<p>Stan is a language for writing down a model; it compiles the model to C++ and samples it with NUTS. Like any MCMC sampler, it needs a description of the data, the parameter space to sample, the likelihood, the priors, and (optionally) starting values for the chains. It then proposes steps through parameter space and accepts or rejects each one, as the Metropolis sampler above does. Reasons to use it rather than writing your own sampler:</p>
+<ul>
+<li>it uses advanced methods (NUTS) to explore the parameter space thoroughly and efficiently;</li>
+<li>compiled C++ runs much faster than an MCMC loop in R;</li>
+<li>it scales to thousands of parameters;</li>
+<li>its errors and warnings say whether the sampling is working.</li>
+</ul>
+<p>The main limitation is that the parameter space must be continuous (see <a href="#hmc-failures">when HMC struggles</a>). We run it from R with the <code>cmdstanr</code> package (setup instructions: <a href="lecture_notes/NOTES_Reference_CmdstanrQuickStart.pdf">cmdstanr quick start</a>). Here is the Gamma model for the myxomatosis titers, with flat priors on the positive values as before:</p>
 <pre class="r"><code>library(cmdstanr)
 myxo_code &lt;- &quot;
 data {
@@ -1674,7 +1681,7 @@ rbind(metropolis = quantile(keep[, 1], c(0.025, 0.975)),
 <h2>5. When HMC struggles</h2>
 <ul>
 <li><strong>Divergent transitions.</strong> Where the posterior curves sharply, the leapfrog steps overshoot and the energy blows up. Stan flags these as divergences. Don't ignore them: they mark regions the sampler can't reach, so the draws may be biased. Raising <code>adapt_delta</code> (for example to 0.95) forces a smaller <span class="math inline">\(\epsilon\)</span>; if that doesn't help, change the model's parameterization.</li>
-<li><strong>Discrete parameters.</strong> HMC needs gradients, so Stan can't sample discrete unknowns (for example, whether a site is truly occupied). They must be summed out of the likelihood first. JAGS and NIMBLE handle them directly.</li>
+<li><strong>Discrete parameters.</strong> HMC needs gradients, so Stan can't sample discrete unknowns (for example, whether a site is truly occupied). They must be summed out of the likelihood first. That's less of a limitation than it sounds: such models just need to be reparameterized. JAGS and NIMBLE handle them directly.</li>
 <li><strong>Several separate modes.</strong> HMC explores locally; well-separated valleys can trap it. Run several chains from different starts.</li>
 <li><strong>Overhead.</strong> Compiling, and a C++ toolchain to install. For a two-parameter model, any sampler works.</li>
 </ul>
@@ -1685,7 +1692,7 @@ rbind(metropolis = quantile(keep[, 1], c(0.025, 0.975)),
 <div id="discussion" class="section level2">
 <h2>Discussion</h2>
 <ol style="list-style-type: decimal">
-<li>For the myxomatosis model, the Metropolis sampler took 20,000 steps (about 0.11 seconds) and gave about 43 effective draws of shape. Stan needed time to compile, then 0.3 seconds to sample, and gave about 452 effective draws from 4,000. A labmate says Stan is overkill: &quot;my sampler was faster.&quot; Who's right?</li>
+<li>For the myxomatosis model, the Metropolis sampler took 20,000 steps (about 0.10 seconds) and gave about 43 effective draws of shape. Stan needed time to compile, then 0.3 seconds to sample, and gave about 452 effective draws from 4,000. A labmate says Stan is overkill: &quot;my sampler was faster.&quot; Who's right?</li>
 <li>For your own research, when would you reach for Stan, and when might JAGS, NIMBLE, or a hand-written sampler be the better choice?</li>
 <li>A Gibbs sampler never rejects a draw. On the correlated example above it was worth only 14 independent draws out of 200. How can a sampler that accepts everything be so inefficient?</li>
 </ol>
