@@ -677,12 +677,12 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Wee
     n = 200, truth $\beta$ = 1, 0.5, shape 3, $\rho$ 0.7): copula
     `optim()` gave 0.95, 0.52, 3.10, 0.68.
 
-- **Announcements backlog (Nov. 4):** the instructor's post-lecture
-  student announcements are being folded into the weekly pages (his
-  wording preferred where it says the same thing; no dates or day
-  references on pages; a dated "As taught" note in each guide). Done
-  through Mon., Nov. 2 (Week 11). **Still to load: every announcement
-  after Nov. 2.**
+- **Announcements (Nov. 4):** the instructor's post-lecture student
+  announcements are folded into the weekly pages (his wording preferred
+  where it says the same thing; no dates or day references on pages;
+  names and readings stay off; a dated "As taught" note in each guide).
+  The backlog is done through Wed., Nov. 4 (Week 11); fold in new ones
+  as they come.
 
 - **For the time-series/dynamic models week (Nov. 30):** teach AR vs.
   MA identification with ACF and PACF side by side on long simulated
