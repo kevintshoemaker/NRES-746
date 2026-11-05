@@ -874,8 +874,9 @@ round(rbind(likelihood_ratio = lr_int, bayes_flat_prior = cred_int), 2)</code></
 </div>
 <div id="why-bayes" class="section level2">
 <h2>6. Why Bayesian methods are so widely used</h2>
+<p>Bayesian methods are especially popular for analyzing messy data. The reasons, in no particular order:</p>
 <ul>
-<li><strong>Direct probability statements</strong> about parameters, as in the germination interval above.</li>
+<li><strong>Direct probability statements</strong> about parameters, as in the germination interval above. A credible interval can be read the way most people want to read a confidence interval: &quot;I'm 95% sure the parameter is in this interval.&quot;</li>
 <li><strong>Evidence accumulates:</strong> one study's posterior is the next one's prior.</li>
 <li><strong>Derived quantities are easy.</strong> Any function of the parameters gets a posterior by computing it for every posterior draw, with no linear approximation (the likelihood route uses the <a href="lecture_notes/NOTES_Reference_DeltaMethod.pdf">delta method</a>). For example, the odds of germination, <span class="math inline">\(p / (1 - p)\)</span>:</li>
 </ul>
@@ -886,9 +887,10 @@ round(quantile(odds_draws, c(0.025, 0.5, 0.975)), 2)</code></pre>
 <pre class="r"><code>mean(draws_flat &gt; 0.6)   # P(germination rate &gt; 0.6), flat prior</code></pre>
 <pre><code>## [1] 0.97228</code></pre>
 <ul>
-<li><strong>Hierarchical models.</strong> Many groups (plots within sites, repeated measurements of the same animals, many species) mean many parameters, some describing variation among groups. These are natural to fit in a Bayesian framework (later in the semester).</li>
-<li><strong>Hidden quantities.</strong> True occupancy when detection is imperfect, true infection status behind a noisy test, or true population size behind a count are just more unknowns in a Bayesian model.</li>
-<li><strong>Small samples.</strong> No reliance on large-sample approximations. For 2 chytrid-positive frogs out of 20, the interval <span class="math inline">\(\hat p \pm 1.96\,\text{SE}\)</span> from the curvature of the NLL runs below zero; a posterior for a probability can't.</li>
+<li><strong>Hierarchical models.</strong> Many groups (plots within sites, repeated measurements of the same animals, many species) mean many parameters, some describing variation among groups (a complex error structure). These are natural to fit in a Bayesian framework (later in the semester).</li>
+<li><strong>Reliable fitting.</strong> For complex models, MCMC often converges on a solution more reliably than an optimizer searching for an MLE.</li>
+<li><strong>Missing data and hidden quantities.</strong> Missing values and latent variables (true occupancy when detection is imperfect, true infection status behind a noisy test, true population size behind a count) are just more unknowns in a Bayesian model, handled with the same rules as the parameters.</li>
+<li><strong>Small samples.</strong> No reliance on large-sample approximations, such as the quadratic approximation behind a standard error (at least when fitting by MCMC). For 2 chytrid-positive frogs out of 20, the interval <span class="math inline">\(\hat p \pm 1.96\,\text{SE}\)</span> from the curvature of the NLL runs below zero; a posterior for a probability can't.</li>
 <li><strong>Prior information</strong> from earlier studies, expert knowledge, or physical limits can be built in openly.</li>
 </ul>
 <p>The costs: priors must be chosen and defended, computing can be slow, and MCMC output must be checked.</p>
@@ -978,6 +980,12 @@ round(rbind(shortest_single = hpd(draws_mix),
 <li><strong>REVISE:</strong> back to the problem and the theories, not just the parameters.</li>
 </ul>
 <p>Fitting by maximum likelihood means finding the lowest point of the NLL surface. A grid search works for one or two parameters: the myxomatosis surface below took 14,400 NLL evaluations. At 30 values per parameter, a 10-parameter model would need <span class="math inline">\(30^{10} \approx 6 \times 10^{14}\)</span>, about 19,000 years at a millisecond each. Optimizers search instead: start somewhere, decide where to step next, and stop when no step helps.</p>
+<p>Derivative-based methods (Bolker Ch. 7) look for the point where the slope of the NLL is zero in every direction. They need two ingredients at the current guess:</p>
+<ol style="list-style-type: decimal">
+<li>the <strong>gradient</strong>, the current slope: how steep the surface is where we stand, and which way is downhill;</li>
+<li>the <strong>curvature</strong> (the <strong>Hessian</strong>, with more than one parameter): how fast that slope is changing.</li>
+</ol>
+<p>Together they say how far to jump to reach the point where the slope becomes zero, assuming the NLL is a perfect parabola near the guess.</p>
 <pre class="r"><code># gamma NLL; Inf outside the allowed range so optimizers can&#39;t use it
 nll_gamma &lt;- function(p) {
   if (any(p &lt;= 0)) return(Inf)
@@ -1009,7 +1017,13 @@ points(fit_nm$par[1], fit_nm$par[2], pch = 4, cex = 1.5, lwd = 2)</code></pre>
   \text{NLL}&#39;&#39;(\lambda) = \frac{18}{\lambda^2}\]</span></p>
 <p>The MLE is where the slope is zero: <span class="math inline">\(\lambda = 3\)</span>. Newton's method finds that point by guessing and correcting. At the current guess it pretends the slope changes linearly, starting at <span class="math inline">\(\text{NLL}&#39;(\lambda)\)</span> and changing at a constant rate <span class="math inline">\(\text{NLL}&#39;&#39;(\lambda)\)</span>. That line reaches zero at</p>
 <p><span class="math display">\[\lambda^* = \lambda - \frac{\text{NLL}&#39;(\lambda)}{\text{NLL}&#39;&#39;(\lambda)},\]</span></p>
-<p>which becomes the next guess. A slope that changes linearly means a parabola-shaped NLL, so each step jumps to the bottom of the parabola that matches the NLL's slope and curvature at the current guess. Dividing by the curvature sets the step size: strong curvature means a short step, weak curvature a long one.</p>
+<p>which becomes the next guess. Written as a step <span class="math inline">\(\Delta\)</span> from the <span class="math inline">\(k\)</span>th guess <span class="math inline">\(\theta_k\)</span>, the straight-line approximation of the slope is</p>
+<p><span class="math display">\[\text{NLL}&#39;(\theta_k + \Delta) \approx \text{NLL}&#39;(\theta_k) +
+  \text{NLL}&#39;&#39;(\theta_k)\,\Delta.\]</span></p>
+<p>Setting it to zero and solving for the step gives</p>
+<p><span class="math display">\[\Delta = -\frac{\text{NLL}&#39;(\theta_k)}{\text{NLL}&#39;&#39;(\theta_k)},
+  \qquad \theta_{k+1} = \theta_k + \Delta.\]</span></p>
+<p>One way to read it: the first derivative says how far the slope is from zero, and dividing by the second derivative converts that into how far to move in parameter space to zero it out. A slope that changes linearly means a parabola-shaped NLL, so each step jumps to the bottom of the parabola that matches the NLL's slope and curvature at the current guess. Dividing by the curvature sets the step size: strong curvature means a short step, weak curvature a long one. If the NLL really were a parabola, a single Newton step would land on the MLE.</p>
 <pre class="r"><code>d1 &lt;- function(l) 6 - 18 / l
 d2 &lt;- function(l) 18 / l^2
 

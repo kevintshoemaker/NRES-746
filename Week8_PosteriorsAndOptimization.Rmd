@@ -411,8 +411,13 @@ the workflow doesn't go away.
 
 ## 6. Why Bayesian methods are so widely used {#why-bayes}
 
+Bayesian methods are especially popular for analyzing messy data. The
+reasons, in no particular order:
+
 - **Direct probability statements** about parameters, as in the
-  germination interval above.
+  germination interval above. A credible interval can be read the way
+  most people want to read a confidence interval: "I'm 95% sure the
+  parameter is in this interval."
 - **Evidence accumulates:** one study's posterior is the next one's
   prior.
 - **Derived quantities are easy.** Any function of the parameters gets
@@ -429,13 +434,19 @@ mean(draws_flat > 0.6)   # P(germination rate > 0.6), flat prior
 
 - **Hierarchical models.** Many groups (plots within sites, repeated
   measurements of the same animals, many species) mean many parameters,
-  some describing variation among groups. These are natural to fit in a
+  some describing variation among groups (a complex error structure).
+  These are natural to fit in a
   Bayesian framework (later in the semester).
-- **Hidden quantities.** True occupancy when detection is imperfect, true
-  infection status behind a noisy test, or true population size behind a
-  count are just more unknowns in a Bayesian model.
-- **Small samples.** No reliance on large-sample approximations. For 2
-  chytrid-positive frogs out of 20, the interval
+- **Reliable fitting.** For complex models, MCMC often converges on a
+  solution more reliably than an optimizer searching for an MLE.
+- **Missing data and hidden quantities.** Missing values and latent
+  variables (true occupancy when detection is imperfect, true infection
+  status behind a noisy test, true population size behind a count) are
+  just more unknowns in a Bayesian model, handled with the same rules
+  as the parameters.
+- **Small samples.** No reliance on large-sample approximations, such
+  as the quadratic approximation behind a standard error (at least when
+  fitting by MCMC). For 2 chytrid-positive frogs out of 20, the interval
   $\hat p \pm 1.96\,\text{SE}$ from the curvature of the NLL runs below
   zero; a posterior for a probability can't.
 - **Prior information** from earlier studies, expert knowledge, or
@@ -577,6 +588,18 @@ parameter, a 10-parameter model would need $30^{10} \approx 6 \times
 instead: start somewhere, decide where to step next, and stop when no
 step helps.
 
+Derivative-based methods (Bolker Ch. 7) look for the point where the
+slope of the NLL is zero in every direction. They need two ingredients
+at the current guess:
+
+1. the **gradient**, the current slope: how steep the surface is where
+   we stand, and which way is downhill;
+2. the **curvature** (the **Hessian**, with more than one parameter):
+   how fast that slope is changing.
+
+Together they say how far to jump to reach the point where the slope
+becomes zero, assuming the NLL is a perfect parabola near the guess.
+
 ```{r myxo-surface, fig.width=6, fig.height=4.5}
 # gamma NLL; Inf outside the allowed range so optimizers can't use it
 nll_gamma <- function(p) {
@@ -621,11 +644,25 @@ reaches zero at
 
 $$\lambda^* = \lambda - \frac{\text{NLL}'(\lambda)}{\text{NLL}''(\lambda)},$$
 
-which becomes the next guess. A slope that changes linearly means a
+which becomes the next guess. Written as a step $\Delta$ from the
+$k$th guess $\theta_k$, the straight-line approximation of the slope is
+
+$$\text{NLL}'(\theta_k + \Delta) \approx \text{NLL}'(\theta_k) +
+  \text{NLL}''(\theta_k)\,\Delta.$$
+
+Setting it to zero and solving for the step gives
+
+$$\Delta = -\frac{\text{NLL}'(\theta_k)}{\text{NLL}''(\theta_k)},
+  \qquad \theta_{k+1} = \theta_k + \Delta.$$
+
+One way to read it: the first derivative says how far the slope is from
+zero, and dividing by the second derivative converts that into how far
+to move in parameter space to zero it out. A slope that changes linearly means a
 parabola-shaped NLL, so each step jumps to the bottom of the parabola
 that matches the NLL's slope and curvature at the current guess.
 Dividing by the curvature sets the step size: strong curvature means a
-short step, weak curvature a long one.
+short step, weak curvature a long one. If the NLL really were a
+parabola, a single Newton step would land on the MLE.
 
 ```{r newton-1d}
 d1 <- function(l) 6 - 18 / l

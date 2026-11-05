@@ -681,8 +681,8 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Wee
   student announcements are being folded into the weekly pages (his
   wording preferred where it says the same thing; no dates or day
   references on pages; a dated "As taught" note in each guide). Done
-  through Mon., Oct. 12 (Week 8). **Still to load: every announcement
-  after Oct. 12.**
+  through Wed., Oct. 14 (Week 8). **Still to load: every announcement
+  after Oct. 14.**
 
 - **For the time-series/dynamic models week (Nov. 30):** teach AR vs.
   MA identification with ACF and PACF side by side on long simulated
