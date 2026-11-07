@@ -582,13 +582,14 @@ div.tocify {
 <p>This material follows Bolker, <em>Ecological Models and Data in R</em>, Chapter 10, sections 10.3-10.6 (pp. 423-441).</p>
 <div id="mixed-models-r" class="section level1">
 <h1>Autocorrelation and mixed models in R</h1>
-<p>Correlated observations need a covariance matrix <span class="math inline">\(V\)</span> with some structure. This part fits a model with correlation through time, shows why structured-variance models are harder to fit than the independent models from earlier in the course, and then fits random intercept and random slope models with the standard R packages, checking them against a likelihood written by hand.</p>
+<p>To fit a likelihood with correlated observations, we need a covariance matrix <span class="math inline">\(V\)</span> to capture that correlation structure!</p>
+<p>Here we start by modeling data that is correlated through time. Then we walk through some reasons why structured-variance models are harder to fit than the independent models from earlier in the course (oh, if it were only as simple as summing up log-likelihoods!!). Then we fit random intercept and random slope models with some popular R packages, checking them against a likelihood written by hand where we can (it's not always possible!).</p>
 <div id="big-picture" class="section level2">
 <h2>1. Big picture</h2>
 <p><img src="Week12_MixedModels_files/figure-html/workflow-models-1.png" width="1750" style="display: block; margin: auto;" /></p>
-<p>A model has a process part and a noise part. When observations aren't independent, the noise part for Normal data is a multivariate normal (MVN) with a structured covariance matrix <span class="math inline">\(V\)</span> (see <a href="Week11_LinearModelsAndVariance.html#variance">modeling variance</a>). A <a href="Week11_LinearModelsAndVariance.html#random-intercept">random intercept</a> makes <span class="math inline">\(V\)</span> block diagonal: observations in the same group share a covariance, and observations in different groups share nothing.</p>
-<p>Two more structures come next: correlation that fades with time, and groups that differ in their response to a predictor as well as in their average. Both are MODELS choices; fitting them (FIT) is where specialized software earns its keep. The new question we can answer: how much do groups differ in <em>how they respond</em> to the environment?</p>
-<p>The AR(1) and fitting sections use the simulated pinyon ring widths from the <a href="Week11_LinearModelsAndVariance.html#lm-likelihood">linear models section</a>: 5 trees in each of 4 stands, 1996-2020, averaged into one chronology per stand.</p>
+<p>When observations aren't independent, the noise part (multivariate normal is by far the most common distribution for correlated errors) is described with a structured covariance matrix <span class="math inline">\(V\)</span> (see <a href="Week11_LinearModelsAndVariance.html#variance">modeling variance</a>). We saw last week that a standard <a href="Week11_LinearModelsAndVariance.html#random-intercept">random intercept model</a> makes <span class="math inline">\(V\)</span> block-diagonal: observations in the same group are correlated (share a non-zero covariance), while other observations are independent.</p>
+<p>The next two things we'll look at are (1) correlation that fades with time, and (2) groups that differ in both their mean response (intercept) and the effect of a predictor (i.e., how much do groups differ in <em>how they respond</em> to the predictor?)</p>
+<p>We'll continue using the simulated pinyon ring widths from <a href="Week11_LinearModelsAndVariance.html#lm-likelihood">week 11</a>: 5 trees in each of 4 stands, 1996-2020, averaged into one chronology per stand.</p>
 <pre class="r"><code># pinyon ring widths (mm): 4 stands x 5 trees x 25 years; simulated
 library(mvtnorm)
 set.seed(21)
@@ -617,7 +618,8 @@ tree_means &lt;- aggregate(width ~ stand + tree_id, data = rings, FUN = mean)</c
 </div>
 <div id="ar1" class="section level2">
 <h2>2. Autocorrelation: AR(1)</h2>
-<p>Take stand A's chronology over 25 years and ask a management question: is growth declining, after accounting for precipitation? Regress ring width on precipitation and year, and look at the residuals:</p>
+<p>Let's take this chronology over 25 years (from stand A) and ask: is growth declining, after accounting for precipitation?</p>
+<p>If we regress ring width on precipitation and year, and look at the residuals:</p>
 <pre class="r"><code>chron_a &lt;- chron[chron$stand == &quot;A&quot;, ]
 chron_a$year_c &lt;- chron_a$year - 2008          # centered year: 0 = 2008
 fit_lm_a &lt;- lm(width ~ precip + year_c, data = chron_a)
@@ -631,8 +633,8 @@ plot(chron_a$year, resid(fit_lm_a), type = &quot;b&quot;, pch = 19, xlab = &quot
 abline(h = 0, lty = 2)
 acf(resid(fit_lm_a), main = &quot;&quot;, lag.max = 10)</code></pre>
 <p><img src="Week12_MixedModels_files/figure-html/ar1-resid-1.png" width="768" style="display: block; margin: auto;" /></p>
-<p>The <code>acf()</code> panel shows the correlation between residuals <span class="math inline">\(k\)</span> years apart. The lag-1 value, 0.33, falls inside the dashed bounds, so this plot alone can't rule out independence. With 25 years the bounds are wide (<span class="math inline">\(\pm 1.96/\sqrt{25} \approx \pm 0.39\)</span>), and a series this short often hides real autocorrelation. A residual ACF inside the bounds means the correlation wasn't detected, not that it's absent.</p>
-<p>Other evidence helps. The lag-1 residual correlation is positive in all four stands:</p>
+<p>The <code>acf()</code> panel shows the correlation between residuals <span class="math inline">\(k\)</span> years apart. The lag-1 value, 0.33, falls inside the dashed bounds, so (surprisingly) this plot can't rule out independence. With 25 years the bounds are wide (<span class="math inline">\(\pm 1.96/\sqrt{25} \approx \pm 0.39\)</span>), and a series this short often hides autocorrelation that's really there.</p>
+<p>Other evidence helps. For example, the correlation decays down to zero- a classic sign of serially correlated errors. Also, lag-1 residual correlation is positive in all four stands:</p>
 <pre class="r"><code>lag1 &lt;- function(dat) {
   dat$year_c &lt;- dat$year - 2008
   acf(resid(lm(width ~ precip + year_c, data = dat)), plot = FALSE)$acf[2]
@@ -640,13 +642,14 @@ acf(resid(fit_lm_a), main = &quot;&quot;, lag.max = 10)</code></pre>
 round(sapply(split(chron, chron$stand), lag1), 2)</code></pre>
 <pre><code>##    A    B    C    D 
 ## 0.33 0.33 0.48 0.41</code></pre>
-<p>and there's a mechanism: in real pinyon, stored carbohydrates and needles that live several years carry one year's conditions into the next.</p>
-<p>The simplest model of this is the <strong>first-order autoregressive</strong> model, AR(1): each year's deviation is a fraction <span class="math inline">\(\rho\)</span> of last year's plus new noise,</p>
-<p><span class="math display">\[e_t = \rho\,e_{t-1} + \eta_t, \qquad \eta_t \sim \text{Normal}(0, \sigma^2), \qquad |\rho| &lt; 1\]</span></p>
-<p>Taking variances of both sides, with <span class="math inline">\(e_{t-1}\)</span> and <span class="math inline">\(\eta_t\)</span> independent and <span class="math inline">\(\text{Var}(e_t) = \text{Var}(e_{t-1})\)</span> (a stationary series):</p>
-<p><span class="math display">\[\text{Var}(e_t) = \rho^2\text{Var}(e_t) + \sigma^2
+<p>and it's realistic: stored carbohydrates and needles that live several years can lead to the conditions in one year (e.g., a good growth year) bleeding into the next.</p>
+<p>The simplest model for temporally correlated errors is the <strong>first-order autoregressive</strong> model, AR(1): each year's total &quot;error&quot; is a fraction <span class="math inline">\(\rho\)</span> of last year's plus new noise (often called an 'innovation'),</p>
+<p><span class="math display">\[\eta_t = \rho\,\eta_{t-1} + \varepsilon_t, \qquad \varepsilon_t \sim \text{Normal}(0, \sigma^2), \qquad |\rho| &lt; 1\]</span></p>
+<p>Here <span class="math inline">\(\eta_t\)</span> is the autocorrelated error and <span class="math inline">\(\varepsilon_t\)</span> is independent noise. Note: many time-series texts (and <code>nlme</code>'s output) call the coefficient <span class="math inline">\(\phi\)</span> rather than <span class="math inline">\(\rho\)</span>.</p>
+<p>Taking variances of both sides, with <span class="math inline">\(\eta_{t-1}\)</span> and <span class="math inline">\(\varepsilon_t\)</span> independent and <span class="math inline">\(\text{Var}(\eta_t) = \text{Var}(\eta_{t-1})\)</span> (a stationary series):</p>
+<p><span class="math display">\[\text{Var}(\eta_t) = \rho^2\text{Var}(\eta_t) + \sigma^2
 \quad\Longrightarrow\quad
-\text{Var}(e_t) = \frac{\sigma^2}{1 - \rho^2}\]</span></p>
+\text{Var}(\eta_t) = \frac{\sigma^2}{1 - \rho^2}\]</span></p>
 <p>and the correlation between deviations <span class="math inline">\(k\)</span> steps apart is <span class="math inline">\(\rho^k\)</span> (Bolker eq. 10.3.7). So the covariance between years <span class="math inline">\(s\)</span> and <span class="math inline">\(t\)</span> is</p>
 <p><span class="math display">\[V_{st} = \frac{\sigma^2}{1 - \rho^2}\,\rho^{|s - t|}\]</span></p>
 <p>The <code>abs(row(M) - col(M))</code> trick from Bolker (p. 427) builds the matrix of lags:</p>
@@ -659,7 +662,7 @@ round(V_ar1(0.6, 0.08)[1:5, 1:5], 4)</code></pre>
 ## [3,] 0.0036 0.0060 0.0100 0.0060 0.0036
 ## [4,] 0.0022 0.0036 0.0060 0.0100 0.0060
 ## [5,] 0.0013 0.0022 0.0036 0.0060 0.0100</code></pre>
-<p>Fitting needs <span class="math inline">\(|\rho| &lt; 1\)</span>, so we optimize <span class="math inline">\(\text{atanh}(\rho)\)</span>, which can be any number, and convert back with <code>tanh()</code>. Standard errors from the Hessian are then on the atanh and log scales; the delta method carries them back to <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\sigma\)</span> (see the reference handout <a href="lecture_notes/NOTES_Reference_DeltaMethod.pdf"><em>The Delta Method</em></a>).</p>
+<p>Fitting needs <span class="math inline">\(|\rho| &lt; 1\)</span>, so we optimize <span class="math inline">\(\text{atanh}(\rho)\)</span>, which can be any number, and convert back with <code>tanh()</code>. Standard errors from the Hessian are then on the atanh and log scales; the delta method puts them back into <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\sigma\)</span> (see the reference handout <a href="lecture_notes/NOTES_Reference_DeltaMethod.pdf"><em>The Delta Method</em></a>).</p>
 <pre class="r"><code># mean: a + b * precip + c * year_c; AR(1) errors with rho = tanh(par[4]), sigma = exp(par[5])
 nll_ar1 &lt;- function(par) {
   mu &lt;- par[1] + par[2] * chron_a$precip + par[3] * chron_a$year_c
@@ -677,7 +680,7 @@ fit_gls &lt;- gls(width ~ precip + year_c, data = chron_a,
 coef(fit_gls)</code></pre>
 <pre><code>##  (Intercept)       precip       year_c 
 ##  0.558326882  0.021408527 -0.004676191</code></pre>
-<pre class="r"><code>coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # rho</code></pre>
+<pre class="r"><code>coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # rho (nlme calls it Phi)</code></pre>
 <pre><code>##       Phi 
 ## 0.3672189</code></pre>
 <p>The estimated <span class="math inline">\(\rho\)</span> is 0.37. The trend estimate barely moves, but its standard error grows:</p>
@@ -1065,9 +1068,9 @@ round(compare, 4)</code></pre>
 <div id="bonus-combined" class="section level2">
 <h2>Bonus: a random intercept and AR(1) together</h2>
 <p>The two structures combine. Using all four pinyon chronologies (100 stand-years), suppose each stand has its own random intercept and AR(1) deviations within the stand:</p>
-<p><span class="math display">\[\text{width}_{jt} = a + b_j + \beta\,\text{precip}_t + e_{jt},
+<p><span class="math display">\[\text{width}_{jt} = a + b_j + \beta\,\text{precip}_t + \eta_{jt},
 \qquad b_j \sim \text{Normal}(0, \sigma_b^2),
-\qquad e_{jt} = \rho\,e_{j,t-1} + \eta_{jt}\]</span></p>
+\qquad \eta_{jt} = \rho\,\eta_{j,t-1} + \varepsilon_{jt}\]</span></p>
 <p><span class="math inline">\(V\)</span> is the sum of the two pieces: <span class="math inline">\(\sigma_b^2\)</span> wherever two values share a stand, plus an AR(1) block within each stand. <code>kronecker(A, B)</code> places a copy of <code>B</code> in every cell of <code>A</code>, scaled by that cell, so <code>kronecker(diag(4), B)</code> makes a block-diagonal matrix with four copies of <code>B</code>.</p>
 <pre class="r"><code>Z_chron &lt;- model.matrix(~ 0 + stand, data = chron)
 V_combined &lt;- function(sigma_b, rho, sigma) {

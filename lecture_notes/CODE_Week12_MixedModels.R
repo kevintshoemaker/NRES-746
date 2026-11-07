@@ -72,7 +72,7 @@ library(nlme)
 fit_gls <- gls(width ~ precip + year_c, data = chron_a,
                correlation = corAR1(form = ~ year), method = "ML")
 coef(fit_gls)
-coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # rho
+coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # rho (nlme calls it Phi)
 
 # trend: estimate, SE, p under independence vs. AR(1) (Hessian SE)
 se_ar1 <- sqrt(diag(solve(fit_ar1$hessian)))
