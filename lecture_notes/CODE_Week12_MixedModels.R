@@ -89,6 +89,15 @@ c(estimate = fit_ar1$par[3], se = se_ar1[3], p = 2 * pnorm(-abs(fit_ar1$par[3] /
 
 #  [PAUSE] With rho near 0.9, what does one AR(1) series look like? How would you tell it from a slow trend?
 
+# AR errors or a lagged response?
+# AR(1) errors rewritten: y_t = a(1 - rho) + rho y_{t-1} + b x_t - rho b x_{t-1} + e_t
+chron_a$width_lag <- c(NA, head(chron_a$width, -1))      # last year's width
+chron_a$precip_lag <- c(NA, head(chron_a$precip, -1))    # last year's precipitation
+fit_lag <- lm(width ~ width_lag + precip + year_c, data = chron_a)
+fit_lag_x <- lm(width ~ width_lag + precip + precip_lag + year_c, data = chron_a)
+round(coef(fit_lag), 4)          # gamma near 0
+round(coef(fit_lag_x), 4)        # gamma near rho; precip_lag near -gamma * beta
+
 # 2. Why these models are harder to fit ---------------------------------------------------
 
 # random intercept for the 20 tree means: V = sigma_b^2 Z Z^T + sigma^2 I

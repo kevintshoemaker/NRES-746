@@ -237,6 +237,48 @@ widget("cov_structures.html")
 > **Question:** With $\rho$ near 0.9, what does a single AR(1) series look
 > like? How could you tell it apart from a slow trend?
 
+### AR errors or a lagged response? {#lagged-response}
+
+Many time-series texts put the autoregression on the response itself:
+$y_t = \alpha + \gamma\,y_{t-1} + \beta x_t + \varepsilon_t$. Without
+covariates this is the same model as AR(1) errors. With covariates it
+isn't. Substituting $\eta_{t-1} = y_{t-1} - a - \beta x_{t-1}$ into the
+AR(1) error model gives
+
+$$y_t = a(1 - \rho) + \rho\,y_{t-1} + \beta x_t - \rho\beta\,x_{t-1} + \varepsilon_t$$
+
+a lagged-response model with an extra term that cancels last year's
+covariate. With AR(1) errors, a wet year raises growth that year only;
+what persists is the unmeasured part. With a lagged response, part of a
+wet year's boost carries into later years (shrinking by $\gamma$ each
+year), so a lasting change in $x$ shifts the mean by $\beta/(1-\gamma)$.
+That suits a response with its own memory, like stored carbohydrates or
+population size.
+
+```{r lagged-response}
+chron_a$width_lag <- c(NA, head(chron_a$width, -1))      # last year's width
+chron_a$precip_lag <- c(NA, head(chron_a$precip, -1))    # last year's precipitation
+fit_lag <- lm(width ~ width_lag + precip + year_c, data = chron_a)
+fit_lag_x <- lm(width ~ width_lag + precip + precip_lag + year_c, data = chron_a)
+round(coef(fit_lag), 4)
+round(coef(fit_lag_x), 4)
+```
+
+```{r lagged-numbers, echo=FALSE}
+g1 <- coef(fit_lag)["width_lag"]
+g2 <- coef(fit_lag_x)["width_lag"]
+cf_pred <- -g2 * coef(fit_lag_x)["precip"]
+```
+
+The simulated errors are AR(1) with $\rho = 0.6$, yet the plain
+lagged-response fit finds almost no carryover ($\hat\gamma =$
+`r f2(g1)`): last year's width mostly reflects last year's
+precipitation, which doesn't persist. Adding last year's precipitation
+gives $\hat\gamma =$ `r f2(g2)`, close to the AR(1) fit's
+$\hat\rho =$ `r f2(rho_hat)`, and a coefficient on last year's
+precipitation of `r f4(coef(fit_lag_x)["precip_lag"])`, near the
+$-\hat\gamma\hat\beta =$ `r f4(cf_pred)` that AR(1) errors predict.
+
 ## 2. Why these models are harder to fit {#harder}
 
 The AR(1) model above and the
