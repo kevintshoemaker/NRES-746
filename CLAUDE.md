@@ -226,7 +226,10 @@ Root-level `Week<N>_<Topic>.Rmd` (model:
 `Week10_ModelComparison.Rmd`), public on the course site.
 
 - **YAML:** `html_document`, `theme: flatly` (the homepage's theme, not
-  the legacy `cerulean`), `toc: yes`, `toc_float: yes`, `toc_depth: 3`.
+  the legacy `cerulean`), `toc: yes`, `toc_float: yes`, `toc_depth: 3`,
+  and `includes: after_body: footer.html` (the AI-use footer, weekly
+  pages only, added Nov. 9), with a `[How this page was made](#ai-use)`
+  line just above the companion-script link.
   Render with `rmarkdown::render_site("Week<N>_<Topic>.Rmd")` so it gets
   the site navbar.
 - **Navbar:** add the page to the Lectures menu in `_site.yml`, then
