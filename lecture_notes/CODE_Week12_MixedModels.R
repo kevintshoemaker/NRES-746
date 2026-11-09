@@ -1,12 +1,13 @@
 #  NRES 746, Week 12: autocorrelation, mixed models in R, Bayesian hierarchical models =====
 #  Sections match the Week 12 web page. Needs mvtnorm, lme4, nlme, glmmTMB, cmdstanr, posterior, brms.
+#  Package syntax: lecture_notes/NOTES_Reference_MixedModelSyntax.pdf (nlme, lme4, glmmTMB side by side).
 
 # AUTOCORRELATION AND MIXED MODELS IN R ===================================================
 
 rm(list = ls())
 library(mvtnorm)
 
-# 1. Big picture: the pinyon ring-width data ---------------------------------------------
+# Pinyon ring-width data ----------------------------------------------------------------
 
 # pinyon ring widths (mm): 4 stands x 5 trees x 25 years; simulated
 set.seed(21)
@@ -34,16 +35,23 @@ chron <- chron[order(chron$stand, chron$year), ]
 chron$stand <- factor(chron$stand)
 tree_means <- aggregate(width ~ stand + tree_id, data = rings, FUN = mean)
 
-# 2. Autocorrelation: AR(1) --------------------------------------------------------------
+# 1. Autocorrelation: AR(1) ---------------------------------------------------------------
 
 chron_a <- chron[chron$stand == "A", ]
 chron_a$year_c <- chron_a$year - 2008          # centered year: 0 = 2008
 fit_lm_a <- lm(width ~ precip + year_c, data = chron_a)
 summary(fit_lm_a)$coefficients
-par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 1))
-plot(chron_a$year, resid(fit_lm_a), type = "b", pch = 19, xlab = "Year", ylab = "Residual")
+par(mfrow = c(3, 1), mar = c(4, 4.5, 2, 1))
+plot(chron_a$year, chron_a$width, type = "b", pch = 19, xlab = "Year",
+     ylab = "Mean ring width (mm)", main = "Stand A chronology")
+trend <- predict(fit_lm_a, newdata = data.frame(precip = mean(chron_a$precip),
+                                                year_c = chron_a$year_c))
+lines(chron_a$year, trend, lwd = 2, col = "red")   # year trend at mean precipitation
+plot(chron_a$year, resid(fit_lm_a), type = "b", pch = 19, xlab = "Year",
+     ylab = "Residual", main = "Residuals from lm()")
 abline(h = 0, lty = 2)
-acf(resid(fit_lm_a), main = "", lag.max = 10)
+acf(resid(fit_lm_a), lag.max = 10, main = "")
+title("Autocorrelation of the residuals", line = 0.8)
 par(mfrow = c(1, 1))
 
 # lag-1 residual correlation in each stand (stand A's is inside the bounds, +/-0.39)
@@ -81,7 +89,7 @@ c(estimate = fit_ar1$par[3], se = se_ar1[3], p = 2 * pnorm(-abs(fit_ar1$par[3] /
 
 #  [PAUSE] With rho near 0.9, what does one AR(1) series look like? How would you tell it from a slow trend?
 
-# 3. Why these models are harder to fit --------------------------------------------------
+# 2. Why these models are harder to fit ---------------------------------------------------
 
 # random intercept for the 20 tree means: V = sigma_b^2 Z Z^T + sigma^2 I
 y_tree <- tree_means$width
@@ -103,7 +111,7 @@ set.seed(1)
 timings <- t(sapply(c(250, 500, 1000, 2000), time_nll))
 timings
 
-# 4. Random slopes -----------------------------------------------------------------------
+# 3. Random slopes ------------------------------------------------------------------------
 
 # drought sensitivity: 12 stands, records of 5-30 years; simulated
 # truth: mean intercept 0.9, mean slope 0.25, tau = (0.15, 0.10), rho = -0.6, sigma = 0.12
@@ -128,7 +136,7 @@ nopool <- t(sapply(split(drought, drought$stand), function(s) coef(lm(width ~ pr
 plot(nopool, pch = 19, xlab = "Intercept: width at 20 cm (mm)", ylab = "Slope (mm per 10 cm)")
 text(nopool, labels = stand_names, pos = 4, cex = 0.7)
 
-# 5. Mixed models in R -------------------------------------------------------------------
+# 4. Mixed models in R --------------------------------------------------------------------
 
 library(lme4)
 fit_ri_lmer <- lmer(width ~ precip10 + (1 | stand), data = drought, REML = FALSE)
@@ -174,12 +182,37 @@ compare <- rbind(
 colnames(compare) <- c("mu_a", "mu_b", "tau_a", "tau_b", "rho", "sigma", "logLik")
 round(compare, 4)
 
-#  [PAUSE] The intercept-slope correlation is about -0.57. What does that say about these stands, ecologically?
-
 # Discussion: the four short-record stands alone
 short <- droplevels(drought[drought$stand %in% c("S09", "S10", "S11", "S12"), ])
 fit_short <- lmer(width ~ precip10 + (precip10 | stand), data = short, REML = FALSE)
 VarCorr(fit_short)
+
+# Bonus: AR(1) by generalized least squares ----------------------------------------------
+
+# for fixed rho: beta = (X'R^-1 X)^-1 X'R^-1 y, sigma^2 = r'R^-1 r / n; then search over rho alone
+X_a <- cbind(1, chron_a$precip, chron_a$year_c)
+y_a <- chron_a$width
+n_a <- length(y_a)
+
+gls_profile <- function(rho) {
+  R <- rho^lags / (1 - rho^2)
+  R_inv <- solve(R)
+  beta <- solve(t(X_a) %*% R_inv %*% X_a, t(X_a) %*% R_inv %*% y_a)
+  r <- as.vector(y_a - X_a %*% beta)
+  sigma2 <- as.numeric(t(r) %*% R_inv %*% r) / n_a
+  list(beta = as.vector(beta), sigma = sqrt(sigma2),
+       loglik = dmvnorm(y_a, as.vector(X_a %*% beta), sigma2 * R, log = TRUE))
+}
+rho_gls <- optimize(function(rho) -gls_profile(rho)$loglik, c(-0.95, 0.95))$minimum
+rho_gls
+gls_profile(rho_gls)          # matches optim() and gls(); gls() reports sigma / sqrt(1 - rho^2)
+
+# profile likelihood and approximate 95% interval for rho
+rho_seq <- seq(-0.5, 0.9, by = 0.005)
+ll_seq <- sapply(rho_seq, function(r) gls_profile(r)$loglik)
+range(rho_seq[ll_seq > max(ll_seq) - 1.92])
+plot(rho_seq, ll_seq, type = "l", lwd = 2, xlab = "rho", ylab = "Profile log-likelihood")
+abline(h = max(ll_seq) - 1.92, lty = 2)
 
 # Bonus: a random intercept and AR(1) together -------------------------------------------
 

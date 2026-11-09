@@ -66,7 +66,10 @@ show_matrix <- function(M, main = "", zlim = c(-1, 1) * max(abs(M))) {
 R code from this page is also in the
 [companion script](lecture_notes/CODE_Week12_MixedModels.R).
 Packages: `mvtnorm`, `lme4`, `nlme`, `glmmTMB`, `cmdstanr`, `posterior`,
-`brms`.
+`brms`. The reference handout
+[*Mixed models in R: nlme, lme4, and glmmTMB*](lecture_notes/NOTES_Reference_MixedModelSyntax.pdf)
+compares the three mixed-model packages' syntax and says when to use
+each.
 
 This material follows Bolker, *Ecological Models and Data in R*,
 Chapter 10, sections 10.3-10.6 (pp. 423-441).
@@ -77,17 +80,12 @@ To fit a likelihood with correlated observations, we need a covariance
 matrix $V$ to capture that correlation structure!
 
 Here we start by modeling data that is correlated through time. Then we 
-walk through some reasons why structured-variance models are harder to fit than the independent models from earlier in the course (oh, if it were only as simple as summing up log-likelihoods!!). Then we fit random intercept and
+walk through some reasons why structured-variance models are harder to fit than the independent models from earlier in the course (oh, if it were only as simple as summing up log-likelihoods across all observations!!). Then we will fit random intercept and
 random slope models with some popular R packages, checking them against
-a likelihood written by hand where we can (it's not always possible!).
+hand-written likelihood functions where we can (it's not always possible!).
 
-## 1. Big picture
-
-```{r workflow-models, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
-draw_workflow(c("MODELS", "FIT"))
-```
-
-When observations aren't independent, the noise part (multivariate normal is 
+As we saw last time, when observations aren't independent, 
+the noise part (multivariate normal is 
 by far the most common distribution for correlated errors)
 is described with a structured covariance matrix $V$ (see
 [modeling variance](Week11_LinearModelsAndVariance.html#variance)). 
@@ -96,8 +94,8 @@ We saw last week that a standard
 makes $V$ block-diagonal: observations in the same group are correlated (share a
 non-zero covariance), while other observations are independent.
 
-The next two things we'll look at are (1) correlation that fades with time, and
-(2) groups that differ in both their mean response (intercept) and the effect of a predictor (i.e., how much do groups differ in *how they respond* to the predictor?)
+The next two things we'll look at are (1) correlation that fades away with time (autoregressive models), and
+(2) discrete/categorical groups that differ in both their mean response (intercept) and the effect of a predictor (i.e., how much do groups differ in *how they respond* to the predictor?). These are often called 'random slope' models. 
 
 We'll continue using the simulated pinyon ring widths
 from [week 11](Week11_LinearModelsAndVariance.html#lm-likelihood):
@@ -132,34 +130,42 @@ chron$stand <- factor(chron$stand)
 tree_means <- aggregate(width ~ stand + tree_id, data = rings, FUN = mean)
 ```
 
-## 2. Autocorrelation: AR(1) {#ar1}
+## 1. Autocorrelation: AR(1) {#ar1}
 
 Let's take this chronology over 25 years (from stand A) and ask:
-is growth declining, after accounting for precipitation? 
+is growth declining linearly over time, after accounting for precipitation? 
 
 If we regress ring width on precipitation and year, and look at the residuals:
 
-```{r ar1-resid, fig.width=8, fig.height=3.2}
+```{r ar1-resid, fig.width=7, fig.height=8.5}
 chron_a <- chron[chron$stand == "A", ]
 chron_a$year_c <- chron_a$year - 2008          # centered year: 0 = 2008
 fit_lm_a <- lm(width ~ precip + year_c, data = chron_a)
 summary(fit_lm_a)$coefficients
-par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 1))
-plot(chron_a$year, resid(fit_lm_a), type = "b", pch = 19, xlab = "Year", ylab = "Residual")
+par(mfrow = c(3, 1), mar = c(4, 4.5, 2, 1))
+plot(chron_a$year, chron_a$width, type = "b", pch = 19, xlab = "Year",
+     ylab = "Mean ring width (mm)", main = "Stand A chronology")
+trend <- predict(fit_lm_a, newdata = data.frame(precip = mean(chron_a$precip),
+                                                year_c = chron_a$year_c))
+lines(chron_a$year, trend, lwd = 2, col = "red")   # year trend at mean precipitation
+plot(chron_a$year, resid(fit_lm_a), type = "b", pch = 19, xlab = "Year",
+     ylab = "Residual", main = "Residuals from lm()")
 abline(h = 0, lty = 2)
-acf(resid(fit_lm_a), main = "", lag.max = 10)
+acf(resid(fit_lm_a), lag.max = 10, main = "")
+title("Autocorrelation of the residuals", line = 0.8)
 ```
 
 The `acf()` panel shows the correlation between residuals $k$ years
 apart. The lag-1 value, `r f2(acf(resid(fit_lm_a), plot = FALSE)$acf[2])`,
 falls inside the dashed bounds, so (surprisingly) this plot can't rule out
-independence. With 25 years the bounds are wide
+independence even though we KNOW there is fairly strong autocorrelation 
+(we simulated it that way). With 25 years the bounds are wide
 ($\pm 1.96/\sqrt{25} \approx \pm 0.39$), and a series this short often
 hides autocorrelation that's really there.
 
 Other evidence helps. For example, the correlation decays down to zero- 
-a classic sign of serially correlated errors. Also, lag-1 residual correlation is positive in all
-four stands:
+a classic sign of serially correlated errors. Also, lag-1 residual correlation 
+is positive in all four stands:
 
 ```{r ar1-lag1-stands}
 lag1 <- function(dat) {
@@ -169,11 +175,10 @@ lag1 <- function(dat) {
 round(sapply(split(chron, chron$stand), lag1), 2)
 ```
 
-and it's realistic: stored carbohydrates and
-needles that live several years can lead to the conditions in one year (e.g., a good growth year) bleeding into the next.
+and it's realistic just based on common sense: stored carbohydrates and
+needles that live several years can lead to year effects (e.g., a good growth year) bleeding into the next year(s).
 
-The simplest model for temporally correlated errors is the **first-order autoregressive** model,
-AR(1): each year's total "error" is a fraction $\rho$ of last year's plus
+The simplest model for temporally correlated errors is the **first-order autoregressive** model, AR(1): each year's total "error" is a fraction $\rho$ of last year's plus
 new noise (often called an 'innovation'),
 
 $$\eta_t = \rho\,\eta_{t-1} + \varepsilon_t, \qquad \varepsilon_t \sim \text{Normal}(0, \sigma^2), \qquad |\rho| < 1$$
@@ -205,9 +210,11 @@ round(V_ar1(0.6, 0.08)[1:5, 1:5], 4)
 ```
 
 Fitting needs $|\rho| < 1$, so we optimize $\text{atanh}(\rho)$, which
-can be any number, and convert back with `tanh()`. Standard errors from
-the Hessian are then on the atanh and log scales; the delta method
-puts them back into $\rho$ and $\sigma$ (see the reference handout
+can be any number (unbounded), and convert back with `tanh()` 
+(which converts any unbounded real number to a bounded real number between -1 and 1. 
+
+Standard errors from the Hessian are then on the atanh (correlation) and log (variance) scales; 
+if you'd like, you can use the delta method to put them back into the natural scale for $\rho$ and $\sigma$ (see the reference handout
 [*The Delta Method*](lecture_notes/NOTES_Reference_DeltaMethod.pdf)).
 
 ```{r ar1-fit}
@@ -246,6 +253,10 @@ moves, but its standard error grows:
 
 The simulation has no trend at all.
 
+The [mixed models handout](lecture_notes/NOTES_Reference_MixedModelSyntax.pdf)
+shows the same AR(1) fit in `glmmTMB`, along with other residual
+structures (spatial correlation, unequal variances).
+
 The widget below builds two covariance structures for 12 observations
 and simulates data from them. The heatmap shows correlations (blue
 positive, red negative).
@@ -257,12 +268,13 @@ widget("cov_structures.html")
 > **Question:** With $\rho$ near 0.9, what does a single AR(1) series look
 > like? How could you tell it apart from a slow trend?
 
-## 3. Why these models are harder to fit {#harder}
+## 2. Why these models are harder to fit {#harder}
 
 The AR(1) model above and the
 [random intercept](Week11_LinearModelsAndVariance.html#random-intercept)
-model for the 20 tree means were both fit with the same `optim()` call
-as always:
+model for the 20 tree means were both fit with the same `optim()` method we've been using for independent-likelihood functions. The difference is that the NLL is NOT
+computed as a sum of (negative) log-likelihoods. Instead we've used the multivariate
+normal density function to compute the likelihood in one fell swoop!
 
 ```{r ri-refit}
 y_tree <- tree_means$width
@@ -390,12 +402,11 @@ $\text{atanh}(\rho)$; richer structures need cleverer parameterizations
 (for example, building $V$ from its Cholesky factor, as Stan does in
 the [Bayesian version](#stan-model)).
 
-None of this is a reason to assume independence when it's false. It's
-why specialized software exists for these models, and why Bayesian
+None of this is a reason to assume independence when it's false. Specialized software helps a LOT in fitting these models, and Bayesian
 methods, which sample the random effects instead of integrating over
-them, are popular for hierarchical models.
+them, make it straightforward to build and interpret hierarchical models.
 
-## 4. Random slopes {#random-slopes}
+## 3. Random slopes {#random-slopes}
 
 A new question for a bigger data set: **is drought sensitivity the same
 everywhere?** Twelve pinyon stands span an elevation gradient. For each
@@ -423,6 +434,9 @@ drought$width <- round(ab_true[j, 1] + ab_true[j, 2] * drought$precip10 +
                          rnorm(nrow(drought), 0, 0.12), 2)
 head(drought)
 ```
+
+Residuals here are independent (no AR(1) term), so the only correlation
+among observations comes from the shared stand effects.
 
 ```{r drought-plot, echo=FALSE, fig.width=9, fig.height=3.8}
 nopool <- t(sapply(split(drought, drought$stand), function(s) coef(lm(width ~ precip10, data = s))))
@@ -461,10 +475,17 @@ where $x_{jt}$ is precipitation (10-cm units, centered) for stand $j$
 in year $t$. There are six parameters: two fixed effects ($\mu_a$,
 $\mu_b$), the among-stand SDs of the intercepts and slopes ($\tau_a$,
 $\tau_b$), their correlation $\rho$, and the residual SD $\sigma$. The
-24 stand deviations $a_j, b_j$ are not parameters in this likelihood;
-they're integrated out, just as $b_j$ was for the random intercept.
+24 stand deviations $a_j, b_j$ are not parameters in this likelihood.
+We never observe them, so the likelihood averages over every value they
+could take, weighted by how likely each is under their MVN
+distribution. This works like the
+[law of total probability](Week3_ProbabilityAndBayes.html#conditional),
+with an integral in place of the sum. For Normal data the average works
+out to another MVN, with the covariance matrix below, so no integral
+appears in the code. This step is called *integrating out* the random
+effects.
 
-What does that do to $V$? Within stand $j$, write the observations as
+What covariance matrix results? Within stand $j$, write the observations as
 $y_j = X_j\mu + Z_j u_j + \varepsilon_j$, with $u_j = (a_j, b_j)^T$ and
 $Z_j$ the two-column matrix $[1, x]$ for that stand. Then
 
@@ -492,11 +513,16 @@ knitr::kable(syntax, format = "html", escape = FALSE,
              table.attr = "class='table table-condensed'")
 ```
 
-(`||` doesn't work as intended with factor predictors in `lme4`; there
-the uncorrelated version is written as two separate terms.) Each formula
-adds the residual variance $\sigma^2$ on top.
+(`(x || stand)` is shorthand for two separate terms,
+`(1 | stand) + (0 + x | stand)`: one for the intercepts and one for the
+slopes, each with its own variance and no correlation between them. The
+shorthand works as intended only when `x` is numeric; with a factor,
+`lme4` still estimates correlations among the factor's levels.) Each formula
+adds the residual variance $\sigma^2$ on top. The
+[mixed models handout](lecture_notes/NOTES_Reference_MixedModelSyntax.pdf)
+writes each of these in `nlme` and `glmmTMB` syntax too.
 
-## 5. Mixed models in R {#packages}
+## 4. Mixed models in R {#packages}
 
 **`lme4`.** `lmer()` fits Normal mixed models; `glmer()` fits
 generalized ones. Here are the random intercept and random slope models
@@ -576,22 +602,25 @@ $\tau_a = 0.15$, $\tau_b = 0.10$, $\rho = -0.6$, $\sigma = 0.12$.
 
 Which package when:
 
-- **`lme4`** (`lmer()`, `glmer()`): fast; handles crossed random effects
-  (stands and years) well. No correlation structures for the residuals.
-- **`nlme`** (`lme()`, `gls()`): residual correlation structures
-  (`corAR1()`, spatial ones like `corExp()`) and unequal variances
-  (`varIdent()`, `varPower()`). Normal responses only; crossed random
-  effects are awkward.
-- **`glmmTMB`**: many response distributions (negative binomial, beta,
-  zero-inflated and hurdle models), and covariance structures for the
-  random effects such as `ar1()` and spatial `exp()`. It writes the
-  likelihood for you and uses automatic differentiation and the Laplace
-  approximation (see the [GLMM bonus](#glmm-by-hand)).
+- **`glmmTMB`**: the most practical default. Many response distributions
+  (negative binomial, beta, zero-inflated and hurdle models), unequal
+  variances, and covariance structures such as `ar1()` and spatial
+  `exp()`, all in one syntax. It writes the likelihood for you and uses
+  automatic differentiation and the Laplace approximation (see the
+  [GLMM bonus](#glmm-by-hand)). Defaults to ML fits and Wald tests.
+- **`lme4`** (`lmer()`, `glmer()`): better for inference on Normal
+  models with few groups (REML fits, small-sample tests through
+  `lmerTest`, profile intervals by default); fast with large crossed
+  designs (stands and years). No correlation structures for the
+  residuals.
+- **`nlme`** (`lme()`, `gls()`): the richest set of residual correlation
+  structures (`corAR1()`, spatial ones like `corExp()`) and unequal
+  variances (`varIdent()`, `varPower()`) for Normal data. Normal
+  responses only; crossed random effects are awkward.
 
-> **Question:** The estimated correlation between stand intercepts and
-> slopes is `r f2(vc_rs[3])`. What does that say about these stands,
-> ecologically? What does it say about a management plan that ranks
-> stands by drought risk using average growth alone?
+The reference handout
+[*Mixed models in R: nlme, lme4, and glmmTMB*](lecture_notes/NOTES_Reference_MixedModelSyntax.pdf)
+puts the three packages' syntax side by side, with advice on which to use.
 
 ## Discussion {#variance-discussion}
 
@@ -609,7 +638,7 @@ time than for precipitation, which jumps around from year to year?
 
 **Q2.** A colleague says: "I have only four stands, so I'll treat stand
 as a fixed factor instead of a random intercept." Using the
-random-intercept surface in [section 3](#harder), argue for or against.
+random-intercept surface in [section 2](#harder), argue for or against.
 What question is each model answering?
 
 **Q3.** Fitting the random slope model to only the four short-record
@@ -619,6 +648,83 @@ and $\hat\rho =$ `r f2(vc_short[3])`, with a "boundary (singular) fit"
 message. Do these stands have perfectly correlated intercepts and
 slopes? What would you report, and what would you change about the
 model?
+
+## Bonus: AR(1) by generalized least squares {#bonus-gls}
+
+The [AR(1) fit](#ar1) searched over five parameters with `optim()`.
+Matrix algebra cuts that to one. Write the covariance matrix as
+$V = \sigma^2 R$, where $R_{st} = \rho^{|s-t|}/(1 - \rho^2)$ depends
+only on $\rho$. If $\rho$ were known, the mean parameters and $\sigma^2$
+that maximize the likelihood have closed forms:
+
+$$\hat{\boldsymbol\beta}(\rho) = (X^TR^{-1}X)^{-1}X^TR^{-1}\mathbf{y},
+\qquad
+\hat\sigma^2(\rho) = \frac{1}{n}\,\mathbf{r}^TR^{-1}\mathbf{r},
+\quad \mathbf{r} = \mathbf{y} - X\hat{\boldsymbol\beta}(\rho)$$
+
+This is **generalized least squares** (GLS). With $\rho = 0$, $R$ is
+the identity matrix and $\hat{\boldsymbol\beta}$ reduces to the
+ordinary [normal equations](Week11_LinearModelsAndVariance.html#least-squares),
+$(X^TX)^{-1}X^T\mathbf{y}$. With $\rho > 0$, $R^{-1}$ down-weights
+information that neighboring years share.
+
+Plugging $\hat{\boldsymbol\beta}(\rho)$ and $\hat\sigma^2(\rho)$ back
+into the likelihood leaves a function of $\rho$ alone (a profile
+likelihood), which a one-dimensional search can maximize:
+
+```{r gls-by-hand}
+X_a <- cbind(1, chron_a$precip, chron_a$year_c)
+y_a <- chron_a$width
+n_a <- length(y_a)
+
+gls_profile <- function(rho) {
+  R <- rho^lags / (1 - rho^2)
+  R_inv <- solve(R)
+  beta <- solve(t(X_a) %*% R_inv %*% X_a, t(X_a) %*% R_inv %*% y_a)
+  r <- as.vector(y_a - X_a %*% beta)
+  sigma2 <- as.numeric(t(r) %*% R_inv %*% r) / n_a
+  list(beta = as.vector(beta), sigma = sqrt(sigma2),
+       loglik = dmvnorm(y_a, as.vector(X_a %*% beta), sigma2 * R, log = TRUE))
+}
+rho_gls <- optimize(function(rho) -gls_profile(rho)$loglik, c(-0.95, 0.95))$minimum
+fit_by_hand <- gls_profile(rho_gls)
+```
+
+```{r gls-compare, echo=FALSE}
+gls_tab <- rbind(
+  "optim(), 5 parameters" = c(rho_hat, fit_ar1$par[1:3], exp(fit_ar1$par[5]), -fit_ar1$value),
+  "GLS by hand, 1 parameter" = c(rho_gls, fit_by_hand$beta, fit_by_hand$sigma, fit_by_hand$loglik),
+  "gls()" = c(coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE), coef(fit_gls),
+              fit_gls$sigma * sqrt(1 - coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)^2),
+              logLik(fit_gls)))
+colnames(gls_tab) <- c("rho", "a", "precip", "trend", "sigma", "logLik")
+knitr::kable(gls_tab, digits = c(3, 3, 4, 5, 4, 3))
+```
+
+All three agree. `gls()` takes the same route: it profiles the mean
+parameters and $\sigma$ out of the likelihood and searches only over
+the correlation parameters. (It reports $\sigma$ as the SD of each
+year's total error, $\sigma/\sqrt{1 - \rho^2}$; the table converts it
+back to the innovation SD.)
+
+The profile also gives a likelihood interval for $\rho$:
+
+```{r gls-profile-plot, echo=FALSE, fig.width=6, fig.height=3.8}
+rho_seq <- seq(-0.5, 0.9, by = 0.005)
+ll_seq <- sapply(rho_seq, function(r) gls_profile(r)$loglik)
+in_ci <- rho_seq[ll_seq > max(ll_seq) - 1.92]
+par(mar = c(4, 4.5, 1, 1))
+plot(rho_seq, ll_seq, type = "l", lwd = 2, xlab = expression(rho),
+     ylab = "Profile log-likelihood")
+abline(h = max(ll_seq) - 1.92, lty = 2)
+abline(v = range(in_ci), lty = 3)
+abline(v = rho_gls, col = "red")
+```
+
+The dashed line sits 1.92 below the maximum; the dotted lines mark the
+approximate 95% interval for $\rho$, `r f2(min(in_ci))` to
+`r f2(max(in_ci))`. Twenty-five years can't rule out $\rho = 0$, and
+can't rule out the true value of 0.6 either.
 
 ## Bonus: a random intercept and AR(1) together {#bonus-combined}
 
@@ -716,7 +822,10 @@ slope would make each stand's integral two-dimensional, and the cost of
 grid-based integration grows with the number of grid points raised to
 the number of random effects per group. That's why packages
 approximate the integral, and why Bayesian samplers, which skip it, are
-popular for complex hierarchical models.
+popular for complex hierarchical models. For other count and proportion
+models (negative binomial, zero-inflated, binomial with trials) in
+`lme4` and `glmmTMB`, see the
+[mixed models handout](lecture_notes/NOTES_Reference_MixedModelSyntax.pdf).
 
 # Bayesian hierarchical models {#bayesian-hierarchical}
 

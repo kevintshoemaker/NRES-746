@@ -528,7 +528,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Week 1-9 pages built after the fact).
+Snapshot: Sun., Nov. 8, 2026 (end of Week 11; Week 12 built and revised, not yet taught; Week 1-9 pages built after the fact).
 
 - **Week 1 page (built Nov. 1, after the week):**
   `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
@@ -660,6 +660,22 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Wee
   work session, no Act; the next formal lab is Lab 10 (Nov. 23). Legacy
   `stan_demo2.stan` / `rcode/stan_demo.R` (Oct. 2025 random slope with
   LKJ) has a bug: `rmvnorm()` never gets `sigma = vcv`; not used.
+  - **Revised Nov. 8:** the first H1's overview section was removed
+    (sections now 1 AR(1), 2 harder, 3 random slopes, 4 packages);
+    AR(1) notation follows Hyndman ($\eta_t$ autocorrelated error,
+    $\varepsilon_t$ innovation; `nlme` calls $\rho$ `Phi`); stacked
+    trend/residual/ACF figure for stand A; new bonus `#bonus-gls` (GLS by
+    matrix algebra with $\rho$ profiled by `optimize()`, matches `gls()`;
+    profile interval for $\rho$ -0.03 to 0.75); the intercept-slope
+    "management plan" question was dropped. New reference handout
+    `lecture_notes/NOTES_Reference_MixedModelSyntax.pdf` (3 pp.; nlme,
+    lme4, glmmTMB side by side, glmmTMB as the practical default; every
+    syntax pair tested), linked from the Week 11 and 12 pages, both
+    scripts, the guide, and the schedule. Found while testing: in
+    glmmTMB 1.1.11, `ar1()` treats observed times as consecutive (a
+    missing year is lag 1, even with the level kept); `ou()` with
+    `numFactor()` times matches `gls()`; `dispformula = ~0` makes glmmTMB
+    AR(1)/spatial fits match `nlme` exactly.
   - **Possible bonus section (not built):** "multivariate" non-normal data (a
     student asked about multivariate Poisson/gamma after the MVN). No
     general multivariate gamma/Poisson exists (the MVN is unusual in
@@ -784,7 +800,7 @@ Snapshot: Wed., Nov. 4, 2026 (end of Week 11; Week 12 built, not yet taught; Wee
   (one-page Stan setup) is linked from the page and the schedule.
 - **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
   Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
-  1-8, then "Other"). `schedule.Rmd` has a `links` table (71 links;
+  1-8, then "Other"). `schedule.Rmd` has a `links` table (72 links;
   `stopifnot` checks weeks and files). Week 1's cells (both lectures
   and the lab) link the Week 1 page (Week 2's cells, including
   the lab, link the Week 2 page; Week 3's lab and Wednesday

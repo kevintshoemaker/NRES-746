@@ -578,17 +578,14 @@ div.tocify {
 </div>
 
 
-<p>R code from this page is also in the <a href="lecture_notes/CODE_Week12_MixedModels.R">companion script</a>. Packages: <code>mvtnorm</code>, <code>lme4</code>, <code>nlme</code>, <code>glmmTMB</code>, <code>cmdstanr</code>, <code>posterior</code>, <code>brms</code>.</p>
+<p>R code from this page is also in the <a href="lecture_notes/CODE_Week12_MixedModels.R">companion script</a>. Packages: <code>mvtnorm</code>, <code>lme4</code>, <code>nlme</code>, <code>glmmTMB</code>, <code>cmdstanr</code>, <code>posterior</code>, <code>brms</code>. The reference handout <a href="lecture_notes/NOTES_Reference_MixedModelSyntax.pdf"><em>Mixed models in R: nlme, lme4, and glmmTMB</em></a> compares the three mixed-model packages' syntax and says when to use each.</p>
 <p>This material follows Bolker, <em>Ecological Models and Data in R</em>, Chapter 10, sections 10.3-10.6 (pp. 423-441).</p>
 <div id="mixed-models-r" class="section level1">
 <h1>Autocorrelation and mixed models in R</h1>
 <p>To fit a likelihood with correlated observations, we need a covariance matrix <span class="math inline">\(V\)</span> to capture that correlation structure!</p>
-<p>Here we start by modeling data that is correlated through time. Then we walk through some reasons why structured-variance models are harder to fit than the independent models from earlier in the course (oh, if it were only as simple as summing up log-likelihoods!!). Then we fit random intercept and random slope models with some popular R packages, checking them against a likelihood written by hand where we can (it's not always possible!).</p>
-<div id="big-picture" class="section level2">
-<h2>1. Big picture</h2>
-<p><img src="Week12_MixedModels_files/figure-html/workflow-models-1.png" width="1750" style="display: block; margin: auto;" /></p>
-<p>When observations aren't independent, the noise part (multivariate normal is by far the most common distribution for correlated errors) is described with a structured covariance matrix <span class="math inline">\(V\)</span> (see <a href="Week11_LinearModelsAndVariance.html#variance">modeling variance</a>). We saw last week that a standard <a href="Week11_LinearModelsAndVariance.html#random-intercept">random intercept model</a> makes <span class="math inline">\(V\)</span> block-diagonal: observations in the same group are correlated (share a non-zero covariance), while other observations are independent.</p>
-<p>The next two things we'll look at are (1) correlation that fades with time, and (2) groups that differ in both their mean response (intercept) and the effect of a predictor (i.e., how much do groups differ in <em>how they respond</em> to the predictor?)</p>
+<p>Here we start by modeling data that is correlated through time. Then we walk through some reasons why structured-variance models are harder to fit than the independent models from earlier in the course (oh, if it were only as simple as summing up log-likelihoods across all observations!!). Then we will fit random intercept and random slope models with some popular R packages, checking them against hand-written likelihood functions where we can (it's not always possible!).</p>
+<p>As we saw last time, when observations aren't independent, the noise part (multivariate normal is by far the most common distribution for correlated errors) is described with a structured covariance matrix <span class="math inline">\(V\)</span> (see <a href="Week11_LinearModelsAndVariance.html#variance">modeling variance</a>). We saw last week that a standard <a href="Week11_LinearModelsAndVariance.html#random-intercept">random intercept model</a> makes <span class="math inline">\(V\)</span> block-diagonal: observations in the same group are correlated (share a non-zero covariance), while other observations are independent.</p>
+<p>The next two things we'll look at are (1) correlation that fades away with time (autoregressive models), and (2) discrete/categorical groups that differ in both their mean response (intercept) and the effect of a predictor (i.e., how much do groups differ in <em>how they respond</em> to the predictor?). These are often called 'random slope' models.</p>
 <p>We'll continue using the simulated pinyon ring widths from <a href="Week11_LinearModelsAndVariance.html#lm-likelihood">week 11</a>: 5 trees in each of 4 stands, 1996-2020, averaged into one chronology per stand.</p>
 <pre class="r"><code># pinyon ring widths (mm): 4 stands x 5 trees x 25 years; simulated
 library(mvtnorm)
@@ -615,10 +612,9 @@ chron &lt;- aggregate(width ~ stand + year + precip, data = rings, FUN = mean)
 chron &lt;- chron[order(chron$stand, chron$year), ]
 chron$stand &lt;- factor(chron$stand)
 tree_means &lt;- aggregate(width ~ stand + tree_id, data = rings, FUN = mean)</code></pre>
-</div>
 <div id="ar1" class="section level2">
-<h2>2. Autocorrelation: AR(1)</h2>
-<p>Let's take this chronology over 25 years (from stand A) and ask: is growth declining, after accounting for precipitation?</p>
+<h2>1. Autocorrelation: AR(1)</h2>
+<p>Let's take this chronology over 25 years (from stand A) and ask: is growth declining linearly over time, after accounting for precipitation?</p>
 <p>If we regress ring width on precipitation and year, and look at the residuals:</p>
 <pre class="r"><code>chron_a &lt;- chron[chron$stand == &quot;A&quot;, ]
 chron_a$year_c &lt;- chron_a$year - 2008          # centered year: 0 = 2008
@@ -628,12 +624,19 @@ summary(fit_lm_a)$coefficients</code></pre>
 ## (Intercept)  0.568650771 0.064762246  8.780591 1.216672e-08
 ## precip       0.021101416 0.002580253  8.178041 4.088440e-08
 ## year_c      -0.005505487 0.002596117 -2.120662 4.546107e-02</code></pre>
-<pre class="r"><code>par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 1))
-plot(chron_a$year, resid(fit_lm_a), type = &quot;b&quot;, pch = 19, xlab = &quot;Year&quot;, ylab = &quot;Residual&quot;)
+<pre class="r"><code>par(mfrow = c(3, 1), mar = c(4, 4.5, 2, 1))
+plot(chron_a$year, chron_a$width, type = &quot;b&quot;, pch = 19, xlab = &quot;Year&quot;,
+     ylab = &quot;Mean ring width (mm)&quot;, main = &quot;Stand A chronology&quot;)
+trend &lt;- predict(fit_lm_a, newdata = data.frame(precip = mean(chron_a$precip),
+                                                year_c = chron_a$year_c))
+lines(chron_a$year, trend, lwd = 2, col = &quot;red&quot;)   # year trend at mean precipitation
+plot(chron_a$year, resid(fit_lm_a), type = &quot;b&quot;, pch = 19, xlab = &quot;Year&quot;,
+     ylab = &quot;Residual&quot;, main = &quot;Residuals from lm()&quot;)
 abline(h = 0, lty = 2)
-acf(resid(fit_lm_a), main = &quot;&quot;, lag.max = 10)</code></pre>
-<p><img src="Week12_MixedModels_files/figure-html/ar1-resid-1.png" width="768" style="display: block; margin: auto;" /></p>
-<p>The <code>acf()</code> panel shows the correlation between residuals <span class="math inline">\(k\)</span> years apart. The lag-1 value, 0.33, falls inside the dashed bounds, so (surprisingly) this plot can't rule out independence. With 25 years the bounds are wide (<span class="math inline">\(\pm 1.96/\sqrt{25} \approx \pm 0.39\)</span>), and a series this short often hides autocorrelation that's really there.</p>
+acf(resid(fit_lm_a), lag.max = 10, main = &quot;&quot;)
+title(&quot;Autocorrelation of the residuals&quot;, line = 0.8)</code></pre>
+<p><img src="Week12_MixedModels_files/figure-html/ar1-resid-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>The <code>acf()</code> panel shows the correlation between residuals <span class="math inline">\(k\)</span> years apart. The lag-1 value, 0.33, falls inside the dashed bounds, so (surprisingly) this plot can't rule out independence even though we KNOW there is fairly strong autocorrelation (we simulated it that way). With 25 years the bounds are wide (<span class="math inline">\(\pm 1.96/\sqrt{25} \approx \pm 0.39\)</span>), and a series this short often hides autocorrelation that's really there.</p>
 <p>Other evidence helps. For example, the correlation decays down to zero- a classic sign of serially correlated errors. Also, lag-1 residual correlation is positive in all four stands:</p>
 <pre class="r"><code>lag1 &lt;- function(dat) {
   dat$year_c &lt;- dat$year - 2008
@@ -642,7 +645,7 @@ acf(resid(fit_lm_a), main = &quot;&quot;, lag.max = 10)</code></pre>
 round(sapply(split(chron, chron$stand), lag1), 2)</code></pre>
 <pre><code>##    A    B    C    D 
 ## 0.33 0.33 0.48 0.41</code></pre>
-<p>and it's realistic: stored carbohydrates and needles that live several years can lead to the conditions in one year (e.g., a good growth year) bleeding into the next.</p>
+<p>and it's realistic just based on common sense: stored carbohydrates and needles that live several years can lead to year effects (e.g., a good growth year) bleeding into the next year(s).</p>
 <p>The simplest model for temporally correlated errors is the <strong>first-order autoregressive</strong> model, AR(1): each year's total &quot;error&quot; is a fraction <span class="math inline">\(\rho\)</span> of last year's plus new noise (often called an 'innovation'),</p>
 <p><span class="math display">\[\eta_t = \rho\,\eta_{t-1} + \varepsilon_t, \qquad \varepsilon_t \sim \text{Normal}(0, \sigma^2), \qquad |\rho| &lt; 1\]</span></p>
 <p>Here <span class="math inline">\(\eta_t\)</span> is the autocorrelated error and <span class="math inline">\(\varepsilon_t\)</span> is independent noise. Note: many time-series texts (and <code>nlme</code>'s output) call the coefficient <span class="math inline">\(\phi\)</span> rather than <span class="math inline">\(\rho\)</span>.</p>
@@ -662,7 +665,8 @@ round(V_ar1(0.6, 0.08)[1:5, 1:5], 4)</code></pre>
 ## [3,] 0.0036 0.0060 0.0100 0.0060 0.0036
 ## [4,] 0.0022 0.0036 0.0060 0.0100 0.0060
 ## [5,] 0.0013 0.0022 0.0036 0.0060 0.0100</code></pre>
-<p>Fitting needs <span class="math inline">\(|\rho| &lt; 1\)</span>, so we optimize <span class="math inline">\(\text{atanh}(\rho)\)</span>, which can be any number, and convert back with <code>tanh()</code>. Standard errors from the Hessian are then on the atanh and log scales; the delta method puts them back into <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\sigma\)</span> (see the reference handout <a href="lecture_notes/NOTES_Reference_DeltaMethod.pdf"><em>The Delta Method</em></a>).</p>
+<p>Fitting needs <span class="math inline">\(|\rho| &lt; 1\)</span>, so we optimize <span class="math inline">\(\text{atanh}(\rho)\)</span>, which can be any number (unbounded), and convert back with <code>tanh()</code> (which converts any unbounded real number to a bounded real number between -1 and 1.</p>
+<p>Standard errors from the Hessian are then on the atanh (correlation) and log (variance) scales; if you'd like, you can use the delta method to put them back into the natural scale for <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\sigma\)</span> (see the reference handout <a href="lecture_notes/NOTES_Reference_DeltaMethod.pdf"><em>The Delta Method</em></a>).</p>
 <pre class="r"><code># mean: a + b * precip + c * year_c; AR(1) errors with rho = tanh(par[4]), sigma = exp(par[5])
 nll_ar1 &lt;- function(par) {
   mu &lt;- par[1] + par[2] * chron_a$precip + par[3] * chron_a$year_c
@@ -689,6 +693,7 @@ coef(fit_gls)</code></pre>
 <li>with AR(1) errors: -0.0047 mm/yr, SE 0.0034 (from the Hessian), <span class="math inline">\(p =\)</span> 0.17.</li>
 </ul>
 <p>The simulation has no trend at all.</p>
+<p>The <a href="lecture_notes/NOTES_Reference_MixedModelSyntax.pdf">mixed models handout</a> shows the same AR(1) fit in <code>glmmTMB</code>, along with other residual structures (spatial correlation, unequal variances).</p>
 <p>The widget below builds two covariance structures for 12 observations and simulates data from them. The heatmap shows correlations (blue positive, red negative).</p>
 <div class="w746cv" id="cv">
 <style>
@@ -837,8 +842,8 @@ setMode('ri');
 </blockquote>
 </div>
 <div id="harder" class="section level2">
-<h2>3. Why these models are harder to fit</h2>
-<p>The AR(1) model above and the <a href="Week11_LinearModelsAndVariance.html#random-intercept">random intercept</a> model for the 20 tree means were both fit with the same <code>optim()</code> call as always:</p>
+<h2>2. Why these models are harder to fit</h2>
+<p>The AR(1) model above and the <a href="Week11_LinearModelsAndVariance.html#random-intercept">random intercept</a> model for the 20 tree means were both fit with the same <code>optim()</code> method we've been using for independent-likelihood functions. The difference is that the NLL is NOT computed as a sum of (negative) log-likelihoods. Instead we've used the multivariate normal density function to compute the likelihood in one fell swoop!</p>
 <pre class="r"><code>y_tree &lt;- tree_means$width
 Z &lt;- model.matrix(~ 0 + stand, data = tree_means)
 V_ri &lt;- function(sigma_b, sigma) sigma_b^2 * Z %*% t(Z) + sigma^2 * diag(20)
@@ -875,10 +880,10 @@ timings</code></pre>
 <li><strong>AR(1) with a trend:</strong> here the axes are <span class="math inline">\(\rho\)</span> and the trend, with everything else profiled out. The region is a fan, not an ellipse. Near <span class="math inline">\(\rho = 0\)</span> the plausible trends run from about -0.0074 to -0.0039 mm/yr, all below 0 (dashed line). At <span class="math inline">\(\rho =\)</span> 0.37 they run from -0.0113 to 0.0017. A slow drift and strong autocorrelation can explain the same wandering series, so what we conclude about a mean parameter depends on a variance parameter, and the two have to be estimated together. A lopsided region like this also makes Hessian-based intervals, which assume an ellipse, less trustworthy.</li>
 </ul>
 <p><strong>Parameters must keep <span class="math inline">\(V\)</span> valid.</strong> A variance must be positive, <span class="math inline">\(|\rho|\)</span> must be below 1, and in general <span class="math inline">\(V\)</span> must stay <a href="Week11_LinearModelsAndVariance.html#valid-covariance">positive definite</a>. An unconstrained step can leave the allowed region, and <code>dmvnorm()</code> then fails. We avoided this by optimizing <span class="math inline">\(\log\sigma\)</span> and <span class="math inline">\(\text{atanh}(\rho)\)</span>; richer structures need cleverer parameterizations (for example, building <span class="math inline">\(V\)</span> from its Cholesky factor, as Stan does in the <a href="#stan-model">Bayesian version</a>).</p>
-<p>None of this is a reason to assume independence when it's false. It's why specialized software exists for these models, and why Bayesian methods, which sample the random effects instead of integrating over them, are popular for hierarchical models.</p>
+<p>None of this is a reason to assume independence when it's false. Specialized software helps a LOT in fitting these models, and Bayesian methods, which sample the random effects instead of integrating over them, make it straightforward to build and interpret hierarchical models.</p>
 </div>
 <div id="random-slopes" class="section level2">
-<h2>4. Random slopes</h2>
+<h2>3. Random slopes</h2>
 <p>A new question for a bigger data set: <strong>is drought sensitivity the same everywhere?</strong> Twelve pinyon stands span an elevation gradient. For each stand we have a ring-width chronology and that stand's winter precipitation, but the records differ in length: two stands have 30 reliable years, two have only 5. (These data are also simulated.) We express precipitation in 10-cm units, centered at 20 cm, so the intercept is the ring width in a 20-cm winter and the slope is the change in width per extra 10 cm.</p>
 <pre class="r"><code>set.seed(12)
 n_years &lt;- rep(c(30, 24, 18, 12, 8, 5), each = 2)        # record length per stand
@@ -902,6 +907,7 @@ head(drought)</code></pre>
 ## 4   S01 1994   21.8     0.18  0.40
 ## 5   S01 1995   23.4     0.34  0.83
 ## 6   S01 1996   25.9     0.59  0.97</code></pre>
+<p>Residuals here are independent (no AR(1) term), so the only correlation among observations comes from the shared stand effects.</p>
 <p><img src="Week12_MixedModels_files/figure-html/drought-plot-1.png" width="864" style="display: block; margin: auto;" /></p>
 <p>Left: one least-squares line per stand. Right: each stand's own intercept and slope. Stands that grow less in an average winter tend to respond more to precipitation, as you might expect if low-elevation stands are closer to their water limit.</p>
 <p>A <strong>random slope</strong> model lets both the intercept and the slope vary among stands, and lets them be correlated:</p>
@@ -911,8 +917,8 @@ head(drought)</code></pre>
 \text{MVN}\left(\begin{pmatrix} 0 \\ 0 \end{pmatrix}, G\right),
 \qquad
 G = \begin{pmatrix} \tau_a^2 &amp; \rho\,\tau_a\tau_b \\ \rho\,\tau_a\tau_b &amp; \tau_b^2 \end{pmatrix}\]</span></p>
-<p>where <span class="math inline">\(x_{jt}\)</span> is precipitation (10-cm units, centered) for stand <span class="math inline">\(j\)</span> in year <span class="math inline">\(t\)</span>. There are six parameters: two fixed effects (<span class="math inline">\(\mu_a\)</span>, <span class="math inline">\(\mu_b\)</span>), the among-stand SDs of the intercepts and slopes (<span class="math inline">\(\tau_a\)</span>, <span class="math inline">\(\tau_b\)</span>), their correlation <span class="math inline">\(\rho\)</span>, and the residual SD <span class="math inline">\(\sigma\)</span>. The 24 stand deviations <span class="math inline">\(a_j, b_j\)</span> are not parameters in this likelihood; they're integrated out, just as <span class="math inline">\(b_j\)</span> was for the random intercept.</p>
-<p>What does that do to <span class="math inline">\(V\)</span>? Within stand <span class="math inline">\(j\)</span>, write the observations as <span class="math inline">\(y_j = X_j\mu + Z_j u_j + \varepsilon_j\)</span>, with <span class="math inline">\(u_j = (a_j, b_j)^T\)</span> and <span class="math inline">\(Z_j\)</span> the two-column matrix <span class="math inline">\([1, x]\)</span> for that stand. Then</p>
+<p>where <span class="math inline">\(x_{jt}\)</span> is precipitation (10-cm units, centered) for stand <span class="math inline">\(j\)</span> in year <span class="math inline">\(t\)</span>. There are six parameters: two fixed effects (<span class="math inline">\(\mu_a\)</span>, <span class="math inline">\(\mu_b\)</span>), the among-stand SDs of the intercepts and slopes (<span class="math inline">\(\tau_a\)</span>, <span class="math inline">\(\tau_b\)</span>), their correlation <span class="math inline">\(\rho\)</span>, and the residual SD <span class="math inline">\(\sigma\)</span>. The 24 stand deviations <span class="math inline">\(a_j, b_j\)</span> are not parameters in this likelihood. We never observe them, so the likelihood averages over every value they could take, weighted by how likely each is under their MVN distribution. This works like the <a href="Week3_ProbabilityAndBayes.html#conditional">law of total probability</a>, with an integral in place of the sum. For Normal data the average works out to another MVN, with the covariance matrix below, so no integral appears in the code. This step is called <em>integrating out</em> the random effects.</p>
+<p>What covariance matrix results? Within stand <span class="math inline">\(j\)</span>, write the observations as <span class="math inline">\(y_j = X_j\mu + Z_j u_j + \varepsilon_j\)</span>, with <span class="math inline">\(u_j = (a_j, b_j)^T\)</span> and <span class="math inline">\(Z_j\)</span> the two-column matrix <span class="math inline">\([1, x]\)</span> for that stand. Then</p>
 <p><span class="math display">\[V_j = Z_j G Z_j^T + \sigma^2 I\]</span></p>
 <p>and <span class="math inline">\(V\)</span> is block diagonal again, one block per stand, but the covariance between two years in the same stand now depends on how wet those years were.</p>
 <p>R's mixed-model packages share a formula syntax for the random part:</p>
@@ -988,10 +994,10 @@ stand intercepts and year intercepts (crossed: every stand is measured in many y
 </tr>
 </tbody>
 </table>
-<p>(<code>||</code> doesn't work as intended with factor predictors in <code>lme4</code>; there the uncorrelated version is written as two separate terms.) Each formula adds the residual variance <span class="math inline">\(\sigma^2\)</span> on top.</p>
+<p>(<code>(x || stand)</code> is shorthand for two separate terms, <code>(1 | stand) + (0 + x | stand)</code>: one for the intercepts and one for the slopes, each with its own variance and no correlation between them. The shorthand works as intended only when <code>x</code> is numeric; with a factor, <code>lme4</code> still estimates correlations among the factor's levels.) Each formula adds the residual variance <span class="math inline">\(\sigma^2\)</span> on top. The <a href="lecture_notes/NOTES_Reference_MixedModelSyntax.pdf">mixed models handout</a> writes each of these in <code>nlme</code> and <code>glmmTMB</code> syntax too.</p>
 </div>
 <div id="packages" class="section level2">
-<h2>5. Mixed models in R</h2>
+<h2>4. Mixed models in R</h2>
 <p><strong><code>lme4</code>.</strong> <code>lmer()</code> fits Normal mixed models; <code>glmer()</code> fits generalized ones. Here are the random intercept and random slope models for the drought data:</p>
 <pre class="r"><code>library(lme4)
 fit_ri_lmer &lt;- lmer(width ~ precip10 + (1 | stand), data = drought, REML = FALSE)
@@ -1051,19 +1057,88 @@ round(compare, 4)</code></pre>
 <p>All four agree. The truth is <span class="math inline">\(\mu_a = 0.9\)</span>, <span class="math inline">\(\mu_b = 0.25\)</span>, <span class="math inline">\(\tau_a = 0.15\)</span>, <span class="math inline">\(\tau_b = 0.10\)</span>, <span class="math inline">\(\rho = -0.6\)</span>, <span class="math inline">\(\sigma = 0.12\)</span>.</p>
 <p>Which package when:</p>
 <ul>
-<li><strong><code>lme4</code></strong> (<code>lmer()</code>, <code>glmer()</code>): fast; handles crossed random effects (stands and years) well. No correlation structures for the residuals.</li>
-<li><strong><code>nlme</code></strong> (<code>lme()</code>, <code>gls()</code>): residual correlation structures (<code>corAR1()</code>, spatial ones like <code>corExp()</code>) and unequal variances (<code>varIdent()</code>, <code>varPower()</code>). Normal responses only; crossed random effects are awkward.</li>
-<li><strong><code>glmmTMB</code></strong>: many response distributions (negative binomial, beta, zero-inflated and hurdle models), and covariance structures for the random effects such as <code>ar1()</code> and spatial <code>exp()</code>. It writes the likelihood for you and uses automatic differentiation and the Laplace approximation (see the <a href="#glmm-by-hand">GLMM bonus</a>).</li>
+<li><strong><code>glmmTMB</code></strong>: the most practical default. Many response distributions (negative binomial, beta, zero-inflated and hurdle models), unequal variances, and covariance structures such as <code>ar1()</code> and spatial <code>exp()</code>, all in one syntax. It writes the likelihood for you and uses automatic differentiation and the Laplace approximation (see the <a href="#glmm-by-hand">GLMM bonus</a>). Defaults to ML fits and Wald tests.</li>
+<li><strong><code>lme4</code></strong> (<code>lmer()</code>, <code>glmer()</code>): better for inference on Normal models with few groups (REML fits, small-sample tests through <code>lmerTest</code>, profile intervals by default); fast with large crossed designs (stands and years). No correlation structures for the residuals.</li>
+<li><strong><code>nlme</code></strong> (<code>lme()</code>, <code>gls()</code>): the richest set of residual correlation structures (<code>corAR1()</code>, spatial ones like <code>corExp()</code>) and unequal variances (<code>varIdent()</code>, <code>varPower()</code>) for Normal data. Normal responses only; crossed random effects are awkward.</li>
 </ul>
-<blockquote>
-<p><strong>Question:</strong> The estimated correlation between stand intercepts and slopes is -0.57. What does that say about these stands, ecologically? What does it say about a management plan that ranks stands by drought risk using average growth alone?</p>
-</blockquote>
+<p>The reference handout <a href="lecture_notes/NOTES_Reference_MixedModelSyntax.pdf"><em>Mixed models in R: nlme, lme4, and glmmTMB</em></a> puts the three packages' syntax side by side, with advice on which to use.</p>
 </div>
 <div id="variance-discussion" class="section level2">
 <h2>Discussion</h2>
 <p><strong>Q1.</strong> Switching to AR(1) errors changed the trend's standard error from 0.0026 to 0.0034 mm/yr, but the precipitation slope's from 0.0026 to 0.0020 mm/cm. Why would autocorrelated errors matter more for a trend over time than for precipitation, which jumps around from year to year?</p>
-<p><strong>Q2.</strong> A colleague says: &quot;I have only four stands, so I'll treat stand as a fixed factor instead of a random intercept.&quot; Using the random-intercept surface in <a href="#harder">section 3</a>, argue for or against. What question is each model answering?</p>
+<p><strong>Q2.</strong> A colleague says: &quot;I have only four stands, so I'll treat stand as a fixed factor instead of a random intercept.&quot; Using the random-intercept surface in <a href="#harder">section 2</a>, argue for or against. What question is each model answering?</p>
 <p><strong>Q3.</strong> Fitting the random slope model to only the four short-record stands (S09-S12, 26 stand-years) gives <span class="math inline">\(\hat\tau_a =\)</span> 0.084, <span class="math inline">\(\hat\tau_b =\)</span> 0.063, and <span class="math inline">\(\hat\rho =\)</span> -1.00, with a &quot;boundary (singular) fit&quot; message. Do these stands have perfectly correlated intercepts and slopes? What would you report, and what would you change about the model?</p>
+</div>
+<div id="bonus-gls" class="section level2">
+<h2>Bonus: AR(1) by generalized least squares</h2>
+<p>The <a href="#ar1">AR(1) fit</a> searched over five parameters with <code>optim()</code>. Matrix algebra cuts that to one. Write the covariance matrix as <span class="math inline">\(V = \sigma^2 R\)</span>, where <span class="math inline">\(R_{st} = \rho^{|s-t|}/(1 - \rho^2)\)</span> depends only on <span class="math inline">\(\rho\)</span>. If <span class="math inline">\(\rho\)</span> were known, the mean parameters and <span class="math inline">\(\sigma^2\)</span> that maximize the likelihood have closed forms:</p>
+<p><span class="math display">\[\hat{\boldsymbol\beta}(\rho) = (X^TR^{-1}X)^{-1}X^TR^{-1}\mathbf{y},
+\qquad
+\hat\sigma^2(\rho) = \frac{1}{n}\,\mathbf{r}^TR^{-1}\mathbf{r},
+\quad \mathbf{r} = \mathbf{y} - X\hat{\boldsymbol\beta}(\rho)\]</span></p>
+<p>This is <strong>generalized least squares</strong> (GLS). With <span class="math inline">\(\rho = 0\)</span>, <span class="math inline">\(R\)</span> is the identity matrix and <span class="math inline">\(\hat{\boldsymbol\beta}\)</span> reduces to the ordinary <a href="Week11_LinearModelsAndVariance.html#least-squares">normal equations</a>, <span class="math inline">\((X^TX)^{-1}X^T\mathbf{y}\)</span>. With <span class="math inline">\(\rho &gt; 0\)</span>, <span class="math inline">\(R^{-1}\)</span> down-weights information that neighboring years share.</p>
+<p>Plugging <span class="math inline">\(\hat{\boldsymbol\beta}(\rho)\)</span> and <span class="math inline">\(\hat\sigma^2(\rho)\)</span> back into the likelihood leaves a function of <span class="math inline">\(\rho\)</span> alone (a profile likelihood), which a one-dimensional search can maximize:</p>
+<pre class="r"><code>X_a &lt;- cbind(1, chron_a$precip, chron_a$year_c)
+y_a &lt;- chron_a$width
+n_a &lt;- length(y_a)
+
+gls_profile &lt;- function(rho) {
+  R &lt;- rho^lags / (1 - rho^2)
+  R_inv &lt;- solve(R)
+  beta &lt;- solve(t(X_a) %*% R_inv %*% X_a, t(X_a) %*% R_inv %*% y_a)
+  r &lt;- as.vector(y_a - X_a %*% beta)
+  sigma2 &lt;- as.numeric(t(r) %*% R_inv %*% r) / n_a
+  list(beta = as.vector(beta), sigma = sqrt(sigma2),
+       loglik = dmvnorm(y_a, as.vector(X_a %*% beta), sigma2 * R, log = TRUE))
+}
+rho_gls &lt;- optimize(function(rho) -gls_profile(rho)$loglik, c(-0.95, 0.95))$minimum
+fit_by_hand &lt;- gls_profile(rho_gls)</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left"></th>
+<th align="right">rho</th>
+<th align="right">a</th>
+<th align="right">precip</th>
+<th align="right">trend</th>
+<th align="right">sigma</th>
+<th align="right">logLik</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">optim(), 5 parameters</td>
+<td align="right">0.367</td>
+<td align="right">0.558</td>
+<td align="right">0.0214</td>
+<td align="right">-0.00468</td>
+<td align="right">0.0818</td>
+<td align="right">27.037</td>
+</tr>
+<tr class="even">
+<td align="left">GLS by hand, 1 parameter</td>
+<td align="right">0.367</td>
+<td align="right">0.558</td>
+<td align="right">0.0214</td>
+<td align="right">-0.00468</td>
+<td align="right">0.0818</td>
+<td align="right">27.037</td>
+</tr>
+<tr class="odd">
+<td align="left">gls()</td>
+<td align="right">0.367</td>
+<td align="right">0.558</td>
+<td align="right">0.0214</td>
+<td align="right">-0.00468</td>
+<td align="right">0.0818</td>
+<td align="right">27.037</td>
+</tr>
+</tbody>
+</table>
+<p>All three agree. <code>gls()</code> takes the same route: it profiles the mean parameters and <span class="math inline">\(\sigma\)</span> out of the likelihood and searches only over the correlation parameters. (It reports <span class="math inline">\(\sigma\)</span> as the SD of each year's total error, <span class="math inline">\(\sigma/\sqrt{1 - \rho^2}\)</span>; the table converts it back to the innovation SD.)</p>
+<p>The profile also gives a likelihood interval for <span class="math inline">\(\rho\)</span>:</p>
+<p><img src="Week12_MixedModels_files/figure-html/gls-profile-plot-1.png" width="576" style="display: block; margin: auto;" /></p>
+<p>The dashed line sits 1.92 below the maximum; the dotted lines mark the approximate 95% interval for <span class="math inline">\(\rho\)</span>, -0.03 to 0.75. Twenty-five years can't rule out <span class="math inline">\(\rho = 0\)</span>, and can't rule out the true value of 0.6 either.</p>
 </div>
 <div id="bonus-combined" class="section level2">
 <h2>Bonus: a random intercept and AR(1) together</h2>
@@ -1135,13 +1210,13 @@ rbind(integrate = c(fit_glmm$par[1:2], exp(fit_glmm$par[3]), -fit_glmm$value),
 <pre><code>##           (Intercept)     vigor (Intercept)          
 ## integrate    1.550849 0.3819203   0.5424088 -225.5694
 ## glmmTMB      1.548197 0.3820485   0.5422583 -225.5823</code></pre>
-<p>The estimates agree to about two decimals; <code>glmmTMB</code>'s Laplace approximation is close to the numerical integral here. A random slope would make each stand's integral two-dimensional, and the cost of grid-based integration grows with the number of grid points raised to the number of random effects per group. That's why packages approximate the integral, and why Bayesian samplers, which skip it, are popular for complex hierarchical models.</p>
+<p>The estimates agree to about two decimals; <code>glmmTMB</code>'s Laplace approximation is close to the numerical integral here. A random slope would make each stand's integral two-dimensional, and the cost of grid-based integration grows with the number of grid points raised to the number of random effects per group. That's why packages approximate the integral, and why Bayesian samplers, which skip it, are popular for complex hierarchical models. For other count and proportion models (negative binomial, zero-inflated, binomial with trials) in <code>lme4</code> and <code>glmmTMB</code>, see the <a href="lecture_notes/NOTES_Reference_MixedModelSyntax.pdf">mixed models handout</a>.</p>
 </div>
 </div>
 <div id="bayesian-hierarchical" class="section level1">
 <h1>Bayesian hierarchical models</h1>
 <p>The same random slope model, fit by MCMC. A Bayesian hierarchical model puts priors on the population-level parameters (the among-stand SDs and the correlation), and the sampler draws each stand's intercept and slope along with everything else. This part covers partial pooling, priors for a covariance matrix, the model written in Stan, and the same model in one line of <code>brms</code>.</p>
-<div id="big-picture-1" class="section level2">
+<div id="big-picture" class="section level2">
 <h2>1. Big picture</h2>
 <p><img src="Week12_MixedModels_files/figure-html/workflow-fit-1.png" width="1750" style="display: block; margin: auto;" /></p>
 <p>&quot;Hierarchical,&quot; &quot;multilevel,&quot; and &quot;mixed&quot; describe the same models. In Bayesian terms, a random effect is a parameter whose prior has its own unknown parameters (hyperparameters): each <span class="math inline">\((a_j, b_j)\)</span> gets the prior <span class="math inline">\(\text{MVN}(0, G)\)</span>, and <span class="math inline">\(G\)</span> gets a prior too. Compared with fitting by maximum likelihood:</p>

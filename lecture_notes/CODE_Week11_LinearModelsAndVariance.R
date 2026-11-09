@@ -152,7 +152,7 @@ nll_ri <- function(par) {
 fit_ri <- optim(c(mean(y_tree), log(0.1), log(0.1)), nll_ri, method = "BFGS")
 c(mu = fit_ri$par[1], sigma_b = exp(fit_ri$par[2]), sigma = exp(fit_ri$par[3]))
 
-library(lme4)
+library(lme4)          # syntax for nlme, lme4, glmmTMB: lecture_notes/NOTES_Reference_MixedModelSyntax.pdf
 fit_lmer <- lmer(width ~ 1 + (1 | stand), data = tree_means, REML = FALSE)
 fixef(fit_lmer)
 as.data.frame(VarCorr(fit_lmer))[, c("grp", "sdcor")]
