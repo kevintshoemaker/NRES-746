@@ -170,7 +170,10 @@ materials".
 dropped its whole planned topic (Bayesian comparison) for an unplanned
 sidebar (causal DAGs); Week 11 Wednesday got through the WOD and the
 random intercept, 2 of 4 planned sections, though Week 11 Monday
-(standard statistics, 4 sections plus discussion) was covered in full. Plan **3-4 sub-topics**
+(standard statistics, 4 sections plus discussion) was covered in full.
+Week 12 Monday covered the opening recap, AR(1), and why-harder, 2 of 4
+sections (random slopes and packages moved to the lab period, Bayesian
+hierarchical models to the next week). Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
 marked "Bonus" section. A derivation eats its whole slot, so put
@@ -679,6 +682,17 @@ Snapshot: Sun., Nov. 8, 2026 (end of Week 11; Week 12 built and revised, not yet
     missing year is lag 1, even with the level kept); `ou()` with
     `numFactor()` times matches `gls()`; `dispformula = ~0` makes glmmTMB
     AR(1)/spatial fits match `nlme` exactly.
+  - **As taught (Mon., Nov. 9):** opening recap (mean vector + $V$, why
+    the MVN, GLMMs as a latent normal layer; reworded on the page in the
+    instructor's announcement language), AR(1), why harder. Random
+    slopes, packages, and discussion moved to Tuesday's first hour;
+    Bayesian hierarchical models (`#bayesian-hierarchical`) moved to the
+    week of Nov. 16 (day not yet set; schedule not yet updated for it).
+    Also added Nov. 9: `#lagged-response` (AR errors vs. lagged
+    response), matrix form of RI + slope + AR(1) in `#bonus-combined`,
+    marginal-moments note in `#random-slopes`, AI-use footer on all
+    weekly pages (`footer.html`), knitr `_cache/` folders untracked
+    (Pages deploys were timing out at ~900 MB).
   - **Possible bonus section (not built):** "multivariate" non-normal data (a
     student asked about multivariate Poisson/gamma after the MVN). No
     general multivariate gamma/Poisson exists (the MVN is unusual in

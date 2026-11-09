@@ -49,10 +49,15 @@ Chapter 10, sections 10.3-10.6 (pp. 423-441).
 
 # Autocorrelation and mixed models in R {#mixed-models-r}
 
-Every model earlier in the course assumed independent observations, so
-the log-likelihood was a sum and the covariance matrix $V$ was diagonal.
-The diagonal didn't have to be constant: in a Poisson or gamma
-regression, each observation's variance depends on its mean.
+A model for a set of observations has two parts: a mean vector, the
+expected value of each observation ($X\boldsymbol\beta$ in the
+[matrix form of a linear model](Week11_LinearModelsAndVariance.html#linear-algebra)),
+and a variance-covariance matrix $V$. Models earlier in the course
+focused entirely on the mean vector, describing the expected value of
+each response as a function (possibly nonlinear) of one or more
+covariates. $V$ was trivial: a diagonal matrix of observation-level
+variances, which can depend on the expected value of each observation,
+as in Poisson and gamma regression.
 
 | Model | Variance of observation $i$ | Covariance of $i$ and $j$ |
 |:------|:----------------------------|:--------------------------|
@@ -61,16 +66,27 @@ regression, each observation's variance depends on its mean.
 | Negative binomial | $\mu_i + \mu_i^2/k$ | 0 |
 | Gamma (Bolker's form) | $\mu_i^2/\text{shape}$ | 0 |
 
-What's new now is the off-diagonal entries, which let observations
-share information. The multivariate normal is the one distribution
-where you can write those entries down directly, which is why it
-dominates what follows. For counts or other non-Normal data, we put the
-correlation on a hidden Normal layer (random effects on the link scale)
-and keep the familiar distribution for each observation given that
-layer (see the [Poisson GLMM bonus](#glmm-by-hand)).
+Assuming independence sets every off-diagonal element of $V$ to zero,
+which is what let us treat each observation separately and add up the
+log-likelihoods. With correlated observations we have no choice but to
+embrace the variance-covariance matrix!
 
-To fit a likelihood with correlated observations, we need a covariance 
-matrix $V$ to capture that correlation structure!
+Why so much attention to the multivariate normal, when much of the
+course has been about alternatives to the normal for the error
+process? First, just as every scalar random variable has a mean and a
+variance, every random vector has a mean vector and a
+variance-covariance matrix. Using $V$ to describe correlations doesn't
+by itself mean the response is multivariate normal. Second, and more
+important, the multivariate normal is the only practical, easy-to-use
+distribution in which you can write down any valid $V$ directly.
+GLMMs get around this by modeling the correlations among observations
+with a latent (unobserved) normal distribution on the link scale (e.g.,
+the log scale), then modeling the response with one of the univariate
+non-normal distributions from earlier in the course. Once we condition
+on the latent layer, which accounts for sources of non-independence like
+repeated measures, blocking, and temporal autocorrelation, the
+observations are independent (see the
+[Poisson GLMM bonus](#glmm-by-hand)).
 
 Here we start by modeling data that is correlated through time. Then we 
 walk through some reasons why structured-variance models are harder to fit than the independent models from earlier in the course (oh, if it were only as simple as summing up log-likelihoods across all observations!!). Then we will fit random intercept and
@@ -197,6 +213,12 @@ and the correlation between deviations $k$ steps apart is $\rho^k$
 (Bolker eq. 10.3.7). So the covariance between years $s$ and $t$ is
 
 $$V_{st} = \frac{\sigma^2}{1 - \rho^2}\,\rho^{|s - t|}$$
+
+The variance of an observation in a time series is this total variance,
+not the innovation variance $\sigma^2$: it includes a part carried over
+from earlier time steps. And unlike the block-diagonal $V$ of the random
+intercept, every covariance within a series is nonzero, decaying
+geometrically (a discrete exponential decay) as the lag grows.
 
 The `abs(row(M) - col(M))` trick from Bolker (p. 427) builds the matrix
 of lags:
