@@ -687,7 +687,10 @@ Snapshot: Sun., Nov. 8, 2026 (end of Week 11; Week 12 built and revised, not yet
     instructor's announcement language), AR(1), why harder. Random
     slopes, packages, and discussion moved to Tuesday's first hour;
     Bayesian hierarchical models (`#bayesian-hierarchical`) moved to the
-    Mon., Nov. 16 (GAMs keep Wed., Nov. 18).
+    Mon., Nov. 16 (GAMs keep Wed., Nov. 18). **When the Week 13 page is
+    built, move the `#bayesian-hierarchical` H1 (with its widgets,
+    script section, and guide Part 2) from Week 12 to Week 13**, and
+    repoint links to it (schedule Nov. 16 cell, any cross-page links).
     Also added Nov. 9: `#lagged-response` (AR errors vs. lagged
     response), matrix form of RI + slope + AR(1) in `#bonus-combined`,
     marginal-moments note in `#random-slopes`, AI-use footer on all
