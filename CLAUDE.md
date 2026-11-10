@@ -674,9 +674,13 @@ Snapshot: Sun., Nov. 8, 2026 (end of Week 11; Week 12 built and revised, not yet
     matrix algebra with $\rho$ profiled by `optimize()`, matches `gls()`;
     profile interval for $\rho$ -0.03 to 0.75); the intercept-slope
     "management plan" question was dropped. New reference handout
-    `lecture_notes/NOTES_Reference_MixedModelSyntax.pdf` (3 pp.; nlme,
-    lme4, glmmTMB side by side, glmmTMB as the practical default; every
-    syntax pair tested), linked from the Week 11 and 12 pages, both
+    `lecture_notes/NOTES_Reference_MixedModelSyntax.pdf` (rebuilt Nov. 10
+    to 5 pp. pairing each model's math with its nlme, lme4, glmmTMB
+    syntax; notation: $a_j, b_j$ intercept/slope, $\rho_{ab}$ their
+    correlation, $v_{jk}$ nested, $w_{m[i]}$ crossed, $\eta$ correlated
+    error, $\rho$ AR(1); glmmTMB as the practical default; every
+    syntax pair tested, plus the nlme `pdBlocked` crossed workaround and
+    an observation-level random effect), linked from the Week 11 and 12 pages, both
     scripts, the guide, and the schedule. Found while testing: in
     glmmTMB 1.1.11, `ar1()` treats observed times as consecutive (a
     missing year is lag 1, even with the level kept); `ou()` with

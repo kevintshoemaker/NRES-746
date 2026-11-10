@@ -1,12 +1,13 @@
 ---
 fontsize: 10pt
-geometry: margin=0.5in
+geometry: margin=0.6in
 output:
   pdf_document: default
   # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
 header-includes:
   - \usepackage{enumitem}
   - \setlist{itemsep=1pt, parsep=0pt, topsep=2pt}
+  - \usepackage{booktabs}
   - \pagenumbering{gobble}
 knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
 ---
@@ -16,16 +17,48 @@ knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
 ```
 
 \begin{center}
-{\Large\textbf{Mixed models in R: nlme, lme4, and glmmTMB}}\\
+{\Large\textbf{Mixed models in R: math and syntax for nlme, lme4, and glmmTMB}}\\
 NRES 746
 \end{center}
 
 All three packages maximize a likelihood (or a restricted likelihood)
 with the random effects integrated out. Fit the same model in two of
-them and you get the same log-likelihood: the matching lines below
-agreed on simulated data, except where a fit was singular or a method
-approximate. They differ in which models
-they can express, how fast they are, and how they report results.
+them and you get the same log-likelihood: the code pairs below agreed
+on simulated data, except where a fit was singular or a method
+approximate. Each model is written first in math, then in R, so you can
+translate in either direction.
+
+## Notation
+
+- $i$ indexes observations; $j$ a group (site, stand); $k$ a subgroup
+  nested in $j$ (plot within site); $m$ a second, crossed grouping
+  (observer); $t$ time.
+- $j[i]$ is the group that observation $i$ belongs to (the same lookup
+  as `site[i]` in R or Stan).
+- $\beta$s are fixed effects. Random effects ($a_j$, $b_j$, $v_{jk}$,
+  $w_m$) are Normal with mean 0 and independent of each other and of
+  the residuals unless stated. $\varepsilon \sim N(0, \sigma^2)$ is the
+  residual.
+- Every package writes the fixed part the same way (`y ~ x` means
+  $\beta_0 + \beta_1 x$); the random part is where they differ.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lll}
+\toprule
+\textbf{In the model} & \textbf{Math} & \textbf{lme4 / glmmTMB term} \\
+\midrule
+fixed intercept and slope & $\beta_0 + \beta_1 x_i$ & \texttt{y \textasciitilde{} x} \\
+random intercept & $+\,a_{j[i]}$, \ $a_j \sim N(0, \sigma_a^2)$ & \texttt{(1 | site)} \\
+correlated intercept and slope & $+\,a_{j[i]} + b_{j[i]}x_i$, \ $(a_j, b_j) \sim \text{MVN}(\mathbf{0}, G)$ & \texttt{(x | site)} \\
+uncorrelated intercept and slope & same, with $\text{Cov}(a_j, b_j) = 0$ & \texttt{(x || site)} \ (numeric $x$) \\
+nested groups & $+\,a_j + v_{jk}$ & \texttt{(1 | site/plot)} \\
+crossed groups & $+\,a_{j[i]} + w_{m[i]}$ & \texttt{(1 | site) + (1 | obs)} \\
+AR(1) errors in time & $\eta_t = \rho\,\eta_{t-1} + \varepsilon_t$ & \texttt{ar1(yearf + 0 | plot)} \\
+log link, Poisson counts & $y_i \sim \text{Pois}(\lambda_i)$, \ $\log\lambda_i = \ldots$ & \texttt{family = poisson} \\
+\bottomrule
+\end{tabular}
+\end{center}
 
 ## 1. Which package when
 
@@ -35,18 +68,17 @@ they can express, how fast they are, and how they report results.
   and spatial structures; and crossed random effects. Ecological data
   often start out looking Poisson and turn out overdispersed or
   autocorrelated, and here that means changing one argument rather than
-  switching packages. It's fast, especially for GLMMs. Its defaults are
-  ML fits and Wald tests and intervals; for profile intervals use
-  `confint(fit, method = "profile")` (variance terms come out on the log
-  SD scale, so exponentiate them).
+  switching packages. Its defaults are ML fits and Wald tests and
+  intervals; for profile intervals use `confint(fit, method = "profile")`
+  (variance terms come out on the log SD scale, so exponentiate them).
 - **`lme4`** (`lmer()`, `glmer()`) is the better choice for inference on
   Normal models with few groups: `lmer()` fits by REML, `lmerTest` and
   `pbkrtest` give small-sample (Satterthwaite, Kenward-Roger) tests, and
-  `confint()` profiles the likelihood by default. It's also the most
-  widely used and documented, and its sparse-matrix methods handle very
-  large Normal models with crossed effects. No residual correlation or
-  unequal variances.
-- **`nlme`** (`lme()`, `gls()`) still has the richest menu of residual
+  `confint()` profiles the likelihood by default. It's the most widely
+  used and documented, and its sparse-matrix methods handle very large
+  Normal models with crossed effects. No residual correlation or unequal
+  variances.
+- **`nlme`** (`lme()`, `gls()`) has the richest menu of residual
   structures for Normal data (`corCAR1()`, `corSpher()`, `varPower()`,
   and more), and `gls()` fits them with no random effects at all.
   Slower, Normal responses only, and crossed random effects are awkward.
@@ -65,60 +97,154 @@ Speed on large data     slow           fast                 fast
 Fixed-effect p-values   t tests        via lmerTest         Wald z
 ```
 
-## 2. The same model in each package
+## 2. Random-effect structures
 
 Write `d` for the data frame; `site`, `plot`, and `obs` (observer) are
-factors.
+factors and `x` is numeric.
+
+**Random intercept.** Observation $i$ in site $j$:
+$$y_{ij} = \beta_0 + \beta_1 x_{ij} + a_j + \varepsilon_{ij},
+\qquad a_j \sim N(0, \sigma_a^2)$$
+Two observations in the same site share $a_j$, so their covariance is
+$\sigma_a^2$; observations in different sites are independent. Four
+parameters: $\beta_0, \beta_1, \sigma_a, \sigma$.
 
 ```{r syntax-ri}
-# random intercept
 lme(y ~ x, random = ~ 1 | site, data = d)
 lmer(y ~ x + (1 | site), data = d)
 glmmTMB(y ~ x + (1 | site), data = d)
+```
 
-# correlated random intercept and slope
+**Correlated random intercept and slope.** Each site gets its own line:
+$$y_{ij} = (\beta_0 + a_j) + (\beta_1 + b_j)\,x_{ij} + \varepsilon_{ij},
+\qquad
+\begin{pmatrix} a_j \\ b_j \end{pmatrix} \sim
+\text{MVN}\!\left(\mathbf{0},\
+G = \begin{pmatrix} \sigma_a^2 & \rho_{ab}\sigma_a\sigma_b \\
+\rho_{ab}\sigma_a\sigma_b & \sigma_b^2 \end{pmatrix}\right)$$
+Six parameters: $\beta_0, \beta_1, \sigma_a, \sigma_b, \rho_{ab}, \sigma$.
+`(x | site)` includes the intercept; `(0 + x | site)` would give a random
+slope only.
+
+```{r syntax-rs}
 lme(y ~ x, random = ~ x | site, data = d)
 lmer(y ~ x + (x | site), data = d)
 glmmTMB(y ~ x + (x | site), data = d)
+```
 
-# uncorrelated random intercept and slope
+**Uncorrelated random intercept and slope.** The same model with
+$\rho_{ab} = 0$, so $G$ is diagonal (five parameters). In `nlme`,
+`pdDiag` means "positive-definite, diagonal" (`pdSymm`, the default, is
+the general form). In `lme4`, `(x || site)` is shorthand for
+`(1 | site) + (0 + x | site)`.
+
+```{r syntax-uncorrelated}
 lme(y ~ x, random = list(site = pdDiag(~ x)), data = d)
 lmer(y ~ x + (x || site), data = d)
 glmmTMB(y ~ x + (x || site), data = d)          # or diag(x | site)
+```
 
-# nested: plots within sites
+If `x` is a factor, `lme4`'s `||` still estimates correlations among the
+factor's levels. For a diagonal $G$ with a factor, use
+`diag(trt | site)` in `glmmTMB`, `pdDiag(~ trt)` in `nlme`, or numeric
+indicator columns in `lme4`: `(1 + trtB + trtC || site)`.
+
+**Nested groups.** Observation $i$ in plot $k$ within site $j$:
+$$y_{ijk} = \beta_0 + \beta_1 x_{ijk} + a_j + v_{jk} + \varepsilon_{ijk},
+\qquad a_j \sim N(0, \sigma_a^2), \quad v_{jk} \sim N(0, \sigma_v^2)$$
+The plot effect carries both subscripts: plot 1 in site A is a
+different plot from plot 1 in site B. `site/plot` expands to
+`(1 | site) + (1 | site:plot)`, and `site:plot` is the $jk$ subscript.
+The covariance between two observations is $\sigma_a^2 + \sigma_v^2$ in
+the same plot, $\sigma_a^2$ in the same site but different plots, and 0
+in different sites.
+
+```{r syntax-nested}
 lme(y ~ x, random = ~ 1 | site/plot, data = d)
 lmer(y ~ x + (1 | site/plot), data = d)
 glmmTMB(y ~ x + (1 | site/plot), data = d)
-
-# crossed: sites and observers (no simple lme() version)
-lmer(y ~ x + (1 | site) + (1 | obs), data = d)
-glmmTMB(y ~ x + (1 | site) + (1 | obs), data = d)
 ```
 
-**Residual correlation and unequal variances** (not available in
-`lme4`). In `glmmTMB`, correlation enters as a random-effect term with
-one level per observation; `dispformula = ~0` removes the separate
-residual variance so the term *is* the residual, matching `nlme`.
+**Crossed groups.** Every observer visits several sites:
+$$y_i = \beta_0 + \beta_1 x_i + a_{j[i]} + w_{m[i]} + \varepsilon_i,
+\qquad a_j \sim N(0, \sigma_a^2), \quad w_m \sim N(0, \sigma_w^2)$$
+Neither subscript is nested in the other. Two observations covary if
+they share a site ($\sigma_a^2$), an observer ($\sigma_w^2$), or both, so
+no ordering of the data splits $V$ into independent blocks.
 
-```{r syntax-structures}
-# AR(1) within each plot, no random effects
+```{r syntax-crossed}
+lmer(y ~ x + (1 | site) + (1 | obs), data = d)
+glmmTMB(y ~ x + (1 | site) + (1 | obs), data = d)
+d$all <- factor(1)   # nlme: one group holding everything, block-diagonal G (slow for large n)
+lme(y ~ x, data = d,
+    random = list(all = pdBlocked(list(pdIdent(~ 0 + site), pdIdent(~ 0 + obs)))))
+```
+
+## 3. Residual correlation and unequal variances
+
+Here the error, $\eta$, is correlated instead of independent (not
+available in `lme4`). In `glmmTMB`, correlation enters as a
+random-effect term with one level per observation; `dispformula = ~0`
+removes the separate residual variance so the term *is* the residual,
+matching `nlme`.
+
+**AR(1) errors in time.** Plot $j$ in year $t$:
+$$y_{jt} = \beta_0 + \beta_1 x_{jt} + \eta_{jt}, \qquad
+\eta_{jt} = \rho\,\eta_{j,t-1} + \varepsilon_{jt}, \qquad
+\varepsilon_{jt} \sim N(0, \sigma^2)$$
+Within a plot, $\text{Cor}(\eta_{js}, \eta_{jt}) = \rho^{|s-t|}$ and
+$\text{Var}(\eta_{jt}) = \sigma^2/(1-\rho^2)$; plots are independent. No
+random effects, so the model is all residual structure.
+
+```{r syntax-ar1}
 gls(y ~ x, correlation = corAR1(form = ~ year | plot), data = d)
 glmmTMB(y ~ x + ar1(yearf + 0 | plot), dispformula = ~0, data = d)    # yearf <- factor(year)
+```
 
-# random site intercept plus AR(1) within each plot
+**Random site intercept plus AR(1) within each plot.** Plot $k$ in site
+$j$, year $t$:
+$$y_{jkt} = \beta_0 + \beta_1 x_{jkt} + a_j + \eta_{jkt}, \qquad
+a_j \sim N(0, \sigma_a^2), \qquad \eta_{jkt} \text{ AR(1) within plot}$$
+$V = \sigma_a^2 ZZ^T + \sigma^2 R$: the random intercept adds
+$\sigma_a^2$ wherever two values share a site, and $R$ holds the AR(1)
+correlations within each plot.
+
+```{r syntax-ri-ar1}
 lme(y ~ x, random = ~ 1 | site, correlation = corAR1(form = ~ year | site/plot), data = d)
-glmmTMB(y ~ x + (1 | site) + ar1(yearf + 0 | plot), dispformula = ~0, data = d)
+glmmTMB(y ~ x + (1 | site) + ar1(yearf + 0 | plot), dispformula = ~0, data = d)  # unique plot labels
+```
 
-# AR(1) with missing years (glmmTMB's ar1() treats observed years as consecutive)
+**Gaps in time: the Ornstein-Uhlenbeck process.** The continuous-time
+version of AR(1) uses the actual times:
+$$\text{Cor}(\eta_{js}, \eta_{jt}) = e^{-\theta|s - t|} = \rho^{|s-t|},
+\qquad \rho = e^{-\theta}$$
+so a two-year gap gets $\rho^2$. `glmmTMB`'s `ar1()` treats the
+*observed* times as consecutive (a missing year counts as a lag of 1);
+`ou()` with `numFactor()` times handles gaps. `nlme`'s `corAR1()`
+handles gaps with integer times; `corCAR1()` takes non-integer times.
+
+```{r syntax-ou}
 gls(y ~ x, correlation = corAR1(form = ~ year | plot), data = d)      # handles gaps
 glmmTMB(y ~ x + ou(tt + 0 | plot), dispformula = ~0, data = d)       # tt <- numFactor(year)
+```
 
-# exponential spatial correlation within each site
+**Exponential spatial correlation.** Locations $i$ and $k$ in the same
+site, a distance $d_{ik}$ apart:
+$$y_i = \beta_0 + \beta_1 x_i + \eta_i, \qquad
+\text{Cor}(\eta_i, \eta_k) = e^{-d_{ik}/\phi}$$
+where $\phi$ is the range: correlation falls to $e^{-1} \approx 0.37$ at
+distance $\phi$.
+
+```{r syntax-spatial}
 gls(y ~ x, correlation = corExp(form = ~ east + north | site), data = d)
 glmmTMB(y ~ x + exp(pos + 0 | site), dispformula = ~0, data = d)     # pos <- numFactor(east, north)
+```
 
-# a separate residual variance for each treatment
+**A separate residual variance for each treatment.**
+$$y_i = \beta_0 + \beta_1 x_i + \varepsilon_i, \qquad
+\varepsilon_i \sim N\!\left(0, \sigma^2_{\text{trt}[i]}\right)$$
+
+```{r syntax-varident}
 gls(y ~ x, weights = varIdent(form = ~ 1 | trt), data = d)
 glmmTMB(y ~ x, dispformula = ~ trt, data = d)
 ```
@@ -130,31 +256,58 @@ symmetry), `gau()`, `mat()` (Matern), `us()` and `diag()` for
 random-effect covariances. See `?corClasses`, `?varClasses`, and
 `vignette("covstruct", package = "glmmTMB")`.
 
-**Non-Normal responses** (`nlme` has none).
+## 4. Non-Normal responses (GLMMs)
 
-```{r syntax-glmm}
-# Poisson counts
+A GLMM puts the random effects on the link scale, where they are
+Normal, and uses a non-Normal distribution for each observation given
+those effects. `nlme` fits none of these.
+
+**Poisson counts.**
+$$y_{ij} \sim \text{Pois}(\lambda_{ij}), \qquad
+\log \lambda_{ij} = \beta_0 + \beta_1 x_{ij} + a_j, \qquad
+a_j \sim N(0, \sigma_a^2)$$
+
+```{r syntax-poisson}
 glmer(count ~ x + (1 | site), family = poisson, data = d)
 glmmTMB(count ~ x + (1 | site), family = poisson, data = d)
+```
 
-# successes out of n trials
+**Successes $s$ out of $n$ trials.**
+$$s_{ij} \sim \text{Binom}(n_{ij}, p_{ij}), \qquad
+\text{logit}(p_{ij}) = \beta_0 + \beta_1 x_{ij} + a_j$$
+
+```{r syntax-binomial}
 glmer(cbind(s, n - s) ~ x + (1 | site), family = binomial, data = d)
 glmmTMB(cbind(s, n - s) ~ x + (1 | site), family = binomial, data = d)
+```
 
-# negative binomial (variance = mu + mu^2 / theta)
+**Overdispersed counts.** Three common choices:
+
+- Negative binomial (`nbinom2`): $\text{Var}(y_{ij}) = \mu_{ij} + \mu_{ij}^2/\theta$
+  with $\log\mu_{ij} = \beta_0 + \beta_1 x_{ij} + a_j$. (`nbinom1`:
+  $\text{Var} = \mu(1 + \phi)$.)
+- Observation-level random effect: add $e_i \sim N(0, \sigma_e^2)$ to
+  the Poisson's $\log\lambda$, one per observation (`obs_id` has a
+  unique level for each row).
+- Zero-inflated negative binomial: $y_{ij} = 0$ with probability $\pi$;
+  otherwise $y_{ij}$ is negative binomial as above. `ziformula = ~ 1`
+  means a constant $\pi$ (on the logit scale); `~ x` would let it vary.
+
+```{r syntax-overdispersed}
 glmer.nb(count ~ x + (1 | site), data = d)                   # slower, approximate
-glmmTMB(count ~ x + (1 | site), family = nbinom2, data = d)  # nbinom1: variance = mu * (1 + phi)
-
-# zero-inflated negative binomial (constant probability of an extra zero)
+glmmTMB(count ~ x + (1 | site), family = nbinom2, data = d)
+glmer(count ~ x + (1 | site) + (1 | obs_id), family = poisson, data = d)
+glmmTMB(count ~ x + (1 | site) + (1 | obs_id), family = poisson, data = d)
 glmmTMB(count ~ x + (1 | site), family = nbinom2, ziformula = ~ 1, data = d)
-
 # others: beta_family() for proportions in (0, 1), tweedie(), Gamma(link = "log"), ...
 ```
 
-Add an offset for effort or area with `+ offset(log(area))` in the
-formula, in any package.
+**Offsets for effort or area.** A count from a plot of area $A_i$:
+$\log\lambda_i = \log A_i + \beta_0 + \beta_1 x_i + a_{j[i]}$, so
+$\lambda_i / A_i$ is the density. Add `+ offset(log(area))` to the
+formula in any package.
 
-## 3. Fitting options
+## 5. Fitting options
 
 ```
                        nlme                    lme4                          glmmTMB
@@ -174,8 +327,8 @@ glmmTMB(..., control = glmmTMBControl(optimizer = optim, optArgs = list(method =
 
 - REML gives less biased variance estimates. Use ML when comparing
   models with different fixed effects (by AIC or a likelihood ratio
-  test). Note that `lmer()` and `glmmTMB()` have different defaults, so
-  their default fits of the same Normal model differ slightly.
+  test). `lmer()` and `glmmTMB()` have different defaults, so their
+  default fits of the same Normal model differ slightly.
 - `anova(fit1, fit2)` gives a likelihood ratio test in all three.
   Testing a variance at zero puts it on a boundary, so that p-value is
   conservative (too large).
@@ -186,7 +339,7 @@ glmmTMB(..., control = glmmTMBControl(optimizer = optim, optArgs = list(method =
   different points on such a flat surface.
 - Center and rescale predictors before blaming the optimizer.
 
-## 4. Getting results out
+## 6. Getting results out
 
 ```
                       nlme                     lme4                        glmmTMB
@@ -201,6 +354,11 @@ Simulate new data     --                       simulate(fit)               simul
 Residual checks       ACF(fit, resType = "n")  DHARMa (below)              DHARMa (below)
 ```
 
+In the math: `fixef()` returns the $\beta$s; `ranef()` the predicted
+$a_j$, $b_j$ (shrunk toward 0); `coef()` each group's
+$\beta_0 + a_j$ and $\beta_1 + b_j$; `VarCorr()` the $\sigma$s and
+$\rho_{ab}$.
+
 - `summary()`, `logLik()`, `AIC()`, and `nobs()` work everywhere.
   Log-likelihoods are comparable across packages for the same data and
   the same estimation method (ML vs. REML).
@@ -212,22 +370,24 @@ Residual checks       ACF(fit, resType = "n")  DHARMa (below)              DHARM
 - `broom.mixed::tidy(fit)` returns a data frame of estimates from any of
   the three.
 
-## 5. Things that trip people up
+## 7. Things that trip people up
 
-- **Names for the same thing.** The AR(1) coefficient is `Phi` in
+- **Names for the same thing.** The AR(1) coefficient $\rho$ is `Phi` in
   `nlme` and appears as a correlation labeled `(ar1)` in `glmmTMB`'s
   `VarCorr()`. With AR(1) errors, both report the SD of the total
-  error, $\sigma/\sqrt{1-\rho^2}$, not the innovation SD.
+  error, $\sigma/\sqrt{1-\rho^2}$, not the innovation SD $\sigma$.
 - **Time and space in `glmmTMB`.** `ar1()` needs a factor of equally
-  spaced times and treats the *observed* times as consecutive, so a
-  missing year becomes a lag of 1. Use `ou()` with `numFactor()` times
-  when there are gaps. In `nlme`, `corAR1()` needs integer times and
-  handles gaps correctly; use `corCAR1()` for non-integer times.
+  spaced times and treats the observed times as consecutive. Use `ou()`
+  with `numFactor()` times when there are gaps.
 - **Unique times.** Each `time | group` combination must appear once.
   Two observations in the same plot and year need an extra grouping
   level.
 - **Factors.** Make grouping variables factors. `glmmTMB` time terms
-  need a factor (`ar1()`) or `numFactor()` (`ou()`, `exp()`).
+  need a factor (`ar1()`) or `numFactor()` (`ou()`, `exp()`). A factor
+  inside `||` doesn't give uncorrelated effects (section 2).
+- **Nested labels.** If plots are numbered 1, 2, 3 within every site,
+  `(1 | plot)` wrongly treats plot 1 at every site as one plot. Use
+  `(1 | site/plot)` or give plots unique labels.
 - **Missing values** stop `nlme` fits; add `na.action = na.omit`.
 - **p-values.** `lmer()` reports none by design (the degrees of freedom
   are unclear). `lmerTest` adds approximate ones; with few groups,
