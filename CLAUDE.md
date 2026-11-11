@@ -370,7 +370,9 @@ analysis on the Week 6 page), and LECTURE2 (Oct. 30, covered by the
 Week 3 page, with its distributions half on the Week 4 page), and
 LECTURE1 and INTRO (Nov. 1, covered by the Week 1 page), and LECTURE8
 and LECTURE9 (Nov. 10, covered by the Week 10 page and the bonus
-performance page). LECTURE10 remains (not in the navbar). The backlog
+performance page), and LECTURE10 (Nov. 10, rebuilt as the random forest
+bonus page; `LECTURE10.html` is now a redirect stub to it, kept for past
+students' bookmarks). The backlog
 is done: every week through 11 has a page. Ask before deleting
 anything.
 
@@ -777,6 +779,19 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   from LECTURE8: a BIC note, `#model-averaging` (predictions, not
   coefficients; Cade 2015), and a worked tadpole Bayes factor in the
   Bayesian bonus.
+
+- **Random forest bonus page (built Nov. 10, not part of the course):**
+  `Bonus_RandomForest.Rmd`, kept for past students; last in the Lectures
+  menu. Rebuilt from legacy LECTURE10 (whose two images were missing):
+  ML vs. statistics, trees, the forest algorithm (bootstrap of size n,
+  feature subsets, out-of-bag error; widget `forest_average.html`), then
+  Titanic (`data/titanic.csv`, 714 passengers, now with `Pclass`): a
+  `party::ctree`, `ranger` (seed 746) permutation importance (Sex,
+  Pclass, Fare, Age), true partial dependence (averaged over passengers,
+  not other features at their means as the legacy page did), two-way
+  interaction strength (Pclass x Sex, Sex x Age top), and performance
+  (AUC 0.96 on training data vs. 0.87 out-of-bag and by 10-fold CV;
+  logistic 0.85 CV). Script `lecture_notes/CODE_Bonus_RandomForest.R`.
 
 - **For the time-series/dynamic models week (Nov. 30):** teach AR vs.
   MA identification with ACF and PACF side by side on long simulated

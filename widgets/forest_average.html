@@ -1,0 +1,110 @@
+<div class="w746" id="rfa">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746 input[type=range]{flex:1;min-width:160px}
+.w746 .val{font-weight:600;min-width:42px}
+.w746 button{font-size:14px;padding:3px 10px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:8px}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:20px;font-weight:600;color:var(--ink)}
+.w746 .ax{stroke:var(--muted);stroke-width:1}
+.w746 .lab{fill:var(--ink2);font-size:13px}
+.w746 .tk{fill:var(--muted);font-size:11px}
+.w746 .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2)}
+.w746 .key span{display:flex;align-items:center;gap:6px}
+</style>
+<div class="row">
+  <label for="rfa-n">Number of trees</label>
+  <input type="range" id="rfa-n" min="1" max="200" step="1" value="1">
+  <span class="val" id="rfa-nout">1</span>
+</div>
+<div class="row">
+  <label for="rfa-d">Tree depth</label>
+  <input type="range" id="rfa-d" min="1" max="8" step="1" value="8">
+  <span class="val" id="rfa-dout">8</span>
+  <button id="rfa-new" type="button">New data</button>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Error of one tree (new data)</div><div class="v" id="rfa-e1"></div></div>
+  <div class="card"><div class="k">Error of the average (new data)</div><div class="v" id="rfa-ef"></div></div>
+  <div class="card"><div class="k">Out-of-bag error</div><div class="v" id="rfa-oob"></div></div>
+</div>
+<svg viewBox="0 0 700 270" width="100%" role="img" aria-label="Noisy points, the true curve, the first tree's step function, the other trees in light grey, and the average of all trees.">
+  <g id="rfa-g"></g>
+</svg>
+<div class="key">
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#8a8a8a" stroke-width="2" stroke-dasharray="5 3"/></svg>true curve</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#d98a2b" stroke-width="2"/></svg>one tree</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#ccc" stroke-width="2"/></svg>other trees</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#2a78d6" stroke-width="3"/></svg>average of all trees (the forest)</span>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function rnorm(r){const u=r()+1e-12,v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const N=60,SD=0.35,MAXT=200;
+const truth=x=>Math.sin(x)+0.3*x;
+let X=[],Y=[],XT=[],YT=[],seed=746,trees=[],inbag=[];
+// regression tree on one predictor: split to minimize squared error, down to 'depth' levels or single points
+function grow(xs,ys,depth){
+  const m=ys.reduce((a,b)=>a+b,0)/ys.length;
+  if(depth===0||xs.length<2)return{leaf:m};
+  const idx=xs.map((_,i)=>i).sort((a,b)=>xs[a]-xs[b]);
+  let best=null,bestSS=Infinity;
+  let sl=0,sl2=0,nl=0,tot=0,tot2=0;idx.forEach(i=>{tot+=ys[i];tot2+=ys[i]*ys[i];});
+  for(let k=0;k<idx.length-1;k++){const y=ys[idx[k]];sl+=y;sl2+=y*y;nl++;
+    if(xs[idx[k]]===xs[idx[k+1]])continue;
+    const nr=idx.length-nl,sr=tot-sl,sr2=tot2-sl2;
+    const ss=(sl2-sl*sl/nl)+(sr2-sr*sr/nr);
+    if(ss<bestSS){bestSS=ss;best=(xs[idx[k]]+xs[idx[k+1]])/2;}}
+  if(best===null)return{leaf:m};
+  const L=[],R=[];xs.forEach((x,i)=>(x<best?L:R).push(i));
+  return{split:best,left:grow(L.map(i=>xs[i]),L.map(i=>ys[i]),depth-1),right:grow(R.map(i=>xs[i]),R.map(i=>ys[i]),depth-1)};}
+function pred(t,x){while(t.leaf===undefined)t=x<t.split?t.left:t.right;return t.leaf;}
+function sample(){const r=rng(seed);X=[];Y=[];XT=[];YT=[];
+  for(let i=0;i<N;i++){const x=10*r();X.push(x);Y.push(truth(x)+SD*rnorm(r));}
+  for(let i=0;i<400;i++){const x=10*r();XT.push(x);YT.push(truth(x)+SD*rnorm(r));}}
+function build(depth){const r=rng(seed*7+depth);trees=[];inbag=[];
+  for(let b=0;b<MAXT;b++){const ii=[],inb=new Array(N).fill(false);for(let i=0;i<N;i++){const j=Math.floor(r()*N);ii.push(j);inb[j]=true;}
+    trees.push(grow(ii.map(i=>X[i]),ii.map(i=>Y[i]),depth));inbag.push(inb);}}
+const P={x0:40,x1:690,y0:225,y1:15,xmin:0,xmax:10,ymin:-1.5,ymax:4.5};
+const px=x=>P.x0+(x-P.xmin)/(P.xmax-P.xmin)*(P.x1-P.x0);
+const py=y=>P.y0-(Math.max(P.ymin,Math.min(P.ymax,y))-P.ymin)/(P.ymax-P.ymin)*(P.y0-P.y1);
+const g=document.getElementById('rfa-g');
+el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x1,y2:P.y0},g);el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x0,y2:P.y1},g);
+[0,2,4,6,8,10].forEach(x=>txt('tk',px(x),P.y0+15,x,g));[-1,0,1,2,3,4].forEach(y=>txt('tk',P.x0-6,py(y)+4,y,g,'end'));
+txt('lab',(P.x0+P.x1)/2,255,'predictor x',g);
+const dyn=el('g',{},g);
+function line(f,attrs){let p='';for(let i=0;i<=400;i++){const x=i/400*10;p+=(i?'L':'M')+px(x)+','+py(f(x));}attrs.d=p;attrs.fill='none';el('path',attrs,dyn);}
+function draw(){
+  const n=parseInt(document.getElementById('rfa-n').value);
+  dyn.innerHTML='';
+  const shown=Math.min(n,40);
+  for(let b=1;b<shown;b++)line(x=>pred(trees[b],x),{stroke:'#ddd','stroke-width':1});
+  line(truth,{stroke:'#8a8a8a','stroke-width':2,'stroke-dasharray':'5 3'});
+  X.forEach((x,i)=>el('circle',{cx:px(x),cy:py(Y[i]),r:3,fill:'#222'},dyn));
+  line(x=>pred(trees[0],x),{stroke:'#d98a2b','stroke-width':2});
+  const avg=x=>{let s=0;for(let b=0;b<n;b++)s+=pred(trees[b],x);return s/n;};
+  if(n>1)line(avg,{stroke:'#2a78d6','stroke-width':3});
+  let e1=0,ef=0;XT.forEach((x,i)=>{e1+=(YT[i]-pred(trees[0],x))**2;ef+=(YT[i]-avg(x))**2;});
+  let oob=0,no=0;for(let i=0;i<N;i++){let s=0,c=0;for(let b=0;b<n;b++)if(!inbag[b][i]){s+=pred(trees[b],X[i]);c++;}if(c>0){oob+=(Y[i]-s/c)**2;no++;}}
+  document.getElementById('rfa-nout').textContent=n;
+  document.getElementById('rfa-dout').textContent=document.getElementById('rfa-d').value;
+  document.getElementById('rfa-e1').textContent=Math.sqrt(e1/XT.length).toFixed(2);
+  document.getElementById('rfa-ef').textContent=Math.sqrt(ef/XT.length).toFixed(2);
+  document.getElementById('rfa-oob').textContent=no>N/2?Math.sqrt(oob/no).toFixed(2):'too few trees';
+}
+const sn=document.getElementById('rfa-n'),sd=document.getElementById('rfa-d');
+sn.addEventListener('input',draw);
+sd.addEventListener('input',()=>{build(parseInt(sd.value));draw();});
+document.getElementById('rfa-new').addEventListener('click',()=>{seed+=1;sample();build(parseInt(sd.value));draw();});
+sample();build(parseInt(sd.value));draw();
+})();
+</script>
+</div>

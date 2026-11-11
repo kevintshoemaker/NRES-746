@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="NRES 746" />
+
+
+<title>Bonus: Machine Learning with Random Forests</title>
+
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.13.2/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+<link rel="stylesheet" href="styles.css" type="text/css" />
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">NRES 746</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Schedule
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="schedule.html">Course Schedule</a>
+    </li>
+    <li>
+      <a href="Syllabus.pdf">Syllabus</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Lectures
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="Week1_IntroAndAlgorithms.html">Week 1: Course introduction and algorithms for inference</a>
+    </li>
+    <li>
+      <a href="Week2_DeterministicFunctions.html">Week 2: Deterministic functions and the bestiary</a>
+    </li>
+    <li>
+      <a href="Week3_ProbabilityAndBayes.html">Week 3: Probability rules and Bayes' rule</a>
+    </li>
+    <li>
+      <a href="Week4_ProbabilityDistributions.html">Week 4: Counting, expectation, and probability distributions</a>
+    </li>
+    <li>
+      <a href="Week5_SimulatingData.html">Week 5: Simulating data from a model</a>
+    </li>
+    <li>
+      <a href="Week6_LikelihoodAndPowerAnalysis.html">Week 6: Likelihood, maximum likelihood, and a power analysis</a>
+    </li>
+    <li>
+      <a href="Week7_IntervalsAndBayes.html">Week 7: Likelihood intervals and Bayes' rule</a>
+    </li>
+    <li>
+      <a href="Week8_PosteriorsAndOptimization.html">Week 8: Priors, posteriors, and derivative-based optimization</a>
+    </li>
+    <li>
+      <a href="Week9_MCMC.html">Week 9: Derivative-free optimization and MCMC</a>
+    </li>
+    <li>
+      <a href="Week10_ModelComparison.html">Week 10: Model comparison and regularization</a>
+    </li>
+    <li>
+      <a href="Week11_LinearModelsAndVariance.html">Week 11: Linear models, matrices, and modeling variance</a>
+    </li>
+    <li>
+      <a href="Week12_MixedModels.html">Week 12: Autocorrelation and mixed models</a>
+    </li>
+    <li>
+      <a href="Week13_HierarchicalModelsAndGAMs.html">Week 13: Bayesian hierarchical models, splines, and GAMs</a>
+    </li>
+    <li>
+      <a href="Bonus_ModelPerformance.html">Bonus: Evaluating model performance</a>
+    </li>
+    <li>
+      <a href="Bonus_RandomForest.html">Bonus: Machine learning with random forests</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    WODs
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="wod/WOD_Week1_Lecture1_Diagnostic.pdf">Week 1: Math and stats self-diagnostic</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week1_Lecture2_PermutationPseudocode.pdf">Week 1: Pseudocoding a permutation test</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week2_Lecture1_RSyntaxAndNotation.pdf">Week 2: R syntax and function adjustments</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week2_Lecture2_BestiaryLimits.pdf">Week 2: Limits and a derivative</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week3_Lecture2_ProbabilityPuzzle.pdf">Week 3: A probability puzzle</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week4_Lecture2_SampleMeanVariance.pdf">Week 4: Expectation and the sample mean</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week5_Lecture1_ChooseDataGeneratingModel.pdf">Week 5: Choosing a data-generating model</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week5_Lecture2_WritingTheLikelihood.pdf">Week 5: Writing the likelihood</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week6_Lecture2_FindTheBugs.pdf">Week 6: Find the bugs</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week7_Lecture1_ReadTheInterval.pdf">Week 7: Reading the interval</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture1_HowMuchDidThePriorMatter.pdf">Week 8: How much did the prior matter?</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture1_NewtonByHand.pdf">Week 8: Newton's method by hand (take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week8_Lecture2_CurvatureByHand.pdf">Week 8: Curvature by hand (optional take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week9_Lecture2_GettingStanRunning.pdf">Week 9: Getting Stan running (take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week10_Lecture1_ConnectTheDots.pdf">Week 10: Connect the dots</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week11_Lecture1_LinearOrNot.pdf">Week 11: Linear or not?</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week11_Lecture2_TwoCores.pdf">Week 11: Two cores from one tree</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week12_Lecture1_FormulaToModel.pdf">Week 12: Formula to model (take-home)</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week13_Lecture1_PartialPooling.pdf">Week 13: Partial pooling by hand</a>
+    </li>
+    <li>
+      <a href="wod/WOD_Week13_Lecture2_SplineByHand.pdf">Week 13: Spline by hand (take-home)</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Labs
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="labs/Lab1_Act1.pdf">Lab 1, Act 1: Predation risk and tadpole size</a>
+    </li>
+    <li>
+      <a href="labs/Lab1_Act2.pdf">Lab 1, Act 2: From a shape to an equation</a>
+    </li>
+    <li>
+      <a href="labs/Lab1_Act3.pdf">Lab 1, Act 3: Does the evidence support it?</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act1.pdf">Lab 2, Act 1: Systematic search</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act2.pdf">Lab 2, Act 2: A better-fitting function?</a>
+    </li>
+    <li>
+      <a href="labs/Lab2_Act3.pdf">Lab 2, Act 3: Trusting the best fit</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act1.pdf">Lab 3, Act 1: Trusting a positive detection</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act2.pdf">Lab 3, Act 2: Binomial or Poisson?</a>
+    </li>
+    <li>
+      <a href="labs/Lab3_Act3.pdf">Lab 3, Act 3: A continuous measurement</a>
+    </li>
+    <li>
+      <a href="labs/Lab4_Act1.pdf">Lab 4, Act 1: Would the trend analysis find it?</a>
+    </li>
+    <li>
+      <a href="labs/Lab5_Act1.pdf">Lab 5, Act 1: Finding the peak</a>
+    </li>
+    <li>
+      <a href="labs/Lab5_Act2.pdf">Lab 5, Act 2: Finding the peak numerically</a>
+    </li>
+    <li>
+      <a href="labs/Lab6_Act1.pdf">Lab 6, Act 1: Reading the surface</a>
+    </li>
+    <li>
+      <a href="labs/Lab6_Act2.pdf">Lab 6, Act 2: An interval for the lethal dose</a>
+    </li>
+    <li>
+      <a href="labs/Lab7_Act1.pdf">Lab 7, Act 1: Running a chain by hand</a>
+    </li>
+    <li>
+      <a href="labs/Lab7_Act2.pdf">Lab 7, Act 2: Your own sampler</a>
+    </li>
+    <li>
+      <a href="labs/Lab8_Act1.pdf">Lab 8, Act 1: Which pond features matter?</a>
+    </li>
+    <li>
+      <a href="labs/Lab8_Act2.pdf">Lab 8, Act 2: Shrinking the coefficients</a>
+    </li>
+    <li>
+      <a href="labs/Lab9_Act1.pdf">Lab 9: Matrices for models</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Data sets
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li class="dropdown-header">Lab data</li>
+    <li>
+      <a href="data/ReedfrogSizepred.csv">Labs 1-2: Reed frog size and predation</a>
+    </li>
+    <li>
+      <a href="data/FrogChorus.csv">Lab 5: Frog chorus</a>
+    </li>
+    <li>
+      <a href="data/BeetleFumigation.csv">Lab 6: Beetle fumigation</a>
+    </li>
+    <li>
+      <a href="data/BdPondSurvey.csv">Lab 7: Bd pond survey</a>
+    </li>
+    <li>
+      <a href="data/BdRegionalSurvey.csv">Lab 8: Bd regional survey</a>
+    </li>
+    <li>
+      <a href="data/PinyonSeedlings.csv">Lab 9: Pinyon seedlings</a>
+    </li>
+    <li class="divider"></li>
+    <li class="dropdown-header">Other</li>
+    <li>
+      <a href="data/ReservoirChlorophyll.csv">Week 13 WOD: Reservoir chlorophyll</a>
+    </li>
+    <li>
+      <a href="data/other/TreeData.csv">Tree Data</a>
+    </li>
+    <li>
+      <a href="data/ReedfrogPred.csv">Reed Frog Predation Data</a>
+    </li>
+    <li>
+      <a href="data/ReedfrogFuncresp.csv">Reed Frog Func Resp</a>
+    </li>
+  </ul>
+</li>
+<li>
+  <a href="Links.html">Links</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Bonus: Machine Learning with Random Forests</h1>
+<h4 class="author">NRES 746</h4>
+<h4 class="date">Fall 2026</h4>
+
+</div>
+
+
+<p><a href="#ai-use">How this page was made</a></p>
+<p>This is a supplemental page, kept for students from earlier years of the course; random forests aren't part of the current course. R code from this page is also in the <a href="lecture_notes/CODE_Bonus_RandomForest.R">companion script</a>. Packages: <code>ranger</code>, <code>party</code>. Bolker doesn't cover machine learning; the original source is Breiman (2001, <em>Machine Learning</em> 45: 5-32).</p>
+<div id="ml" class="section level1">
+<h1>Statistics and machine learning</h1>
+<p>Statistical models describe how the data arose and estimate the parameters of that process, with their uncertainty. Machine learning algorithms look for patterns that predict well, with fewer assumptions and less interest in parameters. This part explains decision trees and how a random forest combines many of them.</p>
+<div id="big-picture" class="section level2">
+<h2>1. Big picture</h2>
+<p>In statistics we learn about a population from a sample. We write down a data-generating model (a likelihood), fit it, check it, and report parameter estimates with confidence or credible intervals. Prediction often comes second.</p>
+<p>In machine learning the goal is usually prediction: find patterns in the available data that generalize to new cases. The analyst specifies less, and the algorithm does more of the work. There are no distributional assumptions about residuals, and relationships needn't be linear or specified in advance. The price is that there are no parameters with intervals or p-values to interpret. Machine-learning predictions can be more accurate than a statistical model's, and the patterns they find can suggest hypotheses to test with a statistical model later.</p>
+</div>
+<div id="trees" class="section level2">
+<h2>2. Decision trees</h2>
+<p>A decision tree is a set of branching rules that predicts a response from a set of predictors (in machine learning, <strong>features</strong>):</p>
+<ol style="list-style-type: decimal">
+<li>Choose the feature, and the split point on it, that divides the data into two groups whose responses are as similar as possible within each group.</li>
+<li>Repeat within each group, and again within each of those (<strong>recursively</strong>), until a stopping rule is reached, such as a maximum depth or too few observations left to split.</li>
+<li>Predict a new case by following the rules down to a final group (a <strong>leaf</strong>) and using that group's mean response (or, for a categorical response, its most common class or its class proportions).</li>
+</ol>
+<p>Each split point is a <strong>node</strong>. A single tree is easy to read, but it is unstable: a slightly different sample can produce a very different tree, and a deep tree fits the noise.</p>
+</div>
+<div id="forest" class="section level2">
+<h2>3. Random forests</h2>
+<p>A random forest grows many trees (500 is a common default), each on a perturbed version of the data, and averages their predictions:</p>
+<ol style="list-style-type: decimal">
+<li>Draw a <strong>bootstrap sample</strong> of the data: <span class="math inline">\(n\)</span> observations drawn with replacement from the <span class="math inline">\(n\)</span> in the data set, so each tree sees about 63% of the distinct observations.</li>
+<li>Grow a deep tree on that sample. At each node, consider only a random subset of the features (in <code>ranger</code>, the square root of the number of features by default) when choosing the split.</li>
+<li>Predict by averaging the trees' predictions (for a categorical response, by averaging their class probabilities or taking a majority vote).</li>
+</ol>
+<p>Each tree on its own is a noisy, overfit predictor. Because the trees see different data and different features, their errors are only partly correlated, so averaging cancels much of the noise. This is the same reason a mean of many measurements is more precise than one measurement.</p>
+<p>The observations a tree didn't see (about 37%, its <strong>out-of-bag</strong> observations) give a built-in test set. Predicting each observation from only the trees that didn't use it gives an <strong>out-of-bag error</strong>, an estimate of performance on new data that works like <a href="Bonus_ModelPerformance.html#cross-validation">cross-validation</a> without any refitting.</p>
+<p>In the widget, 60 points come from a smooth curve plus noise, with one predictor. Each tree is grown on a bootstrap sample. (With one predictor there is no feature subsampling, so this shows the bagging part of the algorithm.)</p>
+<div class="w746" id="rfa">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746 input[type=range]{flex:1;min-width:160px}
+.w746 .val{font-weight:600;min-width:42px}
+.w746 button{font-size:14px;padding:3px 10px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:8px}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:20px;font-weight:600;color:var(--ink)}
+.w746 .ax{stroke:var(--muted);stroke-width:1}
+.w746 .lab{fill:var(--ink2);font-size:13px}
+.w746 .tk{fill:var(--muted);font-size:11px}
+.w746 .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2)}
+.w746 .key span{display:flex;align-items:center;gap:6px}
+</style>
+<div class="row">
+  <label for="rfa-n">Number of trees</label>
+  <input type="range" id="rfa-n" min="1" max="200" step="1" value="1">
+  <span class="val" id="rfa-nout">1</span>
+</div>
+<div class="row">
+  <label for="rfa-d">Tree depth</label>
+  <input type="range" id="rfa-d" min="1" max="8" step="1" value="8">
+  <span class="val" id="rfa-dout">8</span>
+  <button id="rfa-new" type="button">New data</button>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Error of one tree (new data)</div><div class="v" id="rfa-e1"></div></div>
+  <div class="card"><div class="k">Error of the average (new data)</div><div class="v" id="rfa-ef"></div></div>
+  <div class="card"><div class="k">Out-of-bag error</div><div class="v" id="rfa-oob"></div></div>
+</div>
+<svg viewBox="0 0 700 270" width="100%" role="img" aria-label="Noisy points, the true curve, the first tree's step function, the other trees in light grey, and the average of all trees.">
+  <g id="rfa-g"></g>
+</svg>
+<div class="key">
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#8a8a8a" stroke-width="2" stroke-dasharray="5 3"/></svg>true curve</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#d98a2b" stroke-width="2"/></svg>one tree</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#ccc" stroke-width="2"/></svg>other trees</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#2a78d6" stroke-width="3"/></svg>average of all trees (the forest)</span>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function rnorm(r){const u=r()+1e-12,v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const N=60,SD=0.35,MAXT=200;
+const truth=x=>Math.sin(x)+0.3*x;
+let X=[],Y=[],XT=[],YT=[],seed=746,trees=[],inbag=[];
+// regression tree on one predictor: split to minimize squared error, down to 'depth' levels or single points
+function grow(xs,ys,depth){
+  const m=ys.reduce((a,b)=>a+b,0)/ys.length;
+  if(depth===0||xs.length<2)return{leaf:m};
+  const idx=xs.map((_,i)=>i).sort((a,b)=>xs[a]-xs[b]);
+  let best=null,bestSS=Infinity;
+  let sl=0,sl2=0,nl=0,tot=0,tot2=0;idx.forEach(i=>{tot+=ys[i];tot2+=ys[i]*ys[i];});
+  for(let k=0;k<idx.length-1;k++){const y=ys[idx[k]];sl+=y;sl2+=y*y;nl++;
+    if(xs[idx[k]]===xs[idx[k+1]])continue;
+    const nr=idx.length-nl,sr=tot-sl,sr2=tot2-sl2;
+    const ss=(sl2-sl*sl/nl)+(sr2-sr*sr/nr);
+    if(ss<bestSS){bestSS=ss;best=(xs[idx[k]]+xs[idx[k+1]])/2;}}
+  if(best===null)return{leaf:m};
+  const L=[],R=[];xs.forEach((x,i)=>(x<best?L:R).push(i));
+  return{split:best,left:grow(L.map(i=>xs[i]),L.map(i=>ys[i]),depth-1),right:grow(R.map(i=>xs[i]),R.map(i=>ys[i]),depth-1)};}
+function pred(t,x){while(t.leaf===undefined)t=x<t.split?t.left:t.right;return t.leaf;}
+function sample(){const r=rng(seed);X=[];Y=[];XT=[];YT=[];
+  for(let i=0;i<N;i++){const x=10*r();X.push(x);Y.push(truth(x)+SD*rnorm(r));}
+  for(let i=0;i<400;i++){const x=10*r();XT.push(x);YT.push(truth(x)+SD*rnorm(r));}}
+function build(depth){const r=rng(seed*7+depth);trees=[];inbag=[];
+  for(let b=0;b<MAXT;b++){const ii=[],inb=new Array(N).fill(false);for(let i=0;i<N;i++){const j=Math.floor(r()*N);ii.push(j);inb[j]=true;}
+    trees.push(grow(ii.map(i=>X[i]),ii.map(i=>Y[i]),depth));inbag.push(inb);}}
+const P={x0:40,x1:690,y0:225,y1:15,xmin:0,xmax:10,ymin:-1.5,ymax:4.5};
+const px=x=>P.x0+(x-P.xmin)/(P.xmax-P.xmin)*(P.x1-P.x0);
+const py=y=>P.y0-(Math.max(P.ymin,Math.min(P.ymax,y))-P.ymin)/(P.ymax-P.ymin)*(P.y0-P.y1);
+const g=document.getElementById('rfa-g');
+el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x1,y2:P.y0},g);el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x0,y2:P.y1},g);
+[0,2,4,6,8,10].forEach(x=>txt('tk',px(x),P.y0+15,x,g));[-1,0,1,2,3,4].forEach(y=>txt('tk',P.x0-6,py(y)+4,y,g,'end'));
+txt('lab',(P.x0+P.x1)/2,255,'predictor x',g);
+const dyn=el('g',{},g);
+function line(f,attrs){let p='';for(let i=0;i<=400;i++){const x=i/400*10;p+=(i?'L':'M')+px(x)+','+py(f(x));}attrs.d=p;attrs.fill='none';el('path',attrs,dyn);}
+function draw(){
+  const n=parseInt(document.getElementById('rfa-n').value);
+  dyn.innerHTML='';
+  const shown=Math.min(n,40);
+  for(let b=1;b<shown;b++)line(x=>pred(trees[b],x),{stroke:'#ddd','stroke-width':1});
+  line(truth,{stroke:'#8a8a8a','stroke-width':2,'stroke-dasharray':'5 3'});
+  X.forEach((x,i)=>el('circle',{cx:px(x),cy:py(Y[i]),r:3,fill:'#222'},dyn));
+  line(x=>pred(trees[0],x),{stroke:'#d98a2b','stroke-width':2});
+  const avg=x=>{let s=0;for(let b=0;b<n;b++)s+=pred(trees[b],x);return s/n;};
+  if(n>1)line(avg,{stroke:'#2a78d6','stroke-width':3});
+  let e1=0,ef=0;XT.forEach((x,i)=>{e1+=(YT[i]-pred(trees[0],x))**2;ef+=(YT[i]-avg(x))**2;});
+  let oob=0,no=0;for(let i=0;i<N;i++){let s=0,c=0;for(let b=0;b<n;b++)if(!inbag[b][i]){s+=pred(trees[b],X[i]);c++;}if(c>0){oob+=(Y[i]-s/c)**2;no++;}}
+  document.getElementById('rfa-nout').textContent=n;
+  document.getElementById('rfa-dout').textContent=document.getElementById('rfa-d').value;
+  document.getElementById('rfa-e1').textContent=Math.sqrt(e1/XT.length).toFixed(2);
+  document.getElementById('rfa-ef').textContent=Math.sqrt(ef/XT.length).toFixed(2);
+  document.getElementById('rfa-oob').textContent=no>N/2?Math.sqrt(oob/no).toFixed(2):'too few trees';
+}
+const sn=document.getElementById('rfa-n'),sd=document.getElementById('rfa-d');
+sn.addEventListener('input',draw);
+sd.addEventListener('input',()=>{build(parseInt(sd.value));draw();});
+document.getElementById('rfa-new').addEventListener('click',()=>{seed+=1;sample();build(parseInt(sd.value));draw();});
+sample();build(parseInt(sd.value));draw();
+})();
+</script>
+</div>
+<blockquote>
+<p><strong>Question:</strong> With one tree, how does the step function compare with the true curve? Add trees: what happens to the error on new data, and why does it level off instead of reaching 0? Then set the depth to 1 (each tree has a single split). Does averaging still help as much?</p>
+</blockquote>
+</div>
+</div>
+<div id="titanic" class="section level1">
+<h1>Example: who survived the Titanic?</h1>
+<p>Passenger records from the Titanic give survival (0 or 1), sex, age, ticket class, fare, and the numbers of siblings or spouses and of parents or children aboard. Which features predict survival, and how?</p>
+<div id="single-tree" class="section level2">
+<h2>1. Data and a single tree</h2>
+<p>The data are at <code>https://kevintshoemaker.github.io/NRES-746/data/titanic.csv</code>. Categorical variables must be factors, not numbers or text, for both packages used here:</p>
+<pre class="r"><code>titanic &lt;- read.csv(
+  &quot;https://kevintshoemaker.github.io/NRES-746/data/titanic.csv&quot;
+)
+features &lt;- c(&quot;Pclass&quot;, &quot;Sex&quot;, &quot;Age&quot;, &quot;SibSp&quot;, &quot;Parch&quot;, &quot;Fare&quot;)
+titanic &lt;- na.omit(titanic[, c(&quot;Survived&quot;, features)])   # 714 passengers with known age
+titanic$Survived &lt;- factor(titanic$Survived, levels = 0:1, labels = c(&quot;died&quot;, &quot;survived&quot;))
+titanic$Sex &lt;- factor(titanic$Sex)
+titanic$Pclass &lt;- factor(titanic$Pclass)       # ticket class 1, 2, 3
+str(titanic)</code></pre>
+<pre><code>## &#39;data.frame&#39;:    714 obs. of  7 variables:
+##  $ Survived: Factor w/ 2 levels &quot;died&quot;,&quot;survived&quot;: 1 2 2 2 1 1 1 2 2 2 ...
+##  $ Pclass  : Factor w/ 3 levels &quot;1&quot;,&quot;2&quot;,&quot;3&quot;: 3 1 3 1 3 1 3 3 2 3 ...
+##  $ Sex     : Factor w/ 2 levels &quot;female&quot;,&quot;male&quot;: 2 1 1 1 2 2 2 1 1 1 ...
+##  $ Age     : num  22 38 26 35 35 54 2 27 14 4 ...
+##  $ SibSp   : int  1 1 0 1 0 0 3 0 1 1 ...
+##  $ Parch   : int  0 0 0 0 0 0 1 2 0 1 ...
+##  $ Fare    : num  7.25 71.28 7.92 53.1 8.05 ...
+##  - attr(*, &quot;na.action&quot;)= &#39;omit&#39; Named int [1:177] 6 18 20 27 29 30 32 33 37 43 ...
+##   ..- attr(*, &quot;names&quot;)= chr [1:177] &quot;6&quot; &quot;18&quot; &quot;20&quot; &quot;27&quot; ...</code></pre>
+<p>A single tree (a <strong>classification tree</strong>; with a numeric response it would be a regression tree), limited to three levels so it can be read:</p>
+<pre class="r"><code>library(party)
+tree &lt;- ctree(Survived ~ ., data = titanic,
+              controls = ctree_control(mincriterion = 0.85, maxdepth = 3))
+plot(tree)</code></pre>
+<p><img src="Bonus_RandomForest_files/figure-html/single-tree-1.png" width="960" style="display: block; margin: auto;" /></p>
+<p>Each bar at the bottom shows the share of passengers in that leaf who survived (dark) and died (light). Sex makes the first split; then class, and within those groups age or fare. Boys 9 and under in second or third class survived far more often than older males in those classes, and nearly all women in first or second class survived. (<code>ctree()</code> grows a <em>conditional inference</em> tree, which chooses each split with a significance test; hence the p-values at the nodes.)</p>
+</div>
+<div id="fit" class="section level2">
+<h2>2. Fitting a forest</h2>
+<p><code>ranger</code> is a fast implementation of random forests. With <code>probability = TRUE</code> it predicts the probability of each class instead of a single class; <code>importance = &quot;permutation&quot;</code> records the variable importance described in the next section.</p>
+<pre class="r"><code>library(ranger)
+rf &lt;- ranger(Survived ~ ., data = titanic, num.trees = 500, probability = TRUE,
+             importance = &quot;permutation&quot;, seed = 746)
+rf</code></pre>
+<pre><code>## Ranger result
+## 
+## Call:
+##  ranger(Survived ~ ., data = titanic, num.trees = 500, probability = TRUE,      importance = &quot;permutation&quot;, seed = 746) 
+## 
+## Type:                             Probability estimation 
+## Number of trees:                  500 
+## Sample size:                      714 
+## Number of independent variables:  6 
+## Mtry:                             2 
+## Target node size:                 10 
+## Variable importance mode:         permutation 
+## Splitrule:                        gini 
+## OOB prediction error (Brier s.):  0.1290375</code></pre>
+<p>Like most machine-learning algorithms, a forest has tuning settings: the number of features tried at each split (<code>mtry</code>), the minimum leaf size, and the number of trees. The defaults usually work well. In a real analysis, try a few settings and compare their out-of-bag error.</p>
+</div>
+<div id="importance" class="section level2">
+<h2>3. Variable importance</h2>
+<p><strong>Permutation importance</strong>: for each tree, shuffle one feature's values among the out-of-bag observations, which breaks its link to the response, and measure how much the predictions get worse. A feature the forest relies on loses a lot of accuracy when shuffled.</p>
+<pre class="r"><code>imp &lt;- sort(importance(rf))
+par(mar = c(4, 7, 0.5, 0.5))
+barplot(imp, horiz = TRUE, las = 1, col = &quot;steelblue&quot;,
+        xlab = &quot;Permutation importance (increase in prediction error)&quot;)</code></pre>
+<p><img src="Bonus_RandomForest_files/figure-html/importance-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>Sex matters most, then ticket class, fare, and age. Importance says how much the predictions depend on a feature, not the direction or shape of its effect, and correlated features (class and fare here) share credit in ways that are hard to untangle.</p>
+</div>
+<div id="partial-dependence" class="section level2">
+<h2>4. Partial dependence</h2>
+<p>A <strong>partial dependence plot</strong> shows a feature's effect on the predictions: set the feature to one value for every passenger, predict, average, and repeat across a range of values. The other features keep their observed values, so the curve averages over the real mix of passengers.</p>
+<pre class="r"><code># mean predicted survival when &#39;feature&#39; is set to each value in &#39;values&#39;
+partial_dependence &lt;- function(feature, values) {
+  sapply(seq_along(values), function(i) {
+    nd &lt;- titanic
+    nd[[feature]] &lt;- values[i]
+    mean(predict(rf, nd)$predictions[, &quot;survived&quot;])
+  })
+}</code></pre>
+<pre class="r"><code>par(mfrow = c(2, 3), mar = c(4, 4, 1, 0.5))
+for (f in names(sort(importance(rf), decreasing = TRUE))) {
+  x &lt;- titanic[[f]]
+  values &lt;- if (is.factor(x)) factor(levels(x), levels = levels(x)) else
+    seq(min(x), quantile(x, 0.98), length.out = 30)    # skip the extreme fares
+  pd &lt;- partial_dependence(f, values)
+  if (is.factor(x)) {
+    barplot(pd, names.arg = levels(x), ylim = c(0, 1), col = &quot;steelblue&quot;,
+            xlab = f, ylab = &quot;Predicted survival&quot;)
+  } else {
+    plot(values, pd, type = &quot;l&quot;, lwd = 2, ylim = c(0, 1), xlab = f,
+         ylab = &quot;Predicted survival&quot;)
+    rug(jitter(x[x &lt;= max(values)]))
+  }
+}</code></pre>
+<p><img src="Bonus_RandomForest_files/figure-html/partial-dependence-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))</code></pre>
+<p>Averaged over the other features, predicted survival is 0.68 for women and 0.24 for men. Young children did better than adults (0.66 at age 2, 0.40 at 30), a nonlinear pattern a logistic regression with a straight-line age term would miss.</p>
+</div>
+<div id="interactions" class="section level2">
+<h2>5. Interactions</h2>
+<p>If two features don't interact, their two-way partial dependence is the sum of two separate effects. A simple measure of interaction strength is how far the two-way partial dependence departs from the best additive fit:</p>
+<pre class="r"><code># two-way partial dependence on a grid, and its departure from an additive fit
+grid_values &lt;- function(x) {
+  if (is.factor(x)) factor(levels(x), levels = levels(x)) else
+    seq(min(x), quantile(x, 0.98), length.out = 8)
+}
+pd_2way &lt;- function(f1, f2) {
+  grid &lt;- expand.grid(v1 = grid_values(titanic[[f1]]), v2 = grid_values(titanic[[f2]]))
+  nd &lt;- titanic[rep(seq_len(nrow(titanic)), times = nrow(grid)), ]   # every passenger at every grid point
+  nd[[f1]] &lt;- rep(grid$v1, each = nrow(titanic))
+  nd[[f2]] &lt;- rep(grid$v2, each = nrow(titanic))
+  grid$pd &lt;- tapply(predict(rf, nd)$predictions[, &quot;survived&quot;],
+                    rep(seq_len(nrow(grid)), each = nrow(titanic)), mean)
+  grid
+}
+pairs &lt;- as.data.frame(t(combn(features, 2)))
+names(pairs) &lt;- c(&quot;f1&quot;, &quot;f2&quot;)
+pairs$strength &lt;- sapply(seq_len(nrow(pairs)), function(i) {
+  g &lt;- pd_2way(pairs$f1[i], pairs$f2[i])
+  sqrt(mean(resid(lm(pd ~ factor(v1) + factor(v2), data = g))^2))   # RMS departure from additive
+})
+pairs &lt;- pairs[order(pairs$strength, decreasing = TRUE), ]
+head(pairs, 5)</code></pre>
+<pre><code>##        f1    f2   strength
+## 1  Pclass   Sex 0.08067509
+## 6     Sex   Age 0.07161184
+## 10    Age SibSp 0.03201296
+## 5  Pclass  Fare 0.03087172
+## 12    Age  Fare 0.02935121</code></pre>
+<p>The two strongest interactions both involve sex: sex with class, and sex with age. Plot them:</p>
+<pre class="r"><code># two-way partial dependence: x axis = the feature with more grid values, one line per value of the other
+plot_2way &lt;- function(f1, f2) {
+  g &lt;- pd_2way(f1, f2)
+  if (nlevels(factor(g$v1)) &lt; nlevels(factor(g$v2))) {
+    g &lt;- g[, c(&quot;v2&quot;, &quot;v1&quot;, &quot;pd&quot;)]
+    names(g) &lt;- c(&quot;v1&quot;, &quot;v2&quot;, &quot;pd&quot;)
+    tmp &lt;- f1; f1 &lt;- f2; f2 &lt;- tmp
+  }
+  x &lt;- as.numeric(g$v1)
+  groups &lt;- split(seq_len(nrow(g)), factor(g$v2))
+  plot(NA, xlim = range(x), ylim = c(0, 1), xlab = f1, ylab = &quot;Predicted survival&quot;,
+       xaxt = if (is.factor(g$v1)) &quot;n&quot; else &quot;s&quot;)
+  if (is.factor(g$v1)) axis(1, at = seq_along(levels(g$v1)), labels = levels(g$v1))
+  for (k in seq_along(groups)) lines(x[groups[[k]]], g$pd[groups[[k]]], lwd = 2, lty = k)
+  legend(&quot;topright&quot;, paste(f2, &quot;=&quot;, names(groups)), lwd = 2, lty = seq_along(groups),
+         bty = &quot;n&quot;, cex = 0.8)
+}
+
+par(mfrow = c(1, 2), mar = c(4, 4, 1, 0.5))
+plot_2way(pairs$f1[1], pairs$f2[1])
+plot_2way(pairs$f1[2], pairs$f2[2])</code></pre>
+<p><img src="Bonus_RandomForest_files/figure-html/interaction-plots-1.png" width="864" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>par(mfrow = c(1, 1))</code></pre>
+<p>Class mattered mainly for women: predicted survival drops sharply for women in third class but changes little across classes for men. Age mattered mainly for males: boys survived far more often than men, while survival declines only gently with age for women. A logistic regression would need these interactions written in explicitly; the forest found them on its own.</p>
+</div>
+<div id="performance" class="section level2">
+<h2>6. Performance</h2>
+<p>How well does the forest predict survival? Compare its predictions for the passengers it was trained on, its out-of-bag predictions, and 10-fold cross-validation, along with a logistic regression using the same features. Both models are scored by AUC and McFadden's pseudo-<span class="math inline">\(R^2\)</span> (both explained on the <a href="Bonus_ModelPerformance.html#auc">model performance page</a>).</p>
+<pre class="r"><code>y &lt;- as.numeric(titanic$Survived == &quot;survived&quot;)
+auc &lt;- function(p, y) {
+  r &lt;- rank(p)
+  n1 &lt;- sum(y)
+  n0 &lt;- sum(1 - y)
+  (sum(r[y == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+}
+dev &lt;- function(p) {
+  p &lt;- pmin(pmax(p, 1e-4), 1 - 1e-4)       # avoid log(0) for predictions of exactly 0 or 1
+  -2 * sum(dbinom(y, 1, p, log = TRUE))
+}
+mcfadden &lt;- function(p) 1 - dev(p) / dev(rep(mean(y), length(y)))
+
+set.seed(746)
+folds &lt;- sample(rep(1:10, length.out = nrow(titanic)))
+p_cv_rf &lt;- p_cv_glm &lt;- numeric(nrow(titanic))
+for (k in 1:10) {
+  train &lt;- titanic[folds != k, ]
+  test &lt;- titanic[folds == k, ]
+  m_rf &lt;- ranger(Survived ~ ., data = train, num.trees = 500, probability = TRUE, seed = k)
+  p_cv_rf[folds == k] &lt;- predict(m_rf, test)$predictions[, &quot;survived&quot;]
+  m_glm &lt;- glm(Survived ~ ., data = train, family = binomial)
+  p_cv_glm[folds == k] &lt;- predict(m_glm, test, type = &quot;response&quot;)
+}
+m_glm &lt;- glm(Survived ~ ., data = titanic, family = binomial)
+
+preds &lt;- list(forest_training_data = predict(rf, titanic)$predictions[, &quot;survived&quot;],
+              forest_out_of_bag = rf$predictions[, &quot;survived&quot;],
+              forest_10fold_cv = p_cv_rf,
+              logistic_training_data = fitted(m_glm),
+              logistic_10fold_cv = p_cv_glm)
+perf &lt;- t(sapply(preds, function(p) c(AUC = auc(p, y), McFadden = mcfadden(p))))
+round(perf, 3)</code></pre>
+<pre><code>##                          AUC McFadden
+## forest_training_data   0.961    0.578
+## forest_out_of_bag      0.867    0.377
+## forest_10fold_cv       0.867    0.379
+## logistic_training_data 0.859    0.341
+## logistic_10fold_cv     0.852    0.324</code></pre>
+<p>On the passengers it was trained on, the forest looks nearly perfect (AUC 0.96, pseudo-<span class="math inline">\(R^2\)</span> 0.58), because its deep trees memorize much of the training data. Out-of-bag (0.87) and cross-validated (0.87) AUCs agree, and both are far lower: never judge a forest by its fit to the training data. Under cross-validation the forest still beats the logistic regression a little (0.85), in part because it picks up the age and class patterns the straight-line logistic model misses.</p>
+</div>
+<div id="discussion" class="section level2">
+<h2>Discussion</h2>
+<ol style="list-style-type: decimal">
+<li>The forest's cross-validated AUC is 0.87; the logistic regression's is 0.85. Which would you use to predict survival for a new passenger list? Which would you use to explain <em>why</em> some passengers survived?</li>
+<li>Permutation importance ranks fare above age, but fare and class are strongly related. What would you need to do to say whether fare itself mattered?</li>
+<li>The partial dependence plot shows a jump in survival for young children. How would you write a statistical model to test whether that jump is real, and what would it add that the forest can't?</li>
+</ol>
+</div>
+</div>
+
+<div id="ai-use" style="margin: 3em 0 1.5em; padding: 0.8em 1em; border-top: 1px solid #ddd; color: #666; font-size: 0.9em;">
+<strong>AI use.</strong> I drafted parts of this page (text, code, figures, widgets) with help from an AI assistant (Claude, by Anthropic) and reviewed and tested everything myself. Any errors are mine, please let me know if you find any!
+</div>
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

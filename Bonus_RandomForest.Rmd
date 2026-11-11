@@ -1,0 +1,384 @@
+---
+title: "Bonus: Machine Learning with Random Forests"
+author: "NRES 746"
+date: "Fall 2026"
+output:
+  html_document:
+    includes:
+      after_body: footer.html
+    theme: flatly
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 7, fig.height = 4.5, fig.align = "center")
+
+widget <- function(file) htmltools::includeHTML(file.path("widgets", file))
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+```
+
+[How this page was made](#ai-use)
+
+This is a supplemental page, kept for students from earlier years of
+the course; random forests aren't part of the current course. R code
+from this page is also in the
+[companion script](lecture_notes/CODE_Bonus_RandomForest.R).
+Packages: `ranger`, `party`. Bolker doesn't cover machine learning; the
+original source is Breiman (2001, *Machine Learning* 45: 5-32).
+
+# Statistics and machine learning {#ml}
+
+Statistical models describe how the data arose and estimate the
+parameters of that process, with their uncertainty. Machine learning
+algorithms look for patterns that predict well, with fewer assumptions
+and less interest in parameters. This part explains decision trees and
+how a random forest combines many of them.
+
+## 1. Big picture
+
+In statistics we learn about a population from a sample. We write down
+a data-generating model (a likelihood), fit it, check it, and report
+parameter estimates with confidence or credible intervals. Prediction
+often comes second.
+
+In machine learning the goal is usually prediction: find patterns in
+the available data that generalize to new cases. The analyst specifies
+less, and the algorithm does more of the work. There are no
+distributional assumptions about residuals, and relationships needn't
+be linear or specified in advance. The price is that there are no
+parameters with intervals or p-values to interpret. Machine-learning
+predictions can be more accurate than a statistical model's, and the
+patterns they find can suggest hypotheses to test with a statistical
+model later.
+
+## 2. Decision trees {#trees}
+
+A decision tree is a set of branching rules that predicts a response
+from a set of predictors (in machine learning, **features**):
+
+1. Choose the feature, and the split point on it, that divides the data
+   into two groups whose responses are as similar as possible within
+   each group.
+2. Repeat within each group, and again within each of those
+   (**recursively**), until a stopping rule is reached, such as a
+   maximum depth or too few observations left to split.
+3. Predict a new case by following the rules down to a final group (a
+   **leaf**) and using that group's mean response (or, for a
+   categorical response, its most common class or its class
+   proportions).
+
+Each split point is a **node**. A single tree is easy to read, but it
+is unstable: a slightly different sample can produce a very different
+tree, and a deep tree fits the noise.
+
+## 3. Random forests {#forest}
+
+A random forest grows many trees (500 is a common default), each on a
+perturbed version of the data, and averages their predictions:
+
+1. Draw a **bootstrap sample** of the data: $n$ observations drawn with
+   replacement from the $n$ in the data set, so each tree sees about
+   63% of the distinct observations.
+2. Grow a deep tree on that sample. At each node, consider only a
+   random subset of the features (in `ranger`, the square root of the
+   number of features by default) when choosing the split.
+3. Predict by averaging the trees' predictions (for a categorical
+   response, by averaging their class probabilities or taking a
+   majority vote).
+
+Each tree on its own is a noisy, overfit predictor. Because the trees
+see different data and different features, their errors are only
+partly correlated, so averaging cancels much of the noise. This is the
+same reason a mean of many measurements is more precise than one
+measurement.
+
+The observations a tree didn't see (about 37%, its **out-of-bag**
+observations) give a built-in test set. Predicting each observation
+from only the trees that didn't use it gives an **out-of-bag error**,
+an estimate of performance on new data that works like
+[cross-validation](Bonus_ModelPerformance.html#cross-validation)
+without any refitting.
+
+In the widget, 60 points come from a smooth curve plus noise, with one
+predictor. Each tree is grown on a bootstrap sample. (With one
+predictor there is no feature subsampling, so this shows the bagging
+part of the algorithm.)
+
+```{r forest-widget, echo=FALSE}
+widget("forest_average.html")
+```
+
+> **Question:** With one tree, how does the step function compare with
+> the true curve? Add trees: what happens to the error on new data, and
+> why does it level off instead of reaching 0? Then set the depth to 1
+> (each tree has a single split). Does averaging still help as much?
+
+# Example: who survived the Titanic? {#titanic}
+
+Passenger records from the Titanic give survival (0 or 1), sex, age,
+ticket class, fare, and the numbers of siblings or spouses and of
+parents or children aboard. Which features predict survival, and how?
+
+## 1. Data and a single tree {#single-tree}
+
+The data are at
+`https://kevintshoemaker.github.io/NRES-746/data/titanic.csv`.
+Categorical variables must be factors, not numbers or text, for both
+packages used here:
+
+```{r titanic-data}
+titanic <- read.csv(
+  "https://kevintshoemaker.github.io/NRES-746/data/titanic.csv"
+)
+features <- c("Pclass", "Sex", "Age", "SibSp", "Parch", "Fare")
+titanic <- na.omit(titanic[, c("Survived", features)])   # 714 passengers with known age
+titanic$Survived <- factor(titanic$Survived, levels = 0:1, labels = c("died", "survived"))
+titanic$Sex <- factor(titanic$Sex)
+titanic$Pclass <- factor(titanic$Pclass)       # ticket class 1, 2, 3
+str(titanic)
+```
+
+A single tree (a **classification tree**; with a numeric response it
+would be a regression tree), limited to three levels so it can be read:
+
+```{r single-tree, fig.width=10, fig.height=6}
+library(party)
+tree <- ctree(Survived ~ ., data = titanic,
+              controls = ctree_control(mincriterion = 0.85, maxdepth = 3))
+plot(tree)
+```
+
+Each bar at the bottom shows the share of passengers in that leaf who
+survived (dark) and died (light). Sex makes the first split; then class,
+and within those groups age or fare. Boys 9 and under in second or
+third class survived far more often than older males in those classes,
+and nearly all women in first or second class survived. (`ctree()`
+grows a *conditional inference* tree, which chooses each split with a
+significance test; hence the p-values at the nodes.)
+
+## 2. Fitting a forest {#fit}
+
+`ranger` is a fast implementation of random forests. With
+`probability = TRUE` it predicts the probability of each class instead
+of a single class; `importance = "permutation"` records the variable
+importance described in the next section.
+
+```{r ranger-fit}
+library(ranger)
+rf <- ranger(Survived ~ ., data = titanic, num.trees = 500, probability = TRUE,
+             importance = "permutation", seed = 746)
+rf
+```
+
+Like most machine-learning algorithms, a forest has tuning settings:
+the number of features tried at each split (`mtry`), the minimum leaf
+size, and the number of trees. The defaults usually work well. In a
+real analysis, try a few settings and compare their out-of-bag error.
+
+## 3. Variable importance {#importance}
+
+**Permutation importance**: for each tree, shuffle one feature's values
+among the out-of-bag observations, which breaks its link to the
+response, and measure how much the predictions get worse. A feature
+the forest relies on loses a lot of accuracy when shuffled.
+
+```{r importance, fig.height=3.5}
+imp <- sort(importance(rf))
+par(mar = c(4, 7, 0.5, 0.5))
+barplot(imp, horiz = TRUE, las = 1, col = "steelblue",
+        xlab = "Permutation importance (increase in prediction error)")
+```
+
+Sex matters most, then ticket class, fare, and age. Importance says how
+much the predictions depend on a feature, not the direction or shape of
+its effect, and correlated features (class and fare here) share credit
+in ways that are hard to untangle.
+
+## 4. Partial dependence {#partial-dependence}
+
+A **partial dependence plot** shows a feature's effect on the
+predictions: set the feature to one value for every passenger, predict,
+average, and repeat across a range of values. The other features keep
+their observed values, so the curve averages over the real mix of
+passengers.
+
+```{r partial-dependence-function}
+# mean predicted survival when 'feature' is set to each value in 'values'
+partial_dependence <- function(feature, values) {
+  sapply(seq_along(values), function(i) {
+    nd <- titanic
+    nd[[feature]] <- values[i]
+    mean(predict(rf, nd)$predictions[, "survived"])
+  })
+}
+```
+
+```{r partial-dependence, fig.width=9, fig.height=5.5}
+par(mfrow = c(2, 3), mar = c(4, 4, 1, 0.5))
+for (f in names(sort(importance(rf), decreasing = TRUE))) {
+  x <- titanic[[f]]
+  values <- if (is.factor(x)) factor(levels(x), levels = levels(x)) else
+    seq(min(x), quantile(x, 0.98), length.out = 30)    # skip the extreme fares
+  pd <- partial_dependence(f, values)
+  if (is.factor(x)) {
+    barplot(pd, names.arg = levels(x), ylim = c(0, 1), col = "steelblue",
+            xlab = f, ylab = "Predicted survival")
+  } else {
+    plot(values, pd, type = "l", lwd = 2, ylim = c(0, 1), xlab = f,
+         ylab = "Predicted survival")
+    rug(jitter(x[x <= max(values)]))
+  }
+}
+par(mfrow = c(1, 1))
+```
+
+```{r pd-numbers, echo=FALSE}
+pd_sex <- partial_dependence("Sex", factor(levels(titanic$Sex), levels = levels(titanic$Sex)))
+pd_age <- partial_dependence("Age", c(2, 30))
+```
+
+Averaged over the other features, predicted survival is
+`r f2(pd_sex[1])` for women and `r f2(pd_sex[2])` for men. Young
+children did better than adults (`r f2(pd_age[1])` at age 2,
+`r f2(pd_age[2])` at 30), a nonlinear pattern a logistic regression
+with a straight-line age term would miss.
+
+## 5. Interactions {#interactions}
+
+If two features don't interact, their two-way partial dependence is the
+sum of two separate effects. A simple measure of interaction strength
+is how far the two-way partial dependence departs from the best
+additive fit:
+
+```{r interaction-strength}
+# two-way partial dependence on a grid, and its departure from an additive fit
+grid_values <- function(x) {
+  if (is.factor(x)) factor(levels(x), levels = levels(x)) else
+    seq(min(x), quantile(x, 0.98), length.out = 8)
+}
+pd_2way <- function(f1, f2) {
+  grid <- expand.grid(v1 = grid_values(titanic[[f1]]), v2 = grid_values(titanic[[f2]]))
+  nd <- titanic[rep(seq_len(nrow(titanic)), times = nrow(grid)), ]   # every passenger at every grid point
+  nd[[f1]] <- rep(grid$v1, each = nrow(titanic))
+  nd[[f2]] <- rep(grid$v2, each = nrow(titanic))
+  grid$pd <- tapply(predict(rf, nd)$predictions[, "survived"],
+                    rep(seq_len(nrow(grid)), each = nrow(titanic)), mean)
+  grid
+}
+pairs <- as.data.frame(t(combn(features, 2)))
+names(pairs) <- c("f1", "f2")
+pairs$strength <- sapply(seq_len(nrow(pairs)), function(i) {
+  g <- pd_2way(pairs$f1[i], pairs$f2[i])
+  sqrt(mean(resid(lm(pd ~ factor(v1) + factor(v2), data = g))^2))   # RMS departure from additive
+})
+pairs <- pairs[order(pairs$strength, decreasing = TRUE), ]
+head(pairs, 5)
+```
+
+The two strongest interactions both involve sex: sex with class, and
+sex with age. Plot them:
+
+```{r interaction-plots, fig.width=9, fig.height=3.8}
+# two-way partial dependence: x axis = the feature with more grid values, one line per value of the other
+plot_2way <- function(f1, f2) {
+  g <- pd_2way(f1, f2)
+  if (nlevels(factor(g$v1)) < nlevels(factor(g$v2))) {
+    g <- g[, c("v2", "v1", "pd")]
+    names(g) <- c("v1", "v2", "pd")
+    tmp <- f1; f1 <- f2; f2 <- tmp
+  }
+  x <- as.numeric(g$v1)
+  groups <- split(seq_len(nrow(g)), factor(g$v2))
+  plot(NA, xlim = range(x), ylim = c(0, 1), xlab = f1, ylab = "Predicted survival",
+       xaxt = if (is.factor(g$v1)) "n" else "s")
+  if (is.factor(g$v1)) axis(1, at = seq_along(levels(g$v1)), labels = levels(g$v1))
+  for (k in seq_along(groups)) lines(x[groups[[k]]], g$pd[groups[[k]]], lwd = 2, lty = k)
+  legend("topright", paste(f2, "=", names(groups)), lwd = 2, lty = seq_along(groups),
+         bty = "n", cex = 0.8)
+}
+
+par(mfrow = c(1, 2), mar = c(4, 4, 1, 0.5))
+plot_2way(pairs$f1[1], pairs$f2[1])
+plot_2way(pairs$f1[2], pairs$f2[2])
+par(mfrow = c(1, 1))
+```
+
+Class mattered mainly for women: predicted survival drops sharply for
+women in third class but changes little across classes for men. Age
+mattered mainly for males: boys survived far more often than men, while
+survival declines only gently with age for women. A logistic regression
+would need these interactions written in explicitly; the forest found
+them on its own.
+
+## 6. Performance {#performance}
+
+How well does the forest predict survival? Compare its predictions for
+the passengers it was trained on, its out-of-bag predictions, and
+10-fold cross-validation, along with a logistic regression using the
+same features. Both models are scored by AUC and McFadden's
+pseudo-$R^2$ (both explained on the
+[model performance page](Bonus_ModelPerformance.html#auc)).
+
+```{r performance}
+y <- as.numeric(titanic$Survived == "survived")
+auc <- function(p, y) {
+  r <- rank(p)
+  n1 <- sum(y)
+  n0 <- sum(1 - y)
+  (sum(r[y == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+}
+dev <- function(p) {
+  p <- pmin(pmax(p, 1e-4), 1 - 1e-4)       # avoid log(0) for predictions of exactly 0 or 1
+  -2 * sum(dbinom(y, 1, p, log = TRUE))
+}
+mcfadden <- function(p) 1 - dev(p) / dev(rep(mean(y), length(y)))
+
+set.seed(746)
+folds <- sample(rep(1:10, length.out = nrow(titanic)))
+p_cv_rf <- p_cv_glm <- numeric(nrow(titanic))
+for (k in 1:10) {
+  train <- titanic[folds != k, ]
+  test <- titanic[folds == k, ]
+  m_rf <- ranger(Survived ~ ., data = train, num.trees = 500, probability = TRUE, seed = k)
+  p_cv_rf[folds == k] <- predict(m_rf, test)$predictions[, "survived"]
+  m_glm <- glm(Survived ~ ., data = train, family = binomial)
+  p_cv_glm[folds == k] <- predict(m_glm, test, type = "response")
+}
+m_glm <- glm(Survived ~ ., data = titanic, family = binomial)
+
+preds <- list(forest_training_data = predict(rf, titanic)$predictions[, "survived"],
+              forest_out_of_bag = rf$predictions[, "survived"],
+              forest_10fold_cv = p_cv_rf,
+              logistic_training_data = fitted(m_glm),
+              logistic_10fold_cv = p_cv_glm)
+perf <- t(sapply(preds, function(p) c(AUC = auc(p, y), McFadden = mcfadden(p))))
+round(perf, 3)
+```
+
+On the passengers it was trained on, the forest looks nearly perfect
+(AUC `r f2(perf["forest_training_data", "AUC"])`, pseudo-$R^2$
+`r f2(perf["forest_training_data", "McFadden"])`), because its deep
+trees memorize much of the training data. Out-of-bag
+(`r f2(perf["forest_out_of_bag", "AUC"])`) and cross-validated
+(`r f2(perf["forest_10fold_cv", "AUC"])`) AUCs agree, and both are far
+lower: never judge a forest by its fit to the training data. Under
+cross-validation the forest still beats the logistic regression a
+little (`r f2(perf["logistic_10fold_cv", "AUC"])`), in part because it
+picks up the age and class patterns the straight-line logistic model
+misses.
+
+## Discussion {#discussion}
+
+1. The forest's cross-validated AUC is `r f2(perf["forest_10fold_cv", "AUC"])`;
+   the logistic regression's is `r f2(perf["logistic_10fold_cv", "AUC"])`.
+   Which would you use to predict survival for a new passenger list?
+   Which would you use to explain *why* some passengers survived?
+2. Permutation importance ranks fare above age, but fare and class are
+   strongly related. What would you need to do to say whether fare
+   itself mattered?
+3. The partial dependence plot shows a jump in survival for young
+   children. How would you write a statistical model to test whether
+   that jump is real, and what would it add that the forest can't?
