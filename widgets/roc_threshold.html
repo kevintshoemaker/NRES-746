@@ -1,0 +1,94 @@
+<div class="w746" id="roc">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:150px}
+.w746 input[type=range]{flex:1}
+.w746 .val{font-weight:600;min-width:42px}
+.w746 .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:8px}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:20px;font-weight:600;color:var(--ink)}
+.w746 .ax{stroke:var(--muted);stroke-width:1}
+.w746 .lab{fill:var(--ink2);font-size:13px}
+.w746 .tk{fill:var(--muted);font-size:11px}
+.w746 .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2)}
+.w746 .key span{display:flex;align-items:center;gap:6px}
+@media (max-width:560px){.w746 .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="row">
+  <label for="roc-sep">Separation of the groups</label>
+  <input type="range" id="roc-sep" min="0" max="4" step="0.05" value="1.2">
+  <span class="val" id="roc-sepout">1.20</span>
+</div>
+<div class="row">
+  <label for="roc-thr">Threshold</label>
+  <input type="range" id="roc-thr" min="-3" max="7" step="0.05" value="0.6">
+  <span class="val" id="roc-throut">0.60</span>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">True positive rate</div><div class="v" id="roc-tpr"></div></div>
+  <div class="card"><div class="k">False positive rate</div><div class="v" id="roc-fpr"></div></div>
+  <div class="card"><div class="k">Correct, if half occupied</div><div class="v" id="roc-acc"></div></div>
+  <div class="card"><div class="k">AUC</div><div class="v" id="roc-auc"></div></div>
+</div>
+<svg viewBox="0 0 700 270" width="100%" role="img" aria-label="Left: distributions of the model's score for unoccupied and occupied sites, with a threshold. Right: the ROC curve with the current threshold marked.">
+  <g id="roc-g"></g>
+</svg>
+<div class="key">
+  <span><svg width="24" height="10"><rect x="0" y="0" width="24" height="10" fill="#8a8a8a" fill-opacity="0.45"/></svg>unoccupied sites called "occupied" (false positives)</span>
+  <span><svg width="24" height="10"><rect x="0" y="0" width="24" height="10" fill="#2a78d6" fill-opacity="0.45"/></svg>occupied sites called "occupied" (true positives)</span>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+function erf(x){const s=x<0?-1:1;x=Math.abs(x);const t=1/(1+0.3275911*x);const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);return s*y;}
+const Phi=z=>0.5*(1+erf(z/Math.SQRT2));
+const dn=z=>Math.exp(-0.5*z*z)/Math.sqrt(2*Math.PI);
+const L={x0:30,x1:380,y0:225,y1:20,smin:-4,smax:8};
+const R={x0:450,x1:655,y0:225,y1:20};
+const lx=s=>L.x0+(s-L.smin)/(L.smax-L.smin)*(L.x1-L.x0);
+const ly=d=>L.y0-d/0.42*(L.y0-L.y1);
+const rx=f=>R.x0+f*(R.x1-R.x0);
+const ry=t=>R.y0-t*(R.y0-R.y1);
+const g=document.getElementById('roc-g');
+el('line',{class:'ax',x1:L.x0,y1:L.y0,x2:L.x1,y2:L.y0},g);
+[-4,-2,0,2,4,6,8].forEach(s=>txt('tk',lx(s),L.y0+15,s,g));
+txt('lab',(L.x0+L.x1)/2,255,"model's score (higher = more likely occupied)",g);
+el('rect',{x:R.x0,y:R.y1,width:R.x1-R.x0,height:R.y0-R.y1,fill:'none',stroke:'#8a8a8a'},g);
+el('line',{x1:rx(0),y1:ry(0),x2:rx(1),y2:ry(1),stroke:'#ccc','stroke-dasharray':'4 3'},g);
+[0,0.5,1].forEach(v=>{txt('tk',rx(v),R.y0+15,v,g);txt('tk',R.x0-6,ry(v)+4,v,g,'end');});
+txt('lab',(R.x0+R.x1)/2,255,'false positive rate',g);
+const t=txt('lab',R.x0-32,(R.y0+R.y1)/2,'true positive rate',g);t.setAttribute('transform','rotate(-90 '+(R.x0-32)+' '+(R.y0+R.y1)/2+')');
+const dyn=el('g',{},g);
+function area(m,thr){let p='M'+lx(Math.max(thr,L.smin))+','+L.y0;for(let i=0;i<=200;i++){const s=Math.max(thr,L.smin)+i/200*(L.smax-Math.max(thr,L.smin));p+='L'+lx(s)+','+ly(dn(s-m));}p+='L'+lx(L.smax)+','+L.y0+'Z';return p;}
+function dens(m){let p='';for(let i=0;i<=300;i++){const s=L.smin+i/300*(L.smax-L.smin);p+=(i?'L':'M')+lx(s)+','+ly(dn(s-m));}return p;}
+function draw(){
+  const d=parseFloat(document.getElementById('roc-sep').value);
+  const thr=parseFloat(document.getElementById('roc-thr').value);
+  dyn.innerHTML='';
+  el('path',{d:area(d,thr),fill:'#2a78d6','fill-opacity':0.45},dyn);
+  el('path',{d:area(0,thr),fill:'#8a8a8a','fill-opacity':0.55},dyn);
+  el('path',{d:dens(0),fill:'none',stroke:'#555','stroke-width':2},dyn);
+  el('path',{d:dens(d),fill:'none',stroke:'#2a78d6','stroke-width':2},dyn);
+  txt('tk',lx(0)-6,ly(0.4)-6,'unoccupied',dyn,'end');
+  txt('tk',lx(d)+6,ly(0.4)-6,'occupied',dyn,'start');
+  el('line',{x1:lx(thr),y1:L.y0,x2:lx(thr),y2:L.y1,stroke:'#222','stroke-width':2},dyn);
+  let p='';for(let i=0;i<=200;i++){const c=L.smax-i/200*(L.smax-L.smin+4);p+=(i?'L':'M')+rx(1-Phi(c))+','+ry(1-Phi(c-d));}
+  el('path',{d:p,fill:'none',stroke:'#2a78d6','stroke-width':2.5},dyn);
+  const fpr=1-Phi(thr),tpr=1-Phi(thr-d);
+  el('circle',{cx:rx(fpr),cy:ry(tpr),r:6,fill:'#222'},dyn);
+  document.getElementById('roc-sepout').textContent=d.toFixed(2);
+  document.getElementById('roc-throut').textContent=thr.toFixed(2);
+  document.getElementById('roc-tpr').textContent=tpr.toFixed(2);
+  document.getElementById('roc-fpr').textContent=fpr.toFixed(2);
+  document.getElementById('roc-acc').textContent=(0.5*tpr+0.5*(1-fpr)).toFixed(2);
+  document.getElementById('roc-auc').textContent=Phi(d/Math.SQRT2).toFixed(2);
+}
+['roc-sep','roc-thr'].forEach(id=>document.getElementById(id).addEventListener('input',draw));
+draw();
+})();
+</script>
+</div>

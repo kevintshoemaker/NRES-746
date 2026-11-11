@@ -368,7 +368,9 @@ covered by the Week 6 page, with intervals and the LRT on the Week 7
 page), and LECTURE3 (Oct. 29, covered by the Week 5 page, with its power
 analysis on the Week 6 page), and LECTURE2 (Oct. 30, covered by the
 Week 3 page, with its distributions half on the Week 4 page), and
-LECTURE1 and INTRO (Nov. 1, covered by the Week 1 page). The backlog
+LECTURE1 and INTRO (Nov. 1, covered by the Week 1 page), and LECTURE8
+and LECTURE9 (Nov. 10, covered by the Week 10 page and the bonus
+performance page). LECTURE10 remains (not in the navbar). The backlog
 is done: every week through 11 has a page. Ask before deleting
 anything.
 
@@ -732,6 +734,23 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 not yet built; We
   names and readings stay off; a dated "As taught" note in each guide).
   The backlog is done through Wed., Nov. 4 (Week 11); fold in new ones
   as they come.
+
+- **Bonus page (built Nov. 10, not taught):** `Bonus_ModelPerformance.Rmd`,
+  last item in the Lectures menu; replaces legacy LECTURE9 (and, with
+  Week 10, LECTURE8; both archived). H1s: what makes a model good
+  `#good` (myxo grade 1 Ricker-gamma, MLE a 3.56, b 0.171, shape 90.6);
+  goodness of fit `#gof` (plug-in bounds, parametric bootstrap RMSE
+  p 0.67, Stan posterior predictive check p 0.58); predictive
+  performance `#prediction` (R2 0.47, McFadden 0.22; LECTURE9's
+  hypothetical new rabbits: days 2-8 R2 0.46, days 10-16 McFadden
+  -0.37; LOO CV RMSE 0.68 -> 0.74); ROC/AUC `#roc` (simulated pika
+  occupancy, seed 746, 120 patches; habitat vs. + 8 noise covariates:
+  AUC 0.79/0.81 in sample, 0.76/0.72 by 10-fold CV). Widgets
+  `cv_overfit.html`, `roc_threshold.html`. Script
+  `lecture_notes/CODE_Bonus_ModelPerformance.R`; no guide. Week 10 gained
+  from LECTURE8: a BIC note, `#model-averaging` (predictions, not
+  coefficients; Cade 2015), and a worked tadpole Bayes factor in the
+  Bayesian bonus.
 
 - **For the time-series/dynamic models week (Nov. 30):** teach AR vs.
   MA identification with ACF and PACF side by side on long simulated

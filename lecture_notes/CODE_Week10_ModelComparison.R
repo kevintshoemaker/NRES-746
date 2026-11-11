@@ -153,6 +153,19 @@ round(data.frame(truth = beta_true,
                  row.names = covars), 2)
 #  [PAUSE] the lasso kept road_dist but estimates 0.07; the truth is 0.3. is the lasso broken?
 
+# Bonus: model averaging ---------------------------------------------------------
+
+# predicted cones for a wave-site fir of 10 cm DBH under each model, then the Akaike-weighted mean
+dbh <- 10
+pred <- c(full     = fit_full$par[2] * dbh^fit_full$par[4],
+          const_b  = fit_constb$par[2] * dbh^fit_constb$par[3],
+          const_ak = fit_constak$par[1] * dbh^fit_constak$par[3],
+          no_wave  = fit_nowave$par[1] * dbh^fit_nowave$par[2],
+          poisson  = fit_pois$par[1] * dbh^fit_pois$par[2])
+w <- setNames(aic_tab$weight, aic_tab$model)[names(pred)]
+round(rbind(prediction = pred, weight = w), 3)
+sum(w * pred)   # model-averaged expected cones
+
 
 
 
@@ -357,3 +370,20 @@ curve(dexp(abs(x), 1 / 0.15) / 2, -1, 1, n = 501, add = TRUE, lwd = 2, col = 3)
 lines(density(hs[abs(hs) < 1], bw = 0.01, n = 1024), lwd = 2, col = 4)
 legend("topright", c("Normal (ridge)", "Laplace (lasso)", "horseshoe"), col = c(1, 3, 4),
        lwd = 2, bty = "n")
+
+# Bayes factors -------------------------------------------------------------------
+
+# 10 tadpoles, k die. Model 1: p = 0.5. Model 2: p ~ Uniform(0, 1).
+# marginal likelihood = integral of P(k | p) P(p) dp
+marg_fixed <- function(k) dbinom(k, 10, 0.5)
+marg_free <- function(k) integrate(function(p) dbinom(k, 10, p), 0, 1)$value   # = 1/11
+k_vals <- 0:10
+plot(k_vals, sapply(k_vals, marg_fixed), type = "h", lwd = 4,
+     xlab = "Dead tadpoles (of 10)", ylab = "Marginal likelihood")
+points(k_vals + 0.2, sapply(k_vals, marg_free), type = "h", lwd = 4, col = "steelblue")
+legend("topright", c("p fixed at 0.5", "p free, Uniform(0, 1) prior"),
+       lwd = 4, col = c("black", "steelblue"), bty = "n")
+
+# Bayes factors (fixed over free) for 2 and 3 deaths; likelihood ratio at the MLE for 3
+round(c(BF_k2 = marg_fixed(2) / marg_free(2), BF_k3 = marg_fixed(3) / marg_free(3),
+        LR_k3 = dbinom(3, 10, 0.3) / dbinom(3, 10, 0.5)), 2)

@@ -1,0 +1,95 @@
+<div class="w746" id="cvo">
+<style>
+.w746{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:720px}
+.w746 .row{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.w746 .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746 input[type=range]{flex:1;min-width:160px}
+.w746 .val{font-weight:600;min-width:42px}
+.w746 button{font-size:14px;padding:3px 10px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:8px}
+.w746 .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746 .card .k{font-size:13px;color:var(--ink2)}
+.w746 .card .v{font-size:20px;font-weight:600;color:var(--ink)}
+.w746 .ax{stroke:var(--muted);stroke-width:1}
+.w746 .lab{fill:var(--ink2);font-size:13px}
+.w746 .tk{fill:var(--muted);font-size:11px}
+.w746 .key{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink2)}
+.w746 .key span{display:flex;align-items:center;gap:6px}
+</style>
+<div class="row">
+  <label for="cvo-deg">Polynomial degree</label>
+  <input type="range" id="cvo-deg" min="0" max="9" step="1" value="1">
+  <span class="val" id="cvo-degout">1</span>
+  <button id="cvo-new" type="button">New sample</button>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Parameters (degree + 1)</div><div class="v" id="cvo-k"></div></div>
+  <div class="card"><div class="k">RMSE, data used to fit</div><div class="v" id="cvo-tr"></div></div>
+  <div class="card"><div class="k">RMSE, leave-one-out CV</div><div class="v" id="cvo-cv"></div></div>
+</div>
+<svg viewBox="0 0 700 270" width="100%" role="img" aria-label="Left: 20 points with a fitted polynomial. Right: fitting error and cross-validation error against polynomial degree.">
+  <g id="cvo-g"></g>
+</svg>
+<div class="key">
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#8a8a8a" stroke-width="2" stroke-dasharray="5 3"/></svg>true curve</span>
+  <span><svg width="24" height="6"><line x1="0" y1="3" x2="24" y2="3" stroke="#2a78d6" stroke-width="3"/></svg>fitted polynomial</span>
+  <span><svg width="24" height="10"><circle cx="12" cy="5" r="4" fill="#8a8a8a"/></svg>RMSE on the data used to fit</span>
+  <span><svg width="24" height="10"><rect x="8" y="1" width="8" height="8" fill="#2a78d6"/></svg>RMSE under cross-validation</span>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const N=20,SD=0.7;
+const truth=x=>1+1.4*x*Math.exp(-0.25*x);
+let X=[],Y=[],seed=746;
+function sample(){const r=rng(seed);X=[];Y=[];for(let i=0;i<N;i++){const x=0.3+9.4*(i+r())/N;let u=r(),v=r();const z=Math.sqrt(-2*Math.log(u+1e-12))*Math.cos(2*Math.PI*v);X.push(x);Y.push(truth(x)+SD*z);}}
+// Legendre basis on u in [-1, 1]
+function basis(x,d){const u=(x-5)/5;const p=[1];if(d>=1)p.push(u);for(let k=1;k<d;k++)p.push(((2*k+1)*u*p[k]-k*p[k-1])/(k+1));return p;}
+function solve(A,b){const n=b.length;A=A.map(r=>r.slice());b=b.slice();for(let c=0;c<n;c++){let m=c;for(let r=c+1;r<n;r++)if(Math.abs(A[r][c])>Math.abs(A[m][c]))m=r;[A[c],A[m]]=[A[m],A[c]];[b[c],b[m]]=[b[m],b[c]];for(let r=c+1;r<n;r++){const f=A[r][c]/A[c][c];for(let k=c;k<n;k++)A[r][k]-=f*A[c][k];b[r]-=f*b[c];}}const x=new Array(n).fill(0);for(let r=n-1;r>=0;r--){let s=b[r];for(let k=r+1;k<n;k++)s-=A[r][k]*x[k];x[r]=s/A[r][r];}return x;}
+function fit(xs,ys,d){const p=d+1,A=[],b=new Array(p).fill(0);for(let i=0;i<p;i++)A.push(new Array(p).fill(0));xs.forEach((x,i)=>{const f=basis(x,d);for(let j=0;j<p;j++){b[j]+=f[j]*ys[i];for(let k=0;k<p;k++)A[j][k]+=f[j]*f[k];}});const beta=solve(A,b);return x=>basis(x,d).reduce((s,f,j)=>s+f*beta[j],0);}
+function errors(d){const f=fit(X,Y,d);let tr=0,cv=0;for(let i=0;i<N;i++){tr+=(Y[i]-f(X[i]))**2;const xs=X.filter((_,j)=>j!==i),ys=Y.filter((_,j)=>j!==i);const g=fit(xs,ys,d);cv+=(Y[i]-g(X[i]))**2;}return{f:f,tr:Math.sqrt(tr/N),cv:Math.sqrt(cv/N)};}
+const L={x0:40,x1:370,y0:225,y1:15,xmin:0,xmax:10,ymin:-1,ymax:7};
+const R={x0:440,x1:690,y0:225,y1:15,ymax:2.5};
+const lx=x=>L.x0+(x-L.xmin)/(L.xmax-L.xmin)*(L.x1-L.x0);
+const ly=y=>L.y0-(y-L.ymin)/(L.ymax-L.ymin)*(L.y0-L.y1);
+const rx=d=>R.x0+d/9*(R.x1-R.x0);
+const ry=e=>R.y0-Math.min(e,R.ymax)/R.ymax*(R.y0-R.y1);
+const g=document.getElementById('cvo-g');
+el('line',{class:'ax',x1:L.x0,y1:L.y0,x2:L.x1,y2:L.y0},g);el('line',{class:'ax',x1:L.x0,y1:L.y0,x2:L.x0,y2:L.y1},g);
+[0,2,4,6,8,10].forEach(x=>txt('tk',lx(x),L.y0+15,x,g));[0,2,4,6].forEach(y=>txt('tk',L.x0-6,ly(y)+4,y,g,'end'));
+txt('lab',(L.x0+L.x1)/2,255,'predictor x',g);
+el('line',{class:'ax',x1:R.x0,y1:R.y0,x2:R.x1,y2:R.y0},g);el('line',{class:'ax',x1:R.x0,y1:R.y0,x2:R.x0,y2:R.y1},g);
+for(let d=0;d<=9;d++)txt('tk',rx(d),R.y0+15,d,g);[0,0.5,1,1.5,2,2.5].forEach(e=>txt('tk',R.x0-6,ry(e)+4,e,g,'end'));
+txt('lab',(R.x0+R.x1)/2,255,'polynomial degree',g);
+const t=txt('lab',R.x0-30,(R.y0+R.y1)/2,'RMSE',g);t.setAttribute('transform','rotate(-90 '+(R.x0-30)+' '+(R.y0+R.y1)/2+')');
+el('line',{x1:R.x0,y1:ry(SD),x2:R.x1,y2:ry(SD),stroke:'#ccc','stroke-dasharray':'3 3'},g);
+txt('tk',R.x1,ry(SD)-4,'noise SD',g,'end');
+const dyn=el('g',{},g);
+let all=[];
+function precompute(){all=[];for(let d=0;d<=9;d++)all.push(errors(d));}
+function path(f,x0,x1,clip){let p='',on=false;for(let i=0;i<=300;i++){const x=x0+i/300*(x1-x0);const y=f(x);if(y<L.ymin-0.5||y>L.ymax+0.5){on=false;continue;}p+=(on?'L':'M')+lx(x)+','+ly(Math.max(L.ymin,Math.min(L.ymax,y)));on=true;}return p;}
+function draw(d){
+  dyn.innerHTML='';
+  el('path',{d:path(truth,0,10),fill:'none',stroke:'#8a8a8a','stroke-width':2,'stroke-dasharray':'5 3'},dyn);
+  el('path',{d:path(all[d].f,0.3,9.7),fill:'none',stroke:'#2a78d6','stroke-width':3},dyn);
+  X.forEach((x,i)=>el('circle',{cx:lx(x),cy:ly(Math.max(L.ymin,Math.min(L.ymax,Y[i]))),r:3.5,fill:'#222'},dyn));
+  let ptr='',pcv='';
+  all.forEach((e,k)=>{ptr+=(k?'L':'M')+rx(k)+','+ry(e.tr);pcv+=(k?'L':'M')+rx(k)+','+ry(e.cv);});
+  el('path',{d:ptr,fill:'none',stroke:'#8a8a8a','stroke-width':1.5},dyn);
+  el('path',{d:pcv,fill:'none',stroke:'#2a78d6','stroke-width':1.5},dyn);
+  all.forEach((e,k)=>{el('circle',{cx:rx(k),cy:ry(e.tr),r:k===d?6:3.5,fill:'#8a8a8a'},dyn);const s=k===d?11:7;el('rect',{x:rx(k)-s/2,y:ry(e.cv)-s/2,width:s,height:s,fill:'#2a78d6'},dyn);if(e.cv>R.ymax)txt('tk',rx(k)+(k>=8?5:0),R.y1-3,'off scale',dyn,k>=8?'end':'middle');});
+  document.getElementById('cvo-degout').textContent=d;
+  document.getElementById('cvo-k').textContent=d+1;
+  document.getElementById('cvo-tr').textContent=all[d].tr.toFixed(2);
+  document.getElementById('cvo-cv').textContent=all[d].cv.toFixed(2);
+}
+const s=document.getElementById('cvo-deg');
+s.addEventListener('input',()=>draw(parseInt(s.value)));
+document.getElementById('cvo-new').addEventListener('click',()=>{seed+=1;sample();precompute();draw(parseInt(s.value));});
+sample();precompute();draw(parseInt(s.value));
+})();
+</script>
+</div>

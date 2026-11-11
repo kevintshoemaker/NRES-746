@@ -345,12 +345,6 @@ div.tocify {
   </a>
   <ul class="dropdown-menu" role="menu">
     <li>
-      <a href="LECTURE8.html">Model Selection</a>
-    </li>
-    <li>
-      <a href="LECTURE9.html">Performance Evaluation</a>
-    </li>
-    <li>
       <a href="Week1_IntroAndAlgorithms.html">Week 1: Course introduction and algorithms for inference</a>
     </li>
     <li>
@@ -384,7 +378,13 @@ div.tocify {
       <a href="Week11_LinearModelsAndVariance.html">Week 11: Linear models, matrices, and modeling variance</a>
     </li>
     <li>
-      <a href="Week12_MixedModels.html">Week 12: Autocorrelation, mixed models, and Bayesian hierarchical models</a>
+      <a href="Week12_MixedModels.html">Week 12: Autocorrelation and mixed models</a>
+    </li>
+    <li>
+      <a href="Week13_HierarchicalModelsAndGAMs.html">Week 13: Bayesian hierarchical models, splines, and GAMs</a>
+    </li>
+    <li>
+      <a href="Bonus_ModelPerformance.html">Bonus: Evaluating model performance</a>
     </li>
   </ul>
 </li>
@@ -710,7 +710,7 @@ fit_pois &lt;- fit_model(nll_pois, c(1, 2))
 <ul>
 <li><span class="math inline">\(\Delta_i = \text{AIC}_i - \text{AIC}_{\min}\)</span></li>
 <li>Akaike weights: <span class="math inline">\(w_i = e^{-\Delta_i/2} / \sum_j e^{-\Delta_j/2}\)</span></li>
-<li>AICc adds a small-sample correction; BIC uses <span class="math inline">\(k \log n\)</span> in place of <span class="math inline">\(2k\)</span> (a harsher penalty).</li>
+<li>AICc adds a small-sample correction; BIC uses <span class="math inline">\(k \log n\)</span> in place of <span class="math inline">\(2k\)</span> (a harsher penalty once <span class="math inline">\(n &gt; 7\)</span>, so BIC favors simpler models). Despite its name, BIC isn't a Bayesian method: like AIC, it uses only the likelihood at the MLE, not a posterior.</li>
 </ul>
 <pre class="r"><code># two intermediate models: wave changes only a and k (5 parameters), or only b (4)
 nll_constb &lt;- function(p) nll_nb(p[1:2][wave], p[3], p[4:5][wave])
@@ -1003,6 +1003,25 @@ round(data.frame(truth = beta_true,
 <h2>Discussion</h2>
 <p><strong>Q1.</strong> AIC's best creeper model kept northness (several models within 2 units, top weight small); the lasso dropped it. Which covariates would you report as &quot;important,&quot; and how would you word it?</p>
 <p><strong>Q2.</strong> In a real survey, the lasso sets grazing to exactly 0. A manager concludes that expanding grazing won't affect creepers. Do you agree?</p>
+</div>
+<div id="model-averaging" class="section level2">
+<h2>Bonus: model averaging</h2>
+<p>When several models have support, Akaike weights can combine their predictions: compute each model's prediction and take the weighted average. For a wave-site fir of 10 cm DBH:</p>
+<pre class="r"><code>dbh &lt;- 10
+pred &lt;- c(full     = fit_full$par[2] * dbh^fit_full$par[4],
+          const_b  = fit_constb$par[2] * dbh^fit_constb$par[3],
+          const_ak = fit_constak$par[1] * dbh^fit_constak$par[3],
+          no_wave  = fit_nowave$par[1] * dbh^fit_nowave$par[2],
+          poisson  = fit_pois$par[1] * dbh^fit_pois$par[2])
+w &lt;- setNames(aic_tab$weight, aic_tab$model)[names(pred)]
+round(rbind(prediction = pred, weight = w), 3)</code></pre>
+<pre><code>##              full const_b const_ak no_wave poisson
+## prediction 57.355  59.907   58.957  63.394  63.922
+## weight      0.070   0.169    0.246   0.516   0.000</code></pre>
+<pre class="r"><code>sum(w * pred)   # model-averaged expected cones</code></pre>
+<pre><code>## [1] 61.29332</code></pre>
+<p>The average, 61.3 cones, sits nearest the no-wave model's 63.4, which carries about half the weight.</p>
+<p>Averaged predictions are a reasonable way to carry model uncertainty into a forecast. Averaged <em>coefficients</em> are not: a coefficient's meaning changes with the other covariates in the model, especially when covariates are correlated, so averaging a slope across models mixes different quantities (Cade 2015, <em>Ecology</em> 96: 2370-2382). Use averaging for prediction, not to estimate effect sizes.</p>
 </div>
 </div>
 <div id="lab-tools" class="section level1">
@@ -1635,8 +1654,27 @@ legend(&quot;topright&quot;, c(&quot;Normal (ridge)&quot;, &quot;Laplace (lasso)
 </div>
 <div id="bayes-factors-and-rjmcmc" class="section level2">
 <h2>Bayes factors and RJMCMC</h2>
+<p>A <strong>Bayes factor</strong> is a ratio of <strong>marginal likelihoods</strong>, each the likelihood averaged over that model's prior,</p>
+<p><span class="math display">\[\overline{\mathcal{L}} = \int P(y \mid \theta)\,P(\theta)\,d\theta,\]</span></p>
+<p>which is the denominator of Bayes' rule, <span class="math inline">\(P(y)\)</span>. It reads as the odds in favor of one model over the other (with equal prior odds on the models). Averaging penalizes complexity automatically: a model with an extra free parameter spreads its prior over values that fit badly, so its average can be lower even though its best fit is always higher.</p>
+<p>Example: 10 tadpoles in a pesticide tank, <span class="math inline">\(k\)</span> die. Model 1 fixes the mortality at <span class="math inline">\(p = 0.5\)</span>; model 2 lets <span class="math inline">\(p\)</span> vary, with a Uniform(0, 1) prior.</p>
+<pre class="r"><code>marg_fixed &lt;- function(k) dbinom(k, 10, 0.5)
+marg_free &lt;- function(k) integrate(function(p) dbinom(k, 10, p), 0, 1)$value   # = 1/11
+k_vals &lt;- 0:10
+par(mar = c(4, 4, 0.5, 0.5))
+plot(k_vals, sapply(k_vals, marg_fixed), type = &quot;h&quot;, lwd = 4,
+     xlab = &quot;Dead tadpoles (of 10)&quot;, ylab = &quot;Marginal likelihood&quot;)
+points(k_vals + 0.2, sapply(k_vals, marg_free), type = &quot;h&quot;, lwd = 4, col = &quot;steelblue&quot;)
+legend(&quot;topright&quot;, c(&quot;p fixed at 0.5&quot;, &quot;p free, Uniform(0, 1) prior&quot;),
+       lwd = 4, col = c(&quot;black&quot;, &quot;steelblue&quot;), bty = &quot;n&quot;)</code></pre>
+<p><img src="Week10_ModelComparison_files/figure-html/bayes-factor-1.png" width="576" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>round(c(BF_k2 = marg_fixed(2) / marg_free(2), BF_k3 = marg_fixed(3) / marg_free(3),
+        LR_k3 = dbinom(3, 10, 0.3) / dbinom(3, 10, 0.5)), 2)</code></pre>
+<pre><code>## BF_k2 BF_k3 LR_k3 
+##  0.48  1.29  2.28</code></pre>
+<p>The free model spreads its predictions evenly over every outcome, so the fixed model is favored for outcomes near 5 dead. With 2 deaths the Bayes factor favors the free model about two to one. With 3, it favors the fixed model, even though the free model's best fit (<span class="math inline">\(\hat p = 0.3\)</span>) makes the data 2.3 times more likely than <span class="math inline">\(p = 0.5\)</span> does.</p>
 <ul>
-<li>A <strong>Bayes factor</strong> is a ratio of marginal likelihoods (the likelihood averaged over the prior). It is sensitive to vague priors and hard to compute (Bolker 6.6.3).</li>
+<li>Bayes factors depend strongly on the prior. For an unbounded parameter (a slope, say), making its prior vaguer spreads the average thinner and penalizes the model with that parameter more, without limit. They are also hard to compute when the integral has many dimensions (Bolker 6.6.3).</li>
 <li><strong>RJMCMC and spike-and-slab</strong> priors let the sampler jump between models, giving posterior model probabilities. They need discrete parameters, so they run in JAGS or NIMBLE rather than Stan.</li>
 </ul>
 </div>
