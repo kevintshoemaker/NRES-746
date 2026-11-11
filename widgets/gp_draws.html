@@ -1,0 +1,153 @@
+<div class="w746gp" id="gp">
+<style>
+.w746gp{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746gp .row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.w746gp .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746gp .row .lab1{min-width:170px}
+.w746gp select{font-size:14px;padding:2px 4px}
+.w746gp input[type=range]{flex:1;min-width:140px}
+.w746gp .val{font-weight:600;min-width:44px}
+.w746gp .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746gp .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746gp .card .k{font-size:13px;color:var(--ink2)}
+.w746gp .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746gp .panels{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);gap:14px;align-items:start}
+.w746gp .ax{stroke:var(--muted);stroke-width:1}
+.w746gp .lab{fill:var(--ink2);font-size:13px}
+.w746gp .tk{fill:var(--muted);font-size:11px}
+.w746gp .note{font-size:13px;color:var(--ink2);margin:2px 0 6px}
+.w746gp button{font-size:14px;padding:3px 10px}
+.w746gp svg.click{cursor:crosshair}
+@media (max-width:600px){.w746gp .panels{grid-template-columns:1fr}.w746gp .cards{grid-template-columns:1fr 1fr}.w746gp .row .lab1{min-width:120px}}
+</style>
+<div class="row">
+  <label class="lab1" for="gp-kern">Kernel (covariance function)</label>
+  <select id="gp-kern">
+    <option value="se" selected>Squared exponential</option>
+    <option value="m32">Matérn 3/2</option>
+    <option value="exp">Exponential (AR(1) in continuous time)</option>
+  </select>
+</div>
+<div class="row"><label class="lab1" for="gp-ell">Length-scale ℓ</label><input type="range" id="gp-ell" min="0.2" max="5" step="0.05" value="1.5"><span class="val" id="gp-ellout"></span></div>
+<div class="row"><label class="lab1" for="gp-amp">Amplitude SD α</label><input type="range" id="gp-amp" min="0.2" max="2" step="0.05" value="1"><span class="val" id="gp-ampout"></span></div>
+<div class="row"><label class="lab1" for="gp-sig">Noise SD σ</label><input type="range" id="gp-sig" min="0.01" max="1" step="0.01" value="0.1"><span class="val" id="gp-sigout"></span></div>
+<div class="row">
+  <button type="button" id="gp-new">New random functions</button>
+  <button type="button" id="gp-ex">Add example points</button>
+  <button type="button" id="gp-clear">Clear points</button>
+</div>
+<p class="note">Click inside the left plot to add an observation. With no points you see draws from the prior; with points, draws from the posterior.</p>
+<div class="cards">
+  <div class="card"><div class="k">Correlation at distance 1</div><div class="v" id="gp-v1"></div></div>
+  <div class="card"><div class="k">Distance where correlation falls to 0.1</div><div class="v" id="gp-v2"></div></div>
+  <div class="card"><div class="k">Observations</div><div class="v" id="gp-v3"></div></div>
+</div>
+<div class="panels">
+  <svg viewBox="0 0 460 300" width="100%" class="click" id="gp-svg" role="img" aria-label="Random functions from the Gaussian process, with a 95% band."><g id="gp-main"></g></svg>
+  <svg viewBox="0 0 250 300" width="100%" role="img" aria-label="Correlation between f(x) and f(x + d) against distance d."><g id="gp-kplot"></g></svg>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+let seed=2026;
+function rng(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+function rnorm(){let u=0,v=0;while(u===0)u=rng();v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const ng=121,xs=[];for(let i=0;i<ng;i++)xs.push(10*i/(ng-1));
+const nd=3,cols=['#2a78d6','#c0392b','#27ae60'];
+let Z=[];function newZ(){Z=[];for(let k=0;k<nd;k++){const z=[];for(let i=0;i<ng;i++)z.push(rnorm());Z.push(z);}}
+newZ();
+let pts=[];
+const kS=document.getElementById('gp-kern'),eS=document.getElementById('gp-ell'),aS=document.getElementById('gp-amp'),sS=document.getElementById('gp-sig');
+function corr(d,l){
+  const k=kS.value;
+  if(k==='se')return Math.exp(-d*d/(2*l*l));
+  if(k==='exp')return Math.exp(-d/l);
+  const r=Math.sqrt(3)*d/l;return (1+r)*Math.exp(-r);
+}
+function chol(A){
+  const n=A.length,L=[];for(let i=0;i<n;i++)L.push(new Float64Array(n));
+  for(let j=0;j<n;j++){
+    let s=A[j][j];for(let k=0;k<j;k++)s-=L[j][k]*L[j][k];
+    const d=Math.sqrt(Math.max(s,1e-12));L[j][j]=d;
+    for(let i=j+1;i<n;i++){let q=A[i][j];for(let k=0;k<j;k++)q-=L[i][k]*L[j][k];L[i][j]=q/d;}
+  }
+  return L;
+}
+function inv(A){
+  const K=A.length,M=A.map((r,i)=>Array.from(r).concat(Array.from({length:K},(_,j)=>i===j?1:0)));
+  for(let c=0;c<K;c++){
+    let p=c;for(let r=c+1;r<K;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;
+    [M[c],M[p]]=[M[p],M[c]];const d=M[c][c];
+    for(let j=0;j<2*K;j++)M[c][j]/=d;
+    for(let r=0;r<K;r++)if(r!==c){const f=M[r][c];if(f!==0)for(let j=0;j<2*K;j++)M[r][j]-=f*M[c][j];}
+  }
+  return M.map(r=>r.slice(K));
+}
+const P={x0:40,x1:452,y0:262,y1:10,ymax:3};
+const px=x=>P.x0+x/10*(P.x1-P.x0),py=y=>P.y0-(Math.max(-P.ymax,Math.min(P.ymax,y))+P.ymax)/(2*P.ymax)*(P.y0-P.y1);
+function draw(){
+  const l=parseFloat(eS.value),a=parseFloat(aS.value),sg=parseFloat(sS.value);
+  document.getElementById('gp-ellout').textContent=l.toFixed(2);
+  document.getElementById('gp-ampout').textContent=a.toFixed(2);
+  document.getElementById('gp-sigout').textContent=sg.toFixed(2);
+  document.getElementById('gp-v1').textContent=corr(1,l).toFixed(2);
+  let d10=0;while(corr(d10,l)>0.1&&d10<100)d10+=0.01;
+  document.getElementById('gp-v2').textContent=d10.toFixed(1);
+  document.getElementById('gp-v3').textContent=pts.length;
+  const a2=a*a,jit=1e-6*a2;
+  let mean=new Array(ng).fill(0),C=[];
+  for(let i=0;i<ng;i++){C.push([]);for(let j=0;j<ng;j++)C[i].push(a2*corr(Math.abs(xs[i]-xs[j]),l)+(i===j?jit:0));}
+  if(pts.length){
+    const m=pts.length,Kpp=[];
+    for(let i=0;i<m;i++){Kpp.push([]);for(let j=0;j<m;j++)Kpp[i].push(a2*corr(Math.abs(pts[i][0]-pts[j][0]),l)+(i===j?sg*sg:0));}
+    const Ki=inv(Kpp),Ks=xs.map(x=>pts.map(p=>a2*corr(Math.abs(x-p[0]),l)));
+    const KsKi=Ks.map(r=>Ki.map((_,j)=>r.reduce((s,v,k)=>s+v*Ki[k][j],0)));
+    mean=KsKi.map(r=>r.reduce((s,v,j)=>s+v*pts[j][1],0));
+    for(let i=0;i<ng;i++)for(let j=i;j<ng;j++){let s=0;for(let k=0;k<m;k++)s+=KsKi[i][k]*Ks[j][k];C[i][j]-=s;if(j!==i)C[j][i]=C[i][j];}
+  }
+  const L=chol(C);
+  const draws=Z.map(z=>mean.map((mu,i)=>{let s=mu;for(let k=0;k<=i;k++)s+=L[i][k]*z[k];return s;}));
+  const sd=C.map((r,i)=>Math.sqrt(Math.max(r[i],0)));
+  const g=document.getElementById('gp-main');g.innerHTML='';
+  el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x1,y2:P.y0},g);el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x0,y2:P.y1},g);
+  el('line',{x1:P.x0,y1:py(0),x2:P.x1,y2:py(0),stroke:'#ddd'},g);
+  let band='';xs.forEach((x,i)=>{band+=(i?'L':'M')+px(x).toFixed(1)+','+py(mean[i]+1.96*sd[i]).toFixed(1);});
+  for(let i=ng-1;i>=0;i--)band+='L'+px(xs[i]).toFixed(1)+','+py(mean[i]-1.96*sd[i]).toFixed(1);
+  el('path',{d:band+'Z',fill:'#e6e6e2',stroke:'none'},g);
+  draws.forEach((f,k)=>{let d='';f.forEach((y,i)=>{d+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py(y).toFixed(1);});
+    el('path',{d:d,fill:'none',stroke:cols[k],'stroke-width':1.5,opacity:0.85},g);});
+  let d='';mean.forEach((y,i)=>{d+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py(y).toFixed(1);});
+  el('path',{d:d,fill:'none',stroke:'#222','stroke-width':pts.length?2.6:1.2,'stroke-dasharray':pts.length?'':'4 3'},g);
+  pts.forEach(p=>el('circle',{cx:px(p[0]),cy:py(p[1]),r:4.5,fill:'#222',stroke:'#fff','stroke-width':1.2},g));
+  [-2,-1,0,1,2].forEach(t=>txt('tk',P.x0-5,py(t)+4,t,g,'end'));
+  [0,2,4,6,8,10].forEach(t=>txt('tk',px(t),P.y0+14,t,g));
+  txt('lab',(P.x0+P.x1)/2,P.y0+32,'x (temperature, time, or distance)',g);
+  txt('lab',P.x0+6,P.y1+6,pts.length?'posterior: mean (black), 95% band, 3 draws':'prior: 95% band and 3 draws',g,'start');
+  // kernel plot
+  const h=document.getElementById('gp-kplot');h.innerHTML='';
+  const Q={x0:40,x1:242,y0:262,y1:30},qx=v=>Q.x0+v/5*(Q.x1-Q.x0),qy=v=>Q.y0-v*(Q.y0-Q.y1);
+  el('line',{class:'ax',x1:Q.x0,y1:Q.y0,x2:Q.x1,y2:Q.y0},h);el('line',{class:'ax',x1:Q.x0,y1:Q.y0,x2:Q.x0,y2:Q.y1},h);
+  let e='';for(let i=0;i<=200;i++){const v=5*i/200;e+=(i?'L':'M')+qx(v).toFixed(1)+','+qy(corr(v,l)).toFixed(1);}
+  el('path',{d:e,fill:'none',stroke:'#222','stroke-width':2},h);
+  [0,0.5,1].forEach(t=>txt('tk',Q.x0-5,qy(t)+4,t,h,'end'));
+  [0,1,2,3,4,5].forEach(t=>txt('tk',qx(t),Q.y0+14,t,h));
+  txt('lab',(Q.x0+Q.x1)/2,Q.y0+32,'distance d',h);
+  txt('lab',(Q.x0+Q.x1)/2,16,'correlation of f(x) and f(x + d)',h);
+}
+document.getElementById('gp-svg').addEventListener('click',ev=>{
+  const svg=document.getElementById('gp-svg'),pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;
+  const q=pt.matrixTransform(svg.getScreenCTM().inverse());
+  if(q.x<P.x0||q.x>P.x1||q.y<P.y1||q.y>P.y0)return;
+  const x=(q.x-P.x0)/(P.x1-P.x0)*10,y=-P.ymax+(P.y0-q.y)/(P.y0-P.y1)*2*P.ymax;
+  if(pts.length<40){pts.push([x,y]);draw();}
+});
+document.getElementById('gp-ex').addEventListener('click',()=>{pts=[[1,-0.8],[2.5,0.4],[3.2,1.1],[6,0.9],[7.4,-0.5],[9,-1.2]];draw();});
+document.getElementById('gp-clear').addEventListener('click',()=>{pts=[];draw();});
+document.getElementById('gp-new').addEventListener('click',()=>{newZ();draw();});
+[kS,eS,aS,sS].forEach(s=>s.addEventListener('input',draw));kS.addEventListener('change',draw);
+draw();
+})();
+</script>
+</div>

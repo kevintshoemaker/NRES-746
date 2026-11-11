@@ -1,0 +1,159 @@
+<div class="w746sb" id="sb">
+<style>
+.w746sb{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746sb .row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.w746sb .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746sb .row .lab1{min-width:150px}
+.w746sb select{font-size:14px;padding:2px 4px}
+.w746sb input[type=range]{flex:1;min-width:140px}
+.w746sb .val{font-weight:600;min-width:40px}
+.w746sb .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746sb .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746sb .card .k{font-size:13px;color:var(--ink2)}
+.w746sb .card .v{font-size:18px;font-weight:600;color:var(--ink)}
+.w746sb .ax{stroke:var(--muted);stroke-width:1}
+.w746sb .lab{fill:var(--ink2);font-size:13px}
+.w746sb .tk{fill:var(--muted);font-size:11px}
+.w746sb button{font-size:14px;padding:3px 10px}
+@media (max-width:600px){.w746sb .cards{grid-template-columns:1fr 1fr}.w746sb .row .lab1{min-width:110px}}
+</style>
+<div class="row">
+  <label class="lab1" for="sb-type">Basis</label>
+  <select id="sb-type">
+    <option value="poly">Polynomial (powers of x)</option>
+    <option value="trunc">Truncated power (piecewise)</option>
+    <option value="bs" selected>B-spline</option>
+    <option value="rbf">Gaussian bumps</option>
+  </select>
+  <label for="sb-deg" id="sb-deglab">Degree</label>
+  <select id="sb-deg"><option value="1">1 (linear)</option><option value="2">2 (quadratic)</option><option value="3" selected>3 (cubic)</option></select>
+</div>
+<div class="row"><label class="lab1" for="sb-k" id="sb-klab">Interior knots</label><input type="range" id="sb-k"><span class="val" id="sb-kout"></span></div>
+<div class="row">
+  <label class="lab1">Weights</label>
+  <label><input type="radio" name="sb-wmode" value="iid" checked> independent, Normal(0, 1)</label>
+  <label><input type="radio" name="sb-wmode" value="rw"> random walk (neighbors similar)</label>
+</div>
+<div class="row" id="sb-steprow" style="display:none"><label class="lab1" for="sb-step">Step SD between neighbors</label><input type="range" id="sb-step" min="0.02" max="1" step="0.02" value="0.2"><span class="val" id="sb-stepout"></span></div>
+<div class="row">
+  <button type="button" id="sb-new">Randomize weights</button>
+  <label><input type="checkbox" id="sb-show"> show each weighted basis function under the sum</label>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Basis functions (K)</div><div class="v" id="sb-v1"></div></div>
+  <div class="card"><div class="k">Knots</div><div class="v" id="sb-v2"></div></div>
+  <div class="card"><div class="k">Where pieces join</div><div class="v" id="sb-v3"></div></div>
+</div>
+<svg viewBox="0 0 720 190" width="100%" role="img" aria-label="The basis functions, each in its own color."><g id="sb-basis"></g></svg>
+<svg viewBox="0 0 720 70" width="100%" role="img" aria-label="Bar chart of the random weights, one per basis function."><g id="sb-wts"></g></svg>
+<svg viewBox="0 0 720 260" width="100%" role="img" aria-label="The function f(x), the weighted sum of the basis functions."><g id="sb-fun"></g></svg>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+let seed=746;
+function rng(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+function rnorm(){let u=0,v=0;while(u===0)u=rng();v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+let z=[];
+function newZ(){z=[];for(let i=0;i<40;i++)z.push(rnorm());}
+newZ();
+const cols=['#2a78d6','#c0392b','#27ae60','#8e44ad','#d68910','#16a085','#7f8c8d','#e84393','#34495e','#a0522d'];
+const cfg={poly:{lab:'Highest power',min:1,max:15,val:3},trunc:{lab:'Interior knots',min:0,max:15,val:4},
+           bs:{lab:'Interior knots',min:0,max:15,val:4},rbf:{lab:'Number of bumps',min:2,max:20,val:6}};
+const typeSel=document.getElementById('sb-type'),degSel=document.getElementById('sb-deg'),
+      kS=document.getElementById('sb-k'),stepS=document.getElementById('sb-step'),showC=document.getElementById('sb-show');
+let type='bs';
+function interior(m){const k=[];for(let j=1;j<=m;j++)k.push(j/(m+1));return k;}
+function bspline(x,kn,d){
+  const t=[];for(let i=0;i<=d;i++)t.push(0);kn.forEach(k=>t.push(k));for(let i=0;i<=d;i++)t.push(1);
+  const K=t.length-d-1,N=[];
+  for(let i=0;i<t.length-1;i++)N.push(t[i]<=x&&x<t[i+1]?1:0);
+  if(x>=1){for(let i=t.length-2;i>=0;i--)if(t[i]<t[i+1]){N[i]=1;break;}}
+  for(let q=1;q<=d;q++)for(let i=0;i<t.length-1-q;i++){
+    const a=t[i+q]-t[i]>0?(x-t[i])/(t[i+q]-t[i])*N[i]:0;
+    const b=t[i+q+1]-t[i+1]>0?(t[i+q+1]-x)/(t[i+q+1]-t[i+1])*N[i+1]:0;
+    N[i]=a+b;
+  }
+  return N.slice(0,K);
+}
+function basis(x,k,d){
+  if(type==='poly'){const u=2*x-1,b=[];for(let p=0;p<=k;p++)b.push(Math.pow(u,p));return b;}
+  if(type==='trunc'){const b=[];for(let p=0;p<=d;p++)b.push(Math.pow(x,p));interior(k).forEach(c=>b.push(x>c?Math.pow(x-c,d):0));return b;}
+  if(type==='bs')return bspline(x,interior(k),d);
+  const b=[],h=1/(k-1);for(let j=0;j<k;j++){const c=j/(k-1);b.push(Math.exp(-(x-c)*(x-c)/(2*h*h)));}return b;
+}
+function setType(t){
+  type=t;const c=cfg[t];
+  document.getElementById('sb-klab').textContent=c.lab;
+  kS.min=c.min;kS.max=c.max;kS.step=1;kS.value=c.val;
+  const useDeg=(t==='trunc'||t==='bs');
+  degSel.style.display=useDeg?'':'none';document.getElementById('sb-deglab').style.display=useDeg?'':'none';
+  draw();
+}
+function draw(){
+  const k=parseInt(kS.value),d=parseInt(degSel.value);
+  cfg[type].val=k;
+  document.getElementById('sb-kout').textContent=k;
+  const rw=document.querySelector('#sb input[name=sb-wmode]:checked').value==='rw';
+  document.getElementById('sb-steprow').style.display=rw?'':'none';
+  const step=parseFloat(stepS.value);document.getElementById('sb-stepout').textContent=step.toFixed(2);
+  const nx=301,xs=[],B=[];
+  for(let i=0;i<nx;i++){const x=i/(nx-1);xs.push(x);B.push(basis(x,k,d));}
+  const K=B[0].length;
+  const w=[];for(let j=0;j<K;j++)w.push(rw?(j===0?z[0]:w[j-1]+step*z[j]):z[j]);
+  const f=B.map(b=>b.reduce((s,v,j)=>s+v*w[j],0));
+  const kn=(type==='trunc'||type==='bs')?interior(k):[];
+  document.getElementById('sb-v1').textContent=K;
+  document.getElementById('sb-v2').textContent=type==='poly'?'none':(type==='rbf'?k+' centers':kn.length);
+  let join='';
+  if(type==='poly')join='no pieces';
+  else if(type==='rbf')join='smooth everywhere';
+  else join=['kinks (slope jumps)','slope smooth','curvature smooth'][d-1];
+  document.getElementById('sb-v3').textContent=join;
+  const W=720,x0=48,x1=708,px=x=>x0+x*(x1-x0);
+  // basis panel
+  const gb=document.getElementById('sb-basis');gb.innerHTML='';
+  let bmin=0,bmax=0;B.forEach(b=>b.forEach(v=>{if(v<bmin)bmin=v;if(v>bmax)bmax=v;}));
+  if(bmax-bmin<1e-9)bmax=bmin+1;
+  const P1={y0:165,y1:12},py1=y=>P1.y0-(y-bmin)/(bmax-bmin)*(P1.y0-P1.y1);
+  el('line',{class:'ax',x1:x0,y1:P1.y0,x2:x1,y2:P1.y0},gb);el('line',{class:'ax',x1:x0,y1:P1.y0,x2:x0,y2:P1.y1},gb);
+  kn.forEach(c=>el('line',{x1:px(c),y1:P1.y1,x2:px(c),y2:P1.y0,stroke:'#bbb','stroke-dasharray':'3 3'},gb));
+  for(let j=0;j<K;j++){let p='';B.forEach((b,i)=>{p+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py1(b[j]).toFixed(1);});
+    el('path',{d:p,fill:'none',stroke:cols[j%cols.length],'stroke-width':1.6},gb);}
+  txt('tk',x0-5,py1(bmin)+4,bmin.toFixed(1),gb,'end');txt('tk',x0-5,py1(bmax)+4,bmax.toFixed(1),gb,'end');
+  [0,0.25,0.5,0.75,1].forEach(t=>txt('tk',px(t),P1.y0+14,t,gb));
+  txt('lab',x0+6,P1.y1+4,'basis functions B_k(x)'+(kn.length?'  (dashed: knots)':''),gb,'start');
+  // weights
+  const gw=document.getElementById('sb-wts');gw.innerHTML='';
+  const wm=Math.max(1e-9,...w.map(Math.abs)),bw=(x1-x0)/K;
+  el('line',{class:'ax',x1:x0,y1:35,x2:x1,y2:35},gw);
+  w.forEach((v,j)=>{const h=v/wm*28;el('rect',{x:x0+j*bw+bw*0.15,y:h>0?35-h:35,width:bw*0.7,height:Math.abs(h),fill:cols[j%cols.length]},gw);});
+  txt('tk',x0-5,39,'w_k',gw,'end');
+  // function panel
+  const gf=document.getElementById('sb-fun');gf.innerHTML='';
+  const show=showC.checked;
+  let fmin=Math.min(...f),fmax=Math.max(...f);
+  if(show)B.forEach(b=>b.forEach((v,j)=>{const q=v*w[j];if(q<fmin)fmin=q;if(q>fmax)fmax=q;}));
+  const pad=0.08*(fmax-fmin||1);fmin-=pad;fmax+=pad;
+  const P2={y0:222,y1:12},py2=y=>P2.y0-(y-fmin)/(fmax-fmin)*(P2.y0-P2.y1);
+  el('line',{class:'ax',x1:x0,y1:P2.y0,x2:x1,y2:P2.y0},gf);el('line',{class:'ax',x1:x0,y1:P2.y0,x2:x0,y2:P2.y1},gf);
+  if(fmin<0&&fmax>0)el('line',{x1:x0,y1:py2(0),x2:x1,y2:py2(0),stroke:'#ddd'},gf);
+  kn.forEach(c=>el('line',{x1:px(c),y1:P2.y1,x2:px(c),y2:P2.y0,stroke:'#bbb','stroke-dasharray':'3 3'},gf));
+  if(show)for(let j=0;j<K;j++){let p='';B.forEach((b,i)=>{p+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py2(b[j]*w[j]).toFixed(1);});
+    el('path',{d:p,fill:'none',stroke:cols[j%cols.length],'stroke-width':1.2,opacity:0.8},gf);}
+  let p='';f.forEach((v,i)=>{p+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py2(v).toFixed(1);});
+  el('path',{d:p,fill:'none',stroke:'#222','stroke-width':3},gf);
+  txt('tk',x0-5,py2(fmin+pad)+4,(fmin+pad).toFixed(1),gf,'end');txt('tk',x0-5,py2(fmax-pad)+4,(fmax-pad).toFixed(1),gf,'end');
+  [0,0.25,0.5,0.75,1].forEach(t=>txt('tk',px(t),P2.y0+14,t,gf));
+  txt('lab',(x0+x1)/2,P2.y0+27,'x',gf);
+  txt('lab',x0+6,P2.y1+4,'f(x) = sum of w_k B_k(x)',gf,'start');
+}
+typeSel.addEventListener('change',()=>setType(typeSel.value));
+degSel.addEventListener('change',draw);kS.addEventListener('input',draw);stepS.addEventListener('input',draw);showC.addEventListener('change',draw);
+document.querySelectorAll('#sb input[name=sb-wmode]').forEach(r=>r.addEventListener('change',draw));
+document.getElementById('sb-new').addEventListener('click',()=>{newZ();draw();});
+setType('bs');
+})();
+</script>
+</div>

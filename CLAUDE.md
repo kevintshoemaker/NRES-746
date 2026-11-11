@@ -537,7 +537,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 not yet built; Week 1-9 pages built after the fact).
+Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet taught; Week 1-9 pages built after the fact).
 
 - **Week 1 page (built Nov. 1, after the week):**
   `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
@@ -694,10 +694,8 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 not yet built; We
     instructor's announcement language), AR(1), why harder. Random
     slopes, packages, and discussion moved to Tuesday's first hour;
     Bayesian hierarchical models (`#bayesian-hierarchical`) moved to the
-    Mon., Nov. 16 (GAMs keep Wed., Nov. 18). **When the Week 13 page is
-    built, move the `#bayesian-hierarchical` H1 (with its widgets,
-    script section, and guide Part 2) from Week 12 to Week 13**, and
-    repoint links to it (schedule Nov. 16 cell, any cross-page links).
+    Mon., Nov. 16 (GAMs keep Wed., Nov. 18). Moved to the Week 13 page
+    Nov. 10 (Week 12 keeps a pointer H1; script and guide trimmed).
     Also added Nov. 9: `#lagged-response` (AR errors vs. lagged
     response), matrix form of RI + slope + AR(1) in `#bonus-combined`,
     marginal-moments note in `#random-slopes`, AI-use footer on all
@@ -706,11 +704,39 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 not yet built; We
   - **As taught (Tue., Nov. 10):** the lab period's first hour covered
     the rest of the first H1 (everything up to `#bayesian-hierarchical`);
     the rest was the final-project work session. Guide has dated notes
-    for both meetings. **Week 13 build (next thread):** Mon., Nov. 16 =
-    *Formula to Model* WOD review (5-10 min, due that day) + the moved
-    Bayesian H1 (guide Part 2 is already trimmed to ~50 min, ridge bonus
-    cut); Tue., Nov. 17 = final-project check-ins, no Act; Wed., Nov. 18
-    = nonlinear regression and GAMs.
+    for both meetings.
+
+- **Week 13 (Nov. 16-18), built Nov. 10, not yet taught:** page
+  `Week13_HierarchicalModelsAndGAMs.Rmd`. H1 `#bayesian-hierarchical`
+  (Monday; moved from Week 12, drought data re-simulated on the page,
+  numbers unchanged; new section 1 `#wod-pooling` works the WOD; ridge
+  bonus kept as the bridge to Wednesday) and H1 `#gams` (Wednesday:
+  Bd thermal performance curve `#thermal`, splines as linear models
+  `#basis`, wiggliness penalty = prior, REML, `gam()` `#penalty`,
+  Gaussian processes `#gp`, discussion `#gam-discussion`, bonuses
+  `#derived`, `#smooth-brms`, `#gam-terms`). Example: simulated Bd
+  growth on a thermal gradient plate (seed 13; 48 cultures, 4-29 °C;
+  truth = Deutsch et al. 2008 two-piece curve, peak 0.3 at 20 °C, zero
+  at 28 °C, noise SD 0.03). Bell fit (Topt 19.4) loses to `gam(k = 20,
+  REML)` by 30.6 AIC (edf 8.2; peak 20.2, zero at 28.0); default GCV
+  gives a wigglier edf; hand-coded squared-exponential GP
+  ($\ell$ 10.1) matches the GAM within 0.011. Widgets
+  `spline_basis.html` (poly / truncated power / B-spline / Gaussian
+  bumps, knots, degree, iid or random-walk weights),
+  `penalized_fit.html` (P-spline on the Bd data with evenly spaced
+  extended knots, log-lambda slider, REML criterion curve; REML minimum
+  edf 6.7/8.1/9.1 for K = 10/20/40), `gp_draws.html` (SE / Matérn 3/2
+  / exponential kernels, prior draws, click to condition). Script
+  `CODE_Week13_HierarchicalModelsAndGAMs.R` (checked end to end), guide
+  `NOTES_Week13_WebPageGuide.Rmd`. WODs: in-class *Partial Pooling by
+  Hand* (Bd loads in two ponds; ranking flips, 3.6 vs. 3.8) and
+  take-home *Spline by Hand* (due Mon., Nov. 23; reservoir chlorophyll,
+  `data/ReservoirChlorophyll.csv`, 44 weeks, seed 52; penalized NLL by
+  hand with `bs(df = 20, intercept = TRUE)`, lambda 0/10/1000, vs.
+  `gam(bs = "ps")`), both with keys. Tuesday = project check-ins, no
+  lab. Thanksgiving: no class Wed., Nov. 25 (CSV updated), so spatial
+  gets Nov. 23 + Lab 10; the GP section spills there if not reached.
+  `Syllabus.docx` was not updated for Nov. 25.
   - **Possible bonus section (not built):** "multivariate" non-normal data (a
     student asked about multivariate Poisson/gamma after the MVN). No
     general multivariate gamma/Poisson exists (the MVN is unusual in

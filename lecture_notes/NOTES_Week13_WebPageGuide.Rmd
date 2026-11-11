@@ -1,0 +1,243 @@
+---
+title: "Week 13 web page: delivery guide"
+subtitle: "Instructor notes for Week13_HierarchicalModelsAndGAMs.html"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=3pt, parsep=0pt, topsep=3pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+# General
+
+- Page: <https://kevintshoemaker.github.io/NRES-746/Week13_HierarchicalModelsAndGAMs.html>.
+  Script: `CODE_Week13_HierarchicalModelsAndGAMs.R` (same seeds, same
+  numbers; each H1's section runs on its own after the first few lines).
+- Monday, Nov. 16: *Formula to Model* review (due that day), the
+  *Partial Pooling by Hand* WOD, then Bayesian hierarchical models
+  (moved from the Week 12 page, which keeps a pointer).
+- Tuesday, Nov. 17: final-project check-ins (30 min per group). No lab
+  lecture, Act, or key.
+- Wednesday, Nov. 18: splines, GAMs, and Gaussian processes. No in-class
+  WOD; hand out the take-home *Spline by Hand* (due Mon., Nov. 23) at the
+  end. Keys for both WODs: `wod/answer_keys/`.
+- Thanksgiving: no class Wed., Nov. 25, so spatial models get one
+  lecture and Lab 10. The GP section is the bridge; if it isn't reached
+  Wednesday, open Nov. 23 with it. Going over *Spline by Hand* on Nov. 23
+  (~5 min) competes with that lecture; consider doing it during the
+  Lab 10 opening instead.
+- Data, all simulated (say so):
+    - Drought sensitivity (seed 12), unchanged from Week 12: 12 stands,
+      194 stand-years; truth $\mu_a = 0.9$, $\mu_b = 0.25$,
+      $\tau_a = 0.15$, $\tau_b = 0.10$, $\rho = -0.6$, $\sigma = 0.12$.
+    - Bd thermal gradient plate (seed 13): 48 cultures, 4-29 °C; truth
+      a two-piece curve (Gaussian rise, quadratic fall), peak 0.30/day
+      at 20 °C, zero at 28 °C, noise SD 0.03.
+    - Take-home: reservoir chlorophyll, `data/ReservoirChlorophyll.csv`
+      (44 of 52 weeks; spring bloom near week 15, small fall bloom near
+      week 40). Push it to `gh-pages` and check the URL before handing
+      out the WOD.
+- Questions on the page have no answers. *Land:* is where discussion
+  should end up.
+
+# Part 1: Bayesian hierarchical models (Monday, ~50 min)
+
+**Before class:** remind students (Canvas) to bring a laptop with
+`cmdstanr`, `brms`, and `lme4` installed. In class they run the first
+H1 of the script from the top (about 2 min including compiles).
+
+**Formula to Model review (~8 min)**
+
+- Go over the count table (Part 1a) and one formula-to-equations item.
+  Key in `wod/answer_keys/`.
+
+**WOD: Partial Pooling by Hand (~10 min real; 5 alone, then neighbor)**
+
+- $w_A = 0.5$, $w_B = 0.8$; $\hat a_A = 3.6$, $\hat a_B = 3.8$. The ranking
+  flips: pond A's raw mean is higher (4.2 vs. 4.0), but 4 frogs give a
+  sampling variance (0.25) as big as the among-pond variance (0.25).
+- One-line board summary: $w_j$ = signal variance / (signal + sampling
+  variance). This replaces the formula derivation in section 3.
+
+**Random effects as priors (~2 min)**
+
+- Hierarchical = multilevel = mixed. Four bullets: no integral;
+  uncertainty carries through; priors help with few groups (the
+  singular four-stand fit from Week 12 Q3); the price.
+
+**Partial pooling (~6 min)**
+
+- Code check: the formula matches `lmer()` to three decimals.
+  $\hat\sigma_b = 0.113$, $\hat\sigma = 0.229$, $\hat\mu = 0.861$;
+  weights 0.88 (30 yr) down to 0.55 (5 yr).
+- Widget (`partial_pooling.html`): $\sigma_b = 0$ (every stand on the
+  dashed line; weights 0.00), then $\sigma_b = 0.4$ (weights 0.99 and
+  0.94, nearly no pooling).
+- "Set $\sigma_b$ to 0, then drag it to 0.4. Which two pooling choices
+  are these? Then compare S10 and S12 ... Which moves more toward the
+  overall mean, and why?" *Land:* complete pooling, then (nearly) no
+  pooling. S12 (5 yr, $w = 0.55$) moves a larger share of its distance
+  (45% vs. 34% for S10, $w = 0.66$); absolute moves are almost equal
+  (0.080 vs. 0.078 mm) because S10 starts farther out.
+
+**Priors for a covariance matrix (~4 min; cut to 1 min if behind)**
+
+- Board: $G = \text{diag}(\tau)\,\Omega\,\text{diag}(\tau)$; LKJ gives
+  $p(\rho) \propto (1-\rho^2)^{\eta-1}$ for 2 $\times$ 2.
+- Widget (`lkj_prior.html`), 2 $\times$ 2: $\eta = 1$ flat
+  ($P(|\rho| > 0.5) = 0.50$); $\eta = 2$ 0.31; $\eta = 0.5$ U-shaped,
+  0.67. Ask for a prediction before switching to 10 $\times$ 10.
+- "For a 10 $\times$ 10 correlation matrix with $\eta = 1$, how likely is
+  any one correlation to exceed 0.5 in absolute value? What does
+  'uniform' mean for a matrix that large?" *Land:* about 0.10 (prior SD
+  0.30). LKJ(1) is uniform over valid matrices, and most valid big
+  matrices have small correlations.
+
+**Stan walkthrough (~13 min; laptops)**
+
+- Two ideas: the Cholesky factor (always a valid $\Omega$) and
+  non-centering (the Week 9 funnel). `ab[stand, 1]` is multi-indexing.
+- Students compile and sample. No divergences; all $\hat R$ = 1.00.
+- Table: everything matches `lmer()` except $\rho$: MLE $-0.57$;
+  posterior median $-0.37$, 90% interval $-0.76$ to 0.17; truth $-0.6$.
+- Shrinkage figure: S11 (5 yr) moves most; S01 and S02 (30 yr) barely
+  move. Truth check: in this data set the short-record slopes barely
+  improve (0.057 to 0.055); over 500 simulations slope error falls 0.070
+  to 0.051. Shrinkage wins on average, not every time.
+- "Why is the posterior for $\rho$ so much wider ... closer to 0 than the
+  MLE? Which summary is more honest?" *Land:* 12 stand-level pairs, each
+  estimated with error; the LKJ(2) prior pulls toward 0 and integrating
+  over the $\tau$s spreads it. The posterior is more honest.
+- "Change to `lkj_corr_cholesky(1)`, then `(10)` ..." *Land:* $\eta = 1$:
+  median $-0.45$ (90% $-0.81$ to 0.12); $\eta = 10$: $-0.13$ ($-0.45$ to
+  0.21). Stand slopes move by at most 0.008 and 0.026. Split the room.
+
+**brms (~5 min)**
+
+- Same model and priors: cor $-0.33$ (95% $-0.81$ to 0.30), SDs 0.16 and
+  0.11. Have students find `lkj_corr_cholesky`, `diag_pre_multiply`, and
+  `z_1` in `stancode(fit_brms)`.
+
+**Discussion (if time; otherwise assign Q3 for project check-ins)**
+
+- Q1 (12 more stands or 20 more years?) *Land:* more stands; $\rho$ and
+  the $\tau$s describe the population of stands, and longer records can't
+  add stands.
+- Q2 (brms vs. your own Stan) *Land:* brms for anything a formula can
+  say; your own Stan for custom process or observation models.
+- Q3 (your project's groups) *Land:* open; ask for the grouping factor,
+  its number of levels, and whether slopes plausibly vary. Good prep for
+  Tuesday's check-ins.
+
+**Skip if behind:** the LKJ widget (state the prior in one sentence),
+the $\eta$ experiment, the discussion. The ridge-as-prior bonus is now
+needed Wednesday; mention it in one sentence at the end.
+
+# Part 2: Splines, GAMs, and Gaussian processes (Wednesday, ~50 min)
+
+No laptops needed; all code is on the page.
+
+**Big picture and the bell curve (~6 min)**
+
+- MODELS box: when no bestiary function has the right shape, build one.
+  Management question: above what temperature does Bd stop growing?
+- Bell fit: $r_\text{max} = 0.314$, $T_\text{opt} = 19.4$, width 4.72,
+  $\sigma = 0.038$.
+- "Which features of the scatter does the bell curve get wrong? Which
+  matter for the management question?" *Land:* symmetric (the drop above
+  the optimum is steeper than the rise), can't go below 0 (cultures die
+  above ~28 °C), overpredicts at 27-29 °C. The upper tail is the one the
+  question is about.
+
+**Splines are linear models (~12 min)**
+
+- Board: $f(x) = \sum \beta_k B_k(x)$; each $B_k$ is a column of $X$.
+  Show `head(bs(...))`: most entries 0 (local bumps). Knots at 10.4,
+  16.4, 22.65 °C for 6 functions.
+- Figure: 6 functions fit well; 25 chase single cultures. Callback to the
+  Week 10 connect-the-dots WOD.
+- Widget (`spline_basis.html`), stops in order:
+    1. B-spline, degree 1, 4 knots, "show each weighted basis function":
+       tents; the sum bends only at knots. Ask where it can bend first.
+    2. Degree 3: smooth joins (the "Where pieces join" card).
+    3. Polynomial, highest power 12, randomize 3-4 times: most of the
+       motion is at the edges (powers blow up near $\pm 1$).
+    4. Back to B-spline, 12 knots, independent weights: jagged. Switch
+       to random walk and drag the step SD from 1 down to 0.05: smooth.
+- Q1 (degree 1 vs. 3; polynomial) *Land:* degree 1 bends only at knots
+  (kinks); cubic joins are smooth. Polynomials move everywhere when one
+  weight changes and swing hardest at the ends.
+- Q2 (random walk) *Land:* smooth curves come from weights that change
+  slowly from neighbor to neighbor; that assumption is the penalty.
+
+**Penalizing wiggliness (~12 min)**
+
+- Board: penalized NLL with second differences; $\lambda = 0$ is `lm()`,
+  $\lambda \to \infty$ is a straight line; edf from $K$ down to 2.
+- Penalty = prior: $\lambda = 1/(2\tau^2)$, so the wiggly part is a
+  random effect and REML picks $\lambda$ the way `lmer()` picks
+  $\sigma_b$. Callback to Monday's ridge bonus.
+- Widget (`penalized_fit.html`), stops: $K = 40$, $\log_{10}\lambda = -4$
+  (edf 38.9, wiggly); drag up to 5 (edf 2.06, a sloped line). "Jump to
+  the REML minimum": $\log_{10}\lambda = 0.9$, edf 9.1. Then $K = 20$
+  (minimum at 0.0, edf 8.1) and $K = 10$ ($-1.2$, edf 6.7). Tick "show the
+  curve the data were simulated from" last.
+- Q (edf and the sloped line; how much $K$ matters) *Land:* edf falls to
+  2; the second-difference penalty is zero for any straight line, so the
+  limit is the least-squares line, which slopes up (0.006 per °C). Once
+  REML picks $\lambda$, $K$ = 10, 20, 40 give edf 6.7-9.1 and nearly the
+  same curve: $K$ only needs to be big enough.
+- `gam()`: edf 8.2; `gam.vcomp()` prints the smooth's SD (0.017). Default
+  GCV picks a wigglier curve (edf on the page); always ask for REML.
+- AIC table: bell $-170.6$, 6-function `lm()` $-199.5$, GAM $-201.2$
+  ($\Delta$AIC 30.6 for the bell). GAM peak 20.2 °C, zero at 28.0 °C
+  (truth 20 and 28); bell peak 19.4, never reaches 0.
+
+**Gaussian processes (~10 min; first thing to cut, moves to Nov. 23)**
+
+- Board: MVN on $f$ itself; kernel $\alpha^2 \exp(-d^2/2\ell^2)$.
+  Exponential kernel = AR(1) with $\rho = e^{-1/\ell}$ (point at the
+  Week 12 $V$ heatmap).
+- Fit by `optim()`: $m = -0.057$, $\alpha = 0.32$, $\ell = 10.1$ °C,
+  $\sigma = 0.027$. GP and GAM curves differ by at most 0.011. Don't
+  dwell on $m$ (it trades off with $\alpha$ when $\ell$ is long).
+- Widget (`gp_draws.html`), stops: no points, squared exponential,
+  $\ell = 1.5$ (correlation 0.80 at distance 1; falls to 0.1 at 3.2);
+  "New random functions" twice. Add example points. Switch to
+  exponential (0.51 at distance 1): rough draws, posterior band pinches
+  at each point. Back to squared exponential, $\ell = 0.3$: between and
+  beyond the points the posterior returns to the prior mean (0) and the
+  band widens. Ask for a prediction before each switch.
+- Q *Land:* exponential curves are continuous but rough (like an AR(1)
+  series); squared exponential ones are smooth. With a short $\ell$ the
+  data only inform nearby $x$; far away you get the prior back.
+- Close: replace temperature with distance between sites, and this is a
+  spatial model (kriging).
+
+**Discussion (~5 min; pick one)**
+
+- Q1 (32 °C: bell 0.009, GAM $-0.315$, GP $-0.265$) *Land:* all three
+  are extrapolating. The bell can't go negative; the GAM and GP continue
+  the last slope. None should be used; measure at 30-34 °C.
+- Q2 (GAM beats bell by 30.6) *Land:* the bell is falsified as a
+  description; asymmetry is corroborated only against this one rival.
+  Add an asymmetric parametric rival (Briere, Sharpe-Schoolfield, or the
+  two-piece Deutsch et al. 2008 form that generated the data).
+- Q3 (manager wants one number) *Land:* report $\text{CT}_\text{max}$
+  from the GAM with a simulation interval (bonus: median 28.0, 95%
+  27.7-28.4; $T_\text{opt}$ 20.2, 18.5-21.6), or fit an asymmetric
+  parametric curve with $\text{CT}_\text{max}$ as a parameter.
+
+**Last 2 min:** hand out *Spline by Hand* (due Mon., Nov. 23). Take-home,
+laptops, AI labels on each coding item. Numbers they should get: AIC
+$-5.9$, $-16.4$, $-41.8$, $-39.6$ for $K$ = 4, 8, 12, 20; `pnll` check
+43.72; $\lambda = 10$ is closest to `gam()` (edf 9.7, peak week 15.5).
+Don't show the penalized NLL code before it's due; the page uses
+`gam()` only.
+
+**Bonuses (not planned for class):** derived-quantity intervals; the
+`brms` smooth (`sds(stemp_1)` 0.53, on a different scale from
+`gam.vcomp()`); a table of GAM formula forms for final projects
+(Pedersen et al. 2019).

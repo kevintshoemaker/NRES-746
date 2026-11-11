@@ -1,0 +1,147 @@
+<div class="w746pf" id="pf">
+<style>
+.w746pf{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746pf .row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.w746pf .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746pf .row .lab1{min-width:170px}
+.w746pf input[type=range]{flex:1;min-width:140px}
+.w746pf .val{font-weight:600;min-width:52px}
+.w746pf .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746pf .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746pf .card .k{font-size:13px;color:var(--ink2)}
+.w746pf .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746pf .panels{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;align-items:start}
+.w746pf .ax{stroke:var(--muted);stroke-width:1}
+.w746pf .lab{fill:var(--ink2);font-size:13px}
+.w746pf .tk{fill:var(--muted);font-size:11px}
+.w746pf button{font-size:14px;padding:3px 10px}
+@media (max-width:600px){.w746pf .panels{grid-template-columns:1fr}.w746pf .cards{grid-template-columns:1fr 1fr}.w746pf .row .lab1{min-width:120px}}
+</style>
+<div class="row"><label class="lab1" for="pf-k">Basis functions (cubic B-splines)</label><input type="range" id="pf-k" min="5" max="40" step="1" value="20"><span class="val" id="pf-kout"></span></div>
+<div class="row"><label class="lab1" for="pf-lam">Penalty weight, log<sub>10</sub> λ</label><input type="range" id="pf-lam" min="-4" max="5" step="0.1" value="-4"><span class="val" id="pf-lamout"></span></div>
+<div class="row">
+  <button type="button" id="pf-best">Jump to the REML minimum</button>
+  <label><input type="checkbox" id="pf-truth"> show the curve the data were simulated from</label>
+  <label><input type="checkbox" id="pf-basis"> show the weighted basis functions</label>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">λ</div><div class="v" id="pf-v1"></div></div>
+  <div class="card"><div class="k">Effective df (edf)</div><div class="v" id="pf-v2"></div></div>
+  <div class="card"><div class="k">Residual SS</div><div class="v" id="pf-v3"></div></div>
+  <div class="card"><div class="k">REML criterion, above its minimum</div><div class="v" id="pf-v4"></div></div>
+</div>
+<div class="panels">
+  <svg viewBox="0 0 440 300" width="100%" role="img" aria-label="Bd growth rate against temperature with the penalized spline fit."><g id="pf-fit"></g></svg>
+  <svg viewBox="0 0 270 300" width="100%" role="img" aria-label="REML criterion against log lambda, with the current value marked."><g id="pf-reml"></g></svg>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+const T=[4.1,4.4,5,5.4,6.3,6.5,7.2,7.8,8.4,8.6,9.4,10,10.5,10.9,11.5,11.9,12.5,13.1,13.7,14.2,14.5,15.2,15.8,16.2,16.6,17.3,17.6,18.3,18.8,19.5,19.9,20.5,21.2,21.7,22.1,22.5,23.1,23.5,24.3,24.6,25.3,25.7,26.5,26.9,27.5,28.1,28.3,28.9];
+const R=[0.024,0.011,-0.035,-0.05,-0.016,-0.004,0.023,0.055,0.025,0.024,0.044,0.045,0.063,0.075,0.071,0.082,0.128,0.19,0.178,0.226,0.173,0.188,0.197,0.181,0.259,0.31,0.282,0.309,0.283,0.282,0.307,0.29,0.268,0.311,0.324,0.292,0.217,0.252,0.209,0.174,0.199,0.12,0.085,0.111,0.071,-0.015,-0.056,-0.073];
+const n=T.length,lo=4,hi=29;
+function truth(t){return 0.3*(t<=20?Math.exp(-Math.pow((t-20)/8,2)):1-Math.pow((t-20)/8,2));}
+function bspline(x,K){
+  // P-spline basis: evenly spaced knots extending past [0, 1], so every basis function has the same shape
+  const d=3,h=1/(K-d),t=[];for(let j=0;j<=K+d;j++)t.push((j-d)*h);
+  const N=[];for(let i=0;i<t.length-1;i++)N.push(t[i]<=x&&x<t[i+1]?1:0);
+  for(let q=1;q<=d;q++)for(let i=0;i<t.length-1-q;i++){
+    const a=t[i+q]-t[i]>0?(x-t[i])/(t[i+q]-t[i])*N[i]:0;
+    const b=t[i+q+1]-t[i+1]>0?(t[i+q+1]-x)/(t[i+q+1]-t[i+1])*N[i+1]:0;
+    N[i]=a+b;
+  }
+  return N.slice(0,K);
+}
+function inv(A){
+  const K=A.length,M=A.map((r,i)=>r.concat(Array.from({length:K},(_,j)=>i===j?1:0)));let ld=0;
+  for(let c=0;c<K;c++){
+    let p=c;for(let r=c+1;r<K;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;
+    [M[c],M[p]]=[M[p],M[c]];const d=M[c][c];
+    for(let j=0;j<2*K;j++)M[c][j]/=d;
+    for(let r=0;r<K;r++)if(r!==c){const f=M[r][c];if(f!==0)for(let j=0;j<2*K;j++)M[r][j]-=f*M[c][j];}
+    ld+=Math.log(Math.abs(d));
+  }
+  const out=M.map(r=>r.slice(K));out.logdet=ld;return out;
+}
+let K,B,BtB,Bty,DtD,grid=[],nx=200,xs=[],Bx=[];
+function setup(){
+  K=parseInt(document.getElementById('pf-k').value);
+  B=T.map(t=>bspline((t-lo)/(hi-lo),K));
+  BtB=[];Bty=[];for(let i=0;i<K;i++){BtB.push([]);let s=0;for(let r=0;r<n;r++)s+=B[r][i]*R[r];Bty.push(s);
+    for(let j=0;j<K;j++){let q=0;for(let r=0;r<n;r++)q+=B[r][i]*B[r][j];BtB[i].push(q);}}
+  DtD=[];for(let i=0;i<K;i++)DtD.push(new Array(K).fill(0));
+  for(let r=0;r<K-2;r++){const d=[1,-2,1];for(let a=0;a<3;a++)for(let b=0;b<3;b++)DtD[r+a][r+b]+=d[a]*d[b];}
+  xs=[];Bx=[];for(let i=0;i<nx;i++){const x=i/(nx-1);xs.push(lo+x*(hi-lo));Bx.push(bspline(x,K));}
+  grid=[];for(let l=-4;l<=5.0001;l+=0.1)grid.push([l,solve(Math.pow(10,l))]);
+}
+function solve(lam){
+  const A=BtB.map((r,i)=>r.map((v,j)=>v+lam*DtD[i][j])),Ai=inv(A);
+  const beta=Ai.map(r=>r.reduce((s,v,j)=>s+v*Bty[j],0));
+  let edf=0;for(let i=0;i<K;i++)for(let j=0;j<K;j++)edf+=Ai[i][j]*BtB[j][i];
+  let rss=0;for(let r=0;r<n;r++){const f=B[r].reduce((s,v,j)=>s+v*beta[j],0);rss+=(R[r]-f)*(R[r]-f);}
+  // REML criterion (-2 x restricted log-likelihood, constants dropped), sigma^2 profiled out
+  let pen=0;for(let i=0;i<K;i++)for(let j=0;j<K;j++)pen+=beta[i]*DtD[i][j]*beta[j];
+  const s2=(rss+lam*pen)/(n-2);
+  return {beta:beta,edf:edf,rss:rss,reml:(n-2)*Math.log(s2)+Ai.logdet-(K-2)*Math.log(lam)};
+}
+function draw(){
+  const l=parseFloat(document.getElementById('pf-lam').value),lam=Math.pow(10,l);
+  document.getElementById('pf-kout').textContent=K;
+  document.getElementById('pf-lamout').textContent=l.toFixed(1);
+  const s=solve(lam);
+  document.getElementById('pf-v1').textContent=lam<0.01?lam.toExponential(1):(lam<100?lam.toPrecision(2):Math.round(lam));
+  document.getElementById('pf-v2').textContent=s.edf.toFixed(1);
+  document.getElementById('pf-v3').textContent=s.rss.toFixed(4);
+  const rmin=Math.min(...grid.map(r=>r[1].reml));
+  document.getElementById('pf-v4').textContent=(s.reml-rmin).toFixed(1);
+  // fit panel
+  const g=document.getElementById('pf-fit');g.innerHTML='';
+  const P={x0:46,x1:430,y0:262,y1:10,ymin:-0.15,ymax:0.4};
+  const px=t=>P.x0+(t-lo)/(hi-lo)*(P.x1-P.x0),py=y=>P.y0-(Math.max(P.ymin,Math.min(P.ymax,y))-P.ymin)/(P.ymax-P.ymin)*(P.y0-P.y1);
+  el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x1,y2:P.y0},g);el('line',{class:'ax',x1:P.x0,y1:P.y0,x2:P.x0,y2:P.y1},g);
+  el('line',{x1:P.x0,y1:py(0),x2:P.x1,y2:py(0),stroke:'#ddd'},g);
+  [-0.1,0,0.1,0.2,0.3].forEach(t=>txt('tk',P.x0-5,py(t)+4,t.toFixed(1),g,'end'));
+  [5,10,15,20,25].forEach(t=>txt('tk',px(t),P.y0+14,t,g));
+  txt('lab',(P.x0+P.x1)/2,P.y0+32,'Temperature (°C)',g);
+  txt('lab',13,(P.y0+P.y1)/2,'Growth rate r (per day)',g).setAttribute('transform','rotate(-90 13 '+(P.y0+P.y1)/2+')');
+  if(document.getElementById('pf-basis').checked){
+    for(let j=0;j<K;j++){let d='';Bx.forEach((b,i)=>{d+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py(b[j]*s.beta[j]).toFixed(1);});
+      el('path',{d:d,fill:'none',stroke:'#9ab','stroke-width':1},g);}
+  }
+  if(document.getElementById('pf-truth').checked){
+    let d='';xs.forEach((t,i)=>{d+=(i?'L':'M')+px(t).toFixed(1)+','+py(truth(t)).toFixed(1);});
+    el('path',{d:d,fill:'none',stroke:'#222','stroke-width':2,'stroke-dasharray':'5 4'},g);
+  }
+  T.forEach((t,i)=>el('circle',{cx:px(t),cy:py(R[i]),r:3.2,fill:'#888'},g));
+  let d='';Bx.forEach((b,i)=>{const f=b.reduce((q,v,j)=>q+v*s.beta[j],0);d+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py(f).toFixed(1);});
+  el('path',{d:d,fill:'none',stroke:'#2a78d6','stroke-width':2.6},g);
+  // REML panel
+  const h=document.getElementById('pf-reml');h.innerHTML='';
+  const Q={x0:46,x1:262,y0:262,y1:30};
+  const gmin=rmin,gmax=rmin+30;
+  const qx=l=>Q.x0+(l+4)/9*(Q.x1-Q.x0),qy=v=>Q.y0-(Math.min(v,gmax)-gmin)/(gmax-gmin)*(Q.y0-Q.y1);
+  el('line',{class:'ax',x1:Q.x0,y1:Q.y0,x2:Q.x1,y2:Q.y0},h);el('line',{class:'ax',x1:Q.x0,y1:Q.y0,x2:Q.x0,y2:Q.y1},h);
+  let e='';grid.forEach((r,i)=>{e+=(i?'L':'M')+qx(r[0]).toFixed(1)+','+qy(r[1].reml).toFixed(1);});
+  el('path',{d:e,fill:'none',stroke:'#222','stroke-width':1.8},h);
+  el('line',{x1:qx(l),y1:Q.y1,x2:qx(l),y2:Q.y0,stroke:'#2a78d6','stroke-width':2},h);
+  el('circle',{cx:qx(l),cy:qy(s.reml),r:4,fill:'#2a78d6'},h);
+  [-4,-2,0,2,4].forEach(t=>txt('tk',qx(t),Q.y0+14,t,h));
+  txt('lab',(Q.x0+Q.x1)/2,Q.y0+32,'log10 λ',h);
+  txt('lab',(Q.x0+Q.x1)/2,16,'REML criterion (lower is better)',h);
+  txt('tk',Q.x0+4,Q.y1+10,'edf '+grid[0][1].edf.toFixed(1),h,'start');
+  txt('tk',Q.x1,Q.y1+10,'edf '+grid[grid.length-1][1].edf.toFixed(1),h,'end');
+}
+document.getElementById('pf-k').addEventListener('input',()=>{setup();draw();});
+document.getElementById('pf-lam').addEventListener('input',draw);
+document.getElementById('pf-truth').addEventListener('change',draw);
+document.getElementById('pf-basis').addEventListener('change',draw);
+document.getElementById('pf-best').addEventListener('click',()=>{
+  let b=grid[0];grid.forEach(r=>{if(r[1].reml<b[1].reml)b=r;});
+  document.getElementById('pf-lam').value=b[0].toFixed(1);draw();
+});
+setup();draw();
+})();
+</script>
+</div>

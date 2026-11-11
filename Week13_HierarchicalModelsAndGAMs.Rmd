@@ -1,0 +1,914 @@
+---
+title: "Week 13: Bayesian Hierarchical Models, Splines, and GAMs"
+author: "NRES 746"
+date: "Nov. 16-18, 2026"
+output:
+  html_document:
+    includes:
+      after_body: footer.html
+    theme: flatly
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 7, fig.height = 4.5, fig.align = "center")
+options(cmdstanr_no_ver_check = TRUE)
+widget <- function(file) htmltools::includeHTML(file.path("widgets", file))
+f1 <- function(v) formatC(round(v, 1) + 0, format = "f", digits = 1)
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+f3 <- function(v) formatC(round(v, 3) + 0, format = "f", digits = 3)
+```
+
+```{r helpers, echo=FALSE}
+draw_workflow <- function(highlight = NULL, cex = 0.9) {
+  boxes <- c("PROBLEM", "THEORIES", "MODELS", "FIT", "COMPARE")
+  subs <- c("what do we\nneed to know?", "candidate\nexplanations",
+            "data-generating\n(process + noise)", "confront each\nwith data",
+            "fit, prediction,\nrelevance")
+  x <- seq(1, 9, by = 2)
+  y <- 2
+  w <- 0.8
+  h <- 0.55
+  shade <- function(lab) if (!is.null(highlight) && lab == highlight) "lightskyblue1" else "white"
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 10), ylim = c(-0.2, 4), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_along(boxes)) {
+    rect(x[i] - w, y - h, x[i] + w, y + h, col = shade(boxes[i]), lwd = 1.5)
+    text(x[i], y + 0.18, boxes[i], font = 2, cex = cex)
+    text(x[i], y - 0.22, subs[i], cex = cex * 0.75)
+  }
+  arrows(x[-5] + w, y, x[-1] - w, y, length = 0.08, lwd = 1.5)
+  rect(6 - 0.7, 3.2 - 0.35, 6 + 0.7, 3.2 + 0.35, lty = 2, lwd = 1.5)
+  text(6, 3.28, "DATA", font = 2, cex = cex)
+  text(6, 3.0, "study design", cex = cex * 0.75)
+  arrows(x[3], y + h, 6 - 0.7, 3.2, length = 0.08, lty = 2, lwd = 1.2)
+  arrows(6 + 0.7, 3.2, x[4], y + h, length = 0.08, lty = 2, lwd = 1.2)
+  segments(x[5], y - h, x[5], 0.4, lwd = 1.5)
+  segments(x[5], 0.4, x[1], 0.4, lwd = 1.5)
+  arrows(x[c(1, 2)], 0.4, x[c(1, 2)], y - h, length = 0.08, lwd = 1.5)
+  text(6, 0.15, "REVISE the problem and theories; drop or down-weight poor models",
+       cex = cex * 0.85, font = 3)
+}
+
+# Bd data plot used by several figures
+plot_bd <- function(...) {
+  plot(r ~ temp, data = bd, pch = 16, col = "grey45", xlab = "Temperature (°C)",
+       ylab = "Growth rate r (per day)", ...)
+  abline(h = 0, col = "grey85")
+}
+```
+
+[How this page was made](#ai-use)
+
+R code from this page is also in the
+[companion script](lecture_notes/CODE_Week13_HierarchicalModelsAndGAMs.R).
+Packages: `mvtnorm`, `lme4`, `cmdstanr`, `posterior`, `brms`, `splines`
+(comes with R), `mgcv`.
+
+Bayesian hierarchical models extend Bolker, *Ecological Models and Data
+in R*, Chapter 10, sections 10.3-10.6 (pp. 423-441). Bolker gives
+splines one paragraph (section 3.5.1.1, p. 122); nonlinear least
+squares, the parametric alternative, is section 9.3 (pp. 404-406).
+
+# Bayesian hierarchical models {#bayesian-hierarchical}
+
+A random slope model fit by MCMC. A Bayesian hierarchical model puts
+priors on the population-level parameters (the among-group SDs and
+their correlation), and the sampler draws each group's intercept and
+slope along with everything else. This part covers partial pooling,
+priors for a covariance matrix, the model written in Stan, and the same
+model in one line of `brms`.
+
+The example is the simulated drought-sensitivity data set from
+[random slopes](Week12_MixedModels.html#random-slopes): ring widths at
+12 pinyon stands whose records run from 5 to 30 years. Precipitation is
+in 10-cm units centered at 20 cm, so a stand's intercept is its ring
+width in a 20-cm winter and its slope is the change in width per extra
+10 cm.
+
+```{r drought-data}
+library(mvtnorm)
+library(lme4)
+set.seed(12)
+n_years <- rep(c(30, 24, 18, 12, 8, 5), each = 2)        # record length per stand
+tau_true <- c(0.15, 0.10)                                 # among-stand SDs: intercept, slope
+rho_true <- -0.6
+G_true <- diag(tau_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(tau_true)
+ab_true <- rmvnorm(12, c(0.9, 0.25), G_true)              # each stand's intercept and slope
+stand_names <- sprintf("S%02d", 1:12)
+drought <- data.frame(stand = factor(rep(stand_names, n_years)),
+                      year = unlist(lapply(n_years, function(n) seq(2021 - n, 2020))))
+j <- as.integer(drought$stand)
+drought$precip <- round(rgamma(nrow(drought), shape = 9, scale = 22 / 9), 1)
+drought$precip10 <- (drought$precip - 20) / 10
+drought$width <- round(ab_true[j, 1] + ab_true[j, 2] * drought$precip10 +
+                         rnorm(nrow(drought), 0, 0.12), 2)
+
+# no pooling: one least-squares line per stand; and the maximum likelihood random slope fit
+nopool <- t(sapply(split(drought, drought$stand), function(s) coef(lm(width ~ precip10, data = s))))
+fit_rs_lmer <- lmer(width ~ precip10 + (precip10 | stand), data = drought, REML = FALSE)
+ml <- c(fixef(fit_rs_lmer), as.data.frame(VarCorr(fit_rs_lmer))$sdcor)
+names(ml) <- c("mu_a", "mu_b", "tau_a", "tau_b", "rho", "sigma")
+round(ml, 3)
+```
+
+```{r drought-plot, echo=FALSE, fig.width=9, fig.height=3.8}
+par(mfrow = c(1, 2), mar = c(4, 4, 1, 1))
+plot(width ~ precip, data = drought, col = "grey60", pch = 16, cex = 0.7,
+     xlab = "Winter precipitation (cm)", ylab = "Ring width (mm)")
+for (s in seq_len(12)) {
+  xr <- range(drought$precip10[drought$stand == stand_names[s]])
+  lines(20 + 10 * xr, nopool[s, 1] + nopool[s, 2] * xr, lwd = ifelse(n_years[s] <= 8, 1, 2),
+        lty = ifelse(n_years[s] <= 8, 2, 1))
+}
+legend("topleft", c("stand with 12-30 years", "stand with 5-8 years"), lty = 1:2, lwd = 2:1,
+       bty = "n", cex = 0.85)
+plot(nopool, pch = 19, xlab = "Intercept: width at 20 cm (mm)",
+     ylab = "Slope (mm per 10 cm)", cex = 1.1, xlim = range(nopool[, 1]) + c(0, 0.05))
+text(nopool, labels = stand_names, pos = 4, cex = 0.7, col = "grey40")
+```
+
+## 1. WOD: partial pooling by hand {#wod-pooling}
+
+```{r wod-numbers, echo=FALSE}
+wod_mu <- 3
+wod_sb <- 0.5
+wod_s <- 1
+wod_n <- c(A = 4, B = 16)
+wod_ybar <- c(A = 4.2, B = 4.0)
+wod_w <- wod_sb^2 / (wod_sb^2 + wod_s^2 / wod_n)
+wod_est <- wod_mu + wod_w * (wod_ybar - wod_mu)
+```
+
+The WOD (a short warm-up exercise at the start of class) gave the
+random intercept estimate for a group,
+
+$$\hat a_j = \hat\mu + w_j(\bar y_j - \hat\mu), \qquad
+w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j},$$
+
+and asked for the estimated *Batrachochytrium dendrobatidis* (Bd)
+infection load in two ponds. Across many ponds the mean load is
+$\hat\mu =$ `r wod_mu` (log$_{10}$ zoospore equivalents per swab), ponds
+differ with SD $\sigma_b =$ `r wod_sb`, and frogs within a pond differ
+with SD $\sigma =$ `r wod_s`. Pond A had `r wod_n["A"]` frogs swabbed
+with mean load `r wod_ybar["A"]`; pond B had `r wod_n["B"]` frogs with
+mean `r wod_ybar["B"]`.
+
+- Pond A: $\sigma^2/n = `r 1 / wod_n["A"]`$, so
+  $w_A = `r wod_sb^2` / (`r wod_sb^2` + `r 1 / wod_n["A"]`) = `r wod_w["A"]`$
+  and $\hat a_A = `r wod_mu` + `r wod_w["A"]` \times `r wod_ybar["A"] - wod_mu` = `r wod_est["A"]`$.
+- Pond B: $\sigma^2/n = `r 1 / wod_n["B"]`$, so
+  $w_B = `r wod_sb^2` / (`r wod_sb^2` + `r 1 / wod_n["B"]`) = `r wod_w["B"]`$
+  and $\hat a_B = `r wod_mu` + `r wod_w["B"]` \times `r wod_ybar["B"] - wod_mu` = `r wod_est["B"]`$.
+
+```{r wod-plot, echo=FALSE, fig.width=6, fig.height=2.4}
+par(mar = c(4, 7.5, 0.5, 1))
+plot(NA, xlim = c(2.8, 4.4), ylim = c(0.5, 2.5), yaxt = "n", ylab = "",
+     xlab = expression(log[10] ~ "zoospore equivalents"))
+axis(2, at = 1:2, labels = c("pond B (16)", "pond A (4)"), las = 1)
+abline(v = wod_mu, lty = 2, col = "grey50")
+arrows(wod_ybar[c("B", "A")], 1:2, wod_est[c("B", "A")], 1:2, length = 0.08, col = "steelblue", lwd = 2)
+points(wod_ybar[c("B", "A")], 1:2, pch = 1, cex = 1.4)
+points(wod_est[c("B", "A")], 1:2, pch = 19, col = "steelblue", cex = 1.4)
+text(wod_mu, 2.45, "overall mean", pos = 4, cex = 0.8, col = "grey40")
+```
+
+Pond A has the higher raw mean, but after pooling pond B has the higher
+estimate. Four frogs give a noisy pond mean (sampling variance
+`r 1 / wod_n["A"]`, as large as the among-pond variance
+`r wod_sb^2`), so half of pond A's distance from the overall mean is
+treated as noise. Sixteen frogs earn pond B most of its own mean.
+
+## 2. Random effects as priors
+
+"Hierarchical," "multilevel," and "mixed" describe the same models. In
+Bayesian terms, a random effect is a parameter whose prior has its own
+unknown parameters (hyperparameters): each $(a_j, b_j)$ gets the prior
+$\text{MVN}(0, G)$, and $G$ gets a prior too. Compared with fitting by
+maximum likelihood:
+
+- **No integral.** The sampler draws the $a_j$ and $b_j$ instead of
+  integrating them out, so a Poisson or binomial response is no harder
+  than a Normal one.
+- **Uncertainty carries through.** Each stand's estimate reflects
+  uncertainty in $\tau_a$, $\tau_b$, and $\rho$, rather than plugging in
+  their best values.
+- **Priors help with few groups.** A weakly informative prior keeps an
+  SD off the boundary at 0 and a correlation off $\pm 1$, where
+  maximum likelihood gave up with four stands (see
+  [Q3 here](Week12_MixedModels.html#variance-discussion)).
+- **The price** is choosing priors and checking the sampler (see
+  [checking chains](Week9_MCMC.html#chain-checks)).
+
+## 3. Partial pooling {#partial-pooling}
+
+There are three ways to estimate each stand's mean ring width:
+
+- **complete pooling:** ignore stands; every stand gets the overall mean;
+- **no pooling:** estimate each stand separately (stand as a fixed
+  factor);
+- **partial pooling:** the random effect, a compromise between the two.
+
+Ignoring precipitation for the moment, a random intercept model gives
+stand $j$ the estimate from the [WOD](#wod-pooling),
+
+$$\hat a_j = \hat\mu + w_j(\bar y_j - \hat\mu), \qquad
+w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j}$$
+
+where $\bar y_j$ is the stand's own mean from $n_j$ years. The weight
+$w_j$ compares the spread among stands ($\sigma_b^2$) with the sampling
+variance of the stand's own mean ($\sigma^2/n_j$). A stand with a long
+record keeps most of its own mean; a stand with 5 years is pulled
+toward the overall mean. This is the same precision-weighted average as
+a Normal prior combined with Normal data
+([priors and posteriors](Week8_PosteriorsAndOptimization.html#priors)):
+the population of stands acts as a prior for each stand.
+
+```{r pooling-check}
+fit_ri0 <- lmer(width ~ 1 + (1 | stand), data = drought, REML = FALSE)
+sd_ri0 <- as.data.frame(VarCorr(fit_ri0))$sdcor          # sigma_b, sigma
+ybar <- tapply(drought$width, drought$stand, mean)
+n_j <- as.vector(table(drought$stand))
+w <- sd_ri0[1]^2 / (sd_ri0[1]^2 + sd_ri0[2]^2 / n_j)
+round(cbind(own_mean = ybar, n_j, w, formula = fixef(fit_ri0) + w * (ybar - fixef(fit_ri0)),
+            lmer = coef(fit_ri0)$stand[, 1]), 3)
+```
+
+The formula matches `lmer()`'s stand estimates. Here
+$\hat\sigma_b =$ `r f3(sd_ri0[1])` and $\hat\sigma =$ `r f3(sd_ri0[2])`;
+the widget starts at those values. It plots each stand's own mean and
+its partially pooled estimate.
+
+```{r widget-pooling, echo=FALSE}
+widget("partial_pooling.html")
+```
+
+> **Question:** Set $\sigma_b$ to 0, then drag it to 0.4. Which two
+> pooling choices are these? Then compare S10 and S12: their own means
+> are similar (`r f2(ybar["S10"])` and `r f2(ybar["S12"])`), but one has
+> 8 years and the other 5. Which moves more toward the overall mean, and
+> why?
+
+## 4. Priors for a covariance matrix {#lkj}
+
+The random slope model needs a prior on $G$, a 2 $\times$ 2 covariance
+matrix. The usual approach splits $G$ into scales and correlations,
+
+$$G = \begin{pmatrix} \tau_a & 0 \\ 0 & \tau_b \end{pmatrix}
+\Omega
+\begin{pmatrix} \tau_a & 0 \\ 0 & \tau_b \end{pmatrix},
+\qquad
+\Omega = \begin{pmatrix} 1 & \rho \\ \rho & 1 \end{pmatrix}$$
+
+and puts separate priors on each piece: a half-Normal, half-$t$, or
+exponential prior on each SD $\tau$, and an **LKJ prior** on the
+correlation matrix $\Omega$ (named for Lewandowski, Kurowicka, and Joe).
+Older BUGS and JAGS code often used an inverse-Wishart prior on $G$
+instead, which ties the prior on the SDs to the prior on the
+correlations; splitting them makes each easier to choose.
+
+The LKJ density has one shape parameter $\eta$:
+
+$$p(\Omega) \propto \det(\Omega)^{\eta - 1}$$
+
+For a 2 $\times$ 2 matrix, $\det(\Omega) = 1 - \rho^2$, so
+$p(\rho) \propto (1 - \rho^2)^{\eta - 1}$. With $\eta = 1$ every
+correlation is equally likely; $\eta > 1$ favors correlations near 0,
+and $\eta < 1$ favors correlations near $\pm 1$. For a bigger matrix
+($K \times K$), each single correlation has the marginal prior
+$(\rho + 1)/2 \sim \text{Beta}(\eta - 1 + K/2,\ \eta - 1 + K/2)$.
+
+```{r widget-lkj, echo=FALSE}
+widget("lkj_prior.html")
+```
+
+> **Question:** For a 10 $\times$ 10 correlation matrix with $\eta = 1$,
+> how likely is any one correlation to exceed 0.5 in absolute value?
+> What does "uniform" mean for a matrix that large?
+
+## 5. Random slopes in Stan {#stan-model}
+
+The Stan program below is the random slope model with an LKJ(2) prior
+on $\Omega$. Two choices in it need explaining.
+
+- **The Cholesky factor.** Stan works with $L$, the lower-triangular
+  matrix with $LL^T = \Omega$. Any value Stan proposes for
+  `cholesky_factor_corr` gives a valid correlation matrix, so the
+  sampler can't leave the allowed region (the third problem in
+  [why these models are harder to fit](Week12_MixedModels.html#harder)),
+  and it's cheaper to compute with.
+- **Non-centered stand effects.** Instead of sampling $(a_j, b_j)$
+  directly, Stan samples standard Normal $z_j$ and computes
+  $(a_j, b_j)^T = \text{diag}(\tau)\,L\,z_j$. This avoids the funnel
+  that makes hierarchical models hard to sample
+  ([when HMC struggles](Week9_MCMC.html#hmc-failures)).
+
+```{r stan-fit, cache=TRUE, echo=-6, results="hide"}
+library(cmdstanr)
+slopes_code <- "
+data {
+  int<lower=1> N;                       // stand-years
+  int<lower=1> J;                       // stands
+  array[N] int<lower=1, upper=J> stand;
+  vector[N] x;                          // precipitation (10 cm, centered at 20 cm)
+  vector[N] y;                          // ring width (mm)
+}
+parameters {
+  vector[2] mu;                         // mean intercept and slope
+  vector<lower=0>[2] tau;               // among-stand SDs of intercepts and slopes
+  cholesky_factor_corr[2] L;            // Cholesky factor of the correlation matrix
+  matrix[2, J] z;                       // standardized stand effects
+  real<lower=0> sigma;                  // residual SD
+}
+transformed parameters {
+  // row j: stand j's intercept and slope
+  matrix[J, 2] ab = rep_matrix(mu', J) + (diag_pre_multiply(tau, L) * z)';
+}
+model {
+  mu[1] ~ normal(1, 0.5);
+  mu[2] ~ normal(0, 0.5);
+  tau ~ normal(0, 0.3);                 // half-normal, because tau > 0
+  L ~ lkj_corr_cholesky(2);
+  to_vector(z) ~ std_normal();
+  sigma ~ normal(0, 0.3);
+  y ~ normal(ab[stand, 1] + ab[stand, 2] .* x, sigma);
+}
+generated quantities {
+  real rho = multiply_lower_tri_self_transpose(L)[1, 2];
+}
+"
+slopes_model <- cmdstan_model(write_stan_file(slopes_code))
+stan_data <- list(N = nrow(drought), J = 12, stand = as.integer(drought$stand),
+                  x = drought$precip10, y = drought$width)
+fit_stan <- slopes_model$sample(data = stan_data, chains = 4, parallel_chains = 4,
+                                seed = 746, refresh = 0)
+fit_stan$draws()
+```
+
+Check the sampler first, then the estimates:
+
+```{r stan-check}
+fit_stan$diagnostic_summary()
+fit_stan$summary(c("mu", "tau", "rho", "sigma"))
+```
+
+```{r stan-numbers, echo=FALSE}
+library(posterior)
+draws <- as_draws_df(fit_stan$draws(c("mu", "tau", "rho", "sigma", "ab")))
+q <- function(v) quantile(v, c(0.5, 0.05, 0.95))
+post <- rbind(mu_a = q(draws$`mu[1]`), mu_b = q(draws$`mu[2]`), tau_a = q(draws$`tau[1]`),
+              tau_b = q(draws$`tau[2]`), rho = q(draws$rho), sigma = q(draws$sigma))
+ml_vs_bayes <- data.frame(truth = c(0.9, 0.25, 0.15, 0.10, -0.6, 0.12),
+                          lmer = ml, post)
+names(ml_vs_bayes)[3:5] <- c("posterior median", "5%", "95%")
+ab_post <- cbind(sapply(1:12, function(s) mean(draws[[sprintf("ab[%d,1]", s)]])),
+                 sapply(1:12, function(s) mean(draws[[sprintf("ab[%d,2]", s)]])))
+err <- function(est, rows = 1:12) colMeans(abs(est[rows, ] - ab_true[rows, ]))
+short_rows <- which(n_years <= 8)
+err_nopool_short <- err(nopool, short_rows)
+err_post_short <- err(ab_post, short_rows)
+```
+
+```{r ml-bayes-table, echo=FALSE}
+knitr::kable(ml_vs_bayes, digits = 3, caption = "Maximum likelihood (lmer) and posterior summaries")
+```
+
+The two methods agree closely on everything except the correlation: the
+MLE is `r f2(ml["rho"])`, while the posterior median is
+`r f2(post["rho", 1])` with a 90% interval from `r f2(post["rho", 2])`
+to `r f2(post["rho", 3])`.
+
+```{r rho-posterior, echo=FALSE, fig.width=6, fig.height=3.6}
+par(mar = c(4, 4, 1, 1))
+hist(draws$rho, breaks = 40, freq = FALSE, col = "grey85", border = "white", xlim = c(-1, 1),
+     main = "", xlab = expression(rho ~ "(intercept-slope correlation)"))
+curve(dbeta((x + 1) / 2, 2, 2) / 2, add = TRUE, lwd = 2, lty = 2)
+abline(v = ml["rho"], lwd = 2, col = "firebrick")
+abline(v = -0.6, lwd = 2, lty = 3)
+legend("topright", c("LKJ(2) prior", "MLE (lmer)", "truth"), lty = c(2, 1, 3), lwd = 2,
+       col = c("black", "firebrick", "black"), bty = "n", cex = 0.85)
+```
+
+```{r shrinkage-plot, echo=FALSE, fig.width=6.5, fig.height=5}
+par(mar = c(4, 4, 1, 1))
+plot(nopool, pch = 1, cex = 1.2, xlab = "Intercept: width at 20 cm (mm)",
+     ylab = "Slope (mm per 10 cm)",
+     xlim = range(nopool[, 1], ab_post[, 1]) + c(0, 0.06), ylim = range(nopool[, 2], ab_post[, 2]))
+arrows(nopool[, 1], nopool[, 2], ab_post[, 1], ab_post[, 2], length = 0.07, col = "steelblue")
+points(ab_post, pch = 19, col = "steelblue")
+text(nopool, labels = paste0(stand_names, " (", n_years, ")"), pos = 4, cex = 0.65, col = "grey40")
+points(post["mu_a", 1], post["mu_b", 1], pch = 3, cex = 2, lwd = 2)
+legend("topright", c("own least-squares fit", "posterior mean", "population mean"),
+       pch = c(1, 19, 3), col = c("black", "steelblue", "black"), bty = "n", cex = 0.85)
+```
+
+Each arrow runs from a stand's own fit to its posterior mean; the
+number in parentheses is the record length. Stands with short records
+move the most; stands with 24 or 30 years barely move.
+
+```{r shrink-sims, echo=FALSE, cache=TRUE}
+set.seed(746)
+shrink_sims <- t(replicate(500, {
+  ab <- rmvnorm(12, c(0.9, 0.25), G_true)
+  sim <- data.frame(stand = factor(rep(stand_names, n_years)))
+  k <- as.integer(sim$stand)
+  sim$x <- (round(rgamma(nrow(sim), shape = 9, scale = 22 / 9), 1) - 20) / 10
+  sim$y <- ab[k, 1] + ab[k, 2] * sim$x + rnorm(nrow(sim), 0, 0.12)
+  np <- t(sapply(split(sim, sim$stand), function(s) coef(lm(y ~ x, data = s))))
+  pp <- as.matrix(coef(lmer(y ~ x + (x | stand), data = sim, REML = FALSE))$stand)
+  sh <- n_years <= 8
+  c(np_a = mean(abs(np - ab)[sh, 1]), np_b = mean(abs(np - ab)[sh, 2]),
+    pp_a = mean(abs(pp - ab)[sh, 1]), pp_b = mean(abs(pp - ab)[sh, 2]))
+}))
+```
+
+Because the data are simulated, we can compare both sets of estimates
+with the true stand values. For the four stands with 5 or 8 years, the
+average error in the slopes is `r f3(err_nopool_short[2])` mm per 10 cm
+with no pooling and `r f3(err_post_short[2])` with partial pooling
+(intercepts: `r f3(err_nopool_short[1])` and `r f3(err_post_short[1])`
+mm). That's a mixed result: in any one data set, shrinkage can pull a
+stand that really is unusual too far toward the mean. Its advantage is
+on average. Over `r nrow(shrink_sims)` simulated data sets with the same
+design, using `lmer()`'s stand estimates, partial pooling cut the
+average slope error for the short-record stands from
+`r f3(mean(shrink_sims[, "np_b"]))` to `r f3(mean(shrink_sims[, "pp_b"]))`
+(intercepts: `r f3(mean(shrink_sims[, "np_a"]))` to
+`r f3(mean(shrink_sims[, "pp_a"]))`).
+
+> **Question:** Why is the posterior for $\rho$ so much wider than the
+> other posteriors, and why is its median closer to 0 than the MLE?
+> Which summary is more honest about what 12 stands can tell us?
+
+> **Question:** Change `lkj_corr_cholesky(2)` to `lkj_corr_cholesky(1)`,
+> then to `lkj_corr_cholesky(10)`, and refit. Predict how the posterior
+> for $\rho$ will move before you run each one. Do the stand estimates
+> change much?
+
+## 6. The same model in brms {#brms}
+
+`brms` writes the Stan program from a `lme4`-style formula. Here are
+the same model and priors (the fixed-effect priors are left at `brms`'s
+defaults):
+
+```{r brms-fit, cache=TRUE, results="hide"}
+library(brms)
+fit_brms <- brm(width ~ precip10 + (precip10 | stand), data = drought,
+                prior = c(prior(normal(0, 0.3), class = sd),
+                          prior(lkj(2), class = cor),
+                          prior(normal(0, 0.3), class = sigma)),
+                backend = "cmdstanr", chains = 4, cores = 4, seed = 746, refresh = 0)
+```
+
+```{r brms-summary}
+summary(fit_brms)
+```
+
+The estimates match the hand-written model up to Monte Carlo error.
+`stancode(fit_brms)` prints the Stan program `brms` wrote; it uses the
+same Cholesky factor and non-centered stand effects. Without the
+`prior` argument, `brms` uses an LKJ(1) prior on the correlations and
+half-Student-$t$ priors on the SDs; `prior_summary(fit_brms)` lists
+every prior in a fit. `rstanarm::stan_lmer()` fits the same formula
+from precompiled models, so it skips the compile step.
+
+## Discussion {#bayes-discussion}
+
+**Q1.** With 12 stands, the 90% interval for $\rho$ runs from
+`r f2(post["rho", 2])` to `r f2(post["rho", 3])`. To rule out
+$\rho = 0$, would you rather have 12 more stands or 20 more years at
+each of the 12 stands? Defend your choice.
+
+**Q2.** When would you use `brms`, and when would you write the Stan
+model yourself?
+
+**Q3.** Do your final project data have groups (sites, individuals,
+years, observers)? Which effects would you treat as random, and would
+you let any slopes vary among groups?
+
+## Bonus: ridge regression as a prior {#ridge-prior}
+
+A [ridge penalty](Week10_ModelComparison.html#regularization) adds
+$\lambda\sum\beta_k^2$ to the NLL. A Normal(0, $\tau^2$) prior on each
+$\beta_k$ adds $-\log p(\beta) = \sum\beta_k^2/(2\tau^2)$ plus a
+constant, which is the same penalty with $\lambda = 1/(2\tau^2)$; a
+Laplace prior gives the lasso (see
+[Bayesian model comparison and shrinkage priors](Week10_ModelComparison.html#bayesian)).
+A random effect does the same thing to the stand deviations: the
+$\text{MVN}(0, G)$ prior shrinks every $(a_j, b_j)$ toward 0. The
+difference is that $\tau$ isn't chosen by cross-validation; it's
+estimated from how much the stands actually differ. The
+[wiggliness penalty](#penalty) on a spline works the same way.
+
+# Splines, GAMs, and Gaussian processes {#gams}
+
+When no function from the bestiary has the right shape, we can build
+one out of simple pieces. A spline is a weighted sum of basis
+functions, so fitting it is a linear model; a penalty on wiggliness
+keeps it from chasing noise, and that penalty is a prior, which makes
+the smooth a kind of random effect. A Gaussian process skips the basis
+functions and puts a multivariate Normal directly on the curve, using a
+covariance matrix like the ones built for
+[autocorrelation](Week12_MixedModels.html#ar1).
+
+## 1. A thermal performance curve {#thermal}
+
+```{r workflow-models, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow("MODELS")
+```
+
+The chytrid fungus Bd grows fastest at moderate temperatures and dies
+when it gets too warm, which is one reason warm ponds have less
+infection. A management question: **above what water temperature does
+Bd stop growing?** To find out, we grow 48 Bd cultures on a thermal
+gradient plate (a block heated at one end and cooled at the other), so
+each culture sits at a slightly different temperature, and estimate each
+culture's growth rate $r$ (per day) from a week of optical density
+readings. These data are simulated; the curve they came from is in the
+code below, and none of the models on this page has that form.
+
+```{r bd-data}
+# truth: a two-piece thermal performance curve (Gaussian rise, quadratic fall)
+tpc_true <- function(temp) 0.3 * ifelse(temp <= 20, exp(-((temp - 20) / 8)^2), 1 - ((temp - 20) / 8)^2)
+set.seed(13)
+bd <- data.frame(temp = round(seq(4, 29, length.out = 48) + runif(48, -0.2, 0.2), 1))
+bd$r <- round(tpc_true(bd$temp) + rnorm(48, 0, 0.03), 3)
+head(bd)
+```
+
+Thermal performance curves are usually asymmetric: a slow rise, an
+optimum $T_\text{opt}$, then a steep fall to a critical maximum
+$\text{CT}_\text{max}$ where growth stops. A first try from the
+bestiary is a Gaussian (bell) curve, with a peak height, a location
+($T_\text{opt}$), and a width, fit by maximum likelihood with Normal
+noise:
+
+```{r bell-fit}
+bell <- function(temp, rmax, topt, width) rmax * exp(-(temp - topt)^2 / (2 * width^2))
+nll_bell <- function(par) {
+  -sum(dnorm(bd$r, bell(bd$temp, par[1], par[2], par[3]), exp(par[4]), log = TRUE))
+}
+fit_bell <- optim(c(0.3, 20, 5, log(0.05)), nll_bell)
+round(setNames(c(fit_bell$par[1:3], exp(fit_bell$par[4])), c("rmax", "topt", "width", "sigma")), 3)
+```
+
+```{r bell-plot, echo=FALSE, fig.width=6.5, fig.height=4}
+par(mar = c(4, 4, 1, 1))
+plot_bd()
+curve(bell(x, fit_bell$par[1], fit_bell$par[2], fit_bell$par[3]), add = TRUE, lwd = 2, col = "firebrick")
+legend("topleft", "Gaussian (bell) fit", lwd = 2, col = "firebrick", bty = "n", cex = 0.85)
+```
+
+> **Question:** Which features of the scatter does the bell curve get
+> wrong? Which of them matter for the management question?
+
+## 2. Splines are linear models {#basis}
+
+A spline builds a curve from $K$ fixed **basis functions**
+$B_1(x), \dots, B_K(x)$ and estimated weights:
+
+$$f(x) = \sum_{k=1}^{K} \beta_k B_k(x)$$
+
+The basis functions are chosen in advance, so the only unknowns are the
+weights, and $f$ is linear in them. That makes the spline a linear
+model: each basis function becomes one column of the
+[model matrix](Week11_LinearModelsAndVariance.html#linear-algebra), and
+`lm()` estimates the weights.
+
+The most common basis is the **B-spline**. Each cubic B-spline is a
+small bump built from cubic pieces that join smoothly at points called
+**knots**, and it is zero outside a short stretch of $x$. More knots
+mean more, narrower bumps and a more flexible curve. In R,
+`splines::bs()` builds the columns:
+
+```{r bs-basis}
+library(splines)
+X <- bs(bd$temp, df = 6)          # 6 cubic B-spline columns (3 interior knots)
+round(head(X), 3)
+attr(X, "knots")
+fit_bs6 <- lm(r ~ bs(temp, df = 6), data = bd)
+fit_bs25 <- lm(r ~ bs(temp, df = 25), data = bd)
+```
+
+```{r bs-plot, echo=FALSE, fig.width=9, fig.height=3.8}
+temp_grid <- seq(4, 29, by = 0.05)
+Xg <- predict(X, temp_grid)
+pal <- c("#2a78d6", "#c0392b", "#27ae60", "#8e44ad", "#d68910", "black")
+par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 1))
+matplot(temp_grid, Xg, type = "l", lty = 1, lwd = 2, col = pal, xlab = "Temperature (°C)",
+        ylab = "Basis function value", main = "Six B-spline basis functions", cex.main = 0.9)
+abline(v = attr(X, "knots"), lty = 3, col = "grey50")
+plot_bd(main = "Unpenalized spline fits", cex.main = 0.9)
+lines(temp_grid, predict(fit_bs6, data.frame(temp = temp_grid)), lwd = 2.5, col = "#2a78d6")
+lines(temp_grid, predict(fit_bs25, data.frame(temp = temp_grid)), lwd = 1.5, col = "black", lty = 2)
+legend("topleft", c("6 basis functions", "25 basis functions"), lwd = c(2.5, 1.5), lty = 1:2,
+       col = c("#2a78d6", "black"), bty = "n", cex = 0.85)
+```
+
+The six-function fit (left: its basis functions, with dotted lines at
+the knots) has the right shape. With 25 basis functions, the curve
+starts chasing individual cultures, the same problem as the
+[connect-the-dots curve](Week10_ModelComparison.html#wod) that passes
+through every point.
+
+Other bases work the same way. The widget builds $f(x)$ from four kinds
+of basis functions and random weights. Polynomials ($1, x, x^2, \dots$)
+are the oldest choice, but each power stretches across the whole range,
+so changing one weight moves the curve everywhere. B-splines and
+Gaussian bumps are local: each weight changes the curve over one stretch
+of $x$.
+
+```{r widget-basis, echo=FALSE}
+widget("spline_basis.html")
+```
+
+> **Question:** With B-splines of degree 1 and 4 interior knots, where
+> can the function bend? Switch to degree 3 and compare. Then choose the
+> polynomial basis with highest power 12 and randomize a few times:
+> where does the function do most of its moving?
+
+> **Question:** Switch the weights to a random walk and lower the step
+> SD. What happens to the function, and what would you have to assume
+> about the weights to get a smooth curve from many knots?
+
+## 3. Penalizing wiggliness {#penalty}
+
+Choosing the number of knots by hand is awkward: too few and the curve
+can't bend where it needs to, too many and it chases noise. The usual
+fix is to use plenty of basis functions and add a **penalty** to the
+NLL that grows with how wiggly the curve is:
+
+$$\text{NLL}_\text{pen}(\beta) = \text{NLL}(\beta) +
+\lambda \sum_{k=3}^{K} (\beta_k - 2\beta_{k-1} + \beta_{k-2})^2$$
+
+The penalty adds up squared second differences of neighboring weights,
+a stand-in for the curvature of $f$ (the integral of $f''(x)^2$ is
+the other common choice). With $\lambda = 0$ we get the unpenalized
+`lm()` fit. As $\lambda$ grows, the weights are forced onto a straight
+line, and with evenly spaced knots so is $f$. In between, the **effective degrees of freedom**
+(edf) measure how many parameters' worth of flexibility the curve uses;
+edf runs from $K$ (no penalty) down to 2 (a straight line).
+
+Choosing $\lambda$ is the remaining problem.
+[Cross-validation](Week10_ModelComparison.html#cross-validation) would
+work, but there's a faster route, because **the penalty is a prior.**
+As in the [ridge bonus](#ridge-prior), a penalty $\lambda \sum d_k^2$
+on the second differences $d_k$ is what a Normal(0, $\tau^2$) prior on
+each $d_k$ adds to the NLL, with $\lambda = 1/(2\tau^2)$. Read that
+way, the wiggly part of the curve is a random effect: a set of
+deviations drawn from a Normal distribution whose SD $\tau$ is
+estimated from the data. So $\lambda$ can be chosen the way `lmer()`
+estimates $\sigma_b$, by maximizing the restricted likelihood (REML)
+with the weights integrated out.
+
+The widget fits the Bd data with a P-spline (cubic B-splines on evenly
+spaced knots, plus the second-difference penalty) and plots the REML
+criterion against $\lambda$.
+
+```{r widget-penalty, echo=FALSE}
+widget("penalized_fit.html")
+```
+
+> **Question:** Start at 40 basis functions and $\log_{10}\lambda = -4$,
+> then raise $\lambda$. What happens to edf, and why does the curve end
+> up a sloped line rather than a flat one? Then press "Jump to the REML
+> minimum" and try 10, 20, and 40 basis functions. How much does $K$
+> matter once $\lambda$ is chosen this way?
+
+A **generalized additive model** (GAM) is a GLM in which some terms are
+smooth functions like this one:
+$g(\mu_i) = \beta_0 + f_1(x_{1i}) + f_2(x_{2i}) + \dots$, with any link
+$g$ and response distribution. `mgcv::gam()` takes `s()` terms in an
+ordinary model formula:
+
+```{r gam-fit}
+library(mgcv)
+fit_gam <- gam(r ~ s(temp, k = 20), data = bd, method = "REML")
+summary(fit_gam)
+gam.vcomp(fit_gam)          # the smooth's SD, printed like a variance component
+```
+
+```{r gam-gcv, echo=FALSE}
+edf_gcv <- sum(gam(r ~ s(temp, k = 20), data = bd)$edf) - 1
+```
+
+`k = 20` sets the number of basis functions, an upper limit on
+flexibility; the penalty decides how much of it to use (edf
+`r f1(sum(fit_gam$edf) - 1)` here). Ask for `method = "REML"`:
+`gam()`'s default, generalized cross-validation, tends to pick wigglier
+curves (edf `r f1(edf_gcv)` for these data). `gam()`'s default basis is a thin
+plate regression spline, which works like the B-splines above;
+`s(temp, bs = "ps")` asks for the P-spline from the widget instead. For
+counts, use `family = poisson` as in `glm()`.
+
+```{r compare-fits, echo=FALSE}
+aic_tab <- data.frame(
+  model = c("Gaussian (bell)", "B-spline, 6 basis functions (lm)", "Penalized spline (gam, REML)"),
+  parameters = c(4, length(coef(fit_bs6)) + 1, sum(fit_gam$edf) + 1),
+  logLik = c(-fit_bell$value, logLik(fit_bs6), logLik(fit_gam)),
+  AIC = c(2 * fit_bell$value + 8, AIC(fit_bs6), AIC(fit_gam)))
+aic_tab$dAIC <- aic_tab$AIC - min(aic_tab$AIC)
+knitr::kable(aic_tab, digits = c(0, 1, 1, 1, 1), col.names = c("Model", "Parameters (edf)",
+             "logLik", "AIC", "$\\Delta$AIC"))
+```
+
+```{r gam-plot, echo=FALSE, fig.width=6.5, fig.height=4.2}
+pg <- predict(fit_gam, data.frame(temp = temp_grid), se.fit = TRUE)
+par(mar = c(4, 4, 1, 1))
+plot_bd()
+polygon(c(temp_grid, rev(temp_grid)), c(pg$fit + 1.96 * pg$se.fit, rev(pg$fit - 1.96 * pg$se.fit)),
+        col = adjustcolor("#2a78d6", 0.2), border = NA)
+lines(temp_grid, pg$fit, lwd = 2.5, col = "#2a78d6")
+curve(bell(x, fit_bell$par[1], fit_bell$par[2], fit_bell$par[3]), add = TRUE, lwd = 2, col = "firebrick", lty = 2)
+legend("topleft", c("GAM with 95% interval", "Gaussian (bell)"), lwd = 2, lty = 1:2,
+       col = c("#2a78d6", "firebrick"), bty = "n", cex = 0.85)
+topt_gam <- temp_grid[which.max(pg$fit)]
+ctmax_gam <- temp_grid[temp_grid > topt_gam & pg$fit < 0][1]
+```
+
+The GAM finds the steep fall the bell can't make. Its curve peaks at
+`r f1(topt_gam)` °C and crosses zero at `r f1(ctmax_gam)` °C; the
+bell puts the peak at `r f1(fit_bell$par[2])` °C and never reaches
+zero. (AIC for a GAM uses the edf as its parameter count; it's a
+reasonable guide, not an exact one, since $\lambda$ was itself
+estimated.)
+
+## 4. Gaussian processes {#gp}
+
+A spline puts a prior on basis-function weights. A **Gaussian process**
+(GP) puts a prior directly on the curve: the values of $f$ at any set
+of temperatures are multivariate Normal,
+
+$$f(x_1), \dots, f(x_n) \sim \text{MVN}(m\mathbf{1}, K), \qquad
+K_{ij} = \alpha^2 \exp\!\left(-\frac{(x_i - x_j)^2}{2\ell^2}\right)$$
+
+The **kernel** $K_{ij}$ says that cultures at similar temperatures have
+similar growth rates: the correlation falls from 1 to near 0 as the
+temperature gap grows past a few **length-scales** $\ell$. The amplitude
+$\alpha$ sets how far $f$ wanders from its mean $m$. This kernel (the
+squared exponential) gives very smooth curves. The exponential kernel,
+$\exp(-|x_i - x_j|/\ell)$, gives rough ones, and for equally spaced
+times it is the
+[AR(1) correlation](Week12_MixedModels.html#ar1) $\rho^{|s-t|}$ with
+$\rho = e^{-1/\ell}$.
+
+Adding Normal measurement noise gives
+$y \sim \text{MVN}(m\mathbf{1}, K + \sigma^2 I)$, so the likelihood is
+one multivariate Normal density, with four parameters ($m$, $\alpha$,
+$\ell$, $\sigma$) to fit by `optim()`:
+
+```{r gp-fit}
+dist_temp <- abs(outer(bd$temp, bd$temp, "-"))
+nll_gp <- function(par) {
+  m <- par[1]
+  alpha <- exp(par[2])
+  ell <- exp(par[3])
+  sigma <- exp(par[4])
+  V <- alpha^2 * exp(-dist_temp^2 / (2 * ell^2)) + sigma^2 * diag(nrow(bd))
+  -dmvnorm(bd$r, rep(m, nrow(bd)), V, log = TRUE)
+}
+fit_gp <- optim(c(0.15, log(0.15), log(4), log(0.03)), nll_gp, method = "BFGS")
+gp_par <- c(m = fit_gp$par[1], exp(fit_gp$par[2:4]))
+names(gp_par) <- c("m", "alpha", "ell", "sigma")
+round(gp_par, 3)
+```
+
+The length-scale is long compared with the 25-degree range of the
+data, so the curve is one broad excursion from $m$, and $m$ trades off
+against $\alpha$; don't read much into its value.
+
+The prediction at a new temperature $x^*$ is the conditional mean of
+$f(x^*)$ given the data, from the same MVN rules:
+$\hat f(x^*) = m + k_*^T (K + \sigma^2 I)^{-1}(y - m\mathbf{1})$, where
+$k_*$ holds the covariances between $f(x^*)$ and the observed cultures.
+
+```{r gp-predict}
+gp_predict <- function(new_temp, p = gp_par) {
+  K <- p["alpha"]^2 * exp(-dist_temp^2 / (2 * p["ell"]^2)) + p["sigma"]^2 * diag(nrow(bd))
+  k_star <- p["alpha"]^2 * exp(-outer(new_temp, bd$temp, "-")^2 / (2 * p["ell"]^2))
+  as.vector(p["m"] + k_star %*% solve(K, bd$r - p["m"]))
+}
+gp_fit_grid <- gp_predict(temp_grid)
+max(abs(gp_fit_grid - pg$fit))          # largest gap between the GP and GAM curves
+```
+
+```{r gp-plot, echo=FALSE, fig.width=6.5, fig.height=4}
+par(mar = c(4, 4, 1, 1))
+plot_bd()
+lines(temp_grid, pg$fit, lwd = 3, col = "#2a78d6")
+lines(temp_grid, gp_fit_grid, lwd = 2, col = "black", lty = 2)
+legend("topleft", c("GAM", "Gaussian process"), lwd = c(3, 2), lty = 1:2,
+       col = c("#2a78d6", "black"), bty = "n", cex = 0.85)
+```
+
+The GP and the GAM give nearly the same curve, with length-scale
+$\hat\ell =$ `r f1(gp_par["ell"])` °C. That's no accident: a penalized
+spline and a GP are both a smooth curve with a multivariate Normal
+prior, one written through basis weights and the other through a kernel.
+
+In the widget, choose a kernel and length-scale, draw random curves from
+the prior, then click to add observations and see the posterior.
+
+```{r widget-gp, echo=FALSE}
+widget("gp_draws.html")
+```
+
+> **Question:** Add the example points. Switch the kernel from squared
+> exponential to exponential. What changes about the curves between the
+> observations? Then shrink $\ell$ to 0.3: what does the posterior do
+> far from any observation?
+
+The $x$ in a GP can be anything with a distance: temperature, time, or
+position. Replace $|x_i - x_j|$ with the distance between two sampling
+sites and the same kernel describes how similar nearby sites are, which
+is the core of spatial regression models (in geostatistics, prediction
+from this model is called kriging).
+
+## Discussion {#gam-discussion}
+
+```{r extrapolation, echo=FALSE}
+ext <- c(bell = bell(32, fit_bell$par[1], fit_bell$par[2], fit_bell$par[3]),
+         gam = as.vector(predict(fit_gam, data.frame(temp = 32))),
+         gp = gp_predict(32))
+```
+
+**Q1.** At 32 °C, outside the plate's range, the bell predicts a growth
+rate of `r f3(ext["bell"])` per day, the GAM `r f3(ext["gam"])`, and
+the GP `r f3(ext["gp"])`. Why do they disagree, and which (if any) would
+you use to say whether Bd survives in a 32 °C pond?
+
+**Q2.** The GAM beats the bell by `r f1(aic_tab$dAIC[1])` AIC units. A
+colleague concludes that "Bd's thermal performance curve is
+asymmetric." What has the comparison corroborated, and what hasn't it?
+What parametric rival would you add?
+
+**Q3.** A manager wants one number: the temperature at which Bd stops
+growing, with an interval. The bell has a parameter for $T_\text{opt}$;
+the GAM has no parameter for anything. Which model would you report
+from, and how?
+
+## Bonus: uncertainty in derived quantities {#derived}
+
+$T_\text{opt}$ and $\text{CT}_\text{max}$ aren't parameters of the GAM,
+but they are functions of its weights. `gam()` returns an approximate
+posterior for the weights (MVN, with covariance `vcov(fit_gam)`), so we
+can draw many sets of weights, compute both quantities for each curve,
+and summarize:
+
+```{r derived}
+Xp <- predict(fit_gam, data.frame(temp = temp_grid), type = "lpmatrix")   # basis at each grid point
+set.seed(746)
+beta_sims <- rmvnorm(2000, coef(fit_gam), vcov(fit_gam))
+curves <- Xp %*% t(beta_sims)                                              # one column per curve
+topt_sims <- temp_grid[apply(curves, 2, which.max)]
+ctmax_sims <- apply(curves, 2, function(f) {
+  above <- temp_grid > 20 & f < 0
+  if (any(above)) temp_grid[which(above)[1]] else NA
+})
+round(rbind(topt = quantile(topt_sims, c(0.5, 0.025, 0.975)),
+            ctmax = quantile(ctmax_sims, c(0.5, 0.025, 0.975), na.rm = TRUE)), 1)
+```
+
+The true curve peaks at 20 °C and reaches zero at 28 °C.
+
+## Bonus: a smooth in brms {#smooth-brms}
+
+`brms` accepts `mgcv`'s `s()` terms and fits them as random effects,
+which makes the [penalty-as-prior](#penalty) idea concrete:
+
+```{r brms-gam, cache=TRUE, results="hide"}
+fit_brms_gam <- brm(r ~ s(temp, k = 20), data = bd, backend = "cmdstanr",
+                    chains = 4, cores = 4, seed = 746, refresh = 0,
+                    control = list(adapt_delta = 0.95))
+```
+
+```{r brms-gam-summary}
+summary(fit_brms_gam)
+```
+
+The `sds(stemp_1)` line is the SD of the smooth's wiggly part (the
+$\tau$ above), on a different scale from `gam.vcomp()`'s because the
+two packages scale the basis functions differently. In
+`stancode(fit_brms_gam)`, the wiggly weights are
+standard Normal draws multiplied by that SD, the same non-centered form
+as the [random slopes in Stan](#stan-model).
+
+## Bonus: GAMs with more terms {#gam-terms}
+
+Smooths combine with everything else in a model formula. Some forms
+that come up in ecological data:
+
+| `mgcv` formula | Meaning |
+|:---|:---|
+| `y ~ s(x1) + s(x2) + x3` | two smooth effects and a linear one, added together |
+| `y ~ f + s(x, by = f)` | a separate smooth of `x` for each level of factor `f` |
+| `y ~ s(x) + s(g, bs = "re")` | a smooth plus a random intercept for group `g` |
+| `y ~ s(x) + s(x, g, bs = "fs")` | a shared smooth plus group-level smooths, shrunk toward it |
+| `y ~ te(x1, x2)` | a smooth surface in two variables (for example, a temperature-by-moisture response) |
+| `y ~ s(lon, lat)` | a smooth surface over space |
+
+Pedersen et al. (2019, *PeerJ* 7: e6876) describe these hierarchical
+GAMs and when to use each, with ecological examples.

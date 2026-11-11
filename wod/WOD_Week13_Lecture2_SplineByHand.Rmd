@@ -1,0 +1,287 @@
+---
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+geometry: margin=0.9in
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines); pair with fig.height
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. lines = lines of prompt text, rows = rows of
+# blank space below it (0.3 in each)
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+# fill-in table drawn as a plot; "" leaves a cell blank
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, family = "serif") {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = family)
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+
+chl <- read.csv("../data/ReservoirChlorophyll.csv")
+library(splines)
+B <- bs(chl$week, df = 20, intercept = TRUE)
+pnll <- function(par, lambda) {
+  beta <- par[1:20]
+  -sum(dnorm(chl$log_chl, B %*% beta, exp(par[21]), log = TRUE)) +
+    lambda * sum(diff(beta, differences = 2)^2)
+}
+check_val <- pnll(c(rep(1, 20), log(0.2)), lambda = 10)
+```
+
+**NRES 746, Week 13, Lecture 2: Spline by Hand (take-home)**
+
+Name: ___________________________________________
+
+**Due Monday, Nov. 23.** Work on your own. You'll need R for Parts 2-4;
+try Part 1 on paper first.
+
+A water utility samples a reservoir every week for chlorophyll *a*, an
+index of algal biomass. Ice and wind cancelled 8 of last year's 52
+visits. The data are log$_{10}$ chlorophyll *a* ($\mu$g/L) by week of
+the year. The utility wants to know when the spring algal bloom peaks
+and how big it gets, so it can time its treatment.
+
+```{r scatter, fig.width=6.5, fig.height=3.6}
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(log_chl ~ week, data = chl, pch = 19, xlim = c(0, 53), ylim = c(0, 2),
+     xlab = "Week of the year", ylab = expression(log[10] ~ "chlorophyll a"),
+     xaxs = "i", yaxs = "i", xaxt = "n")
+axis(1, at = seq(0, 52, 4))
+abline(v = seq(0, 52, 4), h = seq(0, 2, 0.25), col = "grey88")
+points(log_chl ~ week, data = chl, pch = 19)
+```
+
+## Part 1: Your guess (on paper)
+
+**1a.** On the figure above, sketch the smooth seasonal curve you think
+lies under the noise.
+
+**1b.** From your sketch, the spring bloom peaks in week ________ at
+log$_{10}$ chlorophyll ________.
+
+`r nq(8, 0)`
+
+## Part 2: Splines without a penalty
+
+Each coding question has a label:
+
+- *Recommended: no AI*: this week's core skill. R's help pages, web
+  search, and classmates are fine.
+- *AI optional/encouraged*: the results matter, but the code isn't the
+  point.
+
+After each coding question, circle how you used AI.
+
+**What to turn in:** your filled-in answers and the three named figures
+(2b, 3c, 4a) as images on WebCampus. You don't need to submit code.
+
+Read the data with
+
+```{r read-data, echo=TRUE, eval=FALSE}
+chl <- read.csv(
+  "https://kevintshoemaker.github.io/NRES-746/data/ReservoirChlorophyll.csv")
+```
+
+or paste them in:
+
+```{r paste-data, echo=TRUE, eval=FALSE}
+week <- c(1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+          28, 29, 30, 31, 32, 33, 34, 35, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50,
+          51, 52)
+log_chl <- c(0.27, 0.49, 0.36, 0.5, 0.42, 0.65, 0.6, 0.55, 0.96, 0.79, 1.17, 1.33, 1.55,
+             1.56, 1.77, 1.09, 0.86, 0.9, 0.93, 0.94, 0.84, 1.03, 0.83, 1.01, 1.04, 0.82,
+             0.82, 1.03, 0.81, 0.79, 0.89, 1.01, 1.11, 0.96, 0.87, 1.03, 0.74, 0.81, 0.64,
+             0.44, 0.62, 0.35, 0.28, 0.42)
+chl <- data.frame(week, log_chl)
+```
+
+```{r paste-check}
+stopifnot(all.equal(chl$week, c(1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18, 19,
+  20, 21, 22, 23, 24, 28, 29, 30, 31, 32, 33, 34, 35, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46,
+  47, 50, 51, 52)), all.equal(chl$log_chl, c(0.27, 0.49, 0.36, 0.5, 0.42, 0.65, 0.6, 0.55,
+  0.96, 0.79, 1.17, 1.33, 1.55, 1.56, 1.77, 1.09, 0.86, 0.9, 0.93, 0.94, 0.84, 1.03, 0.83,
+  1.01, 1.04, 0.82, 0.82, 1.03, 0.81, 0.79, 0.89, 1.01, 1.11, 0.96, 0.87, 1.03, 0.74, 0.81,
+  0.64, 0.44, 0.62, 0.35, 0.28, 0.42)))
+```
+
+`r nq(5, 9)`
+
+**2a.** *(AI optional/encouraged.)* Fit `lm(log_chl ~ bs(week, df = K), data = chl)`
+for each number of basis functions $K$ below (`bs()` is in the
+`splines` package, which comes with R). Record each fit's AIC, and say
+whether its curve looks too smooth, about right, or too wiggly.
+
+```{r aic-table, fig.height=2.4}
+blank_table(
+  headers = list("K", "AIC", "Too smooth, about right, or too wiggly?"),
+  body = list(list("4", "", ""), list("8", "", ""), list("12", "", ""), list("20", "", "")),
+  col_widths = c(0.6, 1.2, 3.2))
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(4, 0)`
+
+**2b.** *(AI optional/encouraged.)* Plot the data with the fitted curves for
+$K = 4$ and $K = 20$. Name it **Figure 2b**.
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+## Part 3: A penalized spline, by hand
+
+Use 20 cubic B-spline basis functions, with the intercept built into
+the basis:
+
+```{r basis-code, echo=TRUE, eval=FALSE}
+library(splines)
+B <- bs(chl$week, df = 20, intercept = TRUE)    # 44 x 20 model matrix
+```
+
+The model is $y_i \sim \text{Normal}(\mu_i, \sigma)$ with
+$\mu_i = \sum_{k=1}^{20} \beta_k B_k(\text{week}_i)$ (the vector of all
+$\mu_i$ is `B %*% beta`), and the penalized NLL is
+
+$$\text{NLL}_\text{pen} = -\sum_{i=1}^{44} \log p(y_i \mid \mu_i, \sigma) +
+\lambda \sum_{k=3}^{20} (\beta_k - 2\beta_{k-1} + \beta_{k-2})^2$$
+
+`r nq(6, 3)`
+
+**3a.** *(Recommended: no AI.)* Write a function `pnll(par, lambda)` that
+returns $\text{NLL}_\text{pen}$, where `par` holds the 20 weights followed
+by $\log\sigma$. Check it: `pnll(c(rep(1, 20), log(0.2)), lambda = 10)`
+should return `r sprintf("%.2f", check_val)`.
+
+Your value: ________
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(6, 7)`
+
+**3b.** *(Recommended: no AI.)* Minimize `pnll()` with `optim()` for each
+$\lambda$ below, starting from `c(rep(1, 20), log(0.2))`. Use
+`method = "BFGS"` and `control = list(maxit = 2000)`, and check
+`$convergence`. Record $\hat\sigma$ and the penalty term
+$\lambda \sum (\beta_k - 2\beta_{k-1} + \beta_{k-2})^2$ at the optimum.
+
+```{r lambda-table, fig.height=2}
+blank_table(
+  headers = list(expression(lambda), expression(hat(sigma)), "penalty term at the optimum"),
+  body = list(list("0", "", ""), list("10", "", ""), list("1000", "", "")),
+  col_widths = c(1, 1.4, 2.6))
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(4, 0)`
+
+**3c.** *(AI optional/encouraged.)* Plot the data with your three fitted curves
+(`B_grid <- predict(B, newx = 1:52)` gives the basis at every week).
+Name it **Figure 3c**.
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(3, 6)`
+
+**3d.** Which $\lambda$ would you use? Why does $\hat\sigma$ change the
+way it does as $\lambda$ grows?
+
+```{r fig.height=0.3*6}
+blank_lines(6)
+```
+
+## Part 4: The same model in mgcv
+
+`r nq(5, 0)`
+
+**4a.** *(AI optional/encouraged.)* Fit
+`gam(log_chl ~ s(week, bs = "ps", k = 20), data = chl, method = "REML")`
+(package `mgcv`), which uses the same kind of basis and penalty and
+chooses $\lambda$ itself. Plot its curve with your chosen fit from 3d.
+Name it **Figure 4a**.
+
+Effective degrees of freedom (edf): ________ $\qquad \hat\sigma$: ________
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(4, 4)`
+
+**4b.** When does the spring bloom peak, and at what level? Compare the
+`gam()` curve with your sketch from 1b.
+
+`gam()` peak: week ________ at log$_{10}$ chlorophyll ________
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
+
+`r nq(3, 5)`
+
+**4c.** Where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest to get working?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(4, 4)`
+
+**Bonus (optional).** Refit your penalized spline with
+$\lambda = 10^6$ and compare its curve with `lm(log_chl ~ week, data = chl)`.
+Why does a huge $\lambda$ give this curve?
+
+```{r fig.height=0.3*4}
+blank_lines(4)
+```
