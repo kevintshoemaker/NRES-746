@@ -173,7 +173,8 @@ random intercept, 2 of 4 planned sections, though Week 11 Monday
 (standard statistics, 4 sections plus discussion) was covered in full.
 Week 12 Monday covered the opening recap, AR(1), and why-harder, 2 of 4
 sections (random slopes and packages moved to the lab period, Bayesian
-hierarchical models to the next week). Plan **3-4 sub-topics**
+hierarchical models to the next week); the ~60-min lab-period lecture
+then finished the rest (random slopes, packages, discussion). Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
 marked "Bonus" section. A derivation eats its whole slot, so put
@@ -534,7 +535,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Sun., Nov. 8, 2026 (end of Week 11; Week 12 built and revised, not yet taught; Week 1-9 pages built after the fact).
+Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 not yet built; Week 1-9 pages built after the fact).
 
 - **Week 1 page (built Nov. 1, after the week):**
   `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
@@ -638,7 +639,7 @@ Snapshot: Sun., Nov. 8, 2026 (end of Week 11; Week 12 built and revised, not yet
     module. The Lab 9 pre-lab (Nov. 3) covered `#linear-algebra` much
     as written.
 
-- **Week 12 (Nov. 9-10), built Nov. 4, not yet taught:** Monday +
+- **Week 12 (Nov. 9-10), built Nov. 4, taught:** Monday +
   Tuesday only (Veterans Day). Page `Week12_MixedModels.Rmd`, H1s
   `#mixed-models-r` (Monday: Week 11's AR(1) `#ar1`, why harder
   `#harder`, and discussion `#variance-discussion` moved here verbatim;
@@ -700,6 +701,14 @@ Snapshot: Sun., Nov. 8, 2026 (end of Week 11; Week 12 built and revised, not yet
     marginal-moments note in `#random-slopes`, AI-use footer on all
     weekly pages (`footer.html`), knitr `_cache/` folders untracked
     (Pages deploys were timing out at ~900 MB).
+  - **As taught (Tue., Nov. 10):** the lab period's first hour covered
+    the rest of the first H1 (everything up to `#bayesian-hierarchical`);
+    the rest was the final-project work session. Guide has dated notes
+    for both meetings. **Week 13 build (next thread):** Mon., Nov. 16 =
+    *Formula to Model* WOD review (5-10 min, due that day) + the moved
+    Bayesian H1 (guide Part 2 is already trimmed to ~50 min, ridge bonus
+    cut); Tue., Nov. 17 = final-project check-ins, no Act; Wed., Nov. 18
+    = nonlinear regression and GAMs.
   - **Possible bonus section (not built):** "multivariate" non-normal data (a
     student asked about multivariate Poisson/gamma after the MVN). No
     general multivariate gamma/Poisson exists (the MVN is unusual in
