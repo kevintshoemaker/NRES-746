@@ -247,6 +247,17 @@ c(-fit_comb$value, logLik(fit_lme))       # same maximized log-likelihood
 
 # Bonus: a Poisson GLMM by hand ----------------------------------------------------------
 
+# marginal moments: mu = exp(b0 + b1 x + sigma_b^2 / 2); Var = mu + mu^2 (exp(sigma_b^2) - 1)
+mu_glmm <- exp(1.5 + 0.5^2 / 2)               # vigor 0, beta0 = 1.5, sigma_b = 0.5
+moments <- c(mean = mu_glmm, var = mu_glmm + mu_glmm^2 * (exp(0.5^2) - 1), cov = mu_glmm^2 * (exp(0.5^2) - 1))
+
+set.seed(746)
+b_sim <- rnorm(1e5, 0, 0.5)                  # 100,000 stands, two trees each
+y_tree1 <- rpois(1e5, exp(1.5 + b_sim))
+y_tree2 <- rpois(1e5, exp(1.5 + b_sim))
+rbind(formula = moments, simulation = c(mean(y_tree1), var(y_tree1), cov(y_tree1, y_tree2)))
+moments[3] / moments[2]                  # within-stand correlation
+
 # cones on 8 trees per stand; log(lambda) = b0 + b1 * vigor + b_j; simulated
 set.seed(12)
 cones <- data.frame(stand = factor(rep(stand_names, each = 8)),

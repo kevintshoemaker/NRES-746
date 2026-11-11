@@ -1236,6 +1236,23 @@ fixef(fit_lme)</code></pre>
 <p><span class="math display">\[\text{cones}_{ij} \sim \text{Poisson}(\lambda_{ij}), \qquad
 \log\lambda_{ij} = \beta_0 + \beta_1\,\text{vigor}_{ij} + b_j, \qquad
 b_j \sim \text{Normal}(0, \sigma_b^2)\]</span></p>
+<p>The structured covariance lives on the log scale. The linear predictors <span class="math inline">\(\eta_{ij} = \log\lambda_{ij}\)</span> have the same block-diagonal covariance as a Normal random intercept model, <span class="math inline">\(\sigma_b^2 ZZ^T\)</span> (trees in a stand share <span class="math inline">\(b_j\)</span>), but with no <span class="math inline">\(\sigma^2 I\)</span> term. Given <span class="math inline">\(b_j\)</span>, the counts are independent Poisson draws, and the Poisson variance does the job of the residual variance.</p>
+<p>Averaging over <span class="math inline">\(b_j\)</span>, a count whose linear predictor is <span class="math inline">\(\beta_0 + \beta_1 x\)</span> has</p>
+<p><span class="math display">\[\mu = E(y) = e^{\beta_0 + \beta_1 x + \sigma_b^2/2}, \qquad
+\text{Var}(y) = \mu + \mu^2\left(e^{\sigma_b^2} - 1\right)\]</span></p>
+<p>The first term is Poisson variance; the second is extra variance from the random effect. Two trees in the same stand covary by <span class="math inline">\(\mu_1\mu_2(e^{\sigma_b^2} - 1)\)</span>, and trees in different stands are independent. So the counts still have a block-diagonal covariance matrix, but they aren't multivariate normal, and their joint distribution has no closed form. Unlike the Normal case, knowing the mean and covariance doesn't give us the likelihood.</p>
+<pre class="r"><code>mu_glmm &lt;- exp(1.5 + 0.5^2 / 2)               # vigor 0, beta0 = 1.5, sigma_b = 0.5
+moments &lt;- c(mean = mu_glmm, var = mu_glmm + mu_glmm^2 * (exp(0.5^2) - 1), cov = mu_glmm^2 * (exp(0.5^2) - 1))
+
+set.seed(746)
+b_sim &lt;- rnorm(1e5, 0, 0.5)                  # 100,000 stands, two trees each
+y_tree1 &lt;- rpois(1e5, exp(1.5 + b_sim))
+y_tree2 &lt;- rpois(1e5, exp(1.5 + b_sim))
+rbind(formula = moments, simulation = c(mean(y_tree1), var(y_tree1), cov(y_tree1, y_tree2)))</code></pre>
+<pre><code>##                mean      var      cov
+## formula    5.078419 12.40353 7.325112
+## simulation 5.094710 12.57773 7.466926</code></pre>
+<p>At average vigor, with the values simulated below (<span class="math inline">\(\beta_0 = 1.5\)</span>, <span class="math inline">\(\sigma_b = 0.5\)</span>), a count has mean 5.1 but variance 12.4 (a Poisson would have variance equal to its mean), and two trees in one stand have correlation 0.59.</p>
 <p>Each stand's likelihood is a one-dimensional integral over <span class="math inline">\(b_j\)</span>, and <code>integrate()</code> can do it numerically:</p>
 <pre class="r"><code>set.seed(12)
 cones &lt;- data.frame(stand = factor(rep(stand_names, each = 8)),
