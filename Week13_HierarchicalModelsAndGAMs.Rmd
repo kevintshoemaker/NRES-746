@@ -83,55 +83,6 @@ else. This part covers partial pooling, priors for a covariance matrix,
 a random slope model written in Stan, and the same model in one line of
 `brms`.
 
-The example is the simulated drought-sensitivity data set from
-[random slopes](Week12_MixedModels.html#random-slopes): ring widths at
-12 pinyon stands whose records run from 5 to 30 years. Precipitation is
-in 10-cm units centered at 20 cm, so a stand's intercept is its ring
-width in a 20-cm winter and its slope is the change in width per extra
-10 cm.
-
-```{r drought-data}
-library(mvtnorm)
-library(lme4)
-set.seed(12)
-n_years <- rep(c(30, 24, 18, 12, 8, 5), each = 2)        # record length per stand
-tau_true <- c(0.15, 0.10)                                 # among-stand SDs: intercept, slope
-rho_true <- -0.6
-G_true <- diag(tau_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(tau_true)
-ab_true <- rmvnorm(12, c(0.9, 0.25), G_true)              # each stand's intercept and slope
-stand_names <- sprintf("S%02d", 1:12)
-drought <- data.frame(stand = factor(rep(stand_names, n_years)),
-                      year = unlist(lapply(n_years, function(n) seq(2021 - n, 2020))))
-j <- as.integer(drought$stand)
-drought$precip <- round(rgamma(nrow(drought), shape = 9, scale = 22 / 9), 1)
-drought$precip10 <- (drought$precip - 20) / 10
-drought$width <- round(ab_true[j, 1] + ab_true[j, 2] * drought$precip10 +
-                         rnorm(nrow(drought), 0, 0.12), 2)
-
-# no pooling: one least-squares line per stand; and the maximum likelihood random slope fit
-nopool <- t(sapply(split(drought, drought$stand), function(s) coef(lm(width ~ precip10, data = s))))
-fit_rs_lmer <- lmer(width ~ precip10 + (precip10 | stand), data = drought, REML = FALSE)
-ml <- c(fixef(fit_rs_lmer), as.data.frame(VarCorr(fit_rs_lmer))$sdcor)
-names(ml) <- c("mu_a", "mu_b", "tau_a", "tau_b", "rho", "sigma")
-round(ml, 3)
-```
-
-```{r drought-plot, echo=FALSE, fig.width=9, fig.height=3.8}
-par(mfrow = c(1, 2), mar = c(4, 4, 1, 1))
-plot(width ~ precip, data = drought, col = "grey60", pch = 16, cex = 0.7,
-     xlab = "Winter precipitation (cm)", ylab = "Ring width (mm)")
-for (s in seq_len(12)) {
-  xr <- range(drought$precip10[drought$stand == stand_names[s]])
-  lines(20 + 10 * xr, nopool[s, 1] + nopool[s, 2] * xr, lwd = ifelse(n_years[s] <= 8, 1, 2),
-        lty = ifelse(n_years[s] <= 8, 2, 1))
-}
-legend("topleft", c("stand with 12-30 years", "stand with 5-8 years"), lty = 1:2, lwd = 2:1,
-       bty = "n", cex = 0.85)
-plot(nopool, pch = 19, xlab = "Intercept: width at 20 cm (mm)",
-     ylab = "Slope (mm per 10 cm)", cex = 1.1, xlim = range(nopool[, 1]) + c(0, 0.05))
-text(nopool, labels = stand_names, pos = 4, cex = 0.7, col = "grey40")
-```
-
 ## 1. WOD: partial pooling by hand {#wod-pooling}
 
 ```{r wod-numbers, echo=FALSE}
@@ -183,28 +134,60 @@ estimate. Four frogs give a noisy pond mean (sampling variance
 `r wod_sb^2`), so half of pond A's distance from the overall mean is
 treated as noise. Sixteen frogs earn pond B most of its own mean.
 
-## 2. Random effects as priors
+## 2. Partial pooling {#partial-pooling}
 
-"Hierarchical," "multilevel," and "mixed" describe the same models. In
-Bayesian terms, a random effect is a parameter whose prior has its own
-unknown parameters (hyperparameters): each $(a_j, b_j)$ gets the prior
-$\text{MVN}(0, G)$, and $G$ gets a prior too. Compared with fitting by
-maximum likelihood:
+To see partial pooling across many groups, we return to the simulated
+drought-sensitivity data from
+[random slopes](Week12_MixedModels.html#random-slopes): ring widths at
+12 pinyon stands whose records run from 5 to 30 years. Precipitation is
+in 10-cm units centered at 20 cm, so a stand's intercept is its ring
+width in a 20-cm winter and its slope is the change in width per extra
+10 cm.
 
-- **No integral.** The sampler draws the $a_j$ and $b_j$ instead of
-  integrating them out, so a Poisson or binomial response is no harder
-  than a Normal one.
-- **Uncertainty carries through.** Each stand's estimate reflects
-  uncertainty in $\tau_a$, $\tau_b$, and $\rho$, rather than plugging in
-  their best values.
-- **Priors help with few groups.** A weakly informative prior keeps an
-  SD off the boundary at 0 and a correlation off $\pm 1$, where
-  maximum likelihood gave up with four stands (see
-  [Q3 here](Week12_MixedModels.html#variance-discussion)).
-- **The price** is choosing priors and checking the sampler (see
-  [checking chains](Week9_MCMC.html#chain-checks)).
+```{r drought-data}
+library(mvtnorm)
+library(lme4)
+set.seed(12)
+n_years <- rep(c(30, 24, 18, 12, 8, 5), each = 2)        # record length per stand
+tau_true <- c(0.15, 0.10)                                 # among-stand SDs: intercept, slope
+rho_true <- -0.6
+G_true <- diag(tau_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(tau_true)
+ab_true <- rmvnorm(12, c(0.9, 0.25), G_true)              # each stand's intercept and slope
+stand_names <- sprintf("S%02d", 1:12)
+drought <- data.frame(stand = factor(rep(stand_names, n_years)),
+                      year = unlist(lapply(n_years, function(n) seq(2021 - n, 2020))))
+j <- as.integer(drought$stand)
+drought$precip <- round(rgamma(nrow(drought), shape = 9, scale = 22 / 9), 1)
+drought$precip10 <- (drought$precip - 20) / 10
+drought$width <- round(ab_true[j, 1] + ab_true[j, 2] * drought$precip10 +
+                         rnorm(nrow(drought), 0, 0.12), 2)
 
-## 3. Partial pooling {#partial-pooling}
+# no pooling: one least-squares line per stand; and the maximum likelihood random slope fit
+nopool <- t(sapply(split(drought, drought$stand), function(s) coef(lm(width ~ precip10, data = s))))
+fit_rs_lmer <- lmer(width ~ precip10 + (precip10 | stand), data = drought, REML = FALSE)
+ml <- c(fixef(fit_rs_lmer), as.data.frame(VarCorr(fit_rs_lmer))$sdcor)
+names(ml) <- c("mu_a", "mu_b", "tau_a", "tau_b", "rho", "sigma")
+round(ml, 3)
+```
+
+```{r drought-plot, echo=FALSE, fig.width=9, fig.height=3.8}
+par(mfrow = c(1, 2), mar = c(4, 4, 1, 1))
+plot(width ~ precip, data = drought, col = "grey60", pch = 16, cex = 0.7,
+     xlab = "Winter precipitation (cm)", ylab = "Ring width (mm)")
+for (s in seq_len(12)) {
+  xr <- range(drought$precip10[drought$stand == stand_names[s]])
+  lines(20 + 10 * xr, nopool[s, 1] + nopool[s, 2] * xr, lwd = ifelse(n_years[s] <= 8, 1, 2),
+        lty = ifelse(n_years[s] <= 8, 2, 1))
+}
+legend("topleft", c("stand with 12-30 years", "stand with 5-8 years"), lty = 1:2, lwd = 2:1,
+       bty = "n", cex = 0.85)
+plot(nopool, pch = 19, xlab = "Intercept: width at 20 cm (mm)",
+     ylab = "Slope (mm per 10 cm)", cex = 1.1, xlim = range(nopool[, 1]) + c(0, 0.05))
+text(nopool, labels = stand_names, pos = 4, cex = 0.7, col = "grey40")
+```
+
+Left: one least-squares line per stand. Right: each stand's own
+intercept and slope, the "no pooling" estimates.
 
 There are three ways to estimate each stand's mean ring width:
 
@@ -214,17 +197,13 @@ There are three ways to estimate each stand's mean ring width:
 - **partial pooling:** the random effect, a compromise between the two.
 
 Ignoring precipitation for the moment, a random intercept model gives
-stand $j$ the estimate from the [WOD](#wod-pooling),
-
-$$\hat a_j = \hat\mu + w_j(\bar y_j - \hat\mu), \qquad
-w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j}$$
-
-where $\bar y_j$ is the stand's own mean from $n_j$ years. The weight
-$w_j$ compares the spread among stands ($\sigma_b^2$) with the sampling
-variance of the stand's own mean ($\sigma^2/n_j$). A stand with a long
-record keeps most of its own mean; a stand with 5 years is pulled
-toward the overall mean. This is the same precision-weighted average as
-a Normal prior combined with Normal data
+each stand the estimate from the [WOD](#wod-pooling), where $\bar y_j$
+is the stand's own mean from $n_j$ years. The weight $w_j$ compares the
+spread among stands ($\sigma_b^2$) with the sampling variance of the
+stand's own mean ($\sigma^2/n_j$). A stand with a long record keeps
+most of its own mean; a stand with 5 years is pulled toward the overall
+mean. This is the same precision-weighted average as a Normal prior
+combined with Normal data
 ([priors and posteriors](Week8_PosteriorsAndOptimization.html#priors)):
 the population of stands acts as a prior for each stand.
 
@@ -252,6 +231,44 @@ widget("partial_pooling.html")
 > are similar (`r f2(ybar["S10"])` and `r f2(ybar["S12"])`), but one has
 > 8 years and the other 5. Which moves more toward the overall mean, and
 > why?
+
+## 3. Random effects as priors {#re-priors}
+
+Partial pooling works for slopes too. The
+[random slope model](Week12_MixedModels.html#random-slopes) gives each
+stand its own intercept and slope,
+
+$$\text{width}_{jt} = (\mu_a + a_j) + (\mu_b + b_j)\,x_{jt} + \varepsilon_{jt},
+\qquad \varepsilon_{jt} \sim \text{Normal}(0, \sigma^2)$$
+
+$$\begin{pmatrix} a_j \\ b_j \end{pmatrix} \sim
+\text{MVN}\left(\begin{pmatrix} 0 \\ 0 \end{pmatrix}, G\right),
+\qquad
+G = \begin{pmatrix} \tau_a^2 & \rho\,\tau_a\tau_b \\ \rho\,\tau_a\tau_b & \tau_b^2 \end{pmatrix}$$
+
+where $x_{jt}$ is precipitation and $\tau_a$, $\tau_b$, and $\rho$ are
+the among-stand SDs of the intercepts and slopes and their correlation.
+The `lmer()` fit in [partial pooling](#partial-pooling) estimated
+these by maximum likelihood (`ml`).
+
+"Hierarchical," "multilevel," and "mixed" describe the same models. In
+Bayesian terms, a random effect is a parameter whose prior has its own
+unknown parameters (hyperparameters): each $(a_j, b_j)$ gets the prior
+$\text{MVN}(0, G)$, and $G$ gets a prior too. Compared with fitting by
+maximum likelihood:
+
+- **No integral.** The sampler draws the $a_j$ and $b_j$ instead of
+  integrating them out, so a Poisson or binomial response is no harder
+  than a Normal one.
+- **Uncertainty carries through.** Each stand's estimate reflects
+  uncertainty in $\tau_a$, $\tau_b$, and $\rho$, rather than plugging in
+  their best values.
+- **Priors help with few groups.** A weakly informative prior keeps an
+  SD off the boundary at 0 and a correlation off $\pm 1$, where
+  maximum likelihood gave up with four stands (see
+  [Q3 here](Week12_MixedModels.html#variance-discussion)).
+- **The price** is choosing priors and checking the sampler (see
+  [checking chains](Week9_MCMC.html#chain-checks)).
 
 ## 4. Priors for a covariance matrix {#lkj}
 
@@ -679,6 +696,8 @@ widget("penalized_fit.html")
 > minimum" and try 10, 20, and 40 basis functions. How much does $K$
 > matter once $\lambda$ is chosen this way?
 
+## 4. Fitting a GAM {#gam}
+
 A **generalized additive model** (GAM) is a GLM in which some terms are
 smooth functions like this one:
 $g(\mu_i) = \beta_0 + f_1(x_{1i}) + f_2(x_{2i}) + \dots$, with any link
@@ -737,7 +756,7 @@ zero. (AIC for a GAM uses the edf as its parameter count; it's a
 reasonable guide, not an exact one, since $\lambda$ was itself
 estimated.)
 
-## 4. Gaussian processes {#gp}
+## 5. Gaussian processes {#gp}
 
 A spline puts a prior on basis-function weights. A **Gaussian process**
 (GP) puts a prior directly on the curve: the values of $f$ at any set

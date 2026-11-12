@@ -7,7 +7,13 @@ rm(list = ls())
 library(mvtnorm)
 library(lme4)
 
-# Drought-sensitivity data ----------------------------------------------------------------
+# 1. WOD: partial pooling by hand ---------------------------------------------------------
+
+# a_j = mu + w_j (ybar_j - mu), w_j = sb^2 / (sb^2 + s^2 / n_j)
+w_wod <- 0.5^2 / (0.5^2 + 1^2 / c(A = 4, B = 16))
+3 + w_wod * (c(A = 4.2, B = 4.0) - 3)
+
+# 2. Partial pooling ---------------------------------------------------------------------
 
 # 12 pinyon stands, records of 5-30 years; simulated
 # truth: mean intercept 0.9, mean slope 0.25, tau = (0.15, 0.10), rho = -0.6, sigma = 0.12
@@ -33,13 +39,6 @@ ml <- c(fixef(fit_rs_lmer), as.data.frame(VarCorr(fit_rs_lmer))$sdcor)
 names(ml) <- c("mu_a", "mu_b", "tau_a", "tau_b", "rho", "sigma")
 round(ml, 3)
 
-# 1. WOD: partial pooling by hand ---------------------------------------------------------
-
-# a_j = mu + w_j (ybar_j - mu), w_j = sb^2 / (sb^2 + s^2 / n_j)
-w_wod <- 0.5^2 / (0.5^2 + 1^2 / c(A = 4, B = 16))
-3 + w_wod * (c(A = 4.2, B = 4.0) - 3)
-
-# 3. Partial pooling ---------------------------------------------------------------------
 
 # random intercept (no precipitation): a_j = mu + w_j (ybar_j - mu), w_j = sb^2 / (sb^2 + s^2 / n_j)
 fit_ri0 <- lmer(width ~ 1 + (1 | stand), data = drought, REML = FALSE)
@@ -189,11 +188,14 @@ lines(temp_grid, predict(fit_bs25, data.frame(temp = temp_grid)), lty = 2)
 
 # penalized NLL = NLL + lambda * sum of squared second differences of the weights
 # a Normal(0, tau^2) prior on each difference gives the same penalty, lambda = 1 / (2 tau^2)
+
+#  [PAUSE] As lambda grows, why does the curve become a sloped line rather than a flat one?
+
+# 4. Fitting a GAM -----------------------------------------------------------------------
+
 fit_gam <- gam(r ~ s(temp, k = 20), data = bd, method = "REML")
 summary(fit_gam)
 gam.vcomp(fit_gam)          # the smooth's SD, printed like a variance component
-
-#  [PAUSE] As lambda grows, why does the curve become a sloped line rather than a flat one?
 
 # AIC: bell vs. unpenalized spline vs. GAM (the GAM's parameter count is its edf)
 data.frame(model = c("bell", "bs, 6 basis functions", "gam"),
@@ -210,7 +212,7 @@ topt_gam <- temp_grid[which.max(pg$fit)]
 ctmax_gam <- temp_grid[temp_grid > topt_gam & pg$fit < 0][1]
 c(topt = topt_gam, ctmax = ctmax_gam)
 
-# 4. Gaussian processes -------------------------------------------------------------------
+# 5. Gaussian processes -------------------------------------------------------------------
 
 # y ~ MVN(m 1, K + sigma^2 I), K_ij = alpha^2 exp(-(x_i - x_j)^2 / (2 ell^2))
 dist_temp <- abs(outer(bd$temp, bd$temp, "-"))

@@ -596,7 +596,22 @@ div.tocify {
 <div id="bayesian-hierarchical" class="section level1">
 <h1>Bayesian hierarchical models</h1>
 <p>Mixed models can also be fit by MCMC. A Bayesian hierarchical model puts priors on the population-level parameters (here, the among-stand SDs of the intercepts and slopes and their correlation), and the sampler draws each stand's intercept and slope along with everything else. This part covers partial pooling, priors for a covariance matrix, a random slope model written in Stan, and the same model in one line of <code>brms</code>.</p>
-<p>The example is the simulated drought-sensitivity data set from <a href="Week12_MixedModels.html#random-slopes">random slopes</a>: ring widths at 12 pinyon stands whose records run from 5 to 30 years. Precipitation is in 10-cm units centered at 20 cm, so a stand's intercept is its ring width in a 20-cm winter and its slope is the change in width per extra 10 cm.</p>
+<div id="wod-pooling" class="section level2">
+<h2>1. WOD: partial pooling by hand</h2>
+<p>The WOD (a short warm-up exercise at the start of class) gave the random intercept estimate for a group,</p>
+<p><span class="math display">\[\hat a_j = \hat\mu + w_j(\bar y_j - \hat\mu), \qquad
+w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j},\]</span></p>
+<p>and asked for the estimated <em>Batrachochytrium dendrobatidis</em> (Bd) infection load in two ponds. Across many ponds the mean load is <span class="math inline">\(\hat\mu =\)</span> 3 (log<span class="math inline">\(_{10}\)</span> zoospore equivalents per swab), ponds differ with SD <span class="math inline">\(\sigma_b =\)</span> 0.5, and frogs within a pond differ with SD <span class="math inline">\(\sigma =\)</span> 1. Pond A had 4 frogs swabbed with mean load 4.2; pond B had 16 frogs with mean 4.</p>
+<ul>
+<li>Pond A: <span class="math inline">\(\sigma^2/n = 0.25\)</span>, so <span class="math inline">\(w_A = 0.25 / (0.25 + 0.25) = 0.5\)</span> and <span class="math inline">\(\hat a_A = 3 + 0.5 \times 1.2 = 3.6\)</span>.</li>
+<li>Pond B: <span class="math inline">\(\sigma^2/n = 0.0625\)</span>, so <span class="math inline">\(w_B = 0.25 / (0.25 + 0.0625) = 0.8\)</span> and <span class="math inline">\(\hat a_B = 3 + 0.8 \times 1 = 3.8\)</span>.</li>
+</ul>
+<p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/wod-plot-1.png" width="576" style="display: block; margin: auto;" /></p>
+<p>Pond A has the higher raw mean, but after pooling pond B has the higher estimate. Four frogs give a noisy pond mean (sampling variance 0.25, as large as the among-pond variance 0.25), so half of pond A's distance from the overall mean is treated as noise. Sixteen frogs earn pond B most of its own mean.</p>
+</div>
+<div id="partial-pooling" class="section level2">
+<h2>2. Partial pooling</h2>
+<p>To see partial pooling across many groups, we return to the simulated drought-sensitivity data from <a href="Week12_MixedModels.html#random-slopes">random slopes</a>: ring widths at 12 pinyon stands whose records run from 5 to 30 years. Precipitation is in 10-cm units centered at 20 cm, so a stand's intercept is its ring width in a 20-cm winter and its slope is the change in width per extra 10 cm.</p>
 <pre class="r"><code>library(mvtnorm)
 library(lme4)
 set.seed(12)
@@ -623,41 +638,14 @@ round(ml, 3)</code></pre>
 <pre><code>##   mu_a   mu_b  tau_a  tau_b    rho  sigma 
 ##  0.840  0.258  0.131  0.092 -0.573  0.118</code></pre>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/drought-plot-1.png" width="864" style="display: block; margin: auto;" /></p>
-<div id="wod-pooling" class="section level2">
-<h2>1. WOD: partial pooling by hand</h2>
-<p>The WOD (a short warm-up exercise at the start of class) gave the random intercept estimate for a group,</p>
-<p><span class="math display">\[\hat a_j = \hat\mu + w_j(\bar y_j - \hat\mu), \qquad
-w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j},\]</span></p>
-<p>and asked for the estimated <em>Batrachochytrium dendrobatidis</em> (Bd) infection load in two ponds. Across many ponds the mean load is <span class="math inline">\(\hat\mu =\)</span> 3 (log<span class="math inline">\(_{10}\)</span> zoospore equivalents per swab), ponds differ with SD <span class="math inline">\(\sigma_b =\)</span> 0.5, and frogs within a pond differ with SD <span class="math inline">\(\sigma =\)</span> 1. Pond A had 4 frogs swabbed with mean load 4.2; pond B had 16 frogs with mean 4.</p>
-<ul>
-<li>Pond A: <span class="math inline">\(\sigma^2/n = 0.25\)</span>, so <span class="math inline">\(w_A = 0.25 / (0.25 + 0.25) = 0.5\)</span> and <span class="math inline">\(\hat a_A = 3 + 0.5 \times 1.2 = 3.6\)</span>.</li>
-<li>Pond B: <span class="math inline">\(\sigma^2/n = 0.0625\)</span>, so <span class="math inline">\(w_B = 0.25 / (0.25 + 0.0625) = 0.8\)</span> and <span class="math inline">\(\hat a_B = 3 + 0.8 \times 1 = 3.8\)</span>.</li>
-</ul>
-<p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/wod-plot-1.png" width="576" style="display: block; margin: auto;" /></p>
-<p>Pond A has the higher raw mean, but after pooling pond B has the higher estimate. Four frogs give a noisy pond mean (sampling variance 0.25, as large as the among-pond variance 0.25), so half of pond A's distance from the overall mean is treated as noise. Sixteen frogs earn pond B most of its own mean.</p>
-</div>
-<div id="random-effects-as-priors" class="section level2">
-<h2>2. Random effects as priors</h2>
-<p>&quot;Hierarchical,&quot; &quot;multilevel,&quot; and &quot;mixed&quot; describe the same models. In Bayesian terms, a random effect is a parameter whose prior has its own unknown parameters (hyperparameters): each <span class="math inline">\((a_j, b_j)\)</span> gets the prior <span class="math inline">\(\text{MVN}(0, G)\)</span>, and <span class="math inline">\(G\)</span> gets a prior too. Compared with fitting by maximum likelihood:</p>
-<ul>
-<li><strong>No integral.</strong> The sampler draws the <span class="math inline">\(a_j\)</span> and <span class="math inline">\(b_j\)</span> instead of integrating them out, so a Poisson or binomial response is no harder than a Normal one.</li>
-<li><strong>Uncertainty carries through.</strong> Each stand's estimate reflects uncertainty in <span class="math inline">\(\tau_a\)</span>, <span class="math inline">\(\tau_b\)</span>, and <span class="math inline">\(\rho\)</span>, rather than plugging in their best values.</li>
-<li><strong>Priors help with few groups.</strong> A weakly informative prior keeps an SD off the boundary at 0 and a correlation off <span class="math inline">\(\pm 1\)</span>, where maximum likelihood gave up with four stands (see <a href="Week12_MixedModels.html#variance-discussion">Q3 here</a>).</li>
-<li><strong>The price</strong> is choosing priors and checking the sampler (see <a href="Week9_MCMC.html#chain-checks">checking chains</a>).</li>
-</ul>
-</div>
-<div id="partial-pooling" class="section level2">
-<h2>3. Partial pooling</h2>
+<p>Left: one least-squares line per stand. Right: each stand's own intercept and slope, the &quot;no pooling&quot; estimates.</p>
 <p>There are three ways to estimate each stand's mean ring width:</p>
 <ul>
 <li><strong>complete pooling:</strong> ignore stands; every stand gets the overall mean;</li>
 <li><strong>no pooling:</strong> estimate each stand separately (stand as a fixed factor);</li>
 <li><strong>partial pooling:</strong> the random effect, a compromise between the two.</li>
 </ul>
-<p>Ignoring precipitation for the moment, a random intercept model gives stand <span class="math inline">\(j\)</span> the estimate from the <a href="#wod-pooling">WOD</a>,</p>
-<p><span class="math display">\[\hat a_j = \hat\mu + w_j(\bar y_j - \hat\mu), \qquad
-w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j}\]</span></p>
-<p>where <span class="math inline">\(\bar y_j\)</span> is the stand's own mean from <span class="math inline">\(n_j\)</span> years. The weight <span class="math inline">\(w_j\)</span> compares the spread among stands (<span class="math inline">\(\sigma_b^2\)</span>) with the sampling variance of the stand's own mean (<span class="math inline">\(\sigma^2/n_j\)</span>). A stand with a long record keeps most of its own mean; a stand with 5 years is pulled toward the overall mean. This is the same precision-weighted average as a Normal prior combined with Normal data (<a href="Week8_PosteriorsAndOptimization.html#priors">priors and posteriors</a>): the population of stands acts as a prior for each stand.</p>
+<p>Ignoring precipitation for the moment, a random intercept model gives each stand the estimate from the <a href="#wod-pooling">WOD</a>, where <span class="math inline">\(\bar y_j\)</span> is the stand's own mean from <span class="math inline">\(n_j\)</span> years. The weight <span class="math inline">\(w_j\)</span> compares the spread among stands (<span class="math inline">\(\sigma_b^2\)</span>) with the sampling variance of the stand's own mean (<span class="math inline">\(\sigma^2/n_j\)</span>). A stand with a long record keeps most of its own mean; a stand with 5 years is pulled toward the overall mean. This is the same precision-weighted average as a Normal prior combined with Normal data (<a href="Week8_PosteriorsAndOptimization.html#priors">priors and posteriors</a>): the population of stands acts as a prior for each stand.</p>
 <pre class="r"><code>fit_ri0 &lt;- lmer(width ~ 1 + (1 | stand), data = drought, REML = FALSE)
 sd_ri0 &lt;- as.data.frame(VarCorr(fit_ri0))$sdcor          # sigma_b, sigma
 ybar &lt;- tapply(drought$width, drought$stand, mean)
@@ -750,6 +738,24 @@ draw();
 <blockquote>
 <p><strong>Question:</strong> Set <span class="math inline">\(\sigma_b\)</span> to 0, then drag it to 0.4. Which two pooling choices are these? Then compare S10 and S12: their own means are similar (1.09 and 1.04), but one has 8 years and the other 5. Which moves more toward the overall mean, and why?</p>
 </blockquote>
+</div>
+<div id="re-priors" class="section level2">
+<h2>3. Random effects as priors</h2>
+<p>Partial pooling works for slopes too. The <a href="Week12_MixedModels.html#random-slopes">random slope model</a> gives each stand its own intercept and slope,</p>
+<p><span class="math display">\[\text{width}_{jt} = (\mu_a + a_j) + (\mu_b + b_j)\,x_{jt} + \varepsilon_{jt},
+\qquad \varepsilon_{jt} \sim \text{Normal}(0, \sigma^2)\]</span></p>
+<p><span class="math display">\[\begin{pmatrix} a_j \\ b_j \end{pmatrix} \sim
+\text{MVN}\left(\begin{pmatrix} 0 \\ 0 \end{pmatrix}, G\right),
+\qquad
+G = \begin{pmatrix} \tau_a^2 &amp; \rho\,\tau_a\tau_b \\ \rho\,\tau_a\tau_b &amp; \tau_b^2 \end{pmatrix}\]</span></p>
+<p>where <span class="math inline">\(x_{jt}\)</span> is precipitation and <span class="math inline">\(\tau_a\)</span>, <span class="math inline">\(\tau_b\)</span>, and <span class="math inline">\(\rho\)</span> are the among-stand SDs of the intercepts and slopes and their correlation. The <code>lmer()</code> fit in <a href="#partial-pooling">partial pooling</a> estimated these by maximum likelihood (<code>ml</code>).</p>
+<p>&quot;Hierarchical,&quot; &quot;multilevel,&quot; and &quot;mixed&quot; describe the same models. In Bayesian terms, a random effect is a parameter whose prior has its own unknown parameters (hyperparameters): each <span class="math inline">\((a_j, b_j)\)</span> gets the prior <span class="math inline">\(\text{MVN}(0, G)\)</span>, and <span class="math inline">\(G\)</span> gets a prior too. Compared with fitting by maximum likelihood:</p>
+<ul>
+<li><strong>No integral.</strong> The sampler draws the <span class="math inline">\(a_j\)</span> and <span class="math inline">\(b_j\)</span> instead of integrating them out, so a Poisson or binomial response is no harder than a Normal one.</li>
+<li><strong>Uncertainty carries through.</strong> Each stand's estimate reflects uncertainty in <span class="math inline">\(\tau_a\)</span>, <span class="math inline">\(\tau_b\)</span>, and <span class="math inline">\(\rho\)</span>, rather than plugging in their best values.</li>
+<li><strong>Priors help with few groups.</strong> A weakly informative prior keeps an SD off the boundary at 0 and a correlation off <span class="math inline">\(\pm 1\)</span>, where maximum likelihood gave up with four stands (see <a href="Week12_MixedModels.html#variance-discussion">Q3 here</a>).</li>
+<li><strong>The price</strong> is choosing priors and checking the sampler (see <a href="Week9_MCMC.html#chain-checks">checking chains</a>).</li>
+</ul>
 </div>
 <div id="lkj" class="section level2">
 <h2>4. Priors for a covariance matrix</h2>
@@ -1434,6 +1440,9 @@ setup();draw();
 <blockquote>
 <p><strong>Question:</strong> Start at 40 basis functions and <span class="math inline">\(\log_{10}\lambda = -4\)</span>, then raise <span class="math inline">\(\lambda\)</span>. What happens to edf, and why does the curve end up a sloped line rather than a flat one? Then press &quot;Jump to the REML minimum&quot; and try 10, 20, and 40 basis functions. How much does <span class="math inline">\(K\)</span> matter once <span class="math inline">\(\lambda\)</span> is chosen this way?</p>
 </blockquote>
+</div>
+<div id="gam" class="section level2">
+<h2>4. Fitting a GAM</h2>
 <p>A <strong>generalized additive model</strong> (GAM) is a GLM in which some terms are smooth functions like this one: <span class="math inline">\(g(\mu_i) = \beta_0 + f_1(x_{1i}) + f_2(x_{2i}) + \dots\)</span>, with any link <span class="math inline">\(g\)</span> and response distribution. <code>mgcv::gam()</code> takes <code>s()</code> terms in an ordinary model formula:</p>
 <pre class="r"><code>library(mgcv)
 fit_gam &lt;- gam(r ~ s(temp, k = 20), data = bd, method = &quot;REML&quot;)
@@ -1507,7 +1516,7 @@ summary(fit_gam)</code></pre>
 <p>The GAM finds the steep fall the bell can't make. Its curve peaks at 20.2 °C and crosses zero at 28.0 °C; the bell puts the peak at 19.4 °C and never reaches zero. (AIC for a GAM uses the edf as its parameter count; it's a reasonable guide, not an exact one, since <span class="math inline">\(\lambda\)</span> was itself estimated.)</p>
 </div>
 <div id="gp" class="section level2">
-<h2>4. Gaussian processes</h2>
+<h2>5. Gaussian processes</h2>
 <p>A spline puts a prior on basis-function weights. A <strong>Gaussian process</strong> (GP) puts a prior directly on the curve: the values of <span class="math inline">\(f\)</span> at any set of temperatures are multivariate Normal,</p>
 <p><span class="math display">\[f(x_1), \dots, f(x_n) \sim \text{MVN}(m\mathbf{1}, K), \qquad
 K_{ij} = \alpha^2 \exp\!\left(-\frac{(x_i - x_j)^2}{2\ell^2}\right)\]</span></p>
