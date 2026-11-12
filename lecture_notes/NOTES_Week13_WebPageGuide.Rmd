@@ -44,24 +44,44 @@ knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding,
 
 # Part 1: Bayesian hierarchical models (Monday, ~50 min)
 
-**Before class:** remind students (Canvas) to bring a laptop with
-`cmdstanr`, `brms`, and `lme4` installed. In class they run the first
-H1 of the script from the top (about 2 min including compiles).
+Coding is de-emphasized this week: the hand-written Stan program is a
+page bonus, and the `brms` fit can be shown on the projector. Students
+who want to follow along need `brms` and `lme4` (section 6 of the script
+runs in about 1 min including the compile).
 
 **Formula to Model review (~8 min)**
 
 - Go over the count table (Part 1a) and one formula-to-equations item.
   Key in `wod/answer_keys/`.
 
+**What makes a model hierarchical? (~6 min)**
+
+- Layers: data given something unobserved, plus a model for the
+  unobserved thing (stand effects, a spatial surface, true states in
+  capture-recapture).
+- A prior alone isn't a layer: Normal(0, 1) on each slope (no pooling)
+  vs. an estimated $\tau_b$ (partial pooling).
+- A marginal likelihood (one MVN, one negative binomial) can still be
+  hierarchical; the label goes with the claim, not the likelihood.
+
 **WOD: Partial Pooling by Hand (~10 min real; 5 alone, then neighbor)**
 
+- Hand it out right after section 1. The handout gives the formula;
+  the derivation is a page bonus (`#pooling-formula`), not covered in
+  class.
 - $w_A = 0.5$, $w_B = 0.8$; $\hat a_A = 3.6$, $\hat a_B = 3.8$. The ranking
   flips: pond A's raw mean is higher (4.2 vs. 4.0), but 4 frogs give a
   sampling variance (0.25) as big as the among-pond variance (0.25).
 - One-line board summary: $w_j$ = signal variance / (signal + sampling
-  variance). This replaces the formula derivation in section 2.
+  variance).
 
-**Partial pooling (~6 min)**
+**Limits and shrinkage (~3 min)**
+
+- $n_j \to \infty$: no pooling; $\sigma_b \to 0$: complete pooling.
+  Name it shrinkage; contrast with ridge ($\lambda$ chosen vs.
+  $\sigma_b$ estimated).
+
+**Partial pooling (~4 min)**
 
 - Drought data (same as Week 12 random slopes); the no-pooling figure.
 - Code check: the formula matches `lmer()` to three decimals.
@@ -77,15 +97,15 @@ H1 of the script from the top (about 2 min including compiles).
   (45% vs. 34% for S10, $w = 0.66$); absolute moves are almost equal
   (0.080 vs. 0.078 mm) because S10 starts farther out.
 
-**Random effects as priors (~3 min)**
+**Fitting hierarchical models by MCMC (~3 min)**
 
-- Extend pooling to slopes: the random slope model and $G$ are on the
-  page (a recap from Week 12; `lmer()` MLEs in `ml`).
-- Hierarchical = multilevel = mixed. Four bullets: no integral;
-  uncertainty carries through; priors help with few groups (the
-  singular four-stand fit from Week 12 Q3); the price.
+- Pooling intercepts and slopes together: write $G$ ($\tau_a$, $\tau_b$,
+  $\rho$); `lmer()` MLEs are in `ml`.
+- ML integrates the stand effects out; MCMC samples them. Four bullets:
+  no integral; uncertainty carries through; priors help with few groups
+  (the singular four-stand fit from Week 12 Q3); the price.
 
-**Priors for a covariance matrix (~4 min; cut to 1 min if behind)**
+**Priors for a covariance matrix (~2 min; one sentence if behind)**
 
 - Board: $G = \text{diag}(\tau)\,\Omega\,\text{diag}(\tau)$; LKJ gives
   $p(\rho) \propto (1-\rho^2)^{\eta-1}$ for 2 $\times$ 2.
@@ -98,30 +118,36 @@ H1 of the script from the top (about 2 min including compiles).
   0.30). LKJ(1) is uniform over valid matrices, and most valid big
   matrices have small correlations.
 
-**Stan walkthrough (~13 min; laptops)**
+**The random slope model in brms (~10 min; laptops optional)**
 
-- Two ideas: the Cholesky factor (always a valid $\Omega$) and
-  non-centering (the Week 9 funnel). `ab[stand, 1]` is multi-indexing.
-- Students compile and sample. No divergences; all $\hat R$ = 1.00.
+- One formula plus five priors (Normal(1, 0.5) intercept, Normal(0,
+  0.5) slope, half-Normal(0, 0.3) on SDs and $\sigma$, LKJ(2)). Order
+  in `c()` doesn't matter; a `coef`-level prior beats a class-wide one;
+  duplicates are an error (all checked in R). The `Intercept` prior sits
+  at mean `precip10` (0.13), not 0. First compile ~20 s. No
+  divergences; max $\hat R$ 1.007.
 - Table: everything matches `lmer()` except $\rho$: MLE $-0.57$;
-  posterior median $-0.37$, 90% interval $-0.76$ to 0.17; truth $-0.6$.
-- Shrinkage figure: S11 (5 yr) moves most; S01 and S02 (30 yr) barely
-  move. Truth check: in this data set the short-record slopes barely
-  improve (0.057 to 0.055); over 500 simulations slope error falls 0.070
-  to 0.051. Shrinkage wins on average, not every time.
+  posterior median $-0.36$, 90% interval $-0.75$ to 0.17; truth $-0.6$.
+  SDs 0.149 and 0.104 (truth 0.15, 0.10).
+- Shrinkage figure: S11 (5 yr) moves most (slope 0.39 to 0.31); S01 and
+  S02 (30 yr) barely move. Truth check: in this data set the
+  short-record stands don't improve (slope error 0.057 both ways;
+  intercepts 0.044 to 0.053); over 500 simulations slope error falls
+  0.070 to 0.051. Shrinkage wins on average, not every time.
 - "Why is the posterior for $\rho$ so much wider ... closer to 0 than the
   MLE? Which summary is more honest?" *Land:* 12 stand-level pairs, each
-  estimated with error; the LKJ(2) prior pulls toward 0 and integrating
-  over the $\tau$s spreads it. The posterior is more honest.
-- "Change to `lkj_corr_cholesky(1)`, then `(10)` ..." *Land:* $\eta = 1$:
-  median $-0.45$ (90% $-0.81$ to 0.12); $\eta = 10$: $-0.13$ ($-0.45$ to
-  0.21). Stand slopes move by at most 0.008 and 0.026. Split the room.
-
-**brms (~5 min)**
-
-- Same model and priors: cor $-0.33$ (95% $-0.81$ to 0.30), SDs 0.16 and
-  0.11. Have students find `lkj_corr_cholesky`, `diag_pre_multiply`, and
-  `z_1` in `stancode(fit_brms)`.
+  estimated with error, so the likelihood for $\rho$ is flat. The median
+  moves for two reasons: MLE $-0.57$ $\to$ $-0.44$ even with a flat
+  LKJ(1) prior (bounded at $-1$, so the posterior is skewed toward 0 and
+  its median sits off the peak; it also averages over the $\tau$s), then
+  $\to$ $-0.36$ with LKJ(2) (prior pulls toward 0). The posterior is more
+  honest: negative is likely, 0 isn't ruled out ($-0.75$ to 0.17).
+- "Change `lkj(2)` to `lkj(1)`, then `lkj(10)` ..." *Land:* $\eta = 1$:
+  median $-0.44$ (90% $-0.81$ to 0.17); $\eta = 10$: $-0.14$ ($-0.44$ to
+  0.21). Stand slopes move by at most 0.007 and 0.022. Split the room
+  (each refit recompiles, ~20 s).
+- The hand-written Stan program is now a bonus (`#stan-model`); point to
+  it for anyone curious about the Cholesky factor and non-centering.
 
 **Discussion (if time; otherwise assign Q3 for project check-ins)**
 

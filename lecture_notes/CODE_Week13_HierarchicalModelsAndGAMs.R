@@ -7,13 +7,13 @@ rm(list = ls())
 library(mvtnorm)
 library(lme4)
 
-# 1. WOD: partial pooling by hand ---------------------------------------------------------
+# 2. WOD: partial pooling by hand ---------------------------------------------------------
 
 # a_j = mu + w_j (ybar_j - mu), w_j = sb^2 / (sb^2 + s^2 / n_j)
 w_wod <- 0.5^2 / (0.5^2 + 1^2 / c(A = 4, B = 16))
 3 + w_wod * (c(A = 4.2, B = 4.0) - 3)
 
-# 2. Partial pooling ---------------------------------------------------------------------
+# 3. Partial pooling ---------------------------------------------------------------------
 
 # 12 pinyon stands, records of 5-30 years; simulated
 # truth: mean intercept 0.9, mean slope 0.25, tau = (0.15, 0.10), rho = -0.6, sigma = 0.12
@@ -51,7 +51,7 @@ round(cbind(own_mean = ybar, n_j, w, formula = fixef(fit_ri0) + w * (ybar - fixe
 
 #  [PAUSE] S10 and S12 have similar own means but 8 vs. 5 years. Which moves more toward the overall mean?
 
-# 4. Priors for a covariance matrix ------------------------------------------------------
+# 5. Priors for a covariance matrix ------------------------------------------------------
 
 # LKJ(eta) marginal for one correlation in a K x K matrix: (rho + 1)/2 ~ Beta(eta - 1 + K/2, same)
 lkj_marginal <- function(rho, eta, K) dbeta((rho + 1) / 2, eta - 1 + K / 2, eta - 1 + K / 2) / 2
@@ -62,10 +62,42 @@ curve(lkj_marginal(x, eta = 1, K = 10), add = TRUE, lty = 3, lwd = 2)
 
 #  [PAUSE] For a 10 x 10 matrix with eta = 1, how likely is any one correlation to exceed 0.5 in absolute value?
 
-# 5. Random slopes in Stan ---------------------------------------------------------------
+# 6. The random slope model in brms ---------------------------------------------------------
+
+library(brms)
+library(posterior)
+fit_brms <- brm(width ~ precip10 + (precip10 | stand), data = drought,
+                prior = c(prior(normal(1, 0.5), class = Intercept),
+                          prior(normal(0, 0.5), class = b),
+                          prior(normal(0, 0.3), class = sd),
+                          prior(lkj(2), class = cor),
+                          prior(normal(0, 0.3), class = sigma)),
+                backend = "cmdstanr", chains = 4, cores = 4, seed = 746, refresh = 0)
+
+# check the sampler, then the estimates
+summary(fit_brms)
+prior_summary(fit_brms)
+
+# posterior for rho against its LKJ(2) prior and the MLE
+draws <- as_draws_df(fit_brms)
+hist(draws$cor_stand__Intercept__precip10, breaks = 40, freq = FALSE, xlim = c(-1, 1),
+     main = "", xlab = "rho")
+curve(lkj_marginal(x, eta = 2, K = 2), add = TRUE, lwd = 2, lty = 2)
+abline(v = ml["rho"], col = "firebrick", lwd = 2)
+
+# shrinkage: each stand's own fit -> its posterior mean
+ab_post <- coef(fit_brms)$stand[, "Estimate", ]
+plot(nopool, xlab = "Intercept: width at 20 cm (mm)", ylab = "Slope (mm per 10 cm)")
+arrows(nopool[, 1], nopool[, 2], ab_post[, 1], ab_post[, 2], length = 0.07, col = "steelblue")
+points(ab_post, pch = 19, col = "steelblue")
+
+#  [PAUSE] Why is the posterior for rho so much wider than the others, and its median closer to 0 than the MLE?
+
+# try it: change lkj(2) to lkj(1), then lkj(10), and refit
+
+# Bonus: the same model written in Stan ------------------------------------------------
 
 library(cmdstanr)
-library(posterior)
 slopes_code <- "
 data {
   int<lower=1> N;                       // stand-years
@@ -108,34 +140,9 @@ fit_stan <- slopes_model$sample(data = stan_data, chains = 4, parallel_chains = 
 fit_stan$diagnostic_summary()
 fit_stan$summary(c("mu", "tau", "rho", "sigma"))
 
-# posterior for rho against its LKJ(2) prior and the MLE
-draws <- as_draws_df(fit_stan$draws(c("rho", "ab")))
-hist(draws$rho, breaks = 40, freq = FALSE, xlim = c(-1, 1), main = "", xlab = "rho")
-curve(lkj_marginal(x, eta = 2, K = 2), add = TRUE, lwd = 2, lty = 2)
-abline(v = ml["rho"], col = "firebrick", lwd = 2)
-
-# shrinkage: each stand's own fit -> its posterior mean
-ab_post <- cbind(sapply(1:12, function(s) mean(draws[[sprintf("ab[%d,1]", s)]])),
-                 sapply(1:12, function(s) mean(draws[[sprintf("ab[%d,2]", s)]])))
-plot(nopool, xlab = "Intercept: width at 20 cm (mm)", ylab = "Slope (mm per 10 cm)")
-arrows(nopool[, 1], nopool[, 2], ab_post[, 1], ab_post[, 2], length = 0.07, col = "steelblue")
-points(ab_post, pch = 19, col = "steelblue")
-
-#  [PAUSE] Why is the posterior for rho so much wider than the others, and its median closer to 0 than the MLE?
-
 # try it: change lkj_corr_cholesky(2) to (1), then (10), recompile, and refit
 
-# 6. The same model in brms --------------------------------------------------------------
-
-library(brms)
-fit_brms <- brm(width ~ precip10 + (precip10 | stand), data = drought,
-                prior = c(prior(normal(0, 0.3), class = sd),
-                          prior(lkj(2), class = cor),
-                          prior(normal(0, 0.3), class = sigma)),
-                backend = "cmdstanr", chains = 4, cores = 4, seed = 746, refresh = 0)
-summary(fit_brms)
-prior_summary(fit_brms)
-stancode(fit_brms)          # the Stan program brms wrote
+stancode(fit_brms)          # the program brms wrote: same Cholesky factor, non-centered effects
 
 # SPLINES, GAMS, AND GAUSSIAN PROCESSES ==================================================
 
