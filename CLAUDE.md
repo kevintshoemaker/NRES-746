@@ -141,6 +141,19 @@ but writing that signals it makes them take exercises less seriously.
   interpretation, and named figures/tables. Prefer outputs that show
   the student's own choices (e.g. their hand-guessed curve next to the
   fit). Final projects are the exception.
+- **Open issue: when to include code in lab answers** (flagged Nov. 14,
+  2026, while grading Lab 7 Act 2). The handout didn't say clearly when
+  students should write code into their answers, and 2b ("write your
+  sampler") had no room for the sampler code, yet its key shows the
+  full Metropolis function as the expected answer. Handout, key, and
+  answer space disagreed. Interim protocol (approved by the instructor
+  Nov. 14): every coding question states whether code is expected on
+  the page (and which part, e.g. "the core function, not the plotting
+  code"), the answer space fits it, and the key's expected answer
+  matches the handout's request (no code in the key where the handout
+  asks only for outputs). Keep handwritten code short (a line or a few
+  lines). If seeing a student's full code matters, ask for it as an R
+  script submitted on Canvas, not written on the handout.
 
 # Lecture periods
 
