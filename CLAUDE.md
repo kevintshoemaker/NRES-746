@@ -414,6 +414,17 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
   $P(\theta \mid y)$). Mark data size with a subscript,
   $\mathcal{L}_n(\theta)$. Genuine conditional probabilities like
   $P(y \mid \theta)$ keep the bar.
+- **Random effects and dependence** (adopted Nov. 14, 2026, Weeks
+  11-13 converted; close to Yang et al. 2026, *Nat. Rev. Biodiversity*):
+  random intercepts $a_j \sim N(0, \sigma_a^2)$ and slopes $b_j$ with SD
+  $\sigma_b$; intercept-slope correlation $\rho_{ab}$; residual SD
+  $\sigma_e$ (iid errors $\sigma_e^2 I$); AR(1) coefficient $\phi$
+  ($\eta_t = \phi\eta_{t-1} + \varepsilon_t$; `nlme`'s `Phi`); plain
+  $\rho$ for a generic correlation; $V = ZGZ^T + \sigma_e^2 R$. No $\tau$
+  for an SD (it often means a precision): prior SDs are $\sigma_\beta$
+  (ridge), $\sigma_d$ (spline differences). Spatial range and GP
+  length-scale are $\ell$. Handed-out Week 11-12 WODs keep the old
+  notation; Week 10's ridge-as-prior still uses $\tau$.
 
 # Labs: two Acts
 
@@ -675,7 +686,7 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   - **Revised Nov. 8:** the first H1's overview section was removed
     (sections now 1 AR(1), 2 harder, 3 random slopes, 4 packages);
     AR(1) notation follows Hyndman ($\eta_t$ autocorrelated error,
-    $\varepsilon_t$ innovation; `nlme` calls $\rho$ `Phi`); stacked
+    $\varepsilon_t$ innovation; the coefficient is now $\phi$, `nlme`'s `Phi`); stacked
     trend/residual/ACF figure for stand A; new bonus `#bonus-gls` (GLS by
     matrix algebra with $\rho$ profiled by `optimize()`, matches `gls()`;
     profile interval for $\rho$ -0.03 to 0.75); the intercept-slope

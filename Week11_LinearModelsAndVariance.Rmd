@@ -641,7 +641,13 @@ sense: the same block, or nearby in time or space. Wrongly assuming
 independence (multiplying the likelihoods together) implicitly assumes
 the data carry more information than they really do. The result is
 confidence intervals that are too narrow, and possibly wrong
-inferences.
+inferences. The problem is common in practice: a recent review of
+dependence in conservation data
+([Yang, Pan, Warton, and Nakagawa 2026](https://www.nature.com/articles/s44358-026-00215-4),
+*Nature Reviews Biodiversity*) cites a survey of high-impact
+journals in which only 7% of studies accounted for spatial
+autocorrelation and 32% for temporal autocorrelation. The review is a
+good companion to this page and the next few weeks.
 
 These models go by many names: mixed models, hierarchical models,
 Gaussian process models, and, in specific applications, time-series
@@ -710,28 +716,28 @@ stand. Trees in the same stand share soil, slope, and local climate, so
 they resemble each other. A **random intercept** model says so
 directly:
 
-$$y_i = \mu + b_{j(i)} + \varepsilon_i, \qquad
-b_j \sim \text{Normal}(0, \sigma_b^2), \qquad
-\varepsilon_i \sim \text{Normal}(0, \sigma^2)$$
+$$y_i = \mu + a_{j(i)} + \varepsilon_i, \qquad
+a_j \sim \text{Normal}(0, \sigma_a^2), \qquad
+\varepsilon_i \sim \text{Normal}(0, \sigma_e^2)$$
 
 for tree $i$ ($i = 1, \ldots, 20$), where $j(i)$ is the stand tree $i$
-grows in, with all the $b_j$ and $\varepsilon_i$ independent. Instead of estimating four stand intercepts, we treat the
+grows in, with all the $a_j$ and $\varepsilon_i$ independent. Instead of estimating four stand intercepts, we treat the
 four stands as a sample from a population of stands and estimate the
-spread among them, $\sigma_b$.
+spread among them, $\sigma_a$.
 
 Using $\text{Var}(X + Y) = \text{Var}(X) + \text{Var}(Y) + 2\,\text{Cov}(X, Y)$:
 
-- $\text{Var}(y_i) = \sigma_b^2 + \sigma^2$
-- two trees in the same stand ($j(i) = j(k)$) share a $b$:
-  $\text{Cov}(y_i, y_k) = \sigma_b^2$
+- $\text{Var}(y_i) = \sigma_a^2 + \sigma_e^2$
+- two trees in the same stand ($j(i) = j(k)$) share an $a$:
+  $\text{Cov}(y_i, y_k) = \sigma_a^2$
 - trees in different stands share nothing: covariance 0
 
 So $V$ is **block diagonal**: one 5 $\times$ 5 block per stand, with
-$\sigma_b^2 + \sigma^2$ on the diagonal and $\sigma_b^2$ elsewhere in the
+$\sigma_a^2 + \sigma_e^2$ on the diagonal and $\sigma_a^2$ elsewhere in the
 block. The correlation between two trees in the same stand,
-$\sigma_b^2/(\sigma_b^2 + \sigma^2)$, is the **intraclass correlation**.
+$\sigma_a^2/(\sigma_a^2 + \sigma_e^2)$, is the **intraclass correlation**.
 
-In matrix form, $V = \sigma_b^2 ZZ^T + \sigma^2 I$, where $Z$ is the
+In matrix form, $V = \sigma_a^2 ZZ^T + \sigma_e^2 I$, where $Z$ is the
 20 $\times$ 4 matrix of stand indicators (the model matrix for
 `~ 0 + stand`). $ZZ^T$ has a 1 wherever two trees share a stand.
 
@@ -739,7 +745,7 @@ In matrix form, $V = \sigma_b^2 ZZ^T + \sigma^2 I$, where $Z$ is the
 y_tree <- tree_means$width
 Z <- model.matrix(~ 0 + stand, data = tree_means)
 ZZt <- Z %*% t(Z)
-V_ri <- function(sigma_b, sigma) sigma_b^2 * ZZt + sigma^2 * diag(20)
+V_ri <- function(sigma_a, sigma_e) sigma_a^2 * ZZt + sigma_e^2 * diag(20)
 V_ri(0.12, 0.1)[1:7, 1:7]     # first stand's block, and the start of the next
 ```
 
@@ -758,7 +764,7 @@ nll_ri <- function(par) {
   -dmvnorm(y_tree, rep(par[1], 20), V, log = TRUE)
 }
 fit_ri <- optim(c(mean(y_tree), log(0.1), log(0.1)), nll_ri, method = "BFGS")
-c(mu = fit_ri$par[1], sigma_b = exp(fit_ri$par[2]), sigma = exp(fit_ri$par[3]))
+c(mu = fit_ri$par[1], sigma_a = exp(fit_ri$par[2]), sigma_e = exp(fit_ri$par[3]))
 
 library(lme4)
 fit_lmer <- lmer(width ~ 1 + (1 | stand), data = tree_means, REML = FALSE)
@@ -773,16 +779,16 @@ likelihood that corrects the downward bias in variance estimates;
 shows this model and others in all three packages.
 
 ```{r ri-icc, echo=FALSE}
-sb_hat <- exp(fit_ri$par[2])
+sa_hat <- exp(fit_ri$par[2])
 s_hat <- exp(fit_ri$par[3])
-icc <- sb_hat^2 / (sb_hat^2 + s_hat^2)
+icc <- sa_hat^2 / (sa_hat^2 + s_hat^2)
 ```
 
 The estimated intraclass correlation is `r f2(icc)`: two trees from the
 same stand are more alike than two trees from different stands.
 
 > **Question:** The variance among stands is estimated from only four
-> stands. How much would you trust $\hat\sigma_b =$ `r f2(sb_hat)`?
+> stands. How much would you trust $\hat\sigma_a =$ `r f2(sa_hat)`?
 
 ## 4. Autocorrelation and fitting {#ar1}
 
@@ -796,16 +802,16 @@ standard R packages for mixed models.
 
 ## Bonus: integrating out a random effect {#integrating}
 
-Where did $V = \sigma_b^2ZZ^T + \sigma^2I$ come from? The likelihood of
+Where did $V = \sigma_a^2ZZ^T + \sigma_e^2I$ come from? The likelihood of
 a random-effects model averages over the values the random effects
 could have taken. For one stand,
 
-$$\mathcal{L}_j = \int \prod_{i:\, j(i) = j} f(y_i \mid \mu + b)\, g(b \mid \sigma_b)\, db$$
+$$\mathcal{L}_j = \int \prod_{i:\, j(i) = j} f(y_i \mid \mu + a)\, g(a \mid \sigma_a)\, da$$
 
-the probability of the stand's data given $b$, weighted by how likely
-each $b$ is. When both $f$ and $g$ are Normal this integral has a
+the probability of the stand's data given $a$, weighted by how likely
+each $a$ is. When both $f$ and $g$ are Normal this integral has a
 closed form, and the result is the MVN with block covariance (Bolker
 10.5.1). For a Poisson or binomial response it doesn't, so software
 approximates the integral (the Laplace approximation in `glmer()` and
 `glmmTMB()`, or numerical quadrature), or a Bayesian sampler draws the
-$b_j$ along with the other parameters and skips the integral.
+$a_j$ along with the other parameters and skips the integral.

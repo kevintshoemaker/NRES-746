@@ -599,20 +599,20 @@ div.tocify {
 <h2>1. What makes a model hierarchical?</h2>
 <p>A <strong>hierarchical model</strong> is written in layers. The data are described conditional on some unobserved quantities, and those quantities are in turn drawn from a probability distribution whose parameters are estimated from the data. For the drought data used below (the <a href="Week12_MixedModels.html#random-slopes">random slope</a> example):</p>
 <ul>
-<li><strong>data layer:</strong> each ring width is Normal around its own stand's regression line, <span class="math inline">\(\text{width}_{jt} \sim \text{Normal}(\mu_a + a_j + (\mu_b + b_j)\,x_{jt},\ \sigma^2)\)</span>;</li>
+<li><strong>data layer:</strong> each ring width is Normal around its own stand's regression line, <span class="math inline">\(\text{width}_{jt} \sim \text{Normal}(\mu_a + a_j + (\mu_b + b_j)\,x_{jt},\ \sigma_e^2)\)</span>;</li>
 <li><strong>group layer:</strong> the stand deviations come from one shared distribution, <span class="math inline">\((a_j, b_j) \sim \text{MVN}(0, G)\)</span>;</li>
-<li><strong>parameters:</strong> <span class="math inline">\(\mu_a\)</span>, <span class="math inline">\(\mu_b\)</span>, <span class="math inline">\(G\)</span>, and <span class="math inline">\(\sigma\)</span> are estimated (and in a Bayesian model, each gets a prior).</li>
+<li><strong>parameters:</strong> <span class="math inline">\(\mu_a\)</span>, <span class="math inline">\(\mu_b\)</span>, <span class="math inline">\(G\)</span>, and <span class="math inline">\(\sigma_e\)</span> are estimated (and in a Bayesian model, each gets a prior).</li>
 </ul>
 <p>Groups are only one kind of unobserved layer. In a spatial model it is a surface over the landscape, with nearby sites more alike than distant ones (a Gaussian process like the one in <a href="#gp">Gaussian processes</a>, with distance in place of temperature). In capture-recapture and occupancy models it is each animal's or site's true state (alive or dead, occupied or not), with one process describing how the state changes (survival) and another describing what we see given the state (detection). What these models share is a model for the data given something we never observe directly, plus a model for that unobserved thing.</p>
 <p>Every model with random effects is hierarchical (&quot;multilevel&quot; and &quot;mixed&quot; model mean the same thing). The stand intercepts and slopes do the same job in the data layer as a fixed intercept and slope, but they are treated as random draws from a population of stands rather than as separate unknown constants.</p>
 <p>A prior on its own doesn't make a model hierarchical. Compare two Bayesian models for the drought slopes (leaving the intercepts aside). Both give each stand its own slope <span class="math inline">\(b_j\)</span> in the data layer; they differ in where the prior on <span class="math inline">\(b_j\)</span> comes from.</p>
 <ul>
 <li><strong>One layer (stand as a fixed factor):</strong> <span class="math inline">\(b_j \sim \text{Normal}(0, 1)\)</span> for each stand. We choose the prior's mean and SD before seeing the data. Each stand's slope is estimated completely separately, learning nothing from the data collected at the other stands. A Normal(0, 1) prior is so wide (slopes are about 0.25 mm per 10 cm) that S12's estimate is close to its own least-squares slope. The result: no 'pooling' of information!</li>
-<li><strong>Two layers (stand as a random effect):</strong> <span class="math inline">\(b_j \sim \text{Normal}(\mu_b, \tau_b)\)</span>, where the mean slope <span class="math inline">\(\mu_b\)</span> and the among-stand SD <span class="math inline">\(\tau_b\)</span> are unknown and get priors of their own (hyperpriors), such as <span class="math inline">\(\tau_b \sim \text{half-Normal}(0, 0.3)\)</span> in the <a href="#brms">brms fit</a>. Now all 12 stands together tell us how much slopes vary. If the stands with long records have similar slopes, <span class="math inline">\(\tau_b\)</span> is small and S12's slope is pulled strongly toward <span class="math inline">\(\mu_b\)</span>; if they differ a lot, <span class="math inline">\(\tau_b\)</span> is large and S12 keeps more of its own slope. This is the idea of <a href="#partial-pooling">partial pooling</a> of information.</li>
+<li><strong>Two layers (stand as a random effect):</strong> <span class="math inline">\(b_j \sim \text{Normal}(\mu_b, \sigma_b^2)\)</span>, where the mean slope <span class="math inline">\(\mu_b\)</span> and the among-stand SD <span class="math inline">\(\sigma_b\)</span> are unknown and get priors of their own (hyperpriors), such as <span class="math inline">\(\sigma_b \sim \text{half-Normal}(0, 0.3)\)</span> in the <a href="#brms">brms fit</a>. Now all 12 stands together tell us how much slopes vary. If the stands with long records have similar slopes, <span class="math inline">\(\sigma_b\)</span> is small and S12's slope is pulled strongly toward <span class="math inline">\(\mu_b\)</span>; if they differ a lot, <span class="math inline">\(\sigma_b\)</span> is large and S12 keeps more of its own slope. This is the idea of <a href="#partial-pooling">partial pooling</a> of information.</li>
 </ul>
 <p>The data layer is the same in both models. The difference is who sets the prior's SD. In the first model we choose it (a large SD for a vague prior, a smaller one for a weakly informative prior). In the second, the data estimate it, and that estimate decides how strongly each stand is pulled toward the others.</p>
 <p>One misconception that I had for a long time is that a hierarchical model had more than one probability distribution contributing to the likelihood. This isn't actually true: integrating out a layer can collapse the hierarchy into one distribution. For example, a Normal random intercept plus Normal noise gives a single multivariate Normal for all the observations (the <a href="Week11_LinearModelsAndVariance.html#random-intercept">block-diagonal <span class="math inline">\(V\)</span></a>). Similarly, a Poisson count whose rate varies according to a gamma distribution gives the <a href="Week4_ProbabilityDistributions.html#compounding">negative binomial</a>. In both cases the model can be written in a layered (<em>conditional</em>) form, with the unobserved stand effects or rates, or in a collapsed (<em>marginal</em>) form, with those integrated out. For the same data the two give the same likelihood and the same estimates of the shared parameters.</p>
-<p>So is the marginal form hierarchical? If it came from integrating out a layer, yes: it is the same model, written a different way. <code>lmer()</code> maximizes the marginal likelihood, and nobody would call a random intercept model fit with <code>lmer()</code> anything but hierarchical! The hierarchical structure is just folded into <span class="math inline">\(V\)</span>: the within-stand correlation is <span class="math inline">\(\sigma_b^2 / (\sigma_b^2 + \sigma^2)\)</span>, and <span class="math inline">\(\sigma_b\)</span> is still the SD of the stand effects. What makes a model hierarchical is the claim behind it: that the data depend on unobserved quantities (stand effects, a spatial surface or &quot;random field&quot; (coming up in Week 14), true survival states) that have their own probability model.</p>
+<p>So is the marginal form hierarchical? If it came from integrating out a layer, yes: it is the same model, written a different way. <code>lmer()</code> maximizes the marginal likelihood, and nobody would call a random intercept model fit with <code>lmer()</code> anything but hierarchical! The hierarchical structure is just folded into <span class="math inline">\(V\)</span>: the within-stand correlation is <span class="math inline">\(\sigma_a^2 / (\sigma_a^2 + \sigma_e^2)\)</span>, and <span class="math inline">\(\sigma_a\)</span> is still the SD of the stand effects. What makes a model hierarchical is the claim behind it: that the data depend on unobserved quantities (stand effects, a spatial surface or &quot;random field&quot; (coming up in Week 14), true survival states) that have their own probability model.</p>
 <p>Capture-recapture analysis (which I work with a lot!) works the same way: its usual likelihood sums over every alive-or-dead history an animal could have had, which is the discrete version of integrating out a layer.</p>
 <p>The same likelihood can also come with a different claim. A multivariate Normal with equal correlations within stands, written directly as correlated errors (<code>gls()</code> with <code>corCompSymm()</code>), says nothing about stands differing and is usually called a marginal or correlated-errors model. A negative binomial fit simply as a convenient distribution for overdispersed counts is a one-layer model, even though the same likelihood could be read as a Poisson count with an unobserved, gamma-distributed rate.</p>
 <p>In practice the layered form is usually worth writing down anyway: it says where the extra variation and correlation come from (stands really differ), and it is the only form that gives an estimate for each stand, which is what partial pooling needs.</p>
@@ -621,16 +621,16 @@ div.tocify {
 <h2>2. WOD: partial pooling by hand</h2>
 <p>The WOD (a short warm-up exercise) uses the estimate a random intercept model gives each group. For group <span class="math inline">\(j\)</span>, with <span class="math inline">\(n_j\)</span> observations and mean <span class="math inline">\(\bar y_j\)</span>,</p>
 <p><span class="math display">\[\hat a_j = \hat\mu + w_j(\bar y_j - \hat\mu), \qquad
-w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j},\]</span></p>
-<p>where <span class="math inline">\(\hat\mu\)</span> is the overall mean, <span class="math inline">\(\sigma_b\)</span> the SD among groups, and <span class="math inline">\(\sigma\)</span> the SD within a group. The weight <span class="math inline">\(w_j\)</span> compares the spread among groups with the sampling variance of the group's own mean. (The <a href="#pooling-formula">bonus derivation</a> shows where this comes from.) The WOD applies it to the <em>Batrachochytrium dendrobatidis</em> (Bd) infection load in two ponds. Across many ponds the mean load is <span class="math inline">\(\hat\mu =\)</span> 3 (log<span class="math inline">\(_{10}\)</span> zoospore equivalents per swab), ponds differ with SD <span class="math inline">\(\sigma_b =\)</span> 0.5, and frogs within a pond differ with SD <span class="math inline">\(\sigma =\)</span> 1. Pond A had 4 frogs swabbed with mean load 4.2; pond B had 16 frogs with mean 4.</p>
+w_j = \frac{\sigma_a^2}{\sigma_a^2 + \sigma_e^2/n_j},\]</span></p>
+<p>where <span class="math inline">\(\hat\mu\)</span> is the overall mean, <span class="math inline">\(\sigma_a\)</span> the SD among groups, and <span class="math inline">\(\sigma_e\)</span> the SD within a group. The weight <span class="math inline">\(w_j\)</span> compares the spread among groups with the sampling variance of the group's own mean. (The <a href="#pooling-formula">bonus derivation</a> shows where this comes from.) The WOD applies it to the <em>Batrachochytrium dendrobatidis</em> (Bd) infection load in two ponds. Across many ponds the mean load is <span class="math inline">\(\hat\mu =\)</span> 3 (log<span class="math inline">\(_{10}\)</span> zoospore equivalents per swab), ponds differ with SD <span class="math inline">\(\sigma_a =\)</span> 0.5, and frogs within a pond differ with SD <span class="math inline">\(\sigma_e =\)</span> 1. Pond A had 4 frogs swabbed with mean load 4.2; pond B had 16 frogs with mean 4.</p>
 <ul>
-<li>Pond A: <span class="math inline">\(\sigma^2/n = 0.25\)</span>, so <span class="math inline">\(w_A = 0.25 / (0.25 + 0.25) = 0.5\)</span> and <span class="math inline">\(\hat a_A = 3 + 0.5 \times 1.2 = 3.6\)</span>.</li>
-<li>Pond B: <span class="math inline">\(\sigma^2/n = 0.0625\)</span>, so <span class="math inline">\(w_B = 0.25 / (0.25 + 0.0625) = 0.8\)</span> and <span class="math inline">\(\hat a_B = 3 + 0.8 \times 1 = 3.8\)</span>.</li>
+<li>Pond A: <span class="math inline">\(\sigma_e^2/n = 0.25\)</span>, so <span class="math inline">\(w_A = 0.25 / (0.25 + 0.25) = 0.5\)</span> and <span class="math inline">\(\hat a_A = 3 + 0.5 \times 1.2 = 3.6\)</span>.</li>
+<li>Pond B: <span class="math inline">\(\sigma_e^2/n = 0.0625\)</span>, so <span class="math inline">\(w_B = 0.25 / (0.25 + 0.0625) = 0.8\)</span> and <span class="math inline">\(\hat a_B = 3 + 0.8 \times 1 = 3.8\)</span>.</li>
 </ul>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/wod-plot-1.png" width="576" style="display: block; margin: auto;" /></p>
 <p>Pond A has the higher raw mean, but after pooling pond B has the higher estimate. Four frogs give a noisy pond mean (sampling variance 0.25, as large as the among-pond variance 0.25), so half of pond A's distance from the overall mean is treated as noise. Sixteen frogs earn pond B most of its own mean.</p>
-<p>Two limits are worth checking. As <span class="math inline">\(n_j\)</span> grows, <span class="math inline">\(w_j \to 1\)</span> and the group keeps its own mean (no pooling). As <span class="math inline">\(\sigma_b \to 0\)</span>, <span class="math inline">\(w_j \to 0\)</span> and every group gets the overall mean (complete pooling).</p>
-<p>Pulling each group's estimate toward the overall mean like this is called <strong>shrinkage</strong>: the distance <span class="math inline">\(\bar y_j - \mu\)</span> shrinks by the factor <span class="math inline">\(w_j\)</span>. Groups with little data shrink the most, because their own means are the noisiest. Extreme group means are partly luck, so shrinking them makes the estimates less variable and, averaged over groups, more accurate, at the cost of a little bias toward the mean. It's the same idea as the <a href="Week10_ModelComparison.html#regularization">ridge and lasso penalties</a>, which shrink coefficients toward zero. The difference is where the amount of shrinkage comes from: ridge regression chooses its penalty <span class="math inline">\(\lambda\)</span> (often by cross-validation), while a random intercept model estimates <span class="math inline">\(\sigma_b\)</span> from the data, and <span class="math inline">\(\sigma_b\)</span> sets every <span class="math inline">\(w_j\)</span> (see the <a href="#ridge-prior">ridge bonus</a>).</p>
+<p>Two limits are worth checking. As <span class="math inline">\(n_j\)</span> grows, <span class="math inline">\(w_j \to 1\)</span> and the group keeps its own mean (no pooling). As <span class="math inline">\(\sigma_a \to 0\)</span>, <span class="math inline">\(w_j \to 0\)</span> and every group gets the overall mean (complete pooling).</p>
+<p>Pulling each group's estimate toward the overall mean like this is called <strong>shrinkage</strong>: the distance <span class="math inline">\(\bar y_j - \mu\)</span> shrinks by the factor <span class="math inline">\(w_j\)</span>. Groups with little data shrink the most, because their own means are the noisiest. Extreme group means are partly luck, so shrinking them makes the estimates less variable and, averaged over groups, more accurate, at the cost of a little bias toward the mean. It's the same idea as the <a href="Week10_ModelComparison.html#regularization">ridge and lasso penalties</a>, which shrink coefficients toward zero. The difference is where the amount of shrinkage comes from: ridge regression chooses its penalty <span class="math inline">\(\lambda\)</span> (often by cross-validation), while a random intercept model estimates <span class="math inline">\(\sigma_a\)</span> from the data, and <span class="math inline">\(\sigma_a\)</span> sets every <span class="math inline">\(w_j\)</span> (see the <a href="#ridge-prior">ridge bonus</a>).</p>
 </div>
 <div id="partial-pooling" class="section level2">
 <h2>3. Partial pooling</h2>
@@ -639,9 +639,9 @@ w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j},\]</span></p>
 library(lme4)
 set.seed(12)
 n_years &lt;- rep(c(30, 24, 18, 12, 8, 5), each = 2)        # record length per stand
-tau_true &lt;- c(0.15, 0.10)                                 # among-stand SDs: intercept, slope
+sd_true &lt;- c(0.15, 0.10)                                   # among-stand SDs: intercept, slope
 rho_true &lt;- -0.6
-G_true &lt;- diag(tau_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(tau_true)
+G_true &lt;- diag(sd_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(sd_true)
 ab_true &lt;- rmvnorm(12, c(0.9, 0.25), G_true)              # each stand&#39;s intercept and slope
 stand_names &lt;- sprintf(&quot;S%02d&quot;, 1:12)
 drought &lt;- data.frame(stand = factor(rep(stand_names, n_years)),
@@ -656,10 +656,10 @@ drought$width &lt;- round(ab_true[j, 1] + ab_true[j, 2] * drought$precip10 +
 nopool &lt;- t(sapply(split(drought, drought$stand), function(s) coef(lm(width ~ precip10, data = s))))
 fit_rs_lmer &lt;- lmer(width ~ precip10 + (precip10 | stand), data = drought, REML = FALSE)
 ml &lt;- c(fixef(fit_rs_lmer), as.data.frame(VarCorr(fit_rs_lmer))$sdcor)
-names(ml) &lt;- c(&quot;mu_a&quot;, &quot;mu_b&quot;, &quot;tau_a&quot;, &quot;tau_b&quot;, &quot;rho&quot;, &quot;sigma&quot;)
+names(ml) &lt;- c(&quot;mu_a&quot;, &quot;mu_b&quot;, &quot;sigma_a&quot;, &quot;sigma_b&quot;, &quot;rho_ab&quot;, &quot;sigma_e&quot;)
 round(ml, 3)</code></pre>
-<pre><code>##   mu_a   mu_b  tau_a  tau_b    rho  sigma 
-##  0.840  0.258  0.131  0.092 -0.573  0.118</code></pre>
+<pre><code>##    mu_a    mu_b sigma_a sigma_b  rho_ab sigma_e 
+##   0.840   0.258   0.131   0.092  -0.573   0.118</code></pre>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/drought-plot-1.png" width="864" style="display: block; margin: auto;" /></p>
 <p>Left: one least-squares line per stand. Right: each stand's own intercept and slope, the &quot;no pooling&quot; estimates.</p>
 <p>There are three ways to estimate each stand's mean ring width:</p>
@@ -668,10 +668,10 @@ round(ml, 3)</code></pre>
 <li><strong>no pooling:</strong> estimate each stand separately (stand as a fixed factor);</li>
 <li><strong>partial pooling:</strong> the random effect, a compromise between the two.</li>
 </ul>
-<p>With partial pooling, each stand's mean ring width gets a prior that is built from all the other stands: it is centered on the overall mean, and its SD (<span class="math inline">\(\sigma_b\)</span>) reflects how much stands differ from one another. The random slope model below does the same for each stand's slope.</p>
+<p>With partial pooling, each stand's mean ring width gets a prior that is built from all the other stands: it is centered on the overall mean, and its SD (<span class="math inline">\(\sigma_a\)</span>) reflects how much stands differ from one another. The random slope model below does the same for each stand's slope.</p>
 <p>Ignoring precipitation for the moment, here is the random intercept fit, checked against the formula:</p>
 <pre class="r"><code>fit_ri0 &lt;- lmer(width ~ 1 + (1 | stand), data = drought, REML = FALSE)
-sd_ri0 &lt;- as.data.frame(VarCorr(fit_ri0))$sdcor          # sigma_b, sigma
+sd_ri0 &lt;- as.data.frame(VarCorr(fit_ri0))$sdcor          # sigma_a, sigma_e
 ybar &lt;- tapply(drought$width, drought$stand, mean)
 n_j &lt;- as.vector(table(drought$stand))
 w &lt;- sd_ri0[1]^2 / (sd_ri0[1]^2 + sd_ri0[2]^2 / n_j)
@@ -690,7 +690,7 @@ round(cbind(own_mean = ybar, n_j, w, formula = fixef(fit_ri0) + w * (ybar - fixe
 ## S10    1.090   8 0.660   1.012 1.012
 ## S11    0.772   5 0.548   0.812 0.812
 ## S12    1.038   5 0.548   0.958 0.958</code></pre>
-<p>The formula matches <code>lmer()</code>'s stand estimates. Here <span class="math inline">\(\hat\sigma_b =\)</span> 0.113 and <span class="math inline">\(\hat\sigma =\)</span> 0.229; the widget starts at those values. It plots each stand's own mean and its partially pooled estimate.</p>
+<p>The formula matches <code>lmer()</code>'s stand estimates. Here <span class="math inline">\(\hat\sigma_a =\)</span> 0.113 and <span class="math inline">\(\hat\sigma_e =\)</span> 0.229; the widget starts at those values. It plots each stand's own mean and its partially pooled estimate.</p>
 <div class="w746pp" id="pp">
 <style>
 .w746pp{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
@@ -708,8 +708,8 @@ round(cbind(own_mean = ybar, n_j, w, formula = fixef(fit_ri0) + w * (ybar - fixe
 .w746pp .legend{font-size:13px;color:var(--ink2);margin-top:2px}
 @media (max-width:600px){.w746pp .row label{min-width:120px}.w746pp .cards{grid-template-columns:1fr}}
 </style>
-<div class="row"><label for="pp-tau">Among-stand SD &sigma;<sub>b</sub></label><input type="range" id="pp-tau" min="0" max="0.4" step="0.002" value="0.114"><span class="val" id="pp-tauout"></span></div>
-<div class="row"><label for="pp-sig">Within-stand SD &sigma;</label><input type="range" id="pp-sig" min="0.02" max="0.8" step="0.002" value="0.230"><span class="val" id="pp-sigout"></span></div>
+<div class="row"><label for="pp-tau">Among-stand SD &sigma;<sub>a</sub></label><input type="range" id="pp-tau" min="0" max="0.4" step="0.002" value="0.114"><span class="val" id="pp-tauout"></span></div>
+<div class="row"><label for="pp-sig">Within-stand SD &sigma;<sub>e</sub></label><input type="range" id="pp-sig" min="0.02" max="0.8" step="0.002" value="0.230"><span class="val" id="pp-sigout"></span></div>
 <div class="cards">
   <div class="card"><div class="k">Weight on own mean, 30 years</div><div class="v" id="pp-v1"></div></div>
   <div class="card"><div class="k">Weight on own mean, 5 years</div><div class="v" id="pp-v2"></div></div>
@@ -760,18 +760,18 @@ draw();
 </script>
 </div>
 <blockquote>
-<p><strong>Question:</strong> Set <span class="math inline">\(\sigma_b\)</span> to 0, then drag it to 0.4. Which two pooling choices are these? Then compare S10 and S12: their own means are similar (1.09 and 1.04), but one has 8 years and the other 5. Which moves more toward the overall mean, and why?</p>
+<p><strong>Question:</strong> Set <span class="math inline">\(\sigma_a\)</span> to 0, then drag it to 0.4. Which two pooling choices are these? Then compare S10 and S12: their own means are similar (1.09 and 1.04), but one has 8 years and the other 5. Which moves more toward the overall mean, and why?</p>
 </blockquote>
 </div>
 <div id="re-priors" class="section level2">
 <h2>4. Fitting hierarchical models by MCMC</h2>
 <p>The random slope model (the layers at the <a href="#bayesian-hierarchical">top of this part</a>) pools intercepts and slopes together. The stand deviations share one distribution, <span class="math inline">\((a_j, b_j) \sim \text{MVN}(0, G)\)</span>, with</p>
-<p><span class="math display">\[G = \begin{pmatrix} \tau_a^2 &amp; \rho\,\tau_a\tau_b \\ \rho\,\tau_a\tau_b &amp; \tau_b^2 \end{pmatrix}\]</span></p>
-<p>where <span class="math inline">\(\tau_a\)</span> and <span class="math inline">\(\tau_b\)</span> are the among-stand SDs of the intercepts and slopes and <span class="math inline">\(\rho\)</span> is their correlation. The <code>lmer()</code> fit in <a href="#partial-pooling">partial pooling</a> estimated these by maximum likelihood (<code>ml</code>), integrating the stand effects out of the likelihood.</p>
-<p>A Bayesian fit usually keeps the stand effects in the model explicitly. It puts priors on the population-level parameters (<span class="math inline">\(\mu_a\)</span>, <span class="math inline">\(\mu_b\)</span>, <span class="math inline">\(\tau_a\)</span>, <span class="math inline">\(\tau_b\)</span>, <span class="math inline">\(\rho\)</span>, <span class="math inline">\(\sigma\)</span>), and the sampler draws each stand's random intercept and slope along with everything else. In Bayesian/MCMC fitting, the hierarchical nature of these models is fully front and center- that is why 'Bayesian' and 'hierarchical' are nearly synonymous in some circles! This also makes hierarchical models much easier to fit, which is one reason Bayesian methods are so widely used in ecology and environmental science. Compared with maximum likelihood:</p>
+<p><span class="math display">\[G = \begin{pmatrix} \sigma_a^2 &amp; \rho_{ab}\,\sigma_a\sigma_b \\ \rho_{ab}\,\sigma_a\sigma_b &amp; \sigma_b^2 \end{pmatrix}\]</span></p>
+<p>where <span class="math inline">\(\sigma_a\)</span> and <span class="math inline">\(\sigma_b\)</span> are the among-stand SDs of the intercepts and slopes and <span class="math inline">\(\rho_{ab}\)</span> is their correlation. The <code>lmer()</code> fit in <a href="#partial-pooling">partial pooling</a> estimated these by maximum likelihood (<code>ml</code>), integrating the stand effects out of the likelihood.</p>
+<p>A Bayesian fit usually keeps the stand effects in the model explicitly. It puts priors on the population-level parameters (<span class="math inline">\(\mu_a\)</span>, <span class="math inline">\(\mu_b\)</span>, <span class="math inline">\(\sigma_a\)</span>, <span class="math inline">\(\sigma_b\)</span>, <span class="math inline">\(\rho_{ab}\)</span>, <span class="math inline">\(\sigma_e\)</span>), and the sampler draws each stand's random intercept and slope along with everything else. In Bayesian/MCMC fitting, the hierarchical nature of these models is fully front and center- that is why 'Bayesian' and 'hierarchical' are nearly synonymous in some circles! This also makes hierarchical models much easier to fit, which is one reason Bayesian methods are so widely used in ecology and environmental science. Compared with maximum likelihood:</p>
 <ul>
 <li><strong>No integral.</strong> The sampler draws the <span class="math inline">\(a_j\)</span> and <span class="math inline">\(b_j\)</span> instead of integrating them out, so a Poisson or binomial response is no harder than a Normal one (simple marginalization via the covariance matrix in a multivariate normal is much more straightforward than integrating across the random effects for other response distributions).</li>
-<li><strong>Uncertainty carries through.</strong> Each stand's estimate reflects uncertainty in <span class="math inline">\(\tau_a\)</span>, <span class="math inline">\(\tau_b\)</span>, and <span class="math inline">\(\rho\)</span>, rather than plugging in their best values.</li>
+<li><strong>Uncertainty carries through.</strong> Each stand's estimate reflects uncertainty in <span class="math inline">\(\sigma_a\)</span>, <span class="math inline">\(\sigma_b\)</span>, and <span class="math inline">\(\rho_{ab}\)</span>, rather than plugging in their best values.</li>
 <li><strong>Priors help with few groups.</strong> A weakly informative prior keeps an SD off the boundary at 0 and a correlation off <span class="math inline">\(\pm 1\)</span>, where maximum likelihood 'gave up' with four stands (see <a href="Week12_MixedModels.html#variance-discussion">Q3 here</a>).</li>
 <li><strong>The price</strong> is choosing priors and checking the sampler (see <a href="Week9_MCMC.html#chain-checks">checking chains</a>).</li>
 </ul>
@@ -779,15 +779,15 @@ draw();
 <div id="lkj" class="section level2">
 <h2>5. Priors for a covariance matrix</h2>
 <p>The random slope model needs a prior on <span class="math inline">\(G\)</span>, a 2 <span class="math inline">\(\times\)</span> 2 covariance matrix. The usual approach splits <span class="math inline">\(G\)</span> into scales and correlations,</p>
-<p><span class="math display">\[G = \begin{pmatrix} \tau_a &amp; 0 \\ 0 &amp; \tau_b \end{pmatrix}
+<p><span class="math display">\[G = \begin{pmatrix} \sigma_a &amp; 0 \\ 0 &amp; \sigma_b \end{pmatrix}
 \Omega
-\begin{pmatrix} \tau_a &amp; 0 \\ 0 &amp; \tau_b \end{pmatrix},
+\begin{pmatrix} \sigma_a &amp; 0 \\ 0 &amp; \sigma_b \end{pmatrix},
 \qquad
-\Omega = \begin{pmatrix} 1 &amp; \rho \\ \rho &amp; 1 \end{pmatrix}\]</span></p>
-<p>and puts separate priors on each piece: a half-Normal, half-<span class="math inline">\(t\)</span>, or exponential prior on each SD <span class="math inline">\(\tau\)</span>, and an <strong>LKJ prior</strong> on the correlation matrix <span class="math inline">\(\Omega\)</span> (named for Lewandowski, Kurowicka, and Joe 2009, <em>Journal of Multivariate Analysis</em>). Older BUGS and JAGS code often used an inverse-Wishart prior on <span class="math inline">\(G\)</span> instead, which ties the prior on the SDs to the prior on the correlations; splitting them makes each easier to choose.</p>
+\Omega = \begin{pmatrix} 1 &amp; \rho_{ab} \\ \rho_{ab} &amp; 1 \end{pmatrix}\]</span></p>
+<p>and puts separate priors on each piece: a half-Normal, half-<span class="math inline">\(t\)</span>, or exponential prior on each SD, and an <strong>LKJ prior</strong> on the correlation matrix <span class="math inline">\(\Omega\)</span> (named for Lewandowski, Kurowicka, and Joe 2009, <em>Journal of Multivariate Analysis</em>). Older BUGS and JAGS code often used an inverse-Wishart prior on <span class="math inline">\(G\)</span> instead, which ties the prior on the SDs to the prior on the correlations; splitting them makes each easier to choose.</p>
 <p>The LKJ density has one shape parameter <span class="math inline">\(\eta\)</span>:</p>
 <p><span class="math display">\[p(\Omega) \propto \det(\Omega)^{\eta - 1}\]</span></p>
-<p>For a 2 <span class="math inline">\(\times\)</span> 2 matrix, <span class="math inline">\(\det(\Omega) = 1 - \rho^2\)</span>, so <span class="math inline">\(p(\rho) \propto (1 - \rho^2)^{\eta - 1}\)</span>. With <span class="math inline">\(\eta = 1\)</span> every correlation is equally likely; <span class="math inline">\(\eta &gt; 1\)</span> favors correlations near 0, and <span class="math inline">\(\eta &lt; 1\)</span> favors correlations near <span class="math inline">\(\pm 1\)</span>. For a bigger matrix (<span class="math inline">\(K \times K\)</span>), each single correlation has the marginal prior <span class="math inline">\((\rho + 1)/2 \sim \text{Beta}(\eta - 1 + K/2,\ \eta - 1 + K/2)\)</span>.</p>
+<p>For a 2 <span class="math inline">\(\times\)</span> 2 matrix, <span class="math inline">\(\det(\Omega) = 1 - \rho_{ab}^2\)</span>, so <span class="math inline">\(p(\rho_{ab}) \propto (1 - \rho_{ab}^2)^{\eta - 1}\)</span>. With <span class="math inline">\(\eta = 1\)</span> every correlation is equally likely; <span class="math inline">\(\eta &gt; 1\)</span> favors correlations near 0, and <span class="math inline">\(\eta &lt; 1\)</span> favors correlations near <span class="math inline">\(\pm 1\)</span>. For a bigger matrix (<span class="math inline">\(K \times K\)</span>), each single correlation has the marginal prior <span class="math inline">\((\rho + 1)/2 \sim \text{Beta}(\eta - 1 + K/2,\ \eta - 1 + K/2)\)</span>.</p>
 <div class="w746lk" id="lk">
 <style>
 .w746lk{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
@@ -889,7 +889,7 @@ draw();
 <h2>6. The random slope model in brms</h2>
 <p><code>brms</code> writes and runs the Stan program for a model given as an <code>lme4</code>-style formula. Priors go in the <code>prior</code> argument, one <code>prior()</code> call per group of parameters, combined with <code>c()</code>. Each call names a distribution in Stan's syntax and a <code>class</code>: <code>b</code> for fixed-effect slopes, <code>Intercept</code>, <code>sd</code> for the among-group SDs, <code>cor</code> for their correlations, and <code>sigma</code> for the residual SD. A <code>coef</code> or <code>group</code> argument narrows a prior to one parameter or one grouping factor. <code>brms</code> already bounds SDs at zero, so <code>normal(0, 0.3)</code> on class <code>sd</code> is a half-Normal. <code>get_prior(formula, data)</code> lists every parameter that can take a prior, with its default.</p>
 <p>The order of the <code>prior()</code> calls does not matter. <code>brms</code> matches each one to parameters by its <code>class</code>, <code>coef</code>, and <code>group</code>, not by its position. When two priors could apply to the same parameter, the more specific one wins wherever it sits in the list: a prior with <code>coef = &quot;precip10&quot;</code> overrides a class-wide <code>b</code> prior. Giving the same parameter two priors at the same level is an error.</p>
-<p>Here is the random slope model with Normal priors on the mean intercept and slope, half-Normal(0, 0.3) priors on the among-stand SDs and on <span class="math inline">\(\sigma\)</span>, and an LKJ(2) prior on the correlation. Mean ring width is around 1 mm, so Normal(1, 0.5) on the intercept rules out implausible values (a mean width of 3 mm, or a negative one) but is otherwise vague; Normal(0, 0.5) on the slope allows a change of up to about 1 mm per 10 cm of precipitation in either direction. One detail: <code>brms</code> puts the <code>Intercept</code> prior on the intercept at the <em>sample mean</em> of each predictor, not at zero. Here the mean of <code>precip10</code> is 0.13, so the two are close.</p>
+<p>Here is the random slope model with Normal priors on the mean intercept and slope, half-Normal(0, 0.3) priors on the among-stand SDs and on <span class="math inline">\(\sigma_e\)</span>, and an LKJ(2) prior on the correlation. Mean ring width is around 1 mm, so Normal(1, 0.5) on the intercept rules out implausible values (a mean width of 3 mm, or a negative one) but is otherwise vague; Normal(0, 0.5) on the slope allows a change of up to about 1 mm per 10 cm of precipitation in either direction. One detail: <code>brms</code> puts the <code>Intercept</code> prior on the intercept at the <em>sample mean</em> of each predictor, not at zero. Here the mean of <code>precip10</code> is 0.13, so the two are close.</p>
 <pre class="r"><code>library(brms)
 fit_brms &lt;- brm(width ~ precip10 + (precip10 | stand), data = drought,
                 prior = c(prior(normal(1, 0.5), class = Intercept),
@@ -961,7 +961,7 @@ fit_brms &lt;- brm(width ~ precip10 + (precip10 | stand), data = drought,
 <td align="right">0.322</td>
 </tr>
 <tr class="odd">
-<td align="left">tau_a</td>
+<td align="left">sigma_a</td>
 <td align="right">0.15</td>
 <td align="right">0.131</td>
 <td align="right">0.149</td>
@@ -969,7 +969,7 @@ fit_brms &lt;- brm(width ~ precip10 + (precip10 | stand), data = drought,
 <td align="right">0.227</td>
 </tr>
 <tr class="even">
-<td align="left">tau_b</td>
+<td align="left">sigma_b</td>
 <td align="right">0.10</td>
 <td align="right">0.092</td>
 <td align="right">0.104</td>
@@ -977,7 +977,7 @@ fit_brms &lt;- brm(width ~ precip10 + (precip10 | stand), data = drought,
 <td align="right">0.167</td>
 </tr>
 <tr class="odd">
-<td align="left">rho</td>
+<td align="left">rho_ab</td>
 <td align="right">-0.60</td>
 <td align="right">-0.573</td>
 <td align="right">-0.361</td>
@@ -985,7 +985,7 @@ fit_brms &lt;- brm(width ~ precip10 + (precip10 | stand), data = drought,
 <td align="right">0.173</td>
 </tr>
 <tr class="even">
-<td align="left">sigma</td>
+<td align="left">sigma_e</td>
 <td align="right">0.12</td>
 <td align="right">0.118</td>
 <td align="right">0.119</td>
@@ -1000,15 +1000,15 @@ fit_brms &lt;- brm(width ~ precip10 + (precip10 | stand), data = drought,
 <p>Each arrow runs from a stand's own fit to its posterior mean; the number in parentheses is the record length. Stands with short records move the most; stands with 24 or 30 years barely move.</p>
 <p>Because the data are simulated, we can compare both sets of estimates with the true stand values. For the four stands with 5 or 8 years, the average error in the slopes is 0.057 mm per 10 cm with no pooling and 0.056 with partial pooling (intercepts: 0.044 and 0.053 mm). That's a mixed result: in any one data set, shrinkage can pull a stand that really is unusual too far toward the mean. Its advantage is on average. Over 500 simulated data sets with the same design, using <code>lmer()</code>'s stand estimates, partial pooling cut the average slope error for the short-record stands from 0.070 to 0.051 (intercepts: 0.044 to 0.041).</p>
 <blockquote>
-<p><strong>Question:</strong> Why is the posterior for <span class="math inline">\(\rho\)</span> so much wider than the other posteriors, and why is its median closer to 0 than the MLE? Which summary is more honest about what 12 stands can tell us?</p>
+<p><strong>Question:</strong> Why is the posterior for <span class="math inline">\(\rho_{ab}\)</span> so much wider than the other posteriors, and why is its median closer to 0 than the MLE? Which summary is more honest about what 12 stands can tell us?</p>
 </blockquote>
 <blockquote>
-<p><strong>Question:</strong> Change <code>lkj(2)</code> to <code>lkj(1)</code>, then to <code>lkj(10)</code>, and refit. Predict how the posterior for <span class="math inline">\(\rho\)</span> will move before you run each one. Do the stand estimates change much?</p>
+<p><strong>Question:</strong> Change <code>lkj(2)</code> to <code>lkj(1)</code>, then to <code>lkj(10)</code>, and refit. Predict how the posterior for <span class="math inline">\(\rho_{ab}\)</span> will move before you run each one. Do the stand estimates change much?</p>
 </blockquote>
 </div>
 <div id="bayes-discussion" class="section level2">
 <h2>Discussion</h2>
-<p><strong>Q1.</strong> With 12 stands, the 90% interval for <span class="math inline">\(\rho\)</span> runs from -0.75 to 0.17. To rule out <span class="math inline">\(\rho = 0\)</span>, would you rather have 12 more stands or 20 more years at each of the 12 stands? Defend your choice.</p>
+<p><strong>Q1.</strong> With 12 stands, the 90% interval for <span class="math inline">\(\rho_{ab}\)</span> runs from -0.75 to 0.17. To rule out <span class="math inline">\(\rho_{ab} = 0\)</span>, would you rather have 12 more stands or 20 more years at each of the 12 stands? Defend your choice.</p>
 <p><strong>Q2.</strong> When would you use <code>brms</code>, and when would you write the Stan model yourself (as in the <a href="#stan-model">Stan bonus</a>)?</p>
 <p><strong>Q3.</strong> Do your final project data have groups (sites, individuals, years, observers)? Which effects would you treat as random, and would you let any slopes vary among groups?</p>
 </div>
@@ -1016,32 +1016,32 @@ fit_brms &lt;- brm(width ~ precip10 + (precip10 | stand), data = drought,
 <h2>Bonus: where the partial pooling formula comes from</h2>
 <p>Take the simplest hierarchical model, a random intercept with no covariates. Observation <span class="math inline">\(i\)</span> in group <span class="math inline">\(j\)</span> is</p>
 <p><span class="math display">\[y_{ij} = \mu + a_j + \varepsilon_{ij}, \qquad
-a_j \sim \text{Normal}(0, \sigma_b^2), \qquad
-\varepsilon_{ij} \sim \text{Normal}(0, \sigma^2),\]</span></p>
-<p>and group <span class="math inline">\(j\)</span> has <span class="math inline">\(n_j\)</span> observations with mean <span class="math inline">\(\bar y_j\)</span>. Write <span class="math inline">\(\theta_j = \mu + a_j\)</span> for the group's true mean. For now, treat <span class="math inline">\(\mu\)</span>, <span class="math inline">\(\sigma_b\)</span>, and <span class="math inline">\(\sigma\)</span> as known. Two sources of information bear on <span class="math inline">\(\theta_j\)</span>:</p>
+a_j \sim \text{Normal}(0, \sigma_a^2), \qquad
+\varepsilon_{ij} \sim \text{Normal}(0, \sigma_e^2),\]</span></p>
+<p>and group <span class="math inline">\(j\)</span> has <span class="math inline">\(n_j\)</span> observations with mean <span class="math inline">\(\bar y_j\)</span>. Write <span class="math inline">\(\theta_j = \mu + a_j\)</span> for the group's true mean. For now, treat <span class="math inline">\(\mu\)</span>, <span class="math inline">\(\sigma_a\)</span>, and <span class="math inline">\(\sigma_e\)</span> as known. Two sources of information bear on <span class="math inline">\(\theta_j\)</span>:</p>
 <ul>
-<li>**the group's own <a href="data:**" class="uri">data:**</a> each <span class="math inline">\(y_{ij} \sim \text{Normal}(\theta_j, \sigma^2)\)</span>;</li>
-<li><strong>the other groups:</strong> the group layer says <span class="math inline">\(\theta_j \sim \text{Normal}(\mu, \sigma_b^2)\)</span>, which acts as a prior.</li>
+<li>**the group's own <a href="data:**" class="uri">data:**</a> each <span class="math inline">\(y_{ij} \sim \text{Normal}(\theta_j, \sigma_e^2)\)</span>;</li>
+<li><strong>the other groups:</strong> the group layer says <span class="math inline">\(\theta_j \sim \text{Normal}(\mu, \sigma_a^2)\)</span>, which acts as a prior.</li>
 </ul>
 <p>Multiply the two and take the log. Dropping terms that don't involve <span class="math inline">\(\theta_j\)</span>,</p>
 <p><span class="math display">\[\log p(\theta_j \mid \text{data}) =
--\sum_{i=1}^{n_j} \frac{(y_{ij} - \theta_j)^2}{2\sigma^2}
-- \frac{(\theta_j - \mu)^2}{2\sigma_b^2} + \text{constant}\]</span></p>
+-\sum_{i=1}^{n_j} \frac{(y_{ij} - \theta_j)^2}{2\sigma_e^2}
+- \frac{(\theta_j - \mu)^2}{2\sigma_a^2} + \text{constant}\]</span></p>
 <p>To find the best estimate, set the derivative with respect to <span class="math inline">\(\theta_j\)</span> to zero. Since <span class="math inline">\(\sum_i (y_{ij} - \theta_j) = n_j(\bar y_j - \theta_j)\)</span>,</p>
-<p><span class="math display">\[\frac{n_j(\bar y_j - \theta_j)}{\sigma^2} - \frac{\theta_j - \mu}{\sigma_b^2} = 0
+<p><span class="math display">\[\frac{n_j(\bar y_j - \theta_j)}{\sigma_e^2} - \frac{\theta_j - \mu}{\sigma_a^2} = 0
 \quad\Longrightarrow\quad
-\hat\theta_j = \frac{(n_j/\sigma^2)\,\bar y_j + (1/\sigma_b^2)\,\mu}{n_j/\sigma^2 + 1/\sigma_b^2}\]</span></p>
-<p>This is a weighted average of the group's own mean and the overall mean, each weighted by its precision (1/variance): <span class="math inline">\(\bar y_j\)</span> has variance <span class="math inline">\(\sigma^2/n_j\)</span>, and the group layer has variance <span class="math inline">\(\sigma_b^2\)</span>. Rearranging (multiply the top and bottom by <span class="math inline">\(\sigma_b^2\sigma^2/n_j\)</span>) gives the form used in the <a href="#wod-pooling">WOD</a> (where <span class="math inline">\(\hat\theta_j\)</span> is written <span class="math inline">\(\hat a_j\)</span>),</p>
+\hat\theta_j = \frac{(n_j/\sigma_e^2)\,\bar y_j + (1/\sigma_a^2)\,\mu}{n_j/\sigma_e^2 + 1/\sigma_a^2}\]</span></p>
+<p>This is a weighted average of the group's own mean and the overall mean, each weighted by its precision (1/variance): <span class="math inline">\(\bar y_j\)</span> has variance <span class="math inline">\(\sigma_e^2/n_j\)</span>, and the group layer has variance <span class="math inline">\(\sigma_a^2\)</span>. Rearranging (multiply the top and bottom by <span class="math inline">\(\sigma_a^2\sigma_e^2/n_j\)</span>) gives the form used in the <a href="#wod-pooling">WOD</a> (where <span class="math inline">\(\hat\theta_j\)</span> is written <span class="math inline">\(\hat a_j\)</span>),</p>
 <p><span class="math display">\[\hat\theta_j = \mu + w_j(\bar y_j - \mu), \qquad
-w_j = \frac{\sigma_b^2}{\sigma_b^2 + \sigma^2/n_j}.\]</span></p>
-<p>Because the posterior here is Normal, <span class="math inline">\(\hat\theta_j\)</span> is both its mode and its mean. A maximum likelihood fit like <code>lmer()</code> uses the same formula, with estimates of <span class="math inline">\(\mu\)</span>, <span class="math inline">\(\sigma_b\)</span>, and <span class="math inline">\(\sigma\)</span> plugged in.</p>
+w_j = \frac{\sigma_a^2}{\sigma_a^2 + \sigma_e^2/n_j}.\]</span></p>
+<p>Because the posterior here is Normal, <span class="math inline">\(\hat\theta_j\)</span> is both its mode and its mean. A maximum likelihood fit like <code>lmer()</code> uses the same formula, with estimates of <span class="math inline">\(\mu\)</span>, <span class="math inline">\(\sigma_a\)</span>, and <span class="math inline">\(\sigma_e\)</span> plugged in.</p>
 </div>
 <div id="stan-model" class="section level2">
 <h2>Bonus: the same model written in Stan</h2>
 <p>Writing the Stan program yourself shows what <code>brms</code> does behind the scenes, and it is the starting point for models no formula can express (nonlinear functions, latent states, observation models). The program below is the random slope model with the same priors as the <a href="#brms">brms fit</a>. Two choices in it need explaining.</p>
 <ul>
 <li><strong>The Cholesky factor.</strong> Stan works with <span class="math inline">\(L\)</span>, the lower-triangular matrix with <span class="math inline">\(LL^T = \Omega\)</span>. Any value Stan proposes for <code>cholesky_factor_corr</code> gives a valid correlation matrix, so the sampler can't leave the allowed region (the third problem in <a href="Week12_MixedModels.html#harder">why these models are harder to fit</a>), and it's cheaper to compute with.</li>
-<li><strong>Non-centered stand effects.</strong> Instead of sampling <span class="math inline">\((a_j, b_j)\)</span> directly, Stan samples standard Normal <span class="math inline">\(z_j\)</span> and computes <span class="math inline">\((a_j, b_j)^T = \text{diag}(\tau)\,L\,z_j\)</span>. This avoids the funnel that makes hierarchical models hard to sample (<a href="Week9_MCMC.html#hmc-failures">when HMC struggles</a>).</li>
+<li><strong>Non-centered stand effects.</strong> Instead of sampling <span class="math inline">\((a_j, b_j)\)</span> directly, Stan samples standard Normal <span class="math inline">\(z_j\)</span> and computes <span class="math inline">\((a_j, b_j)^T = \text{diag}(\sigma_a, \sigma_b)\,L\,z_j\)</span>. This avoids the funnel that makes hierarchical models hard to sample (<a href="Week9_MCMC.html#hmc-failures">when HMC struggles</a>).</li>
 </ul>
 <pre class="r"><code>library(cmdstanr)
 slopes_code &lt;- &quot;
@@ -1054,26 +1054,26 @@ data {
 }
 parameters {
   vector[2] mu;                         // mean intercept and slope
-  vector&lt;lower=0&gt;[2] tau;               // among-stand SDs of intercepts and slopes
+  vector&lt;lower=0&gt;[2] sigma_ab;          // among-stand SDs of intercepts and slopes
   cholesky_factor_corr[2] L;            // Cholesky factor of the correlation matrix
   matrix[2, J] z;                       // standardized stand effects
-  real&lt;lower=0&gt; sigma;                  // residual SD
+  real&lt;lower=0&gt; sigma_e;                // residual SD
 }
 transformed parameters {
   // row j: stand j&#39;s intercept and slope
-  matrix[J, 2] ab = rep_matrix(mu&#39;, J) + (diag_pre_multiply(tau, L) * z)&#39;;
+  matrix[J, 2] ab = rep_matrix(mu&#39;, J) + (diag_pre_multiply(sigma_ab, L) * z)&#39;;
 }
 model {
   mu[1] ~ normal(1, 0.5);
   mu[2] ~ normal(0, 0.5);
-  tau ~ normal(0, 0.3);                 // half-normal, because tau &gt; 0
+  sigma_ab ~ normal(0, 0.3);            // half-normal, because sigma_ab &gt; 0
   L ~ lkj_corr_cholesky(2);
   to_vector(z) ~ std_normal();
-  sigma ~ normal(0, 0.3);
-  y ~ normal(ab[stand, 1] + ab[stand, 2] .* x, sigma);
+  sigma_e ~ normal(0, 0.3);
+  y ~ normal(ab[stand, 1] + ab[stand, 2] .* x, sigma_e);
 }
 generated quantities {
-  real rho = multiply_lower_tri_self_transpose(L)[1, 2];
+  real rho_ab = multiply_lower_tri_self_transpose(L)[1, 2];
 }
 &quot;
 slopes_model &lt;- cmdstan_model(write_stan_file(slopes_code))
@@ -1091,21 +1091,21 @@ fit_stan &lt;- slopes_model$sample(data = stan_data, chains = 4, parallel_chains
 ## 
 ## $ebfmi
 ## [1] 0.7179343 0.6909448 0.6911174 0.7042722</code></pre>
-<pre class="r"><code>fit_stan$summary(c(&quot;mu&quot;, &quot;tau&quot;, &quot;rho&quot;, &quot;sigma&quot;))</code></pre>
+<pre class="r"><code>fit_stan$summary(c(&quot;mu&quot;, &quot;sigma_ab&quot;, &quot;rho_ab&quot;, &quot;sigma_e&quot;))</code></pre>
 <pre><code>## # A tibble: 6 × 10
-##   variable   mean median      sd     mad      q5   q95  rhat ess_bulk ess_tail
-##   &lt;chr&gt;     &lt;dbl&gt;  &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;    &lt;dbl&gt;    &lt;dbl&gt;
-## 1 mu[1]     0.842  0.842 0.0468  0.0441   0.765  0.920  1.00     834.    1263.
-## 2 mu[2]     0.263  0.263 0.0382  0.0362   0.200  0.324  1.00    1421.    1725.
-## 3 tau[1]    0.154  0.149 0.0377  0.0344   0.103  0.224  1.00    1233.    1852.
-## 4 tau[2]    0.111  0.106 0.0317  0.0283   0.0688 0.170  1.00    1748.    2165.
-## 5 rho      -0.341 -0.366 0.282   0.292   -0.756  0.172  1.00    2259.    2415.
-## 6 sigma     0.119  0.119 0.00664 0.00653  0.109  0.131  1.00    4092.    2598.</code></pre>
+##   variable     mean median      sd     mad      q5   q95  rhat ess_bulk ess_tail
+##   &lt;chr&gt;       &lt;dbl&gt;  &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;    &lt;dbl&gt;    &lt;dbl&gt;
+## 1 mu[1]       0.842  0.842 0.0468  0.0441   0.765  0.920  1.00     834.    1263.
+## 2 mu[2]       0.263  0.263 0.0382  0.0362   0.200  0.324  1.00    1421.    1725.
+## 3 sigma_ab[…  0.154  0.149 0.0377  0.0344   0.103  0.224  1.00    1233.    1852.
+## 4 sigma_ab[…  0.111  0.106 0.0317  0.0283   0.0688 0.170  1.00    1748.    2165.
+## 5 rho_ab     -0.341 -0.366 0.282   0.292   -0.756  0.172  1.00    2259.    2415.
+## 6 sigma_e     0.119  0.119 0.00664 0.00653  0.109  0.131  1.00    4092.    2598.</code></pre>
 <p>The estimates match the <code>brms</code> fit up to Monte Carlo error. <code>stancode(fit_brms)</code> prints the program <code>brms</code> wrote; it uses the same Cholesky factor and non-centered stand effects.</p>
 </div>
 <div id="ridge-prior" class="section level2">
 <h2>Bonus: ridge regression as a prior</h2>
-<p>A <a href="Week10_ModelComparison.html#regularization">ridge penalty</a> adds <span class="math inline">\(\lambda\sum\beta_k^2\)</span> to the NLL. A Normal(0, <span class="math inline">\(\tau^2\)</span>) prior on each <span class="math inline">\(\beta_k\)</span> adds <span class="math inline">\(-\log p(\beta) = \sum\beta_k^2/(2\tau^2)\)</span> plus a constant, which is the same penalty with <span class="math inline">\(\lambda = 1/(2\tau^2)\)</span>; a Laplace prior gives the lasso (see <a href="Week10_ModelComparison.html#bayesian">Bayesian model comparison and shrinkage priors</a>). A random effect puts the same kind of penalty on the stand deviations: the <span class="math inline">\(\text{MVN}(0, G)\)</span> prior shrinks every <span class="math inline">\((a_j, b_j)\)</span> toward 0, with <span class="math inline">\(G\)</span> estimated rather than chosen. The <a href="#penalty">wiggliness penalty</a> on a spline works the same way.</p>
+<p>A <a href="Week10_ModelComparison.html#regularization">ridge penalty</a> adds <span class="math inline">\(\lambda\sum\beta_k^2\)</span> to the NLL. A Normal(0, <span class="math inline">\(\sigma_\beta^2\)</span>) prior on each <span class="math inline">\(\beta_k\)</span> adds <span class="math inline">\(-\log p(\beta) = \sum\beta_k^2/(2\sigma_\beta^2)\)</span> plus a constant, which is the same penalty with <span class="math inline">\(\lambda = 1/(2\sigma_\beta^2)\)</span>; a Laplace prior gives the lasso (see <a href="Week10_ModelComparison.html#bayesian">Bayesian model comparison and shrinkage priors</a>). A random effect puts the same kind of penalty on the stand deviations: the <span class="math inline">\(\text{MVN}(0, G)\)</span> prior shrinks every <span class="math inline">\((a_j, b_j)\)</span> toward 0, with <span class="math inline">\(G\)</span> estimated rather than chosen. The <a href="#penalty">wiggliness penalty</a> on a spline works the same way.</p>
 </div>
 </div>
 <div id="gams" class="section level1">
@@ -1337,7 +1337,7 @@ setType('bs');
 <p><span class="math display">\[\text{NLL}_\text{pen}(\beta) = \text{NLL}(\beta) +
 \lambda \sum_{k=3}^{K} (\beta_k - 2\beta_{k-1} + \beta_{k-2})^2\]</span></p>
 <p>The penalty adds up squared second differences of neighboring weights, a stand-in for the curvature of <span class="math inline">\(f\)</span> (the integral of <span class="math inline">\(f&#39;&#39;(x)^2\)</span> is the other common choice). With <span class="math inline">\(\lambda = 0\)</span> we get the unpenalized <code>lm()</code> fit. As <span class="math inline">\(\lambda\)</span> grows, the weights are forced onto a straight line, and with evenly spaced knots so is <span class="math inline">\(f\)</span>. In between, the <strong>effective degrees of freedom</strong> (edf) measure how many parameters' worth of flexibility the curve uses; edf runs from <span class="math inline">\(K\)</span> (no penalty) down to 2 (a straight line).</p>
-<p>Choosing <span class="math inline">\(\lambda\)</span> is the remaining problem. <a href="Week10_ModelComparison.html#cross-validation">Cross-validation</a> would work, but there's a faster route, because <strong>the penalty is a prior.</strong> As in the <a href="#ridge-prior">ridge bonus</a>, a penalty <span class="math inline">\(\lambda \sum d_k^2\)</span> on the second differences <span class="math inline">\(d_k\)</span> is what a Normal(0, <span class="math inline">\(\tau^2\)</span>) prior on each <span class="math inline">\(d_k\)</span> adds to the NLL, with <span class="math inline">\(\lambda = 1/(2\tau^2)\)</span>. Read that way, the wiggly part of the curve is a random effect: a set of deviations drawn from a Normal distribution whose SD <span class="math inline">\(\tau\)</span> is estimated from the data. So <span class="math inline">\(\lambda\)</span> can be chosen the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_b\)</span>, by maximizing the restricted likelihood (REML) with the weights integrated out.</p>
+<p>Choosing <span class="math inline">\(\lambda\)</span> is the remaining problem. <a href="Week10_ModelComparison.html#cross-validation">Cross-validation</a> would work, but there's a faster route, because <strong>the penalty is a prior.</strong> As in the <a href="#ridge-prior">ridge bonus</a>, a penalty <span class="math inline">\(\lambda \sum d_k^2\)</span> on the second differences <span class="math inline">\(d_k\)</span> is what a Normal(0, <span class="math inline">\(\sigma_d^2\)</span>) prior on each <span class="math inline">\(d_k\)</span> adds to the NLL, with <span class="math inline">\(\lambda = 1/(2\sigma_d^2)\)</span>. Read that way, the wiggly part of the curve is a random effect: a set of deviations drawn from a Normal distribution whose SD <span class="math inline">\(\sigma_d\)</span> is estimated from the data. So <span class="math inline">\(\lambda\)</span> can be chosen the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span>, by maximizing the restricted likelihood (REML) with the weights integrated out.</p>
 <p>The widget fits the Bd data with a P-spline (cubic B-splines on evenly spaced knots, plus the second-difference penalty) and plots the REML criterion against <span class="math inline">\(\lambda\)</span>.</p>
 <div class="w746pf" id="pf">
 <style>
@@ -1569,8 +1569,8 @@ summary(fit_gam)</code></pre>
 <p>A spline puts a prior on basis-function weights. A <strong>Gaussian process</strong> (GP) puts a prior directly on the curve: the values of <span class="math inline">\(f\)</span> at any set of temperatures are multivariate Normal,</p>
 <p><span class="math display">\[f(x_1), \dots, f(x_n) \sim \text{MVN}(m\mathbf{1}, K), \qquad
 K_{ij} = \alpha^2 \exp\!\left(-\frac{(x_i - x_j)^2}{2\ell^2}\right)\]</span></p>
-<p>The <strong>kernel</strong> <span class="math inline">\(K_{ij}\)</span> says that cultures at similar temperatures have similar growth rates: the correlation falls from 1 to near 0 as the temperature gap grows past a few <strong>length-scales</strong> <span class="math inline">\(\ell\)</span>. The amplitude <span class="math inline">\(\alpha\)</span> sets how far <span class="math inline">\(f\)</span> wanders from its mean <span class="math inline">\(m\)</span>. This kernel (the squared exponential) gives very smooth curves. The exponential kernel, <span class="math inline">\(\exp(-|x_i - x_j|/\ell)\)</span>, gives rough ones, and for equally spaced times it is the <a href="Week12_MixedModels.html#ar1">AR(1) correlation</a> <span class="math inline">\(\rho^{|s-t|}\)</span> with <span class="math inline">\(\rho = e^{-1/\ell}\)</span>.</p>
-<p>Adding Normal measurement noise gives <span class="math inline">\(y \sim \text{MVN}(m\mathbf{1}, K + \sigma^2 I)\)</span>, so the likelihood is one multivariate Normal density, with four parameters (<span class="math inline">\(m\)</span>, <span class="math inline">\(\alpha\)</span>, <span class="math inline">\(\ell\)</span>, <span class="math inline">\(\sigma\)</span>) to fit by <code>optim()</code>:</p>
+<p>The <strong>kernel</strong> <span class="math inline">\(K_{ij}\)</span> says that cultures at similar temperatures have similar growth rates: the correlation falls from 1 to near 0 as the temperature gap grows past a few <strong>length-scales</strong> <span class="math inline">\(\ell\)</span>. The amplitude <span class="math inline">\(\alpha\)</span> sets how far <span class="math inline">\(f\)</span> wanders from its mean <span class="math inline">\(m\)</span>. This kernel (the squared exponential) gives very smooth curves. The exponential kernel, <span class="math inline">\(\exp(-|x_i - x_j|/\ell)\)</span>, gives rough ones, and for equally spaced times it is the <a href="Week12_MixedModels.html#ar1">AR(1) correlation</a> <span class="math inline">\(\phi^{|s-t|}\)</span> with <span class="math inline">\(\phi = e^{-1/\ell}\)</span>. Replace the temperature gap with the distance between two sites and the same kernel becomes a spatial correlation function. Box 1 of <a href="https://www.nature.com/articles/s44358-026-00215-4">Yang, Pan, Warton, and Nakagawa (2026)</a> lays out these temporal, spatial, and phylogenetic correlation functions side by side.</p>
+<p>Adding Normal measurement noise gives <span class="math inline">\(y \sim \text{MVN}(m\mathbf{1}, K + \sigma_e^2 I)\)</span>, so the likelihood is one multivariate Normal density, with four parameters (<span class="math inline">\(m\)</span>, <span class="math inline">\(\alpha\)</span>, <span class="math inline">\(\ell\)</span>, <span class="math inline">\(\sigma_e\)</span>) to fit by <code>optim()</code>:</p>
 <pre class="r"><code>dist_temp &lt;- abs(outer(bd$temp, bd$temp, &quot;-&quot;))
 nll_gp &lt;- function(par) {
   m &lt;- par[1]
@@ -1587,7 +1587,7 @@ round(gp_par, 3)</code></pre>
 <pre><code>##      m  alpha    ell  sigma 
 ## -0.057  0.320 10.102  0.027</code></pre>
 <p>The length-scale is long compared with the 25-degree range of the data, so the curve is one broad excursion from <span class="math inline">\(m\)</span>, and <span class="math inline">\(m\)</span> trades off against <span class="math inline">\(\alpha\)</span>; don't read much into its value.</p>
-<p>The prediction at a new temperature <span class="math inline">\(x^*\)</span> is the conditional mean of <span class="math inline">\(f(x^*)\)</span> given the data, from the same MVN rules: <span class="math inline">\(\hat f(x^*) = m + k_*^T (K + \sigma^2 I)^{-1}(y - m\mathbf{1})\)</span>, where <span class="math inline">\(k_*\)</span> holds the covariances between <span class="math inline">\(f(x^*)\)</span> and the observed cultures.</p>
+<p>The prediction at a new temperature <span class="math inline">\(x^*\)</span> is the conditional mean of <span class="math inline">\(f(x^*)\)</span> given the data, from the same MVN rules: <span class="math inline">\(\hat f(x^*) = m + k_*^T (K + \sigma_e^2 I)^{-1}(y - m\mathbf{1})\)</span>, where <span class="math inline">\(k_*\)</span> holds the covariances between <span class="math inline">\(f(x^*)\)</span> and the observed cultures.</p>
 <pre class="r"><code>gp_predict &lt;- function(new_temp, p = gp_par) {
   K &lt;- p[&quot;alpha&quot;]^2 * exp(-dist_temp^2 / (2 * p[&quot;ell&quot;]^2)) + p[&quot;sigma&quot;]^2 * diag(nrow(bd))
   k_star &lt;- p[&quot;alpha&quot;]^2 * exp(-outer(new_temp, bd$temp, &quot;-&quot;)^2 / (2 * p[&quot;ell&quot;]^2))
@@ -1812,7 +1812,7 @@ round(rbind(topt = quantile(topt_sims, c(0.5, 0.025, 0.975)),
 ## Draws were sampled using sample(hmc). For each parameter, Bulk_ESS
 ## and Tail_ESS are effective sample size measures, and Rhat is the potential
 ## scale reduction factor on split chains (at convergence, Rhat = 1).</code></pre>
-<p>The <code>sds(stemp_1)</code> line is the SD of the smooth's wiggly part (the <span class="math inline">\(\tau\)</span> above), on a different scale from <code>gam.vcomp()</code>'s because the two packages scale the basis functions differently. In <code>stancode(fit_brms_gam)</code>, the wiggly weights are standard Normal draws multiplied by that SD, the same non-centered form as the <a href="#stan-model">random slopes in Stan</a>.</p>
+<p>The <code>sds(stemp_1)</code> line is the SD of the smooth's wiggly part (the <span class="math inline">\(\sigma_d\)</span> above), on a different scale from <code>gam.vcomp()</code>'s because the two packages scale the basis functions differently. In <code>stancode(fit_brms_gam)</code>, the wiggly weights are standard Normal draws multiplied by that SD, the same non-centered form as the <a href="#stan-model">random slopes in Stan</a>.</p>
 </div>
 <div id="gam-terms" class="section level2">
 <h2>Bonus: GAMs with more terms</h2>

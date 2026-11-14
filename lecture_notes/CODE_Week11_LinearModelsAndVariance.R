@@ -138,11 +138,11 @@ eigen(V_ok)$values                     # all positive: positive definite
 
 # 3. A random intercept ---------------------------------------------------------------
 
-# V = sigma_b^2 Z Z^T + sigma^2 I: block diagonal, one 5 x 5 block per stand
+# V = sigma_a^2 Z Z^T + sigma_e^2 I: block diagonal, one 5 x 5 block per stand
 y_tree <- tree_means$width
 Z <- model.matrix(~ 0 + stand, data = tree_means)
 ZZt <- Z %*% t(Z)
-V_ri <- function(sigma_b, sigma) sigma_b^2 * ZZt + sigma^2 * diag(20)
+V_ri <- function(sigma_a, sigma_e) sigma_a^2 * ZZt + sigma_e^2 * diag(20)
 V_ri(0.12, 0.1)[1:7, 1:7]     # first stand's block, and the start of the next
 
 nll_ri <- function(par) {
@@ -150,16 +150,16 @@ nll_ri <- function(par) {
   -dmvnorm(y_tree, rep(par[1], 20), V, log = TRUE)
 }
 fit_ri <- optim(c(mean(y_tree), log(0.1), log(0.1)), nll_ri, method = "BFGS")
-c(mu = fit_ri$par[1], sigma_b = exp(fit_ri$par[2]), sigma = exp(fit_ri$par[3]))
+c(mu = fit_ri$par[1], sigma_a = exp(fit_ri$par[2]), sigma_e = exp(fit_ri$par[3]))
 
 library(lme4)          # syntax for nlme, lme4, glmmTMB: lecture_notes/NOTES_Reference_MixedModelSyntax.pdf
 fit_lmer <- lmer(width ~ 1 + (1 | stand), data = tree_means, REML = FALSE)
 fixef(fit_lmer)
 as.data.frame(VarCorr(fit_lmer))[, c("grp", "sdcor")]
 
-sb_hat <- exp(fit_ri$par[2])
+sa_hat <- exp(fit_ri$par[2])
 s_hat <- exp(fit_ri$par[3])
-sb_hat^2 / (sb_hat^2 + s_hat^2)       # intraclass correlation
+sa_hat^2 / (sa_hat^2 + s_hat^2)       # intraclass correlation
 
 #  [PAUSE] The among-stand SD comes from only four stands. How much would you trust it?
 

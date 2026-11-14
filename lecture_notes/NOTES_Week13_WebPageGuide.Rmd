@@ -31,7 +31,7 @@ knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding,
 - Data, all simulated (say so):
     - Drought sensitivity (seed 12), unchanged from Week 12: 12 stands,
       194 stand-years; truth $\mu_a = 0.9$, $\mu_b = 0.25$,
-      $\tau_a = 0.15$, $\tau_b = 0.10$, $\rho = -0.6$, $\sigma = 0.12$.
+      $\sigma_a = 0.15$, $\sigma_b = 0.10$, $\rho_{ab} = -0.6$, $\sigma_e = 0.12$.
     - Bd thermal gradient plate (seed 13): 48 cultures, 4-29 °C; truth
       a two-piece curve (Gaussian rise, quadratic fall), peak 0.30/day
       at 20 °C, zero at 28 °C, noise SD 0.03.
@@ -49,6 +49,14 @@ page bonus, and the `brms` fit can be shown on the projector. Students
 who want to follow along need `brms` and `lme4` (section 6 of the script
 runs in about 1 min including the compile).
 
+**Notation change (Nov. 14), say it once at the start.** The Week 11-13
+pages now write the AR(1) coefficient as $\phi$ (was $\rho$; matches
+Hyndman, `nlme`'s `Phi`, and Yang et al. 2026), the residual SD as
+$\sigma_e$, the random intercept as $a_j$ with SD $\sigma_a$ (was $b_j$,
+$\sigma_b$), the random slope SD as $\sigma_b$ (was $\tau_b$), and the
+intercept-slope correlation as $\rho_{ab}$. Plain $\rho$ now means any
+correlation.
+
 **Formula to Model review (~8 min)**
 
 - Go over the count table (Part 1a) and one formula-to-equations item.
@@ -60,7 +68,7 @@ runs in about 1 min including the compile).
   unobserved thing (stand effects, a spatial surface, true states in
   capture-recapture).
 - A prior alone isn't a layer: Normal(0, 1) on each slope (no pooling)
-  vs. an estimated $\tau_b$ (partial pooling).
+  vs. an estimated $\sigma_b$ (partial pooling).
 - A marginal likelihood (one MVN, one negative binomial) can still be
   hierarchical; the label goes with the claim, not the likelihood.
 
@@ -77,20 +85,20 @@ runs in about 1 min including the compile).
 
 **Limits and shrinkage (~3 min)**
 
-- $n_j \to \infty$: no pooling; $\sigma_b \to 0$: complete pooling.
+- $n_j \to \infty$: no pooling; $\sigma_a \to 0$: complete pooling.
   Name it shrinkage; contrast with ridge ($\lambda$ chosen vs.
-  $\sigma_b$ estimated).
+  $\sigma_a$ estimated).
 
 **Partial pooling (~4 min)**
 
 - Drought data (same as Week 12 random slopes); the no-pooling figure.
 - Code check: the formula matches `lmer()` to three decimals.
-  $\hat\sigma_b = 0.113$, $\hat\sigma = 0.229$, $\hat\mu = 0.861$;
+  $\hat\sigma_a = 0.113$, $\hat\sigma_e = 0.229$, $\hat\mu = 0.861$;
   weights 0.88 (30 yr) down to 0.55 (5 yr).
-- Widget (`partial_pooling.html`): $\sigma_b = 0$ (every stand on the
-  dashed line; weights 0.00), then $\sigma_b = 0.4$ (weights 0.99 and
+- Widget (`partial_pooling.html`): $\sigma_a = 0$ (every stand on the
+  dashed line; weights 0.00), then $\sigma_a = 0.4$ (weights 0.99 and
   0.94, nearly no pooling).
-- "Set $\sigma_b$ to 0, then drag it to 0.4. Which two pooling choices
+- "Set $\sigma_a$ to 0, then drag it to 0.4. Which two pooling choices
   are these? Then compare S10 and S12 ... Which moves more toward the
   overall mean, and why?" *Land:* complete pooling, then (nearly) no
   pooling. S12 (5 yr, $w = 0.55$) moves a larger share of its distance
@@ -99,15 +107,15 @@ runs in about 1 min including the compile).
 
 **Fitting hierarchical models by MCMC (~3 min)**
 
-- Pooling intercepts and slopes together: write $G$ ($\tau_a$, $\tau_b$,
-  $\rho$); `lmer()` MLEs are in `ml`.
+- Pooling intercepts and slopes together: write $G$ ($\sigma_a$, $\sigma_b$,
+  $\rho_{ab}$); `lmer()` MLEs are in `ml`.
 - ML integrates the stand effects out; MCMC samples them. Four bullets:
   no integral; uncertainty carries through; priors help with few groups
   (the singular four-stand fit from Week 12 Q3); the price.
 
 **Priors for a covariance matrix (~2 min; one sentence if behind)**
 
-- Board: $G = \text{diag}(\tau)\,\Omega\,\text{diag}(\tau)$; LKJ gives
+- Board: $G = \text{diag}(\sigma)\,\Omega\,\text{diag}(\sigma)$; LKJ gives
   $p(\rho) \propto (1-\rho^2)^{\eta-1}$ for 2 $\times$ 2.
 - Widget (`lkj_prior.html`), 2 $\times$ 2: $\eta = 1$ flat
   ($P(|\rho| > 0.5) = 0.50$); $\eta = 2$ 0.31; $\eta = 0.5$ U-shaped,
@@ -121,12 +129,12 @@ runs in about 1 min including the compile).
 **The random slope model in brms (~10 min; laptops optional)**
 
 - One formula plus five priors (Normal(1, 0.5) intercept, Normal(0,
-  0.5) slope, half-Normal(0, 0.3) on SDs and $\sigma$, LKJ(2)). Order
+  0.5) slope, half-Normal(0, 0.3) on SDs and $\sigma_e$, LKJ(2)). Order
   in `c()` doesn't matter; a `coef`-level prior beats a class-wide one;
   duplicates are an error (all checked in R). The `Intercept` prior sits
   at mean `precip10` (0.13), not 0. First compile ~20 s. No
   divergences; max $\hat R$ 1.007.
-- Table: everything matches `lmer()` except $\rho$: MLE $-0.57$;
+- Table: everything matches `lmer()` except $\rho_{ab}$: MLE $-0.57$;
   posterior median $-0.36$, 90% interval $-0.75$ to 0.17; truth $-0.6$.
   SDs 0.149 and 0.104 (truth 0.15, 0.10).
 - Shrinkage figure: S11 (5 yr) moves most (slope 0.39 to 0.31); S01 and
@@ -134,12 +142,12 @@ runs in about 1 min including the compile).
   short-record stands don't improve (slope error 0.057 both ways;
   intercepts 0.044 to 0.053); over 500 simulations slope error falls
   0.070 to 0.051. Shrinkage wins on average, not every time.
-- "Why is the posterior for $\rho$ so much wider ... closer to 0 than the
+- "Why is the posterior for $\rho_{ab}$ so much wider ... closer to 0 than the
   MLE? Which summary is more honest?" *Land:* 12 stand-level pairs, each
-  estimated with error, so the likelihood for $\rho$ is flat. The median
+  estimated with error, so the likelihood for $\rho_{ab}$ is flat. The median
   moves for two reasons: MLE $-0.57$ $\to$ $-0.44$ even with a flat
   LKJ(1) prior (bounded at $-1$, so the posterior is skewed toward 0 and
-  its median sits off the peak; it also averages over the $\tau$s), then
+  its median sits off the peak; it also averages over the among-stand SDs), then
   $\to$ $-0.36$ with LKJ(2) (prior pulls toward 0). The posterior is more
   honest: negative is likely, 0 isn't ruled out ($-0.75$ to 0.17).
 - "Change `lkj(2)` to `lkj(1)`, then `lkj(10)` ..." *Land:* $\eta = 1$:
@@ -151,8 +159,8 @@ runs in about 1 min including the compile).
 
 **Discussion (if time; otherwise assign Q3 for project check-ins)**
 
-- Q1 (12 more stands or 20 more years?) *Land:* more stands; $\rho$ and
-  the $\tau$s describe the population of stands, and longer records can't
+- Q1 (12 more stands or 20 more years?) *Land:* more stands; $\rho_{ab}$ and
+  the among-stand SDs describe the population of stands, and longer records can't
   add stands.
 - Q2 (brms vs. your own Stan) *Land:* brms for anything a formula can
   say; your own Stan for custom process or observation models.
@@ -173,7 +181,7 @@ No laptops needed; all code is on the page.
 - MODELS box: when no bestiary function has the right shape, build one.
   Management question: above what temperature does Bd stop growing?
 - Bell fit: $r_\text{max} = 0.314$, $T_\text{opt} = 19.4$, width 4.72,
-  $\sigma = 0.038$.
+  $\sigma_e = 0.038$.
 - "Which features of the scatter does the bell curve get wrong? Which
   matter for the management question?" *Land:* symmetric (the drop above
   the optimum is steeper than the rise), can't go below 0 (cultures die
@@ -205,9 +213,9 @@ No laptops needed; all code is on the page.
 
 - Board: penalized NLL with second differences; $\lambda = 0$ is `lm()`,
   $\lambda \to \infty$ is a straight line; edf from $K$ down to 2.
-- Penalty = prior: $\lambda = 1/(2\tau^2)$, so the wiggly part is a
+- Penalty = prior: $\lambda = 1/(2\sigma_d^2)$, so the wiggly part is a
   random effect and REML picks $\lambda$ the way `lmer()` picks
-  $\sigma_b$. Callback to Monday's ridge bonus.
+  $\sigma_a$. Callback to Monday's ridge bonus.
 - Widget (`penalized_fit.html`), stops: $K = 40$, $\log_{10}\lambda = -4$
   (edf 38.9, wiggly); drag up to 5 (edf 2.06, a sloped line). "Jump to
   the REML minimum": $\log_{10}\lambda = 0.9$, edf 9.1. Then $K = 20$
@@ -230,10 +238,10 @@ No laptops needed; all code is on the page.
 **Gaussian processes (~10 min; first thing to cut, moves to Nov. 23)**
 
 - Board: MVN on $f$ itself; kernel $\alpha^2 \exp(-d^2/2\ell^2)$.
-  Exponential kernel = AR(1) with $\rho = e^{-1/\ell}$ (point at the
+  Exponential kernel = AR(1) with $\phi = e^{-1/\ell}$ (point at the
   Week 12 $V$ heatmap).
 - Fit by `optim()`: $m = -0.057$, $\alpha = 0.32$, $\ell = 10.1$ °C,
-  $\sigma = 0.027$. GP and GAM curves differ by at most 0.011. Don't
+  $\sigma_e = 0.027$. GP and GAM curves differ by at most 0.011. Don't
   dwell on $m$ (it trades off with $\alpha$ when $\ell$ is long).
 - Widget (`gp_draws.html`), stops: no points, squared exponential,
   $\ell = 1.5$ (correlation 0.80 at distance 1; falls to 0.1 at 3.2);

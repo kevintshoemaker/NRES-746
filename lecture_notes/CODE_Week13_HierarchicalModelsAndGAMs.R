@@ -16,12 +16,12 @@ w_wod <- 0.5^2 / (0.5^2 + 1^2 / c(A = 4, B = 16))
 # 3. Partial pooling ---------------------------------------------------------------------
 
 # 12 pinyon stands, records of 5-30 years; simulated
-# truth: mean intercept 0.9, mean slope 0.25, tau = (0.15, 0.10), rho = -0.6, sigma = 0.12
+# truth: mean intercept 0.9, mean slope 0.25, sigma_a, sigma_b = (0.15, 0.10), rho_ab = -0.6, sigma_e = 0.12
 set.seed(12)
 n_years <- rep(c(30, 24, 18, 12, 8, 5), each = 2)        # record length per stand
-tau_true <- c(0.15, 0.10)                                 # among-stand SDs: intercept, slope
+sd_true <- c(0.15, 0.10)                                   # among-stand SDs: intercept, slope
 rho_true <- -0.6
-G_true <- diag(tau_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(tau_true)
+G_true <- diag(sd_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(sd_true)
 ab_true <- rmvnorm(12, c(0.9, 0.25), G_true)              # each stand's intercept and slope
 stand_names <- sprintf("S%02d", 1:12)
 drought <- data.frame(stand = factor(rep(stand_names, n_years)),
@@ -36,13 +36,13 @@ drought$width <- round(ab_true[j, 1] + ab_true[j, 2] * drought$precip10 +
 nopool <- t(sapply(split(drought, drought$stand), function(s) coef(lm(width ~ precip10, data = s))))
 fit_rs_lmer <- lmer(width ~ precip10 + (precip10 | stand), data = drought, REML = FALSE)
 ml <- c(fixef(fit_rs_lmer), as.data.frame(VarCorr(fit_rs_lmer))$sdcor)
-names(ml) <- c("mu_a", "mu_b", "tau_a", "tau_b", "rho", "sigma")
+names(ml) <- c("mu_a", "mu_b", "sigma_a", "sigma_b", "rho_ab", "sigma_e")
 round(ml, 3)
 
 
 # random intercept (no precipitation): a_j = mu + w_j (ybar_j - mu), w_j = sb^2 / (sb^2 + s^2 / n_j)
 fit_ri0 <- lmer(width ~ 1 + (1 | stand), data = drought, REML = FALSE)
-sd_ri0 <- as.data.frame(VarCorr(fit_ri0))$sdcor          # sigma_b, sigma
+sd_ri0 <- as.data.frame(VarCorr(fit_ri0))$sdcor          # sigma_a, sigma_e
 ybar <- tapply(drought$width, drought$stand, mean)
 n_j <- as.vector(table(drought$stand))
 w <- sd_ri0[1]^2 / (sd_ri0[1]^2 + sd_ri0[2]^2 / n_j)
@@ -78,12 +78,12 @@ fit_brms <- brm(width ~ precip10 + (precip10 | stand), data = drought,
 summary(fit_brms)
 prior_summary(fit_brms)
 
-# posterior for rho against its LKJ(2) prior and the MLE
+# posterior for rho_ab against its LKJ(2) prior and the MLE
 draws <- as_draws_df(fit_brms)
 hist(draws$cor_stand__Intercept__precip10, breaks = 40, freq = FALSE, xlim = c(-1, 1),
-     main = "", xlab = "rho")
+     main = "", xlab = "rho_ab")
 curve(lkj_marginal(x, eta = 2, K = 2), add = TRUE, lwd = 2, lty = 2)
-abline(v = ml["rho"], col = "firebrick", lwd = 2)
+abline(v = ml["rho_ab"], col = "firebrick", lwd = 2)
 
 # shrinkage: each stand's own fit -> its posterior mean
 ab_post <- coef(fit_brms)$stand[, "Estimate", ]
@@ -91,7 +91,7 @@ plot(nopool, xlab = "Intercept: width at 20 cm (mm)", ylab = "Slope (mm per 10 c
 arrows(nopool[, 1], nopool[, 2], ab_post[, 1], ab_post[, 2], length = 0.07, col = "steelblue")
 points(ab_post, pch = 19, col = "steelblue")
 
-#  [PAUSE] Why is the posterior for rho so much wider than the others, and its median closer to 0 than the MLE?
+#  [PAUSE] Why is the posterior for rho_ab so much wider than the others, and its median closer to 0 than the MLE?
 
 # try it: change lkj(2) to lkj(1), then lkj(10), and refit
 
@@ -108,26 +108,26 @@ data {
 }
 parameters {
   vector[2] mu;                         // mean intercept and slope
-  vector<lower=0>[2] tau;               // among-stand SDs of intercepts and slopes
+  vector<lower=0>[2] sigma_ab;          // among-stand SDs of intercepts and slopes
   cholesky_factor_corr[2] L;            // Cholesky factor of the correlation matrix
   matrix[2, J] z;                       // standardized stand effects
-  real<lower=0> sigma;                  // residual SD
+  real<lower=0> sigma_e;                // residual SD
 }
 transformed parameters {
   // row j: stand j's intercept and slope
-  matrix[J, 2] ab = rep_matrix(mu', J) + (diag_pre_multiply(tau, L) * z)';
+  matrix[J, 2] ab = rep_matrix(mu', J) + (diag_pre_multiply(sigma_ab, L) * z)';
 }
 model {
   mu[1] ~ normal(1, 0.5);
   mu[2] ~ normal(0, 0.5);
-  tau ~ normal(0, 0.3);                 // half-normal, because tau > 0
+  sigma_ab ~ normal(0, 0.3);            // half-normal, because sigma_ab > 0
   L ~ lkj_corr_cholesky(2);
   to_vector(z) ~ std_normal();
-  sigma ~ normal(0, 0.3);
-  y ~ normal(ab[stand, 1] + ab[stand, 2] .* x, sigma);
+  sigma_e ~ normal(0, 0.3);
+  y ~ normal(ab[stand, 1] + ab[stand, 2] .* x, sigma_e);
 }
 generated quantities {
-  real rho = multiply_lower_tri_self_transpose(L)[1, 2];
+  real rho_ab = multiply_lower_tri_self_transpose(L)[1, 2];
 }
 "
 slopes_model <- cmdstan_model(write_stan_file(slopes_code))   # compiles (slow, once)
@@ -138,7 +138,7 @@ fit_stan <- slopes_model$sample(data = stan_data, chains = 4, parallel_chains = 
 
 # check the sampler, then the estimates
 fit_stan$diagnostic_summary()
-fit_stan$summary(c("mu", "tau", "rho", "sigma"))
+fit_stan$summary(c("mu", "sigma_ab", "rho_ab", "sigma_e"))
 
 # try it: change lkj_corr_cholesky(2) to (1), then (10), recompile, and refit
 
@@ -194,7 +194,7 @@ lines(temp_grid, predict(fit_bs25, data.frame(temp = temp_grid)), lty = 2)
 # 3. Penalizing wiggliness ----------------------------------------------------------------
 
 # penalized NLL = NLL + lambda * sum of squared second differences of the weights
-# a Normal(0, tau^2) prior on each difference gives the same penalty, lambda = 1 / (2 tau^2)
+# a Normal(0, sigma_d^2) prior on each difference gives the same penalty, lambda = 1 / (2 sigma_d^2)
 
 #  [PAUSE] As lambda grows, why does the curve become a sloped line rather than a flat one?
 
@@ -221,24 +221,24 @@ c(topt = topt_gam, ctmax = ctmax_gam)
 
 # 5. Gaussian processes -------------------------------------------------------------------
 
-# y ~ MVN(m 1, K + sigma^2 I), K_ij = alpha^2 exp(-(x_i - x_j)^2 / (2 ell^2))
+# y ~ MVN(m 1, K + sigma_e^2 I), K_ij = alpha^2 exp(-(x_i - x_j)^2 / (2 ell^2))
 dist_temp <- abs(outer(bd$temp, bd$temp, "-"))
 nll_gp <- function(par) {
   m <- par[1]
   alpha <- exp(par[2])
   ell <- exp(par[3])
-  sigma <- exp(par[4])
-  V <- alpha^2 * exp(-dist_temp^2 / (2 * ell^2)) + sigma^2 * diag(nrow(bd))
+  sigma_e <- exp(par[4])
+  V <- alpha^2 * exp(-dist_temp^2 / (2 * ell^2)) + sigma_e^2 * diag(nrow(bd))
   -dmvnorm(bd$r, rep(m, nrow(bd)), V, log = TRUE)
 }
 fit_gp <- optim(c(0.15, log(0.15), log(4), log(0.03)), nll_gp, method = "BFGS")
 gp_par <- c(m = fit_gp$par[1], exp(fit_gp$par[2:4]))
-names(gp_par) <- c("m", "alpha", "ell", "sigma")
+names(gp_par) <- c("m", "alpha", "ell", "sigma_e")
 round(gp_par, 3)
 
-# prediction: f(x*) = m + k*' (K + sigma^2 I)^-1 (y - m)
+# prediction: f(x*) = m + k*' (K + sigma_e^2 I)^-1 (y - m)
 gp_predict <- function(new_temp, p = gp_par) {
-  K <- p["alpha"]^2 * exp(-dist_temp^2 / (2 * p["ell"]^2)) + p["sigma"]^2 * diag(nrow(bd))
+  K <- p["alpha"]^2 * exp(-dist_temp^2 / (2 * p["ell"]^2)) + p["sigma_e"]^2 * diag(nrow(bd))
   k_star <- p["alpha"]^2 * exp(-outer(new_temp, bd$temp, "-")^2 / (2 * p["ell"]^2))
   as.vector(p["m"] + k_star %*% solve(K, bd$r - p["m"]))
 }

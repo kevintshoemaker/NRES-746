@@ -198,30 +198,32 @@ which calls for a slightly different model (see
 [AR errors or a lagged response?](#lagged-response)).
 
 The simplest model for temporally correlated errors is the **first-order autoregressive** 
-model, AR(1): each year's total "error" is a fraction $\rho$ of last year's plus
+model, AR(1): each year's total "error" is a fraction $\phi$ of last year's plus
 new noise (often called an 'innovation'),
 
-$$\eta_t = \rho\,\eta_{t-1} + \varepsilon_t, \qquad \varepsilon_t \sim \text{Normal}(0, \sigma^2), \qquad |\rho| < 1$$
+$$\eta_t = \phi\,\eta_{t-1} + \varepsilon_t, \qquad \varepsilon_t \sim \text{Normal}(0, \sigma_e^2), \qquad |\phi| < 1$$
 
 Here $\eta_t$ is the autocorrelated error and $\varepsilon_t$ is
-independent noise. Note: many time-series texts
-(and `nlme`'s output) call the coefficient $\phi$ rather than $\rho$.
+independent noise. We write the AR(1) coefficient as $\phi$, as most
+time-series texts do (`nlme` calls it `Phi`), and keep $\rho$ for
+correlations in general. (Earlier versions of these pages wrote it as
+$\rho$.)
 
 Taking variances of both sides, with $\eta_{t-1}$ and $\varepsilon_t$
 independent and $\text{Var}(\eta_t) = \text{Var}(\eta_{t-1})$ (a
 stationary series):
 
-$$\text{Var}(\eta_t) = \rho^2\text{Var}(\eta_t) + \sigma^2
+$$\text{Var}(\eta_t) = \phi^2\text{Var}(\eta_t) + \sigma_e^2
 \quad\Longrightarrow\quad
-\text{Var}(\eta_t) = \frac{\sigma^2}{1 - \rho^2}$$
+\text{Var}(\eta_t) = \frac{\sigma_e^2}{1 - \phi^2}$$
 
-and the correlation between deviations $k$ steps apart is $\rho^k$
+and the correlation between deviations $k$ steps apart is $\phi^k$
 (Bolker eq. 10.3.7). So the covariance between years $s$ and $t$ is
 
-$$V_{st} = \frac{\sigma^2}{1 - \rho^2}\,\rho^{|s - t|}$$
+$$V_{st} = \frac{\sigma_e^2}{1 - \phi^2}\,\phi^{|s - t|}$$
 
 The variance of an observation in a time series is this total variance,
-not the innovation variance $\sigma^2$: it includes a part carried over
+not the innovation variance $\sigma_e^2$: it includes a part carried over
 from earlier time steps. And unlike the block-diagonal $V$ of the random
 intercept, every covariance within a series is nonzero, decaying
 geometrically (a discrete exponential decay) as the lag grows.
@@ -231,20 +233,20 @@ of lags:
 
 ```{r ar1-matrix}
 lags <- abs(outer(1:25, 1:25, "-"))
-V_ar1 <- function(rho, sigma) sigma^2 / (1 - rho^2) * rho^lags
+V_ar1 <- function(phi, sigma_e) sigma_e^2 / (1 - phi^2) * phi^lags
 round(V_ar1(0.6, 0.08)[1:5, 1:5], 4)
 ```
 
-Fitting needs $|\rho| < 1$, so we optimize $\text{atanh}(\rho)$, which
+Fitting needs $|\phi| < 1$, so we optimize $\text{atanh}(\phi)$, which
 can be any number (unbounded), and convert back with `tanh()` 
 (which converts any unbounded real number to a bounded real number between -1 and 1. 
 
 Standard errors from the Hessian are then on the atanh (correlation) and log (variance) scales; 
-if you'd like, you can use the delta method to put them back into the natural scale for $\rho$ and $\sigma$ (see the reference handout
+if you'd like, you can use the delta method to put them back into the natural scale for $\phi$ and $\sigma_e$ (see the reference handout
 [*The Delta Method*](lecture_notes/NOTES_Reference_DeltaMethod.pdf)).
 
 ```{r ar1-fit}
-# mean: a + b * precip + c * year_c; AR(1) errors with rho = tanh(par[4]), sigma = exp(par[5])
+# mean: a + b * precip + c * year_c; AR(1) errors with phi = tanh(par[4]), sigma_e = exp(par[5])
 nll_ar1 <- function(par) {
   mu <- par[1] + par[2] * chron_a$precip + par[3] * chron_a$year_c
   V <- V_ar1(tanh(par[4]), exp(par[5]))
@@ -252,24 +254,24 @@ nll_ar1 <- function(par) {
 }
 fit_ar1 <- optim(c(coef(fit_lm_a), 0, log(0.1)), nll_ar1, method = "BFGS", hessian = TRUE)
 c(a = fit_ar1$par[1], b = fit_ar1$par[2], c = fit_ar1$par[3],
-  rho = tanh(fit_ar1$par[4]), sigma = exp(fit_ar1$par[5]))
+  phi = tanh(fit_ar1$par[4]), sigma_e = exp(fit_ar1$par[5]))
 
 library(nlme)
 fit_gls <- gls(width ~ precip + year_c, data = chron_a,
                correlation = corAR1(form = ~ year), method = "ML")
 coef(fit_gls)
-coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # rho (nlme calls it Phi)
+coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # phi (nlme calls it Phi)
 ```
 
 ```{r ar1-se, echo=FALSE}
 trend_ind <- summary(fit_lm_a)$coefficients["year_c", ]
 se_ar1 <- sqrt(diag(solve(fit_ar1$hessian)))[3]
 p_ar1 <- 2 * pnorm(-abs(fit_ar1$par[3] / se_ar1))
-rho_hat <- tanh(fit_ar1$par[4])
+phi_hat <- tanh(fit_ar1$par[4])
 se_precip <- c(summary(fit_lm_a)$coefficients["precip", 2], sqrt(diag(solve(fit_ar1$hessian)))[2])
 ```
 
-The estimated $\rho$ is `r f2(rho_hat)`. The trend estimate barely
+The estimated $\phi$ is `r f2(phi_hat)`. The trend estimate barely
 moves, but its standard error grows:
 
 - assuming independence: `r f4(trend_ind[1])` mm/yr, SE `r f4(trend_ind[2])`,
@@ -291,7 +293,7 @@ positive, red negative).
 widget("cov_structures.html")
 ```
 
-> **Question:** With $\rho$ near 0.9, what does a single AR(1) series look
+> **Question:** With $\phi$ near 0.9, what does a single AR(1) series look
 > like? How could you tell it apart from a slow trend?
 
 ### AR errors or a lagged response? {#lagged-response}
@@ -302,7 +304,7 @@ covariates this is the same model as AR(1) errors. With covariates it
 isn't. Substituting $\eta_{t-1} = y_{t-1} - a - \beta x_{t-1}$ into the
 AR(1) error model gives
 
-$$y_t = a(1 - \rho) + \rho\,y_{t-1} + \beta x_t - \rho\beta\,x_{t-1} + \varepsilon_t$$
+$$y_t = a(1 - \phi) + \phi\,y_{t-1} + \beta x_t - \phi\beta\,x_{t-1} + \varepsilon_t$$
 
 a lagged-response model with an extra term that cancels last year's
 covariate. With AR(1) errors, a wet year raises growth that year only;
@@ -327,12 +329,12 @@ g2 <- coef(fit_lag_x)["width_lag"]
 cf_pred <- -g2 * coef(fit_lag_x)["precip"]
 ```
 
-The simulated errors are AR(1) with $\rho = 0.6$, yet the plain
+The simulated errors are AR(1) with $\phi = 0.6$, yet the plain
 lagged-response fit finds almost no carryover ($\hat\gamma =$
 `r f2(g1)`): last year's width mostly reflects last year's
 precipitation, which doesn't persist. Adding last year's precipitation
 gives $\hat\gamma =$ `r f2(g2)`, close to the AR(1) fit's
-$\hat\rho =$ `r f2(rho_hat)`, and a coefficient on last year's
+$\hat\phi =$ `r f2(phi_hat)`, and a coefficient on last year's
 precipitation of `r f4(coef(fit_lag_x)["precip_lag"])`, near the
 $-\hat\gamma\hat\beta =$ `r f4(cf_pred)` that AR(1) errors predict.
 
@@ -347,12 +349,12 @@ normal density function to compute the likelihood in one fell swoop!
 ```{r ri-refit}
 y_tree <- tree_means$width
 Z <- model.matrix(~ 0 + stand, data = tree_means)
-V_ri <- function(sigma_b, sigma) sigma_b^2 * Z %*% t(Z) + sigma^2 * diag(20)
+V_ri <- function(sigma_a, sigma_e) sigma_a^2 * Z %*% t(Z) + sigma_e^2 * diag(20)
 nll_ri <- function(par) -dmvnorm(y_tree, rep(par[1], 20), V_ri(exp(par[2]), exp(par[3])), log = TRUE)
 fit_ri <- optim(c(mean(y_tree), log(0.1), log(0.1)), nll_ri, method = "BFGS")
-sb_hat <- exp(fit_ri$par[2])
+sa_hat <- exp(fit_ri$par[2])
 s_hat <- exp(fit_ri$par[3])
-c(mu = fit_ri$par[1], sigma_b = sb_hat, sigma = s_hat)
+c(mu = fit_ri$par[1], sigma_a = sa_hat, sigma_e = s_hat)
 ```
 
 Three things make structured-variance models harder than their
@@ -398,13 +400,13 @@ gls_nll <- function(y, X, V) {
   b <- solve(t(X) %*% Vi %*% X, t(X) %*% Vi %*% y)
   -dmvnorm(y, as.vector(X %*% b), V, log = TRUE)
 }
-sb_grid <- seq(0.002, 0.45, length.out = 70)
+sa_grid <- seq(0.002, 0.45, length.out = 70)
 s_grid <- seq(0.04, 0.16, length.out = 70)
 X1 <- matrix(1, 20, 1)
-nll_grid_ri <- outer(sb_grid, s_grid, Vectorize(function(a, b) gls_nll(y_tree, X1, V_ri(a, b))))
-# AR(1): fix rho and the trend c; profile out a, b (GLS) and sigma (closed form)
-prof_ar1 <- function(rho, c_trend) {
-  R <- rho^lags / (1 - rho^2)
+nll_grid_ri <- outer(sa_grid, s_grid, Vectorize(function(a, b) gls_nll(y_tree, X1, V_ri(a, b))))
+# AR(1): fix phi and the trend c; profile out a, b (GLS) and sigma_e (closed form)
+prof_ar1 <- function(phi, c_trend) {
+  R <- phi^lags / (1 - phi^2)
   y <- chron_a$width - c_trend * chron_a$year_c
   Xp <- cbind(1, chron_a$precip)
   Ri <- solve(R)
@@ -413,9 +415,9 @@ prof_ar1 <- function(rho, c_trend) {
   s2 <- as.numeric(t(r) %*% Ri %*% r) / 25
   -dmvnorm(r, rep(0, 25), s2 * R, log = TRUE)
 }
-rho_grid <- seq(-0.5, 0.95, length.out = 70)
+phi_grid <- seq(-0.5, 0.95, length.out = 70)
 c_grid <- seq(-0.02, 0.01, length.out = 70)
-nll_grid_ar <- outer(rho_grid, c_grid, Vectorize(prof_ar1))
+nll_grid_ar <- outer(phi_grid, c_grid, Vectorize(prof_ar1))
 par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
 draw_surface <- function(x, y, z, xlab, ylab, main, best) {
   z <- z - min(z)
@@ -424,37 +426,37 @@ draw_surface <- function(x, y, z, xlab, ylab, main, best) {
   points(best[1], best[2], pch = 3, cex = 1.5, lwd = 2, col = "firebrick")
   box()
 }
-draw_surface(sb_grid, s_grid, nll_grid_ri, expression(sigma[b] ~ "(among stands)"),
-             expression(sigma ~ "(among trees)"), "Random intercept, 4 stands",
-             c(sb_hat, s_hat))
-draw_surface(rho_grid, c_grid, nll_grid_ar, expression(rho),
-             "Trend (mm/yr)", "AR(1) with a trend, stand A", c(rho_hat, fit_ar1$par[3]))
+draw_surface(sa_grid, s_grid, nll_grid_ri, expression(sigma[a] ~ "(among stands)"),
+             expression(sigma[e] ~ "(among trees)"), "Random intercept, 4 stands",
+             c(sa_hat, s_hat))
+draw_surface(phi_grid, c_grid, nll_grid_ar, expression(phi),
+             "Trend (mm/yr)", "AR(1) with a trend, stand A", c(phi_hat, fit_ar1$par[3]))
 abline(h = 0, lty = 2)
 ```
 
 ```{r surface-ranges, echo=FALSE}
 in_ri <- (nll_grid_ri - min(nll_grid_ri)) <= 1.92
-sb_range <- range(sb_grid[apply(in_ri, 1, any)])
+sa_range <- range(sa_grid[apply(in_ri, 1, any)])
 in_ar <- (nll_grid_ar - min(nll_grid_ar)) <= 1.92
-trend_at <- function(r) range(c_grid[in_ar[which.min(abs(rho_grid - r)), ]])
+trend_at <- function(r) range(c_grid[in_ar[which.min(abs(phi_grid - r)), ]])
 trend_0 <- trend_at(0)
-trend_hat <- trend_at(rho_hat)
+trend_hat <- trend_at(phi_hat)
 ```
 
 - **Random intercept:** the region runs from about
-  $\sigma_b =$ `r f2(sb_range[1])` to `r f2(sb_range[2])`, more than a
-  fourfold range, while $\sigma$ (from 20 trees) is much better
-  determined. Four stands give four draws of $b_j$, so the data say
+  $\sigma_a =$ `r f2(sa_range[1])` to `r f2(sa_range[2])`, more than a
+  fourfold range, while $\sigma_e$ (from 20 trees) is much better
+  determined. Four stands give four draws of $a_j$, so the data say
   little about their spread. With fewer stands or smaller differences
-  among them, the region reaches $\sigma_b = 0$; the optimizer may stop
+  among them, the region reaches $\sigma_a = 0$; the optimizer may stop
   on that boundary, where the usual Hessian and LRT approximations fail
   (the same problem as in
   [comparing Poisson and negative binomial models](Week10_ModelComparison.html#frequentist)).
-- **AR(1) with a trend:** here the axes are $\rho$ and the trend, with
+- **AR(1) with a trend:** here the axes are $\phi$ and the trend, with
   everything else profiled out. The region is a fan, not an ellipse. Near
-  $\rho = 0$ the plausible trends run from about
+  $\phi = 0$ the plausible trends run from about
   `r f4(trend_0[1])` to `r f4(trend_0[2])` mm/yr, all below 0 (dashed
-  line). At $\rho =$ `r f2(rho_hat)` they run from `r f4(trend_hat[1])`
+  line). At $\phi =$ `r f2(phi_hat)` they run from `r f4(trend_hat[1])`
   to `r f4(trend_hat[2])`. A slow drift and strong autocorrelation can
   explain the same wandering series, so what we conclude about a mean
   parameter depends on a variance parameter, and the two have to be
@@ -462,11 +464,11 @@ trend_hat <- trend_at(rho_hat)
   Hessian-based intervals, which assume an ellipse, less trustworthy.
 
 **Parameters must keep $V$ valid.** A variance must be positive,
-$|\rho|$ must be below 1, and in general $V$ must stay
+$|\phi|$ must be below 1, and in general $V$ must stay
 [positive definite](Week11_LinearModelsAndVariance.html#valid-covariance).
 An unconstrained step can leave the allowed region, and `dmvnorm()`
-then fails. We avoided this by optimizing $\log\sigma$ and
-$\text{atanh}(\rho)$; richer structures need cleverer parameterizations
+then fails. We avoided this by optimizing the log of each SD and
+$\text{atanh}(\phi)$; richer structures need cleverer parameterizations
 (for example, building $V$ from its Cholesky factor, as Stan does in
 the [Bayesian version](Week13_HierarchicalModelsAndGAMs.html#stan-model)).
 
@@ -488,9 +490,9 @@ change in width per extra 10 cm.
 ```{r drought-data}
 set.seed(12)
 n_years <- rep(c(30, 24, 18, 12, 8, 5), each = 2)        # record length per stand
-tau_true <- c(0.15, 0.10)                                 # among-stand SDs: intercept, slope
+sd_true <- c(0.15, 0.10)                                   # among-stand SDs: intercept, slope
 rho_true <- -0.6
-G_true <- diag(tau_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(tau_true)
+G_true <- diag(sd_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(sd_true)
 ab_true <- rmvnorm(12, c(0.9, 0.25), G_true)              # each stand's intercept and slope
 stand_names <- sprintf("S%02d", 1:12)
 drought <- data.frame(stand = factor(rep(stand_names, n_years)),
@@ -532,17 +534,17 @@ A **random slope** model lets both the intercept and the slope vary
 among stands, and lets them be correlated:
 
 $$\text{width}_{jt} = (\mu_a + a_j) + (\mu_b + b_j)\,x_{jt} + \varepsilon_{jt},
-\qquad \varepsilon_{jt} \sim \text{Normal}(0, \sigma^2)$$
+\qquad \varepsilon_{jt} \sim \text{Normal}(0, \sigma_e^2)$$
 
 $$\begin{pmatrix} a_j \\ b_j \end{pmatrix} \sim
 \text{MVN}\left(\begin{pmatrix} 0 \\ 0 \end{pmatrix}, G\right),
 \qquad
-G = \begin{pmatrix} \tau_a^2 & \rho\,\tau_a\tau_b \\ \rho\,\tau_a\tau_b & \tau_b^2 \end{pmatrix}$$
+G = \begin{pmatrix} \sigma_a^2 & \rho_{ab}\,\sigma_a\sigma_b \\ \rho_{ab}\,\sigma_a\sigma_b & \sigma_b^2 \end{pmatrix}$$
 
 where $x_{jt}$ is precipitation (10-cm units, centered) for stand $j$
 in year $t$. There are six parameters: two fixed effects ($\mu_a$,
-$\mu_b$), the among-stand SDs of the intercepts and slopes ($\tau_a$,
-$\tau_b$), their correlation $\rho$, and the residual SD $\sigma$. The
+$\mu_b$), the among-stand SDs of the intercepts and slopes ($\sigma_a$,
+$\sigma_b$), their correlation $\rho_{ab}$, and the residual SD $\sigma_e$. The
 24 stand deviations $a_j, b_j$ are not parameters in this likelihood.
 We never observe them, so the likelihood averages over every value they
 could take, weighted by how likely each is under their MVN
@@ -557,7 +559,7 @@ What covariance matrix results? Within stand $j$, write the observations as
 $y_j = X_j\mu + Z_j u_j + \varepsilon_j$, with $u_j = (a_j, b_j)^T$ and
 $Z_j$ the two-column matrix $[1, x]$ for that stand. Then
 
-$$V_j = Z_j G Z_j^T + \sigma^2 I$$
+$$V_j = Z_j G Z_j^T + \sigma_e^2 I$$
 
 and $V$ is block diagonal again, one block per stand, but the
 covariance between two years in the same stand now depends on how wet
@@ -594,7 +596,7 @@ knitr::kable(syntax, format = "html", escape = FALSE,
 slopes, each with its own variance and no correlation between them. The
 shorthand works as intended only when `x` is numeric; with a factor,
 `lme4` still estimates correlations among the factor's levels.) Each formula
-adds the residual variance $\sigma^2$ on top. The
+adds the residual variance $\sigma_e^2$ on top. The
 [mixed models handout](lecture_notes/NOTES_Reference_MixedModelSyntax.pdf)
 writes each of these in `nlme` and `glmmTMB` syntax too.
 
@@ -635,21 +637,21 @@ fit_rs_tmb <- glmmTMB(width ~ precip10 + (precip10 | stand), data = drought)   #
 ```
 
 **By hand.** The likelihood is a product over stands of MVN densities,
-one block $V_j$ each. Building $G$ from $\log\tau_a$, $\log\tau_b$, and
-$\text{atanh}(\rho)$ keeps it a valid covariance matrix wherever
+one block $V_j$ each. Building $G$ from $\log\sigma_a$, $\log\sigma_b$, and
+$\text{atanh}(\rho_{ab})$ keeps it a valid covariance matrix wherever
 `optim()` steps:
 
 ```{r rs-optim}
 rows_by_stand <- split(seq_len(nrow(drought)), drought$stand)
 nll_rs <- function(par) {
-  tau <- exp(par[3:4])
-  rho <- tanh(par[5])
-  sigma <- exp(par[6])
-  G <- matrix(c(tau[1]^2, rho * tau[1] * tau[2], rho * tau[1] * tau[2], tau[2]^2), 2)
+  sds <- exp(par[3:4])
+  rho_ab <- tanh(par[5])
+  sigma_e <- exp(par[6])
+  G <- matrix(c(sds[1]^2, rho_ab * sds[1] * sds[2], rho_ab * sds[1] * sds[2], sds[2]^2), 2)
   nll <- 0
   for (rows in rows_by_stand) {
     Zj <- cbind(1, drought$precip10[rows])
-    Vj <- Zj %*% G %*% t(Zj) + sigma^2 * diag(length(rows))
+    Vj <- Zj %*% G %*% t(Zj) + sigma_e^2 * diag(length(rows))
     nll <- nll - dmvnorm(drought$width[rows], as.vector(Zj %*% par[1:2]), Vj, log = TRUE)
   }
   nll
@@ -669,12 +671,12 @@ compare <- rbind(
   glmmTMB = c(fixef(fit_rs_tmb)$cond, tmb_sd,
               attr(VarCorr(fit_rs_tmb)$cond$stand, "correlation")[1, 2],
               sigma(fit_rs_tmb), logLik(fit_rs_tmb)))
-colnames(compare) <- c("mu_a", "mu_b", "tau_a", "tau_b", "rho", "sigma", "logLik")
+colnames(compare) <- c("mu_a", "mu_b", "sigma_a", "sigma_b", "rho_ab", "sigma_e", "logLik")
 round(compare, 4)
 ```
 
 All four agree. The truth is $\mu_a = 0.9$, $\mu_b = 0.25$,
-$\tau_a = 0.15$, $\tau_b = 0.10$, $\rho = -0.6$, $\sigma = 0.12$.
+$\sigma_a = 0.15$, $\sigma_b = 0.10$, $\rho_{ab} = -0.6$, $\sigma_e = 0.12$.
 
 Which package when:
 
@@ -697,6 +699,12 @@ Which package when:
 The reference handout
 [*Mixed models in R: nlme, lme4, and glmmTMB*](lecture_notes/NOTES_Reference_MixedModelSyntax.pdf)
 puts the three packages' syntax side by side, with advice on which to use.
+Table 1 of [Yang, Pan, Warton, and Nakagawa (2026)](https://www.nature.com/articles/s44358-026-00215-4)
+is a one-page guide to random-effects formulas (nested, crossed,
+correlated and uncorrelated slopes) with an ecological example for
+each. Their Figure 1 sets mixed models and GLS beside "robust"
+alternatives (cluster-robust standard errors, block bootstraps) for
+when the dependence structure is uncertain.
 
 ## Discussion {#variance-discussion}
 
@@ -719,8 +727,8 @@ What question is each model answering?
 
 **Q3.** Fitting the random slope model to only the four short-record
 stands (S09-S12, `r nrow(short)` stand-years) gives
-$\hat\tau_a =$ `r f3(vc_short[1])`, $\hat\tau_b =$ `r f3(vc_short[2])`,
-and $\hat\rho =$ `r f2(vc_short[3])`, with a "boundary (singular) fit"
+$\hat\sigma_a =$ `r f3(vc_short[1])`, $\hat\sigma_b =$ `r f3(vc_short[2])`,
+and $\hat\rho_{ab} =$ `r f2(vc_short[3])`, with a "boundary (singular) fit"
 message. Do these stands have perfectly correlated intercepts and
 slopes? What would you report, and what would you change about the
 model?
@@ -729,23 +737,23 @@ model?
 
 The [AR(1) fit](#ar1) searched over five parameters with `optim()`.
 Matrix algebra cuts that to one. Write the covariance matrix as
-$V = \sigma^2 R$, where $R_{st} = \rho^{|s-t|}/(1 - \rho^2)$ depends
-only on $\rho$. If $\rho$ were known, the mean parameters and $\sigma^2$
+$V = \sigma_e^2 R$, where $R_{st} = \phi^{|s-t|}/(1 - \phi^2)$ depends
+only on $\phi$. If $\phi$ were known, the mean parameters and $\sigma_e^2$
 that maximize the likelihood have closed forms:
 
-$$\hat{\boldsymbol\beta}(\rho) = (X^TR^{-1}X)^{-1}X^TR^{-1}\mathbf{y},
+$$\hat{\boldsymbol\beta}(\phi) = (X^TR^{-1}X)^{-1}X^TR^{-1}\mathbf{y},
 \qquad
-\hat\sigma^2(\rho) = \frac{1}{n}\,\mathbf{r}^TR^{-1}\mathbf{r},
-\quad \mathbf{r} = \mathbf{y} - X\hat{\boldsymbol\beta}(\rho)$$
+\hat\sigma_e^2(\phi) = \frac{1}{n}\,\mathbf{r}^TR^{-1}\mathbf{r},
+\quad \mathbf{r} = \mathbf{y} - X\hat{\boldsymbol\beta}(\phi)$$
 
-This is **generalized least squares** (GLS). With $\rho = 0$, $R$ is
+This is **generalized least squares** (GLS). With $\phi = 0$, $R$ is
 the identity matrix and $\hat{\boldsymbol\beta}$ reduces to the
 ordinary [normal equations](Week11_LinearModelsAndVariance.html#least-squares),
-$(X^TX)^{-1}X^T\mathbf{y}$. With $\rho > 0$, $R^{-1}$ down-weights
+$(X^TX)^{-1}X^T\mathbf{y}$. With $\phi > 0$, $R^{-1}$ down-weights
 information that neighboring years share.
 
-Plugging $\hat{\boldsymbol\beta}(\rho)$ and $\hat\sigma^2(\rho)$ back
-into the likelihood leaves a function of $\rho$ alone (a profile
+Plugging $\hat{\boldsymbol\beta}(\phi)$ and $\hat\sigma_e^2(\phi)$ back
+into the likelihood leaves a function of $\phi$ alone (a profile
 likelihood), which a one-dimensional search can maximize:
 
 ```{r gls-by-hand}
@@ -753,8 +761,8 @@ X_a <- cbind(1, chron_a$precip, chron_a$year_c)
 y_a <- chron_a$width
 n_a <- length(y_a)
 
-gls_profile <- function(rho) {
-  R <- rho^lags / (1 - rho^2)
+gls_profile <- function(phi) {
+  R <- phi^lags / (1 - phi^2)
   R_inv <- solve(R)
   beta <- solve(t(X_a) %*% R_inv %*% X_a, t(X_a) %*% R_inv %*% y_a)
   r <- as.vector(y_a - X_a %*% beta)
@@ -762,44 +770,44 @@ gls_profile <- function(rho) {
   list(beta = as.vector(beta), sigma = sqrt(sigma2),
        loglik = dmvnorm(y_a, as.vector(X_a %*% beta), sigma2 * R, log = TRUE))
 }
-rho_gls <- optimize(function(rho) -gls_profile(rho)$loglik, c(-0.95, 0.95))$minimum
-fit_by_hand <- gls_profile(rho_gls)
+phi_gls <- optimize(function(phi) -gls_profile(phi)$loglik, c(-0.95, 0.95))$minimum
+fit_by_hand <- gls_profile(phi_gls)
 ```
 
 ```{r gls-compare, echo=FALSE}
 gls_tab <- rbind(
-  "optim(), 5 parameters" = c(rho_hat, fit_ar1$par[1:3], exp(fit_ar1$par[5]), -fit_ar1$value),
-  "GLS by hand, 1 parameter" = c(rho_gls, fit_by_hand$beta, fit_by_hand$sigma, fit_by_hand$loglik),
+  "optim(), 5 parameters" = c(phi_hat, fit_ar1$par[1:3], exp(fit_ar1$par[5]), -fit_ar1$value),
+  "GLS by hand, 1 parameter" = c(phi_gls, fit_by_hand$beta, fit_by_hand$sigma, fit_by_hand$loglik),
   "gls()" = c(coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE), coef(fit_gls),
               fit_gls$sigma * sqrt(1 - coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)^2),
               logLik(fit_gls)))
-colnames(gls_tab) <- c("rho", "a", "precip", "trend", "sigma", "logLik")
+colnames(gls_tab) <- c("phi", "a", "precip", "trend", "sigma_e", "logLik")
 knitr::kable(gls_tab, digits = c(3, 3, 4, 5, 4, 3))
 ```
 
 All three agree. `gls()` takes the same route: it profiles the mean
-parameters and $\sigma$ out of the likelihood and searches only over
-the correlation parameters. (It reports $\sigma$ as the SD of each
-year's total error, $\sigma/\sqrt{1 - \rho^2}$; the table converts it
+parameters and $\sigma_e$ out of the likelihood and searches only over
+the correlation parameters. (Its `sigma` is the SD of each
+year's total error, $\sigma_e/\sqrt{1 - \phi^2}$; the table converts it
 back to the innovation SD.)
 
-The profile also gives a likelihood interval for $\rho$:
+The profile also gives a likelihood interval for $\phi$:
 
 ```{r gls-profile-plot, echo=FALSE, fig.width=6, fig.height=3.8}
-rho_seq <- seq(-0.5, 0.9, by = 0.005)
-ll_seq <- sapply(rho_seq, function(r) gls_profile(r)$loglik)
-in_ci <- rho_seq[ll_seq > max(ll_seq) - 1.92]
+phi_seq <- seq(-0.5, 0.9, by = 0.005)
+ll_seq <- sapply(phi_seq, function(r) gls_profile(r)$loglik)
+in_ci <- phi_seq[ll_seq > max(ll_seq) - 1.92]
 par(mar = c(4, 4.5, 1, 1))
-plot(rho_seq, ll_seq, type = "l", lwd = 2, xlab = expression(rho),
+plot(phi_seq, ll_seq, type = "l", lwd = 2, xlab = expression(phi),
      ylab = "Profile log-likelihood")
 abline(h = max(ll_seq) - 1.92, lty = 2)
 abline(v = range(in_ci), lty = 3)
-abline(v = rho_gls, col = "red")
+abline(v = phi_gls, col = "red")
 ```
 
 The dashed line sits 1.92 below the maximum; the dotted lines mark the
-approximate 95% interval for $\rho$, `r f2(min(in_ci))` to
-`r f2(max(in_ci))`. Twenty-five years can't rule out $\rho = 0$, and
+approximate 95% interval for $\phi$, `r f2(min(in_ci))` to
+`r f2(max(in_ci))`. Twenty-five years can't rule out $\phi = 0$, and
 can't rule out the true value of 0.6 either.
 
 ## Bonus: a random intercept and AR(1) together {#bonus-combined}
@@ -808,11 +816,11 @@ The two structures combine. Using all four pinyon chronologies (100
 stand-years), suppose each stand has its own random intercept and
 AR(1) deviations within the stand:
 
-$$\text{width}_{jt} = a + b_j + \beta\,\text{precip}_t + \eta_{jt},
-\qquad b_j \sim \text{Normal}(0, \sigma_b^2),
-\qquad \eta_{jt} = \rho\,\eta_{j,t-1} + \varepsilon_{jt}$$
+$$\text{width}_{jt} = \mu + a_j + \beta\,\text{precip}_t + \eta_{jt},
+\qquad a_j \sim \text{Normal}(0, \sigma_a^2),
+\qquad \eta_{jt} = \phi\,\eta_{j,t-1} + \varepsilon_{jt}$$
 
-$V$ is the sum of the two pieces: $\sigma_b^2$ wherever two values share
+$V$ is the sum of the two pieces: $\sigma_a^2$ wherever two values share
 a stand, plus an AR(1) block within each stand. `kronecker(A, B)`
 places a copy of `B` in every cell of `A`, scaled by that cell, so
 `kronecker(diag(4), B)` makes a block-diagonal matrix with four copies
@@ -820,8 +828,8 @@ of `B`.
 
 ```{r combined-fit}
 Z_chron <- model.matrix(~ 0 + stand, data = chron)
-V_combined <- function(sigma_b, rho, sigma) {
-  sigma_b^2 * Z_chron %*% t(Z_chron) + kronecker(diag(4), V_ar1(rho, sigma))
+V_combined <- function(sigma_a, phi, sigma_e) {
+  sigma_a^2 * Z_chron %*% t(Z_chron) + kronecker(diag(4), V_ar1(phi, sigma_e))
 }
 nll_combined <- function(par) {
   mu <- par[1] + par[2] * chron$precip
@@ -830,8 +838,8 @@ nll_combined <- function(par) {
 }
 fit_comb <- optim(c(0.4, 0.02, log(0.1), 0, log(0.1)), nll_combined, method = "BFGS",
                   control = list(maxit = 1000))
-c(a = fit_comb$par[1], b = fit_comb$par[2], sigma_b = exp(fit_comb$par[3]),
-  rho = tanh(fit_comb$par[4]), sigma = exp(fit_comb$par[5]))
+c(mu = fit_comb$par[1], beta = fit_comb$par[2], sigma_a = exp(fit_comb$par[3]),
+  phi = tanh(fit_comb$par[4]), sigma_e = exp(fit_comb$par[5]))
 
 fit_lme <- lme(width ~ precip, random = ~ 1 | stand, data = chron,
                correlation = corAR1(form = ~ year | stand), method = "ML")
@@ -852,12 +860,12 @@ reaching 0.
 In matrix form, with a random slope as well:
 $y = X\boldsymbol\beta + Zu + \eta$, with $u \sim \text{MVN}(0, G)$ as
 in [random slopes](#random-slopes) and
-$\eta \sim \text{MVN}(0, \sigma^2 R)$, where $R$ is the AR(1) matrix
+$\eta \sim \text{MVN}(0, \sigma_e^2 R)$, where $R$ is the AR(1) matrix
 from the [GLS bonus](#bonus-gls), block diagonal by stand. Then
-$V = ZGZ^T + \sigma^2 R$: AR(1) errors replace $\sigma^2 I$ with
-$\sigma^2 R$, and nothing else changes. The AR coefficient in $R$ and
-the intercept-slope correlation in $G$ are different parameters, though
-both are often written $\rho$. `glmmTMB` treats $\eta$ as one more
+$V = ZGZ^T + \sigma_e^2 R$: AR(1) errors replace $\sigma_e^2 I$ with
+$\sigma_e^2 R$, and nothing else changes. The AR coefficient $\phi$ in $R$
+and the intercept-slope correlation $\rho_{ab}$ in $G$ are different
+parameters. `glmmTMB` treats $\eta$ as one more
 random effect with one level per observation, which is why its AR(1)
 syntax drops the separate residual variance (`dispformula = ~0`; see the
 [syntax handout](lecture_notes/NOTES_Reference_MixedModelSyntax.pdf)).
@@ -871,65 +879,65 @@ Suppose we counted cones on 8 trees in each of the 12 stands, with
 tree vigor (standardized) as the predictor:
 
 $$\text{cones}_{ij} \sim \text{Poisson}(\lambda_{ij}), \qquad
-\log\lambda_{ij} = \beta_0 + \beta_1\,\text{vigor}_{ij} + b_j, \qquad
-b_j \sim \text{Normal}(0, \sigma_b^2)$$
+\log\lambda_{ij} = \beta_0 + \beta_1\,\text{vigor}_{ij} + a_j, \qquad
+a_j \sim \text{Normal}(0, \sigma_a^2)$$
 
 The structured covariance lives on the log scale. The linear predictors
 $\eta_{ij} = \log\lambda_{ij}$ have the same block-diagonal covariance as
-a Normal random intercept model, $\sigma_b^2 ZZ^T$ (trees in a stand
-share $b_j$), but with no $\sigma^2 I$ term. Given $b_j$, the counts are
+a Normal random intercept model, $\sigma_a^2 ZZ^T$ (trees in a stand
+share $a_j$), but with no $\sigma_e^2 I$ term. Given $a_j$, the counts are
 independent Poisson draws, and the Poisson variance does the job of
 the residual variance.
 
-Averaging over $b_j$, a count whose linear predictor is
+Averaging over $a_j$, a count whose linear predictor is
 $\beta_0 + \beta_1 x$ has
 
-$$\mu = E(y) = e^{\beta_0 + \beta_1 x + \sigma_b^2/2}, \qquad
-\text{Var}(y) = \mu + \mu^2\left(e^{\sigma_b^2} - 1\right)$$
+$$\mu = E(y) = e^{\beta_0 + \beta_1 x + \sigma_a^2/2}, \qquad
+\text{Var}(y) = \mu + \mu^2\left(e^{\sigma_a^2} - 1\right)$$
 
 The first term is Poisson variance; the second is extra variance from
 the random effect. Two trees in the same stand covary by
-$\mu_1\mu_2(e^{\sigma_b^2} - 1)$, and trees in different stands are
+$\mu_1\mu_2(e^{\sigma_a^2} - 1)$, and trees in different stands are
 independent. So the counts still have a block-diagonal covariance
 matrix, but they aren't multivariate normal, and their joint
 distribution has no closed form. Unlike the Normal case, knowing the
 mean and covariance doesn't give us the likelihood.
 
 ```{r glmm-moments}
-mu_glmm <- exp(1.5 + 0.5^2 / 2)               # vigor 0, beta0 = 1.5, sigma_b = 0.5
+mu_glmm <- exp(1.5 + 0.5^2 / 2)               # vigor 0, beta0 = 1.5, sigma_a = 0.5
 moments <- c(mean = mu_glmm, var = mu_glmm + mu_glmm^2 * (exp(0.5^2) - 1), cov = mu_glmm^2 * (exp(0.5^2) - 1))
 
 set.seed(746)
-b_sim <- rnorm(1e5, 0, 0.5)                  # 100,000 stands, two trees each
-y_tree1 <- rpois(1e5, exp(1.5 + b_sim))
-y_tree2 <- rpois(1e5, exp(1.5 + b_sim))
+a_sim <- rnorm(1e5, 0, 0.5)                  # 100,000 stands, two trees each
+y_tree1 <- rpois(1e5, exp(1.5 + a_sim))
+y_tree2 <- rpois(1e5, exp(1.5 + a_sim))
 rbind(formula = moments, simulation = c(mean(y_tree1), var(y_tree1), cov(y_tree1, y_tree2)))
 ```
 
 At average vigor, with the values simulated below ($\beta_0 = 1.5$,
-$\sigma_b = 0.5$), a count has mean `r round(moments[1], 1)` but variance
+$\sigma_a = 0.5$), a count has mean `r round(moments[1], 1)` but variance
 `r round(moments[2], 1)` (a Poisson would have variance equal to its
 mean), and two trees in one stand have correlation
 `r round(moments[3] / moments[2], 2)`.
 
-Each stand's likelihood is a one-dimensional integral over $b_j$, and
+Each stand's likelihood is a one-dimensional integral over $a_j$, and
 `integrate()` can do it numerically:
 
 ```{r glmm-by-hand}
 set.seed(12)
 cones <- data.frame(stand = factor(rep(stand_names, each = 8)),
                     vigor = round(rnorm(96), 2))
-b_stand <- rnorm(12, 0, 0.5)
-cones$count <- rpois(96, exp(1.5 + 0.4 * cones$vigor + b_stand[as.integer(cones$stand)]))
+a_stand <- rnorm(12, 0, 0.5)
+cones$count <- rpois(96, exp(1.5 + 0.4 * cones$vigor + a_stand[as.integer(cones$stand)]))
 
 nll_glmm <- function(par) {
-  sigma_b <- exp(par[3])
+  sigma_a <- exp(par[3])
   nll <- 0
   for (g in split(cones, cones$stand)) {
-    # integrand: P(this stand's counts | b) * density of b, for a vector of b values
-    stand_lik <- function(b) {
-      sapply(b, function(bi) exp(sum(dpois(g$count, exp(par[1] + par[2] * g$vigor + bi), log = TRUE)))) *
-        dnorm(b, 0, sigma_b)
+    # integrand: P(this stand's counts | a) * density of a, for a vector of a values
+    stand_lik <- function(a) {
+      sapply(a, function(ai) exp(sum(dpois(g$count, exp(par[1] + par[2] * g$vigor + ai), log = TRUE)))) *
+        dnorm(a, 0, sigma_a)
     }
     nll <- nll - log(integrate(stand_lik, -Inf, Inf)$value)
   }

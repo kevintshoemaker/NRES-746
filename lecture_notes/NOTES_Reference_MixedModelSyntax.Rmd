@@ -37,7 +37,7 @@ translate in either direction.
   as `site[i]` in R or Stan).
 - $\beta$s are fixed effects. Random effects ($a_j$, $b_j$, $v_{jk}$,
   $w_m$) are Normal with mean 0 and independent of each other and of
-  the residuals unless stated. $\varepsilon \sim N(0, \sigma^2)$ is the
+  the residuals unless stated. $\varepsilon \sim N(0, \sigma_e^2)$ is the
   residual.
 - Every package writes the fixed part the same way (`y ~ x` means
   $\beta_0 + \beta_1 x$); the random part is where they differ.
@@ -54,7 +54,7 @@ correlated intercept and slope & $+\,a_{j[i]} + b_{j[i]}x_i$, \ $(a_j, b_j) \sim
 uncorrelated intercept and slope & same, with $\text{Cov}(a_j, b_j) = 0$ & \texttt{(x || site)} \ (numeric $x$) \\
 nested groups & $+\,a_j + v_{jk}$ & \texttt{(1 | site/plot)} \\
 crossed groups & $+\,a_{j[i]} + w_{m[i]}$ & \texttt{(1 | site) + (1 | obs)} \\
-AR(1) errors in time & $\eta_t = \rho\,\eta_{t-1} + \varepsilon_t$ & \texttt{ar1(yearf + 0 | plot)} \\
+AR(1) errors in time & $\eta_t = \phi\,\eta_{t-1} + \varepsilon_t$ & \texttt{ar1(yearf + 0 | plot)} \\
 log link, Poisson counts & $y_i \sim \text{Pois}(\lambda_i)$, \ $\log\lambda_i = \ldots$ & \texttt{family = poisson} \\
 \bottomrule
 \end{tabular}
@@ -107,7 +107,7 @@ $$y_{ij} = \beta_0 + \beta_1 x_{ij} + a_j + \varepsilon_{ij},
 \qquad a_j \sim N(0, \sigma_a^2)$$
 Two observations in the same site share $a_j$, so their covariance is
 $\sigma_a^2$; observations in different sites are independent. Four
-parameters: $\beta_0, \beta_1, \sigma_a, \sigma$.
+parameters: $\beta_0, \beta_1, \sigma_a, \sigma_e$.
 
 ```{r syntax-ri}
 lme(y ~ x, random = ~ 1 | site, data = d)
@@ -122,7 +122,7 @@ $$y_{ij} = (\beta_0 + a_j) + (\beta_1 + b_j)\,x_{ij} + \varepsilon_{ij},
 \text{MVN}\!\left(\mathbf{0},\
 G = \begin{pmatrix} \sigma_a^2 & \rho_{ab}\sigma_a\sigma_b \\
 \rho_{ab}\sigma_a\sigma_b & \sigma_b^2 \end{pmatrix}\right)$$
-Six parameters: $\beta_0, \beta_1, \sigma_a, \sigma_b, \rho_{ab}, \sigma$.
+Six parameters: $\beta_0, \beta_1, \sigma_a, \sigma_b, \rho_{ab}, \sigma_e$.
 `(x | site)` includes the intercept; `(0 + x | site)` would give a random
 slope only.
 
@@ -190,10 +190,10 @@ matching `nlme`.
 
 **AR(1) errors in time.** Plot $j$ in year $t$:
 $$y_{jt} = \beta_0 + \beta_1 x_{jt} + \eta_{jt}, \qquad
-\eta_{jt} = \rho\,\eta_{j,t-1} + \varepsilon_{jt}, \qquad
-\varepsilon_{jt} \sim N(0, \sigma^2)$$
-Within a plot, $\text{Cor}(\eta_{js}, \eta_{jt}) = \rho^{|s-t|}$ and
-$\text{Var}(\eta_{jt}) = \sigma^2/(1-\rho^2)$; plots are independent. No
+\eta_{jt} = \phi\,\eta_{j,t-1} + \varepsilon_{jt}, \qquad
+\varepsilon_{jt} \sim N(0, \sigma_e^2)$$
+Within a plot, $\text{Cor}(\eta_{js}, \eta_{jt}) = \phi^{|s-t|}$ and
+$\text{Var}(\eta_{jt}) = \sigma_e^2/(1-\phi^2)$; plots are independent. No
 random effects, so the model is all residual structure.
 
 ```{r syntax-ar1}
@@ -205,7 +205,7 @@ glmmTMB(y ~ x + ar1(yearf + 0 | plot), dispformula = ~0, data = d)    # yearf <-
 $j$, year $t$:
 $$y_{jkt} = \beta_0 + \beta_1 x_{jkt} + a_j + \eta_{jkt}, \qquad
 a_j \sim N(0, \sigma_a^2), \qquad \eta_{jkt} \text{ AR(1) within plot}$$
-$V = \sigma_a^2 ZZ^T + \sigma^2 R$: the random intercept adds
+$V = \sigma_a^2 ZZ^T + \sigma_e^2 R$: the random intercept adds
 $\sigma_a^2$ wherever two values share a site, and $R$ holds the AR(1)
 correlations within each plot.
 
@@ -216,9 +216,9 @@ glmmTMB(y ~ x + (1 | site) + ar1(yearf + 0 | plot), dispformula = ~0, data = d) 
 
 **Gaps in time: the Ornstein-Uhlenbeck process.** The continuous-time
 version of AR(1) uses the actual times:
-$$\text{Cor}(\eta_{js}, \eta_{jt}) = e^{-\theta|s - t|} = \rho^{|s-t|},
-\qquad \rho = e^{-\theta}$$
-so a two-year gap gets $\rho^2$. `glmmTMB`'s `ar1()` treats the
+$$\text{Cor}(\eta_{js}, \eta_{jt}) = e^{-\theta|s - t|} = \phi^{|s-t|},
+\qquad \phi = e^{-\theta}$$
+so a two-year gap gets $\phi^2$. `glmmTMB`'s `ar1()` treats the
 *observed* times as consecutive (a missing year counts as a lag of 1);
 `ou()` with `numFactor()` times handles gaps. `nlme`'s `corAR1()`
 handles gaps with integer times; `corCAR1()` takes non-integer times.
@@ -231,9 +231,9 @@ glmmTMB(y ~ x + ou(tt + 0 | plot), dispformula = ~0, data = d)       # tt <- num
 **Exponential spatial correlation.** Locations $i$ and $k$ in the same
 site, a distance $d_{ik}$ apart:
 $$y_i = \beta_0 + \beta_1 x_i + \eta_i, \qquad
-\text{Cor}(\eta_i, \eta_k) = e^{-d_{ik}/\phi}$$
-where $\phi$ is the range: correlation falls to $e^{-1} \approx 0.37$ at
-distance $\phi$.
+\text{Cor}(\eta_i, \eta_k) = e^{-d_{ik}/\ell}$$
+where $\ell$ is the range: correlation falls to $e^{-1} \approx 0.37$ at
+distance $\ell$.
 
 ```{r syntax-spatial}
 gls(y ~ x, correlation = corExp(form = ~ east + north | site), data = d)
@@ -286,7 +286,7 @@ glmmTMB(cbind(s, n - s) ~ x + (1 | site), family = binomial, data = d)
 - Negative binomial (`nbinom2`): $\text{Var}(y_{ij}) = \mu_{ij} + \mu_{ij}^2/\theta$
   with $\log\mu_{ij} = \beta_0 + \beta_1 x_{ij} + a_j$. (`nbinom1`:
   $\text{Var} = \mu(1 + \phi)$.)
-- Observation-level random effect: add $e_i \sim N(0, \sigma_e^2)$ to
+- Observation-level random effect: add $o_i \sim N(0, \sigma_o^2)$ to
   the Poisson's $\log\lambda$, one per observation (`obs_id` has a
   unique level for each row).
 - Zero-inflated negative binomial: $y_{ij} = 0$ with probability $\pi$;
@@ -372,10 +372,10 @@ $\rho_{ab}$.
 
 ## 7. Things that trip people up
 
-- **Names for the same thing.** The AR(1) coefficient $\rho$ is `Phi` in
+- **Names for the same thing.** The AR(1) coefficient $\phi$ is `Phi` in
   `nlme` and appears as a correlation labeled `(ar1)` in `glmmTMB`'s
   `VarCorr()`. With AR(1) errors, both report the SD of the total
-  error, $\sigma/\sqrt{1-\rho^2}$, not the innovation SD $\sigma$.
+  error, $\sigma_e/\sqrt{1-\phi^2}$, not the innovation SD $\sigma_e$.
 - **Time and space in `glmmTMB`.** `ar1()` needs a factor of equally
   spaced times and treats the observed times as consecutive. Use `ou()`
   with `numFactor()` times when there are gaps.

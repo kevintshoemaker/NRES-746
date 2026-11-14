@@ -61,12 +61,12 @@ lag1 <- function(dat) {
 }
 round(sapply(split(chron, chron$stand), lag1), 2)
 
-# AR(1) covariance: V_st = sigma^2 / (1 - rho^2) * rho^|s - t|
+# AR(1) covariance: V_st = sigma_e^2 / (1 - phi^2) * phi^|s - t|
 lags <- abs(outer(1:25, 1:25, "-"))
-V_ar1 <- function(rho, sigma) sigma^2 / (1 - rho^2) * rho^lags
+V_ar1 <- function(phi, sigma_e) sigma_e^2 / (1 - phi^2) * phi^lags
 round(V_ar1(0.6, 0.08)[1:5, 1:5], 4)
 
-# mean: a + b * precip + c * year_c; AR(1) errors with rho = tanh(par[4]), sigma = exp(par[5])
+# mean: a + b * precip + c * year_c; AR(1) errors with phi = tanh(par[4]), sigma_e = exp(par[5])
 nll_ar1 <- function(par) {
   mu <- par[1] + par[2] * chron_a$precip + par[3] * chron_a$year_c
   V <- V_ar1(tanh(par[4]), exp(par[5]))
@@ -74,39 +74,39 @@ nll_ar1 <- function(par) {
 }
 fit_ar1 <- optim(c(coef(fit_lm_a), 0, log(0.1)), nll_ar1, method = "BFGS", hessian = TRUE)
 c(a = fit_ar1$par[1], b = fit_ar1$par[2], c = fit_ar1$par[3],
-  rho = tanh(fit_ar1$par[4]), sigma = exp(fit_ar1$par[5]))
+  phi = tanh(fit_ar1$par[4]), sigma_e = exp(fit_ar1$par[5]))
 
 library(nlme)
 fit_gls <- gls(width ~ precip + year_c, data = chron_a,
                correlation = corAR1(form = ~ year), method = "ML")
 coef(fit_gls)
-coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # rho (nlme calls it Phi)
+coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)   # phi (nlme calls it Phi)
 
 # trend: estimate, SE, p under independence vs. AR(1) (Hessian SE)
 se_ar1 <- sqrt(diag(solve(fit_ar1$hessian)))
 summary(fit_lm_a)$coefficients["year_c", ]
 c(estimate = fit_ar1$par[3], se = se_ar1[3], p = 2 * pnorm(-abs(fit_ar1$par[3] / se_ar1[3])))
 
-#  [PAUSE] With rho near 0.9, what does one AR(1) series look like? How would you tell it from a slow trend?
+#  [PAUSE] With phi near 0.9, what does one AR(1) series look like? How would you tell it from a slow trend?
 
 # AR errors or a lagged response?
-# AR(1) errors rewritten: y_t = a(1 - rho) + rho y_{t-1} + b x_t - rho b x_{t-1} + e_t
+# AR(1) errors rewritten: y_t = a(1 - phi) + phi y_{t-1} + b x_t - phi b x_{t-1} + e_t
 chron_a$width_lag <- c(NA, head(chron_a$width, -1))      # last year's width
 chron_a$precip_lag <- c(NA, head(chron_a$precip, -1))    # last year's precipitation
 fit_lag <- lm(width ~ width_lag + precip + year_c, data = chron_a)
 fit_lag_x <- lm(width ~ width_lag + precip + precip_lag + year_c, data = chron_a)
 round(coef(fit_lag), 4)          # gamma near 0
-round(coef(fit_lag_x), 4)        # gamma near rho; precip_lag near -gamma * beta
+round(coef(fit_lag_x), 4)        # gamma near phi; precip_lag near -gamma * beta
 
 # 2. Why these models are harder to fit ---------------------------------------------------
 
-# random intercept for the 20 tree means: V = sigma_b^2 Z Z^T + sigma^2 I
+# random intercept for the 20 tree means: V = sigma_a^2 Z Z^T + sigma_e^2 I
 y_tree <- tree_means$width
 Z <- model.matrix(~ 0 + stand, data = tree_means)
-V_ri <- function(sigma_b, sigma) sigma_b^2 * Z %*% t(Z) + sigma^2 * diag(20)
+V_ri <- function(sigma_a, sigma_e) sigma_a^2 * Z %*% t(Z) + sigma_e^2 * diag(20)
 nll_ri <- function(par) -dmvnorm(y_tree, rep(par[1], 20), V_ri(exp(par[2]), exp(par[3])), log = TRUE)
 fit_ri <- optim(c(mean(y_tree), log(0.1), log(0.1)), nll_ri, method = "BFGS")
-c(mu = fit_ri$par[1], sigma_b = exp(fit_ri$par[2]), sigma = exp(fit_ri$par[3]))
+c(mu = fit_ri$par[1], sigma_a = exp(fit_ri$par[2]), sigma_e = exp(fit_ri$par[3]))
 
 # milliseconds per NLL evaluation, averaged over 'reps' evaluations
 time_nll <- function(n, reps = 10) {
@@ -123,12 +123,12 @@ timings
 # 3. Random slopes ------------------------------------------------------------------------
 
 # drought sensitivity: 12 stands, records of 5-30 years; simulated
-# truth: mean intercept 0.9, mean slope 0.25, tau = (0.15, 0.10), rho = -0.6, sigma = 0.12
+# truth: mean intercept 0.9, mean slope 0.25, sigma_a, sigma_b = (0.15, 0.10), rho_ab = -0.6, sigma_e = 0.12
 set.seed(12)
 n_years <- rep(c(30, 24, 18, 12, 8, 5), each = 2)        # record length per stand
-tau_true <- c(0.15, 0.10)                                 # among-stand SDs: intercept, slope
+sd_true <- c(0.15, 0.10)                                   # among-stand SDs: intercept, slope
 rho_true <- -0.6
-G_true <- diag(tau_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(tau_true)
+G_true <- diag(sd_true) %*% matrix(c(1, rho_true, rho_true, 1), 2) %*% diag(sd_true)
 ab_true <- rmvnorm(12, c(0.9, 0.25), G_true)              # each stand's intercept and slope
 stand_names <- sprintf("S%02d", 1:12)
 drought <- data.frame(stand = factor(rep(stand_names, n_years)),
@@ -153,24 +153,24 @@ fit_rs_lmer <- lmer(width ~ precip10 + (precip10 | stand), data = drought, REML 
 fixef(fit_rs_lmer)
 VarCorr(fit_rs_lmer)
 AIC(fit_ri_lmer, fit_rs_lmer)
-vc_rs <- as.data.frame(VarCorr(fit_rs_lmer))$sdcor        # tau_a, tau_b, rho, sigma
+vc_rs <- as.data.frame(VarCorr(fit_rs_lmer))$sdcor        # sigma_a, sigma_b, rho_ab, sigma_e
 
 fit_rs_lme <- lme(width ~ precip10, random = ~ precip10 | stand, data = drought, method = "ML")
 
 library(glmmTMB)
 fit_rs_tmb <- glmmTMB(width ~ precip10 + (precip10 | stand), data = drought)   # ML by default
 
-# by hand: one MVN block per stand, V_j = Z_j G Z_j^T + sigma^2 I
+# by hand: one MVN block per stand, V_j = Z_j G Z_j^T + sigma_e^2 I
 rows_by_stand <- split(seq_len(nrow(drought)), drought$stand)
 nll_rs <- function(par) {
-  tau <- exp(par[3:4])
-  rho <- tanh(par[5])
-  sigma <- exp(par[6])
-  G <- matrix(c(tau[1]^2, rho * tau[1] * tau[2], rho * tau[1] * tau[2], tau[2]^2), 2)
+  sds <- exp(par[3:4])
+  rho_ab <- tanh(par[5])
+  sigma_e <- exp(par[6])
+  G <- matrix(c(sds[1]^2, rho_ab * sds[1] * sds[2], rho_ab * sds[1] * sds[2], sds[2]^2), 2)
   nll <- 0
   for (rows in rows_by_stand) {
     Zj <- cbind(1, drought$precip10[rows])
-    Vj <- Zj %*% G %*% t(Zj) + sigma^2 * diag(length(rows))
+    Vj <- Zj %*% G %*% t(Zj) + sigma_e^2 * diag(length(rows))
     nll <- nll - dmvnorm(drought$width[rows], as.vector(Zj %*% par[1:2]), Vj, log = TRUE)
   }
   nll
@@ -188,7 +188,7 @@ compare <- rbind(
   glmmTMB = c(fixef(fit_rs_tmb)$cond, tmb_sd,
               attr(VarCorr(fit_rs_tmb)$cond$stand, "correlation")[1, 2],
               sigma(fit_rs_tmb), logLik(fit_rs_tmb)))
-colnames(compare) <- c("mu_a", "mu_b", "tau_a", "tau_b", "rho", "sigma", "logLik")
+colnames(compare) <- c("mu_a", "mu_b", "sigma_a", "sigma_b", "rho_ab", "sigma_e", "logLik")
 round(compare, 4)
 
 # Discussion: the four short-record stands alone
@@ -198,13 +198,13 @@ VarCorr(fit_short)
 
 # Bonus: AR(1) by generalized least squares ----------------------------------------------
 
-# for fixed rho: beta = (X'R^-1 X)^-1 X'R^-1 y, sigma^2 = r'R^-1 r / n; then search over rho alone
+# for fixed phi: beta = (X'R^-1 X)^-1 X'R^-1 y, sigma_e^2 = r'R^-1 r / n; then search over phi alone
 X_a <- cbind(1, chron_a$precip, chron_a$year_c)
 y_a <- chron_a$width
 n_a <- length(y_a)
 
-gls_profile <- function(rho) {
-  R <- rho^lags / (1 - rho^2)
+gls_profile <- function(phi) {
+  R <- phi^lags / (1 - phi^2)
   R_inv <- solve(R)
   beta <- solve(t(X_a) %*% R_inv %*% X_a, t(X_a) %*% R_inv %*% y_a)
   r <- as.vector(y_a - X_a %*% beta)
@@ -212,22 +212,22 @@ gls_profile <- function(rho) {
   list(beta = as.vector(beta), sigma = sqrt(sigma2),
        loglik = dmvnorm(y_a, as.vector(X_a %*% beta), sigma2 * R, log = TRUE))
 }
-rho_gls <- optimize(function(rho) -gls_profile(rho)$loglik, c(-0.95, 0.95))$minimum
-rho_gls
-gls_profile(rho_gls)          # matches optim() and gls(); gls() reports sigma / sqrt(1 - rho^2)
+phi_gls <- optimize(function(phi) -gls_profile(phi)$loglik, c(-0.95, 0.95))$minimum
+phi_gls
+gls_profile(phi_gls)          # matches optim() and gls(); gls() reports sigma_e / sqrt(1 - phi^2)
 
-# profile likelihood and approximate 95% interval for rho
-rho_seq <- seq(-0.5, 0.9, by = 0.005)
-ll_seq <- sapply(rho_seq, function(r) gls_profile(r)$loglik)
-range(rho_seq[ll_seq > max(ll_seq) - 1.92])
-plot(rho_seq, ll_seq, type = "l", lwd = 2, xlab = "rho", ylab = "Profile log-likelihood")
+# profile likelihood and approximate 95% interval for phi
+phi_seq <- seq(-0.5, 0.9, by = 0.005)
+ll_seq <- sapply(phi_seq, function(r) gls_profile(r)$loglik)
+range(phi_seq[ll_seq > max(ll_seq) - 1.92])
+plot(phi_seq, ll_seq, type = "l", lwd = 2, xlab = "phi", ylab = "Profile log-likelihood")
 abline(h = max(ll_seq) - 1.92, lty = 2)
 
 # Bonus: a random intercept and AR(1) together -------------------------------------------
 
 Z_chron <- model.matrix(~ 0 + stand, data = chron)
-V_combined <- function(sigma_b, rho, sigma) {
-  sigma_b^2 * Z_chron %*% t(Z_chron) + kronecker(diag(4), V_ar1(rho, sigma))
+V_combined <- function(sigma_a, phi, sigma_e) {
+  sigma_a^2 * Z_chron %*% t(Z_chron) + kronecker(diag(4), V_ar1(phi, sigma_e))
 }
 nll_combined <- function(par) {
   mu <- par[1] + par[2] * chron$precip
@@ -236,8 +236,8 @@ nll_combined <- function(par) {
 }
 fit_comb <- optim(c(0.4, 0.02, log(0.1), 0, log(0.1)), nll_combined, method = "BFGS",
                   control = list(maxit = 1000))
-c(a = fit_comb$par[1], b = fit_comb$par[2], sigma_b = exp(fit_comb$par[3]),
-  rho = tanh(fit_comb$par[4]), sigma = exp(fit_comb$par[5]))
+c(mu = fit_comb$par[1], beta = fit_comb$par[2], sigma_a = exp(fit_comb$par[3]),
+  phi = tanh(fit_comb$par[4]), sigma_e = exp(fit_comb$par[5]))
 
 fit_lme <- lme(width ~ precip, random = ~ 1 | stand, data = chron,
                correlation = corAR1(form = ~ year | stand), method = "ML")
@@ -247,14 +247,14 @@ c(-fit_comb$value, logLik(fit_lme))       # same maximized log-likelihood
 
 # Bonus: a Poisson GLMM by hand ----------------------------------------------------------
 
-# marginal moments: mu = exp(b0 + b1 x + sigma_b^2 / 2); Var = mu + mu^2 (exp(sigma_b^2) - 1)
-mu_glmm <- exp(1.5 + 0.5^2 / 2)               # vigor 0, beta0 = 1.5, sigma_b = 0.5
+# marginal moments: mu = exp(b0 + b1 x + sigma_a^2 / 2); Var = mu + mu^2 (exp(sigma_a^2) - 1)
+mu_glmm <- exp(1.5 + 0.5^2 / 2)               # vigor 0, beta0 = 1.5, sigma_a = 0.5
 moments <- c(mean = mu_glmm, var = mu_glmm + mu_glmm^2 * (exp(0.5^2) - 1), cov = mu_glmm^2 * (exp(0.5^2) - 1))
 
 set.seed(746)
-b_sim <- rnorm(1e5, 0, 0.5)                  # 100,000 stands, two trees each
-y_tree1 <- rpois(1e5, exp(1.5 + b_sim))
-y_tree2 <- rpois(1e5, exp(1.5 + b_sim))
+a_sim <- rnorm(1e5, 0, 0.5)                  # 100,000 stands, two trees each
+y_tree1 <- rpois(1e5, exp(1.5 + a_sim))
+y_tree2 <- rpois(1e5, exp(1.5 + a_sim))
 rbind(formula = moments, simulation = c(mean(y_tree1), var(y_tree1), cov(y_tree1, y_tree2)))
 moments[3] / moments[2]                  # within-stand correlation
 
@@ -262,17 +262,17 @@ moments[3] / moments[2]                  # within-stand correlation
 set.seed(12)
 cones <- data.frame(stand = factor(rep(stand_names, each = 8)),
                     vigor = round(rnorm(96), 2))
-b_stand <- rnorm(12, 0, 0.5)
-cones$count <- rpois(96, exp(1.5 + 0.4 * cones$vigor + b_stand[as.integer(cones$stand)]))
+a_stand <- rnorm(12, 0, 0.5)
+cones$count <- rpois(96, exp(1.5 + 0.4 * cones$vigor + a_stand[as.integer(cones$stand)]))
 
-# each stand's likelihood integrates over its random intercept b
+# each stand's likelihood integrates over its random intercept a
 nll_glmm <- function(par) {
-  sigma_b <- exp(par[3])
+  sigma_a <- exp(par[3])
   nll <- 0
   for (g in split(cones, cones$stand)) {
-    stand_lik <- function(b) {
-      sapply(b, function(bi) exp(sum(dpois(g$count, exp(par[1] + par[2] * g$vigor + bi), log = TRUE)))) *
-        dnorm(b, 0, sigma_b)
+    stand_lik <- function(a) {
+      sapply(a, function(ai) exp(sum(dpois(g$count, exp(par[1] + par[2] * g$vigor + ai), log = TRUE)))) *
+        dnorm(a, 0, sigma_a)
     }
     nll <- nll - log(integrate(stand_lik, -Inf, Inf)$value)
   }

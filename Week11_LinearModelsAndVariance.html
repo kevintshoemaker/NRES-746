@@ -998,7 +998,7 @@ eigen(V_ok)$values</code></pre>
 <p><span class="math display">\[\mathcal{L}(\theta) = \prod_{i=1}^n f(y_i \mid \theta), \qquad
 \text{NLL} = -\sum_{i=1}^n \log f(y_i \mid \theta)\]</span></p>
 <p>which is why nearly every NLL we've written ends in <code>-sum(d...(..., log = TRUE))</code>. When observations are correlated, the likelihood is a single joint density for the whole vector, and for Normal data that density is the <a href="#linear-algebra">MVN</a> with a non-diagonal <span class="math inline">\(V\)</span>. Modeling the variance means choosing a structure for <span class="math inline">\(V\)</span> with only a few parameters.</p>
-<p>Real data sets are rarely that tidy. The information in one observation can bleed into others, usually &quot;neighboring&quot; ones in some sense: the same block, or nearby in time or space. Wrongly assuming independence (multiplying the likelihoods together) implicitly assumes the data carry more information than they really do. The result is confidence intervals that are too narrow, and possibly wrong inferences.</p>
+<p>Real data sets are rarely that tidy. The information in one observation can bleed into others, usually &quot;neighboring&quot; ones in some sense: the same block, or nearby in time or space. Wrongly assuming independence (multiplying the likelihoods together) implicitly assumes the data carry more information than they really do. The result is confidence intervals that are too narrow, and possibly wrong inferences. The problem is common in practice: a recent review of dependence in conservation data (<a href="https://www.nature.com/articles/s44358-026-00215-4">Yang, Pan, Warton, and Nakagawa 2026</a>, <em>Nature Reviews Biodiversity</em>) cites a survey of high-impact journals in which only 7% of studies accounted for spatial autocorrelation and 32% for temporal autocorrelation. The review is a good companion to this page and the next few weeks.</p>
 <p>These models go by many names: mixed models, hierarchical models, Gaussian process models, and, in specific applications, time-series models or spatial regression. What they share is that the errors are no longer independent and identically distributed (i.i.d.). We can't simply add up log-likelihoods; extra error processes make some or all of the covariances in the observation-level variance-covariance matrix nonzero.</p>
 <p>For the rest of the course, we will consider cases where observations are not independent, such as:</p>
 <ul>
@@ -1022,22 +1022,22 @@ eigen(V_ok)$values</code></pre>
 <div id="random-intercept" class="section level2">
 <h2>3. A random intercept</h2>
 <p>Take each tree's mean ring width over the 25 years: 20 numbers, 5 per stand. Trees in the same stand share soil, slope, and local climate, so they resemble each other. A <strong>random intercept</strong> model says so directly:</p>
-<p><span class="math display">\[y_i = \mu + b_{j(i)} + \varepsilon_i, \qquad
-b_j \sim \text{Normal}(0, \sigma_b^2), \qquad
-\varepsilon_i \sim \text{Normal}(0, \sigma^2)\]</span></p>
-<p>for tree <span class="math inline">\(i\)</span> (<span class="math inline">\(i = 1, \ldots, 20\)</span>), where <span class="math inline">\(j(i)\)</span> is the stand tree <span class="math inline">\(i\)</span> grows in, with all the <span class="math inline">\(b_j\)</span> and <span class="math inline">\(\varepsilon_i\)</span> independent. Instead of estimating four stand intercepts, we treat the four stands as a sample from a population of stands and estimate the spread among them, <span class="math inline">\(\sigma_b\)</span>.</p>
+<p><span class="math display">\[y_i = \mu + a_{j(i)} + \varepsilon_i, \qquad
+a_j \sim \text{Normal}(0, \sigma_a^2), \qquad
+\varepsilon_i \sim \text{Normal}(0, \sigma_e^2)\]</span></p>
+<p>for tree <span class="math inline">\(i\)</span> (<span class="math inline">\(i = 1, \ldots, 20\)</span>), where <span class="math inline">\(j(i)\)</span> is the stand tree <span class="math inline">\(i\)</span> grows in, with all the <span class="math inline">\(a_j\)</span> and <span class="math inline">\(\varepsilon_i\)</span> independent. Instead of estimating four stand intercepts, we treat the four stands as a sample from a population of stands and estimate the spread among them, <span class="math inline">\(\sigma_a\)</span>.</p>
 <p>Using <span class="math inline">\(\text{Var}(X + Y) = \text{Var}(X) + \text{Var}(Y) + 2\,\text{Cov}(X, Y)\)</span>:</p>
 <ul>
-<li><span class="math inline">\(\text{Var}(y_i) = \sigma_b^2 + \sigma^2\)</span></li>
-<li>two trees in the same stand (<span class="math inline">\(j(i) = j(k)\)</span>) share a <span class="math inline">\(b\)</span>: <span class="math inline">\(\text{Cov}(y_i, y_k) = \sigma_b^2\)</span></li>
+<li><span class="math inline">\(\text{Var}(y_i) = \sigma_a^2 + \sigma_e^2\)</span></li>
+<li>two trees in the same stand (<span class="math inline">\(j(i) = j(k)\)</span>) share an <span class="math inline">\(a\)</span>: <span class="math inline">\(\text{Cov}(y_i, y_k) = \sigma_a^2\)</span></li>
 <li>trees in different stands share nothing: covariance 0</li>
 </ul>
-<p>So <span class="math inline">\(V\)</span> is <strong>block diagonal</strong>: one 5 <span class="math inline">\(\times\)</span> 5 block per stand, with <span class="math inline">\(\sigma_b^2 + \sigma^2\)</span> on the diagonal and <span class="math inline">\(\sigma_b^2\)</span> elsewhere in the block. The correlation between two trees in the same stand, <span class="math inline">\(\sigma_b^2/(\sigma_b^2 + \sigma^2)\)</span>, is the <strong>intraclass correlation</strong>.</p>
-<p>In matrix form, <span class="math inline">\(V = \sigma_b^2 ZZ^T + \sigma^2 I\)</span>, where <span class="math inline">\(Z\)</span> is the 20 <span class="math inline">\(\times\)</span> 4 matrix of stand indicators (the model matrix for <code>~ 0 + stand</code>). <span class="math inline">\(ZZ^T\)</span> has a 1 wherever two trees share a stand.</p>
+<p>So <span class="math inline">\(V\)</span> is <strong>block diagonal</strong>: one 5 <span class="math inline">\(\times\)</span> 5 block per stand, with <span class="math inline">\(\sigma_a^2 + \sigma_e^2\)</span> on the diagonal and <span class="math inline">\(\sigma_a^2\)</span> elsewhere in the block. The correlation between two trees in the same stand, <span class="math inline">\(\sigma_a^2/(\sigma_a^2 + \sigma_e^2)\)</span>, is the <strong>intraclass correlation</strong>.</p>
+<p>In matrix form, <span class="math inline">\(V = \sigma_a^2 ZZ^T + \sigma_e^2 I\)</span>, where <span class="math inline">\(Z\)</span> is the 20 <span class="math inline">\(\times\)</span> 4 matrix of stand indicators (the model matrix for <code>~ 0 + stand</code>). <span class="math inline">\(ZZ^T\)</span> has a 1 wherever two trees share a stand.</p>
 <pre class="r"><code>y_tree &lt;- tree_means$width
 Z &lt;- model.matrix(~ 0 + stand, data = tree_means)
 ZZt &lt;- Z %*% t(Z)
-V_ri &lt;- function(sigma_b, sigma) sigma_b^2 * ZZt + sigma^2 * diag(20)
+V_ri &lt;- function(sigma_a, sigma_e) sigma_a^2 * ZZt + sigma_e^2 * diag(20)
 V_ri(0.12, 0.1)[1:7, 1:7]     # first stand&#39;s block, and the start of the next</code></pre>
 <pre><code>##        1      2      3      4      5      6      7
 ## 1 0.0244 0.0144 0.0144 0.0144 0.0144 0.0000 0.0000
@@ -1054,8 +1054,8 @@ V_ri(0.12, 0.1)[1:7, 1:7]     # first stand&#39;s block, and the start of the ne
   -dmvnorm(y_tree, rep(par[1], 20), V, log = TRUE)
 }
 fit_ri &lt;- optim(c(mean(y_tree), log(0.1), log(0.1)), nll_ri, method = &quot;BFGS&quot;)
-c(mu = fit_ri$par[1], sigma_b = exp(fit_ri$par[2]), sigma = exp(fit_ri$par[3]))</code></pre>
-<pre><code>##        mu   sigma_b     sigma 
+c(mu = fit_ri$par[1], sigma_a = exp(fit_ri$par[2]), sigma_e = exp(fit_ri$par[3]))</code></pre>
+<pre><code>##        mu   sigma_a   sigma_e 
 ## 1.0312400 0.1419086 0.0847458</code></pre>
 <pre class="r"><code>library(lme4)
 fit_lmer &lt;- lmer(width ~ 1 + (1 | stand), data = tree_means, REML = FALSE)
@@ -1069,7 +1069,7 @@ fixef(fit_lmer)</code></pre>
 <p><code>lmer()</code> agrees. (By default it uses REML, a variant of maximum likelihood that corrects the downward bias in variance estimates; <code>REML = FALSE</code> gives the plain MLE.) The reference handout <a href="lecture_notes/NOTES_Reference_MixedModelSyntax.pdf"><em>Mixed models in R: nlme, lme4, and glmmTMB</em></a> shows this model and others in all three packages.</p>
 <p>The estimated intraclass correlation is 0.74: two trees from the same stand are more alike than two trees from different stands.</p>
 <blockquote>
-<p><strong>Question:</strong> The variance among stands is estimated from only four stands. How much would you trust <span class="math inline">\(\hat\sigma_b =\)</span> 0.14?</p>
+<p><strong>Question:</strong> The variance among stands is estimated from only four stands. How much would you trust <span class="math inline">\(\hat\sigma_a =\)</span> 0.14?</p>
 </blockquote>
 </div>
 <div id="ar1" class="section level2">
@@ -1078,9 +1078,9 @@ fixef(fit_lmer)</code></pre>
 </div>
 <div id="integrating" class="section level2">
 <h2>Bonus: integrating out a random effect</h2>
-<p>Where did <span class="math inline">\(V = \sigma_b^2ZZ^T + \sigma^2I\)</span> come from? The likelihood of a random-effects model averages over the values the random effects could have taken. For one stand,</p>
-<p><span class="math display">\[\mathcal{L}_j = \int \prod_{i:\, j(i) = j} f(y_i \mid \mu + b)\, g(b \mid \sigma_b)\, db\]</span></p>
-<p>the probability of the stand's data given <span class="math inline">\(b\)</span>, weighted by how likely each <span class="math inline">\(b\)</span> is. When both <span class="math inline">\(f\)</span> and <span class="math inline">\(g\)</span> are Normal this integral has a closed form, and the result is the MVN with block covariance (Bolker 10.5.1). For a Poisson or binomial response it doesn't, so software approximates the integral (the Laplace approximation in <code>glmer()</code> and <code>glmmTMB()</code>, or numerical quadrature), or a Bayesian sampler draws the <span class="math inline">\(b_j\)</span> along with the other parameters and skips the integral.</p>
+<p>Where did <span class="math inline">\(V = \sigma_a^2ZZ^T + \sigma_e^2I\)</span> come from? The likelihood of a random-effects model averages over the values the random effects could have taken. For one stand,</p>
+<p><span class="math display">\[\mathcal{L}_j = \int \prod_{i:\, j(i) = j} f(y_i \mid \mu + a)\, g(a \mid \sigma_a)\, da\]</span></p>
+<p>the probability of the stand's data given <span class="math inline">\(a\)</span>, weighted by how likely each <span class="math inline">\(a\)</span> is. When both <span class="math inline">\(f\)</span> and <span class="math inline">\(g\)</span> are Normal this integral has a closed form, and the result is the MVN with block covariance (Bolker 10.5.1). For a Poisson or binomial response it doesn't, so software approximates the integral (the Laplace approximation in <code>glmer()</code> and <code>glmmTMB()</code>, or numerical quadrature), or a Bayesian sampler draws the <span class="math inline">\(a_j\)</span> along with the other parameters and skips the integral.</p>
 </div>
 </div>
 
