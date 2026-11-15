@@ -66,14 +66,17 @@ plot_bd <- function(...) {
 R code from this page is also in the
 [companion script](lecture_notes/CODE_Week13_HierarchicalModelsAndGAMs.R).
 Packages: `mvtnorm`, `lme4`, `cmdstanr`, `posterior`, `brms`, `splines`
-(comes with R), `mgcv`.
+(comes with R), `mgcv`. The reference handout
+[*Bayesian mixed models in R: brms and rstanarm*](lecture_notes/NOTES_Reference_BayesianMixedModelSyntax.pdf)
+gives the syntax for random effects, priors, residual correlation, and
+GLMMs in both packages.
 
 # Bayesian hierarchical models {#bayesian-hierarchical}
 
 Last week we fit mixed models by maximum likelihood; this week we go
 Bayesian! This part defines what makes a model 'hierarchical', works
 through partial pooling (a major advantage of hierarchical models), and
-then fits the drought random slope model by MCMC using `brms` (with a bonus section in stan).
+then fits the drought random slope model by MCMC using `brms` (with a bonus section in Stan).
 
 ## 1. What makes a model hierarchical? {#what-hierarchical}
 
@@ -109,7 +112,7 @@ hold: the occupancy and state-space models above are hierarchical, but
 nobody calls them 'mixed models'. 
 
 The stand intercepts and slopes in the 
-data layer have identical function as a fixed intercept and slope, but they
+data layer have the same function as a fixed intercept and slope, but they
 are treated as random draws from a population of stands. This is in contrast
 to the fixed effects, which are treated as
 separate and independently estimated unknown constants.
@@ -158,7 +161,8 @@ two give the same likelihood and the same estimates of the shared
 parameters.
 
 So is the marginal form hierarchical? If it came from integrating out a
-layer, it is still hierarchical since it is the same model, written a different way.^[One nuance is that if the likelihood is specified directly as a
+layer, it is still hierarchical since it is the same model, written a different way. 
+^[One nuance is that if the likelihood is specified directly as a
 multivariate Normal with pre-specified correlations in the variance-covariance
 matrix (e.g., correlation within stands in the random intercept framework),
 and fitted directly using a function like `gls()`, there
@@ -179,9 +183,9 @@ integrate the likelihood across all possible alive/dead states an animal could
 have had, resulting in a single likelihood function (often a multinomial distribution).]
 
 In practice the layered form is usually worth writing down anyway:
-it says where the extra variation and correlation come from (stands
-really differ), and it is the only form that gives an estimate for each
-stand, which is what partial pooling needs.
+it says where the extra variation and correlation come from (e.g., differences among 
+stands), and it is the only form that gives an estimate for each
+stand (resulting in shrinkage/partial-pooling).
 
 
 ## 2. WOD: partial pooling by hand {#wod-pooling}
@@ -205,8 +209,8 @@ w_j = \frac{\sigma_a^2}{\sigma_a^2 + \sigma_e^2/n_j},$$
 
 where $\hat\mu$ is the overall mean, $\sigma_a$ the SD among groups,
 and $\sigma_e$ the SD within a group. The weight $w_j$ compares the
-spread among groups with the sampling variance of the group's own mean.
-(The [bonus derivation](#pooling-formula) shows where this comes from.)
+spread among groups with the sampling variance of the group's own mean
+(see the [bonus derivation](#pooling-formula)).
 The WOD applies it to the *Batrachochytrium dendrobatidis* (Bd)
 infection load in two ponds. Across many ponds the mean load is
 $\hat\mu =$ `r wod_mu` (log$_{10}$ zoospore equivalents per swab), ponds
@@ -235,38 +239,39 @@ text(wod_mu, 2.45, "overall mean", pos = 4, cex = 0.8, col = "grey40")
 ```
 
 Pond A has the higher raw mean, but after pooling pond B has the higher
-estimate. Four frogs give a noisy pond mean (sampling variance
+estimate! Four frogs give a noisy pond mean (sampling variance
 `r 1 / wod_n["A"]`, as large as the among-pond variance
 `r wod_sb^2`), so half of pond A's distance from the overall mean is
-treated as noise. Sixteen frogs earn pond B most of its own mean.
+treated as noise. With a much larger sample size (n = 16) pond B gets to keep 
+most of its own mean (it 'earned' this via its large sample size!).
 
-Two limits are worth checking. As $n_j$ grows, $w_j \to 1$ and the group
+As $n_j$ grows, $w_j \to 1$ and the group
 keeps its own mean (no pooling). As $\sigma_a \to 0$, $w_j \to 0$ and
 every group gets the overall mean (complete pooling).
 
 Pulling each group's estimate toward the overall mean like this is
 called **shrinkage**: the distance $\bar y_j - \mu$ shrinks by the
-factor $w_j$. Groups with little data shrink the most, because their
-own means are the noisiest. Extreme group means are partly luck, so
-shrinking them makes the estimates less variable and, averaged over
-groups, more accurate, at the cost of a little bias toward the mean.
-It's the same idea as the
+factor $w_j$. Groups with low sample size shrink the most. 
+Extreme group means are partly luck, so
+shrinking them makes the estimates less variable -- and generally more accurate 
+when averaged over groups -- at the cost of a little bias toward the global mean.
+This is actually the same idea as the
 [ridge and lasso penalties](Week10_ModelComparison.html#regularization),
-which shrink coefficients toward zero. The difference is where the
-amount of shrinkage comes from: ridge regression chooses its penalty
-$\lambda$ (often by cross-validation), while a random intercept model
-estimates $\sigma_a$ from the data, and $\sigma_a$ sets every $w_j$
-(see the [ridge bonus](#ridge-prior)).
+which also 'shrink' coefficients toward zero. The difference is where the
+shrinkage comes from: ridge regression chooses its penalty
+$\lambda$ (often by a separate cross-validation step), while a random intercept model
+estimates $\sigma_a$ from the data at the same time as the other parameters are 
+estimated (and $\sigma_a$ sets every $w_j$: see the [ridge bonus](#ridge-prior)).
 
 ## 3. Partial pooling {#partial-pooling}
 
-To see partial pooling across many groups, we return to the simulated
+To see partial pooling across many groups, let's go back to the simulated
 drought-sensitivity data from
 [random slopes](Week12_MixedModels.html#random-slopes): ring widths at
 12 pinyon stands whose records run from 5 to 30 years. Precipitation is
 in 10-cm units centered at 20 cm, so a stand's intercept is its ring
 width in a 20-cm winter and its slope is the change in width per extra
-10 cm.
+10 cm precipitation.
 
 ```{r drought-data}
 library(mvtnorm)
@@ -311,19 +316,19 @@ text(nopool, labels = stand_names, pos = 4, cex = 0.7, col = "grey40")
 ```
 
 Left: one least-squares line per stand. Right: each stand's own
-intercept and slope, the "no pooling" estimates.
+intercept and slope (the "no pooling" estimates).
 
 There are three ways to estimate each stand's mean ring width:
 
 - **complete pooling:** ignore stands; every stand gets the overall mean;
 - **no pooling:** estimate each stand separately (stand as a fixed
   factor);
-- **partial pooling:** the random effect, a compromise between the two.
+- **partial pooling:** the random effect, a compromise between the two!
 
-With partial pooling, each stand's mean ring width gets a prior that
-is built from all the other stands: it is centered on the overall mean,
+With partial pooling, each stand's mean ring width gets a prior built from 
+all the other stands: it's centered on the overall mean,
 and its SD ($\sigma_a$) reflects how much stands differ from one
-another. The random slope model below does the same for each stand's
+another. The random slope model does the same thing for each stand's
 slope.
 
 Ignoring precipitation for the moment, here is the random intercept
@@ -349,7 +354,7 @@ widget("partial_pooling.html")
 ```
 
 > **Question:** Set $\sigma_a$ to 0, then drag it to 0.4. Which two
-> pooling choices are these? Then compare S10 and S12: their own means
+> pooling choices are these? Then compare S10 and S12: their means
 > are similar (`r f2(ybar["S10"])` and `r f2(ybar["S12"])`), but one has
 > 8 years and the other 5. Which moves more toward the overall mean, and
 > why?
@@ -368,13 +373,16 @@ and slopes and $\rho_{ab}$ is their correlation. The `lmer()` fit in
 [partial pooling](#partial-pooling) estimated these by maximum
 likelihood (`ml`), integrating the stand effects out of the likelihood.
 
-A Bayesian fit usually keeps the stand effects in the model explicitly. It puts priors on
+As discussed above, a Bayesian fit usually keeps the stand effects in the
+model explicitly. We put priors on
 the population-level parameters ($\mu_a$, $\mu_b$, $\sigma_a$, $\sigma_b$,
 $\rho_{ab}$, $\sigma_e$), and the sampler draws each stand's random intercept and
-slope along with everything else. In Bayesian/MCMC fitting, the hierarchical nature 
-of these models is fully front and center- that is why 'Bayesian' and 
-'hierarchical' are nearly synonymous in some circles! This also makes hierarchical models much
-easier to fit, which is one reason Bayesian methods are so widely used
+slope along with everything else. In Bayesian/MCMC fitting, the hierarchical nature
+of these models is fully front and center (in a way, Bayesian models are more 'hierarchical'
+than frequentist versions of the same model because the hierarchy is made explicit!).
+That is why 'Bayesian' and 'hierarchical' are nearly synonymous in some circles!
+This also makes hierarchical models much easier to fit from scratch (both conceptually and practically), 
+which is one reason Bayesian methods are so widely used
 in ecology and environmental science. Compared with maximum likelihood:
 
 - **No integral.** The sampler draws the $a_j$ and $b_j$ instead of
@@ -390,7 +398,7 @@ in ecology and environmental science. Compared with maximum likelihood:
   SD off the boundary at 0 and a correlation off $\pm 1$, where
   maximum likelihood 'gave up' with four stands (see
   [Q3 here](Week12_MixedModels.html#variance-discussion)).
-- **The price** is choosing priors and checking the sampler (see
+- **The price** (as with all Bayesian models) is choosing priors and checking the sampler (see
   [checking chains](Week9_MCMC.html#chain-checks)).
 
 ## 5. Priors for a covariance matrix {#lkj}
@@ -442,7 +450,10 @@ for their correlations, and `sigma` for the residual SD. A `coef` or
 `group` argument narrows a prior to one parameter or one grouping
 factor. `brms` already bounds SDs at zero, so `normal(0, 0.3)` on class
 `sd` is a half-Normal. `get_prior(formula, data)` lists every
-parameter that can take a prior, with its default.
+parameter that can take a prior, with its default. The
+[brms and rstanarm handout](lecture_notes/NOTES_Reference_BayesianMixedModelSyntax.pdf)
+has the syntax for other random-effect structures, residual
+correlation, and non-Normal responses.
 
 The order of the `prior()` calls does not matter. `brms` matches each
 one to parameters by its `class`, `coef`, and `group`, not by its
@@ -562,8 +573,8 @@ average error in the slopes is `r f3(err_nopool_short[2])` mm per 10 cm
 with no pooling and `r f3(err_post_short[2])` with partial pooling
 (intercepts: `r f3(err_nopool_short[1])` and `r f3(err_post_short[1])`
 mm). That's a mixed result: in any one data set, shrinkage can pull a
-stand that really is unusual too far toward the mean. Its advantage is
-on average. Over `r nrow(shrink_sims)` simulated data sets with the same
+stand that really is unusual too far toward the mean. The advantage is
+that we will do better on average! Over `r nrow(shrink_sims)` simulated data sets with the same
 design, using `lmer()`'s stand estimates, partial pooling cut the
 average slope error for the short-record stands from
 `r f3(mean(shrink_sims[, "np_b"]))` to `r f3(mean(shrink_sims[, "pp_b"]))`
@@ -727,12 +738,14 @@ a spline works the same way.
 
 # Splines, GAMs, and Gaussian processes {#gams}
 
-When no function from the bestiary has the right shape, we can build
+When no function from the 'bestiary' has the right shape, we can build
 one out of simple pieces. A spline is a weighted sum of basis
-functions, so fitting it is a linear model; a penalty on wiggliness
-keeps it from chasing noise, and that penalty is a prior, which makes
-the smooth a kind of random effect. A Gaussian process skips the basis
-functions and puts a multivariate Normal directly on the curve, using a
+functions (a set of 'variables' strategically derived from one or more predictor variables), 
+so fitting it is a linear model ($\mathbf{y} = X\boldsymbol{\beta} + \boldsymbol{\varepsilon}$); a penalty on 'wiggliness'
+tries to prevent it from fitting noise.^[The penalty is a prior! This makes
+the fitted spline a kind of random effect.] A Gaussian process skips the basis
+functions and puts a multivariate Normal directly on the curve, using a correlation 
+function (e.g., correlation decays with distance) to build a 
 covariance matrix like the ones built for
 [autocorrelation](Week12_MixedModels.html#ar1).
 
@@ -744,7 +757,7 @@ draw_workflow("MODELS")
 
 The chytrid fungus Bd grows fastest at moderate temperatures and dies
 when it gets too warm, which is one reason warm ponds have less
-infection. A management question: **above what water temperature does
+infection. Managers might want to know: **above what water temperature does
 Bd stop growing?** To find out, we grow 48 Bd cultures on a thermal
 gradient plate (a block heated at one end and cooled at the other), so
 each culture sits at a slightly different temperature, and estimate each
@@ -798,7 +811,22 @@ The basis functions are chosen in advance, so the only unknowns are the
 weights, and $f$ is linear in them. That makes the spline a linear
 model: each basis function becomes one column of the
 [model matrix](Week11_LinearModelsAndVariance.html#linear-algebra), and
-`lm()` estimates the weights.
+`lm()` estimates the weights. At the $n$ observed values $x_1, \dots, x_n$,
+
+$$\begin{pmatrix} f(x_1) \\ f(x_2) \\ \vdots \\ f(x_n) \end{pmatrix}
+= \begin{pmatrix}
+B_1(x_1) & B_2(x_1) & \cdots & B_K(x_1) \\
+B_1(x_2) & B_2(x_2) & \cdots & B_K(x_2) \\
+\vdots & \vdots & & \vdots \\
+B_1(x_n) & B_2(x_n) & \cdots & B_K(x_n)
+\end{pmatrix}
+\begin{pmatrix} \beta_1 \\ \beta_2 \\ \vdots \\ \beta_K \end{pmatrix},
+\qquad \text{or} \qquad \mathbf{f} = X\boldsymbol{\beta}$$
+
+Row $i$ of $X$ holds every basis function evaluated at $x_i$, and
+column $k$ holds one basis function evaluated at every $x_i$. With
+Normal errors, $y = X\boldsymbol\beta + \varepsilon$, the same form as
+any linear regression.
 
 The most common basis is the **B-spline**. Each cubic B-spline is a
 small bump built from cubic pieces that join smoothly at points called
@@ -832,9 +860,7 @@ legend("topleft", c("6 basis functions", "25 basis functions"), lwd = c(2.5, 1.5
 
 The six-function fit (left: its basis functions, with dotted lines at
 the knots) has the right shape. With 25 basis functions, the curve
-starts chasing individual cultures, the same problem as the
-[connect-the-dots curve](Week10_ModelComparison.html#wod) that passes
-through every point.
+starts chasing individual cultures (fitting the noise).
 
 Other bases work the same way. The widget builds $f(x)$ from four kinds
 of basis functions and random weights. Polynomials ($1, x, x^2, \dots$)
@@ -859,7 +885,7 @@ widget("spline_basis.html")
 ## 3. Penalizing wiggliness {#penalty}
 
 Choosing the number of knots by hand is awkward: too few and the curve
-can't bend where it needs to, too many and it chases noise. The usual
+can't bend where it needs to, too many and it overfits. The usual
 fix is to use plenty of basis functions and add a **penalty** to the
 NLL that grows with how wiggly the curve is:
 

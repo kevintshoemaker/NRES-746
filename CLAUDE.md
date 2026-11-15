@@ -771,6 +771,17 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   lab. Thanksgiving: no class Wed., Nov. 25 (CSV updated), so spatial
   gets Nov. 23 + Lab 10; the GP section spills there if not reached.
   `Syllabus.docx` was not updated for Nov. 25.
+  - **Bayesian syntax handout (Nov. 15):**
+    `lecture_notes/NOTES_Reference_BayesianMixedModelSyntax.pdf`, the
+    brms/rstanarm companion to the nlme/lme4/glmmTMB handout (same
+    section layout plus a priors section). Every syntax pair was run on
+    simulated data (brms 2.22, rstanarm 2.32). Found while testing: brms
+    `ar()` reports the innovation SD as `sigma` (with `cov = TRUE` too)
+    and treats observed times as consecutive (fill gaps with NA rows and
+    `y | mi()`); rstanarm silently ignores `re_formula`; rstanarm's
+    `decov()` scales random-effect SDs by $\sigma_e$ in Normal models.
+    Linked from the Week 12 and 13 pages, the Week 13 script, and the
+    schedule.
   - **Possible bonus section (not built):** "multivariate" non-normal data (a
     student asked about multivariate Poisson/gamma after the MVN). No
     general multivariate gamma/Poisson exists (the MVN is unusual in

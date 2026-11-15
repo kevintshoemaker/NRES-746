@@ -1,5 +1,6 @@
 #  NRES 746, Week 13: Bayesian hierarchical models; splines, GAMs, and Gaussian processes =====
 #  Sections match the Week 13 web page. Needs mvtnorm, lme4, cmdstanr, posterior, brms, splines, mgcv.
+#  brms/rstanarm syntax: lecture_notes/NOTES_Reference_BayesianMixedModelSyntax.pdf
 
 # BAYESIAN HIERARCHICAL MODELS ===========================================================
 
