@@ -8,11 +8,11 @@ rm(list = ls())
 library(mvtnorm)
 library(lme4)
 
-# 2. WOD: partial pooling by hand ---------------------------------------------------------
+# 2. Partial pooling by hand --------------------------------------------------------------
 
-# a_j = mu + w_j (ybar_j - mu), w_j = sb^2 / (sb^2 + s^2 / n_j)
-w_wod <- 0.5^2 / (0.5^2 + 1^2 / c(A = 4, B = 16))
-3 + w_wod * (c(A = 4.2, B = 4.0) - 3)
+# theta_j = mu + w_j (ybar_j - mu), w_j = sigma_a^2 / (sigma_a^2 + sigma_e^2 / n_j)
+w_pond <- 0.5^2 / (0.5^2 + 1^2 / c(A = 4, B = 16))
+3 + w_pond * (c(A = 4.2, B = 4.0) - 3)
 
 # 3. Partial pooling ---------------------------------------------------------------------
 

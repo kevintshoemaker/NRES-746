@@ -743,7 +743,8 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
 - **Week 13 (Nov. 16-18), built Nov. 10, not yet taught:** page
   `Week13_HierarchicalModelsAndGAMs.Rmd`. H1 `#bayesian-hierarchical`
   (Monday; moved from Week 12, drought data re-simulated on the page,
-  numbers unchanged; new section 1 `#wod-pooling` works the WOD; ridge
+  numbers unchanged; section 2 `#pooling-by-hand` works the two-pond
+  example as lecture; ridge
   bonus kept as the bridge to Wednesday) and H1 `#gams` (Wednesday:
   Bd thermal performance curve `#thermal`, splines as linear models
   `#basis`, wiggliness penalty = prior, REML, `gam()` `#penalty`,
@@ -762,12 +763,15 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   edf 6.7/8.1/9.1 for K = 10/20/40), `gp_draws.html` (SE / Matérn 3/2
   / exponential kernels, prior draws, click to condition). Script
   `CODE_Week13_HierarchicalModelsAndGAMs.R` (checked end to end), guide
-  `NOTES_Week13_WebPageGuide.Rmd`. WODs: in-class *Partial Pooling by
-  Hand* (Bd loads in two ponds; ranking flips, 3.6 vs. 3.8) and
-  take-home *Spline by Hand* (due Mon., Nov. 23; reservoir chlorophyll,
+  `NOTES_Week13_WebPageGuide.Rmd`. WODs: the in-class *Partial Pooling
+  by Hand* (Bd loads in two ponds; ranking flips, 3.6 vs. 3.8) was
+  dropped Nov. 15 for time, never handed out; it and its key are in
+  `wod/archive/` and `wod/answer_keys/archive/`, and its example is
+  page section 2, worked as lecture. Take-home *Spline by Hand* (due
+  Mon., Nov. 23; reservoir chlorophyll,
   `data/ReservoirChlorophyll.csv`, 44 weeks, seed 52; penalized NLL by
   hand with `bs(df = 20, intercept = TRUE)`, lambda 0/10/1000, vs.
-  `gam(bs = "ps")`), both with keys. Tuesday = project check-ins, no
+  `gam(bs = "ps")`), with key. Tuesday = project check-ins, no
   lab. Thanksgiving: no class Wed., Nov. 25 (CSV updated), so spatial
   gets Nov. 23 + Lab 10; the GP section spills there if not reached.
   `Syllabus.docx` was not updated for Nov. 25.
