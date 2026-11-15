@@ -202,11 +202,11 @@ AIC(m_trees, m_collider)
 # 8 survey routes: change in log abundance ~ Normal(mu, sigma = 0.15); mu = regional trend
 route_y <- c(0.12, -0.05, 0.20, 0.08, -0.10, 0.15, 0.02, 0.10)
 sigma <- 0.15
-tau <- 0.05                       # prior: mu ~ Normal(0, tau)
-lambda <- 1 / (2 * tau^2)         # ridge penalty that matches it
+sigma_beta <- 0.05                # prior: mu ~ Normal(0, sigma_beta)
+lambda <- 1 / (2 * sigma_beta^2)  # ridge penalty that matches it
 nll_mu <- function(mu) sapply(mu, function(m) sum((route_y - m)^2) / (2 * sigma^2))
 pnll_mu <- function(mu) nll_mu(mu) + lambda * mu^2                       # ridge
-neg_log_post <- function(mu) nll_mu(mu) - dnorm(mu, 0, tau, log = TRUE)  # Bayes
+neg_log_post <- function(mu) nll_mu(mu) - dnorm(mu, 0, sigma_beta, log = TRUE)  # Bayes
 c(MLE = mean(route_y),
   ridge = optimize(pnll_mu, c(-1, 1))$minimum,
   posterior_mode = optimize(neg_log_post, c(-1, 1))$minimum)
@@ -224,11 +224,11 @@ legend("top", c("NLL (data)", "penalty = -log prior", "ridge PNLL", "-log poster
        bty = "n", cex = 0.8)
 
 # right: prior x likelihood -> posterior, as densities; posterior mean = ridge estimate
-post_prec <- length(route_y) / sigma^2 + 1 / tau^2                     # precisions add
+post_prec <- length(route_y) / sigma^2 + 1 / sigma_beta^2              # precisions add
 post_mean <- (sum(route_y) / sigma^2) / post_prec
 plot(mu, dnorm(mu, post_mean, 1 / sqrt(post_prec)), type = "l", lwd = 4,
      xlab = "Regional trend", ylab = "Density", main = "Bayes view")
-lines(mu, dnorm(mu, 0, tau), lwd = 2, lty = 2)
+lines(mu, dnorm(mu, 0, sigma_beta), lwd = 2, lty = 2)
 lines(mu, dnorm(mu, mean(route_y), sigma / sqrt(length(route_y))), lwd = 2, col = "grey60")
 legend("topright", c("likelihood (data)", "prior", "posterior"), col = c("grey60", 1, 1),
        lwd = c(2, 2, 4), lty = c(1, 2, 1), bty = "n", cex = 0.8)

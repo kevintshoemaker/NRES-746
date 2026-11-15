@@ -266,6 +266,12 @@ Root-level `Week<N>_<Topic>.Rmd` (model:
   pages are named by week ("this week", "last week", "the Week 12
   page", corrected by the instructor Nov. 12). Explain course
   jargon on first use (e.g. what a WOD is).
+- **Footnotes** (Nov. 15): use them liberally so the main text stays a
+  coherent line the instructor can lecture from. Asides, caveats,
+  citations, package details, historical notes, and fine-print nuances
+  go in pandoc inline footnotes (`^[...]`), written rigorously enough
+  to stand on their own; the main text keeps only what the argument
+  needs. Model: the Week 13 page (`#what-hierarchical`, `#brms`, `#gam`).
 - **Prompts:** `> **Question:**` blockquotes and a `## Discussion`
   section, with no answers on the page (answers go in the instructor
   notes). No timings or instructor-only text; there is no instructor
@@ -437,7 +443,8 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
   for an SD (it often means a precision): prior SDs are $\sigma_\beta$
   (ridge), $\sigma_d$ (spline differences). Spatial range and GP
   length-scale are $\ell$. Handed-out Week 11-12 WODs keep the old
-  notation; Week 10's ridge-as-prior still uses $\tau$.
+  notation. Week 10's ridge-as-prior uses $\sigma_\beta$ (Nov. 15) but
+  keeps plain $\sigma$ for the residual SD.
 
 # Labs: two Acts
 

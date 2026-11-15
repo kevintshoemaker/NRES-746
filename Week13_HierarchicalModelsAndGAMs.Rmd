@@ -71,17 +71,18 @@ Packages: `mvtnorm`, `lme4`, `cmdstanr`, `posterior`, `brms`, `splines`
 # Bayesian hierarchical models {#bayesian-hierarchical}
 
 Last week we fit mixed models by maximum likelihood; this week we go
-Bayesian. This part defines what makes a model hierarchical, works
-through partial pooling (the main payoff of a hierarchical model), and
-then fits the drought random slope model by MCMC, first in Stan and
-then in one line of `brms`.
+Bayesian! This part defines what makes a model 'hierarchical', works
+through partial pooling (a major advantage of hierarchical models), and
+then fits the drought random slope model by MCMC using `brms` (with a bonus section in stan).
 
 ## 1. What makes a model hierarchical? {#what-hierarchical}
 
-A **hierarchical model** is written in layers. The data are described
+A **hierarchical model** is composed of two or more layers. The data are described
 conditional on some unobserved quantities, and those quantities are in
 turn drawn from a probability distribution whose parameters are
-estimated from the data. For the drought data used below (the
+estimated from the data. 
+
+For the drought data used below (the
 [random slope](Week12_MixedModels.html#random-slopes) example):
 
 - **data layer:** each ring width is Normal around its own stand's regression line,
@@ -91,7 +92,7 @@ estimated from the data. For the drought data used below (the
 - **parameters:** $\mu_a$, $\mu_b$, $G$, and $\sigma_e$ are estimated (and
   in a Bayesian model, each gets a prior).
 
-Groups are only one kind of unobserved layer. In a spatial model it is
+Categories/groups are only one kind of unobserved layer. In a spatial model it is
 a surface over the landscape, with nearby sites more alike than distant
 ones (a Gaussian process like the one in [Gaussian processes](#gp), with
 distance in place of temperature). In capture-recapture and occupancy
@@ -102,13 +103,20 @@ occupied or not), with one process describing how the state changes
 something we never observe directly, plus a model for that unobserved
 thing.
 
-Every model with random effects is hierarchical ("multilevel" and
-"mixed" model mean the same thing). The stand intercepts and slopes do
-the same job in the data layer as a fixed intercept and slope, but they
-are treated as random draws from a population of stands rather than as
-separate unknown constants.
+Every model with random effects is hierarchical; "mixed model" and
+"multilevel model" are other names for this kind. The reverse doesn't
+hold: the occupancy and state-space models above are hierarchical, but
+nobody calls them 'mixed models'. 
 
-A prior on its own doesn't make a model hierarchical. Compare two
+The stand intercepts and slopes in the 
+data layer have identical function as a fixed intercept and slope, but they
+are treated as random draws from a population of stands. This is in contrast
+to the fixed effects, which are treated as
+separate and independently estimated unknown constants.
+
+One clarification: the above definition might make it seem like every 
+Bayesian model should be hierarchical - after all, a prior is like a second 'layer'.
+However, a prior doesn't by itself make a model hierarchical. Compare two
 Bayesian models for the drought slopes (leaving the intercepts aside).
 Both give each stand its own slope $b_j$ in the data layer; they differ
 in where the prior on $b_j$ comes from.
@@ -131,17 +139,15 @@ in where the prior on $b_j$ comes from.
   slope. This is the idea of [partial pooling](#partial-pooling) of information.
 
 The data layer is the same in both models. The difference is who sets
-the prior's SD. In the first model we choose it (a large SD for a vague
-prior, a smaller one for a weakly informative prior). In the second,
-the data estimate it, and that estimate decides how strongly each stand
-is pulled toward the others.
+the prior's SD -- either we choose it (no partial pooling) or we let the data 
+determine how strongly each stand is pulled toward the others (partial pooling).
 
-One misconception that I had for a long time is that a hierarchical model had more than 
-one probability distribution contributing to the likelihood. This isn't actually 
-true: integrating out a layer can
-collapse the hierarchy into one distribution. For example, a Normal random
-intercept plus Normal noise gives a single multivariate Normal for all
-the observations (the
+One misconception that I had for a long time is that a 'hierarchical model'
+necessarily has more than one probability distribution contributing to the 
+likelihood. This isn't actually true: integrating out a layer can
+collapse the hierarchy into a single distribution (often but not always a multivariate Normal). 
+For example, a Normal random intercept plus Normal noise gives a single 
+multivariate Normal for all the observations (the
 [block-diagonal $V$](Week11_LinearModelsAndVariance.html#random-intercept)). 
 Similarly, a Poisson count whose rate varies according to a gamma distribution
 gives the [negative binomial](Week4_ProbabilityDistributions.html#compounding).
@@ -152,29 +158,25 @@ two give the same likelihood and the same estimates of the shared
 parameters.
 
 So is the marginal form hierarchical? If it came from integrating out a
-layer, yes: it is the same model, written a different way. `lmer()`
-maximizes the marginal likelihood, and nobody would call a random
-intercept model fit with `lmer()` anything but hierarchical! The
+layer, it is still hierarchical since it is the same model, written a different way.^[One nuance is that if the likelihood is specified directly as a
+multivariate Normal with pre-specified correlations in the variance-covariance
+matrix (e.g., correlation within stands in the random intercept framework),
+and fitted directly using a function like `gls()`, there
+is no easy way to recover information about the specific random slopes or intercepts
+in the data-layer model. Therefore, these models are often NOT called 'hierarchical'
+(instead, these models are usually called marginal or
+correlated-errors models). For example, a negative binomial likelihood is simply
+a convenient distribution for overdispersed counts. Even though
+we COULD specify the NB likelihood as a Poisson count with an
+unobserved, gamma-distributed rate (a hierarchical model) we typically don't call this
+a hierarchical model.]
+`lmer()` maximizes the marginal likelihood, and we still call a random
+intercept model fit with `lmer()` 'hierarchical'. The
 hierarchical structure is just folded into $V$: the within-stand
 correlation is $\sigma_a^2 / (\sigma_a^2 + \sigma_e^2)$, and $\sigma_a$
-is still the SD of the stand effects. What makes a model hierarchical is
-the claim behind it: that the data depend on unobserved quantities
-(stand effects, a spatial surface or "random field" (coming up in
-Week 14), true survival
-states) that have their own probability model.
-
-Capture-recapture analysis (which I work with a lot!) works the same way: its
-usual likelihood sums over every alive-or-dead history an animal could
-have had, which is the discrete version of integrating out a layer.
-
-The same likelihood can also come with a different claim. A
-multivariate Normal with equal correlations within stands, written
-directly as correlated errors (`gls()` with `corCompSymm()`), says
-nothing about stands differing and is usually called a marginal or
-correlated-errors model. A negative binomial fit simply as a convenient
-distribution for overdispersed counts is a one-layer model, even though
-the same likelihood could be read as a Poisson count with an
-unobserved, gamma-distributed rate.
+is still the SD of the stand effects.^[Capture-recapture analysis (which I work with a lot!) works the same way: we usually
+integrate the likelihood across all possible alive/dead states an animal could
+have had, resulting in a single likelihood function (often a multinomial distribution).]
 
 In practice the layered form is usually worth writing down anyway:
 it says where the extra variation and correlation come from (stands
@@ -377,9 +379,10 @@ in ecology and environmental science. Compared with maximum likelihood:
 
 - **No integral.** The sampler draws the $a_j$ and $b_j$ instead of
   integrating them out, so a Poisson or binomial response is no harder
-  than a Normal one (simple marginalization via the covariance matrix in a multivariate 
-  normal is much more straightforward than integrating across the random effects for other 
-  response distributions).
+  than a Normal one.^[Marginalizing a Normal model only takes building
+  the covariance matrix of a multivariate Normal, which is much more
+  straightforward than integrating across the random effects for other
+  response distributions.]
 - **Uncertainty carries through.** Each stand's estimate reflects
   uncertainty in $\sigma_a$, $\sigma_b$, and $\rho_{ab}$, rather than plugging in
   their best values.
@@ -403,11 +406,11 @@ $$G = \begin{pmatrix} \sigma_a & 0 \\ 0 & \sigma_b \end{pmatrix}
 
 and puts separate priors on each piece: a half-Normal, half-$t$, or
 exponential prior on each SD, and an **LKJ prior** on the
-correlation matrix $\Omega$ (named for Lewandowski, Kurowicka, and Joe 2009, *Journal of
+correlation matrix $\Omega$.^[The LKJ prior is named for Lewandowski, Kurowicka, and Joe (2009, *Journal of
 Multivariate Analysis*).
 Older BUGS and JAGS code often used an inverse-Wishart prior on $G$
 instead, which ties the prior on the SDs to the prior on the
-correlations; splitting them makes each easier to choose.
+correlations; splitting them makes each easier to choose.]
 
 The LKJ density has one shape parameter $\eta$:
 
@@ -454,11 +457,10 @@ and on $\sigma_e$, and an LKJ(2) prior on the correlation. Mean ring width
 is around 1 mm, so Normal(1, 0.5) on the intercept rules out
 implausible values (a mean width of 3 mm, or a negative one) but is
 otherwise vague; Normal(0, 0.5) on the slope allows a change of up to
-about 1 mm per 10 cm of precipitation in either direction. 
-One detail: `brms` puts the `Intercept` prior on the
+about 1 mm per 10 cm of precipitation in either direction.^[`brms` puts the `Intercept` prior on the
 intercept at the *sample mean* of each predictor, not at zero. Here the
 mean of `precip10` is `r round(mean(drought$precip10), 2)`, so the two
-are close.
+are close.]
 
 ```{r brms-fit, cache=TRUE, results="hide"}
 library(brms)
@@ -479,10 +481,10 @@ large effective sample sizes; see
 summary(fit_brms)
 ```
 
-`prior_summary(fit_brms)` lists every prior in a fit. Without the
+`prior_summary(fit_brms)` lists every prior in a fit.^[Without the
 `prior` argument, `brms` uses an LKJ(1) prior on the correlations and
 half-Student-$t$ priors on the SDs. `rstanarm::stan_lmer()` fits the
-same formula from precompiled models, so it skips the compile step.
+same formula from precompiled models, so it skips the compile step.]
 
 ```{r brms-numbers, echo=FALSE}
 library(posterior)
@@ -865,8 +867,8 @@ $$\text{NLL}_\text{pen}(\beta) = \text{NLL}(\beta) +
 \lambda \sum_{k=3}^{K} (\beta_k - 2\beta_{k-1} + \beta_{k-2})^2$$
 
 The penalty adds up squared second differences of neighboring weights,
-a stand-in for the curvature of $f$ (the integral of $f''(x)^2$ is
-the other common choice). With $\lambda = 0$ we get the unpenalized
+a stand-in for the curvature of $f$.^[The integral of $f''(x)^2$ is
+the other common choice.] With $\lambda = 0$ we get the unpenalized
 `lm()` fit. As $\lambda$ grows, the weights are forced onto a straight
 line, and with evenly spaced knots so is $f$. In between, the **effective degrees of freedom**
 (edf) measure how many parameters' worth of flexibility the curve uses;
@@ -921,9 +923,9 @@ edf_gcv <- sum(gam(r ~ s(temp, k = 20), data = bd)$edf) - 1
 flexibility; the penalty decides how much of it to use (edf
 `r f1(sum(fit_gam$edf) - 1)` here). Ask for `method = "REML"`:
 `gam()`'s default, generalized cross-validation, tends to pick wigglier
-curves (edf `r f1(edf_gcv)` for these data). `gam()`'s default basis is a thin
+curves (edf `r f1(edf_gcv)` for these data).^[`gam()`'s default basis is a thin
 plate regression spline, which works like the B-splines above;
-`s(temp, bs = "ps")` asks for the P-spline from the widget instead. For
+`s(temp, bs = "ps")` asks for the P-spline from the widget instead.] For
 counts, use `family = poisson` as in `glm()`.
 
 ```{r compare-fits, echo=FALSE}
@@ -954,9 +956,9 @@ ctmax_gam <- temp_grid[temp_grid > topt_gam & pg$fit < 0][1]
 The GAM finds the steep fall the bell can't make. Its curve peaks at
 `r f1(topt_gam)` °C and crosses zero at `r f1(ctmax_gam)` °C; the
 bell puts the peak at `r f1(fit_bell$par[2])` °C and never reaches
-zero. (AIC for a GAM uses the edf as its parameter count; it's a
+zero.^[AIC for a GAM uses the edf as its parameter count; it's a
 reasonable guide, not an exact one, since $\lambda$ was itself
-estimated.)
+estimated.]
 
 ## 5. Gaussian processes {#gp}
 
@@ -975,17 +977,17 @@ squared exponential) gives very smooth curves. The exponential kernel,
 $\exp(-|x_i - x_j|/\ell)$, gives rough ones, and for equally spaced
 times it is the
 [AR(1) correlation](Week12_MixedModels.html#ar1) $\phi^{|s-t|}$ with
-$\phi = e^{-1/\ell}$. Replace the temperature gap with the distance
-between two sites and the same kernel becomes a spatial correlation
-function. Box 1 of
+$\phi = e^{-1/\ell}$.^[Box 1 of
 [Yang, Pan, Warton, and Nakagawa (2026)](https://www.nature.com/articles/s44358-026-00215-4)
-lays out these temporal, spatial, and phylogenetic correlation
-functions side by side.
+lays out temporal, spatial, and phylogenetic correlation
+functions side by side.]
 
 Adding Normal measurement noise gives
 $y \sim \text{MVN}(m\mathbf{1}, K + \sigma_e^2 I)$, so the likelihood is
 one multivariate Normal density, with four parameters ($m$, $\alpha$,
-$\ell$, $\sigma_e$) to fit by `optim()`:
+$\ell$, $\sigma_e$) to fit by `optim()`.^[In this fit the length-scale is long compared with the 25-degree range of the
+data, so the curve is one broad excursion from $m$, and $m$ trades off
+against $\alpha$; don't read much into its value.]
 
 ```{r gp-fit}
 dist_temp <- abs(outer(bd$temp, bd$temp, "-"))
@@ -1002,10 +1004,6 @@ gp_par <- c(m = fit_gp$par[1], exp(fit_gp$par[2:4]))
 names(gp_par) <- c("m", "alpha", "ell", "sigma")
 round(gp_par, 3)
 ```
-
-The length-scale is long compared with the 25-degree range of the
-data, so the curve is one broad excursion from $m$, and $m$ trades off
-against $\alpha$; don't read much into its value.
 
 The prediction at a new temperature $x^*$ is the conditional mean of
 $f(x^*)$ given the data, from the same MVN rules:
