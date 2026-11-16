@@ -571,7 +571,72 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet taught; Week 1-9 pages built after the fact).
+Snapshot: Sun., Nov. 15, 2026 (Weeks 1-12 taught; Weeks 13 and 14 built, not yet taught; Week 1-9 pages built after the fact).
+
+- **Week 14 (Nov. 23-24), built and pushed Nov. 15, not yet taught:**
+  Monday lecture + Tuesday demo (no Lab 10 on
+  spatial; Thanksgiving Wed.). Page `Week14_SpatialRegression.Rmd`.
+  H1 `#spatial` (Monday): nearby plots are alike `#problem`, the
+  variogram `#variogram`, a Gaussian process over the map `#gp-space`
+  (exponential $V$ by `optim()` + `dmvnorm()`), meshes/SPDE `#mesh`,
+  `glmmTMB` / `sdmTMB` / `R-INLA` `#packages`, the GAM alternative
+  `#gam-space` (thin plate and `bs = "gp"` smooths, plus a "which
+  approach, when" table; added at the instructor's request to tie in
+  Week 13), discussion `#spatial-discussion`, brms bonus. H1 `#demo`
+  (Tuesday, `sdmTMB` end to end): candidate models, mesh sensitivity,
+  `sanity()` and residual variogram `#demo-check`, AIC and random vs.
+  block CV `#demo-compare`, prediction/SE/exceedance maps
+  `#demo-predict`, what we tell the district, Poisson bonus
+  `#demo-counts`. Kriging code is left off the page (the WOD asks for
+  it). New notation: spatial SD $\sigma_s$ (= Week 13's GP amplitude
+  $\alpha$), length-scale $\ell$; "range" = distance where correlation
+  is about 0.13 ($2\ell$ for the exponential).
+  - **Example:** simulated cheatgrass survey, `data/CheatgrassSurvey.csv`
+    (200 plots, 40 x 30 km, coordinates in km, 77 burned in three fire
+    ellipses, none in a roadless block; also a `seedlings` count) and
+    `data/CheatgrassGrid.csv` (0.5-km grid with the true field).
+    Generator `rcode/sim_Week14_cheatgrass.R` (seed 18, chosen for a
+    clear contrast; say so). Truth: fire 0.5, elevation -2 per km,
+    $\sigma_s$ 0.7, exponential $\ell$ 6 km, $\sigma_e$ 0.3. `lm()`:
+    fire 0.98 (SE 0.11); spatial by hand = `glmmTMB` `exp()` (logLik
+    -169.7104): fire 0.50 (SE 0.14), elevation SE 0.19 -> 0.59,
+    $\hat\ell$ 4.1; `sdmTMB` (cutoff 2, 131 vertices) 0.55, range 8.9;
+    INLA (PC priors) 0.54. 2000 simulated surveys: `lm()` fire SD 0.23
+    vs. reported SE 0.10, coverage 59%. GAM: fire 0.42, elevation SE
+    3.9 (unpenalized planes; easting/northing explain 94% of
+    elevation). CV RMSE: random folds 0.73 vs. 0.54, 10-km blocks 0.79
+    vs. 0.78. Grid RMSE 0.37 vs. 0.64.
+  - Widgets `variogram.html` (kernel, $\ell$, $\sigma_s$, nugget;
+    simulated landscape + empirical and model variograms) and
+    `spatial_mesh.html` (true field vs. mesh version by edge length;
+    the wrapper id is `meshw`, since `#mesh` is a section anchor).
+  - Script `CODE_Week14_SpatialRegression.R` (reads the CSVs by URL;
+    run end to end with local paths, numbers match), guide
+    `NOTES_Week14_WebPageGuide.Rmd`.
+  - Take-home WOD *Neighbors* (`WOD_Week14_Lecture1_Neighbors`, due
+    Mon., Nov. 30) + key: `data/SnowCourses.csv` (60 stations, seed 65,
+    generator `rcode/sim_Week14_snow.R`; truth slope 45, $\sigma_s$ 8,
+    $\ell$ 10, $\sigma_e$ 3). Paper: Var of the mean of two correlated
+    stations (idea bank), reading a variogram. R: `nll_spatial()`
+    (check 209.42), `lm()` slope 31.6 vs. spatial 48.0, kriging by hand
+    at a new site (43.7 -> 54.7 cm), `glmmTMB` check.
+  - Found while building: `sdmTMB_cv()`'s `sum_loglik` scores held-out
+    points without the field's uncertainty, so under block CV it made
+    the spatial model look far worse (-358 vs. -244); the page uses
+    RMSE. `sdmTMB_cv()` needs a mesh even with `spatial = "off"`. In
+    `mgcv`, `bs = "gp"` fixes the range in advance. Don't put
+    `library()` calls inside `cache = TRUE` chunks (they aren't re-run).
+    Scripted edits through the Bash tool collapse `\\` to `\`, so
+    `\\nu` became a newline; use the Edit tool for LaTeX.
+  - **Syllabus (Nov. 15):** `Syllabus.docx` schedule table edited to
+    match `CourseSchedule.csv` (Nov. 9-30 rows) by editing
+    `word/document.xml` and repacking; `Syllabus.pdf` re-exported
+    through Word (COM, `SaveAs2(..., 17)`).
+  - **Schedule (Nov. 15):** `schedule.Rmd` now labels each row with its
+    week of the semester, linked to that week's page when
+    `Week<N>_*.Rmd` exists (found by `Sys.glob`); the Nov. 30 lab was
+    renumbered Lab 10 (dynamic models), and the Nov. 23 reading changed
+    from Bolker Ch. 11 to 10.3.
 
 - **Week 1 page (built Nov. 1, after the week):**
   `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
@@ -700,7 +765,7 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   No Monday WOD; required take-home WOD *Formula to Model*
   (`WOD_Week12_Lecture1_FormulaToModel`, due Nov. 16) + key. Tuesday
   ("Lab period, Week 12", not a numbered lab) = lecture + final-project
-  work session, no Act; the next formal lab is Lab 10 (Nov. 23). Legacy
+  work session, no Act; the next formal lab is Lab 10 (now Nov. 30; see Week 14). Legacy
   `stan_demo2.stan` / `rcode/stan_demo.R` (Oct. 2025 random slope with
   LKJ) has a bug: `rmvnorm()` never gets `sigma = vcv`; not used.
   - **Revised Nov. 8:** the first H1's overview section was removed
@@ -747,7 +812,8 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   example as lecture; ridge
   bonus kept as the bridge to Wednesday) and H1 `#gams` (Wednesday:
   Bd thermal performance curve `#thermal`, splines as linear models
-  `#basis`, wiggliness penalty = prior, REML, `gam()` `#penalty`,
+  `#basis` (with the matrix form $y = X\beta + \varepsilon$, row $i$ =
+  every basis function at $x_i$), wiggliness penalty = prior, REML, `gam()` `#penalty`,
   Gaussian processes `#gp`, discussion `#gam-discussion`, bonuses
   `#derived`, `#smooth-brms`, `#gam-terms`). Example: simulated Bd
   growth on a thermal gradient plate (seed 13; 48 cultures, 4-29 °C;
@@ -771,10 +837,12 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   Mon., Nov. 23; reservoir chlorophyll,
   `data/ReservoirChlorophyll.csv`, 44 weeks, seed 52; penalized NLL by
   hand with `bs(df = 20, intercept = TRUE)`, lambda 0/10/1000, vs.
-  `gam(bs = "ps")`), with key. Tuesday = project check-ins, no
+  `gam(bs = "ps")`), with key. Revised Nov. 15: asides moved to 12
+  footnotes (the model for the footnote rule), "hierarchical" = "mixed"
+  = "multilevel" wording, Stan kept as a bonus. Tuesday = project check-ins, no
   lab. Thanksgiving: no class Wed., Nov. 25 (CSV updated), so spatial
-  gets Nov. 23 + Lab 10; the GP section spills there if not reached.
-  `Syllabus.docx` was not updated for Nov. 25.
+  gets Nov. 23 + the Nov. 24 demo; the GP section spills there if not
+  reached.
   - **Bayesian syntax handout (Nov. 15):**
     `lecture_notes/NOTES_Reference_BayesianMixedModelSyntax.pdf`, the
     brms/rstanarm companion to the nlme/lme4/glmmTMB handout (same
@@ -938,9 +1006,10 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   are archived; LECTURE7 (MCMC) is in `archive/` and its navbar entry
   is replaced by the Week 9 page. `NOTES_Reference_CmdstanrQuickStart.pdf`
   (one-page Stan setup) is linked from the page and the schedule.
-- **Site menus (Oct. 27-28):** navbar has `WODs` (16 PDFs), `Labs` (18
-  Acts; Lab 4 Acts 2-3 left out), and `Data sets` ("Lab data" for Labs
-  1-8, then "Other"). `schedule.Rmd` has a `links` table (72 links;
+- **Site menus (Oct. 27-28; counts as of Nov. 15):** navbar has `WODs`
+  (20 PDFs), `Labs` (19 Acts; Lab 4 Acts 2-3 left out), and `Data sets`
+  ("Lab data" for Labs 1-9, then "Other"). `schedule.Rmd` has a `links`
+  table (79 links;
   `stopifnot` checks weeks and files). Week 1's cells (both lectures
   and the lab) link the Week 1 page (Week 2's cells, including
   the lab, link the Week 2 page; Week 3's lab and Wednesday
@@ -948,9 +1017,10 @@ Snapshot: Tue., Nov. 10, 2026 (end of Week 12, taught; Week 13 built, not yet ta
   and Week 6 link the Week 6 page). Navbar updates: re-render
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
-  pages (FINALPROJ, LAB3, LAB4, LECTURE8, LECTURE9, Links,
-  Week1-Week12; schedule and the newest week page get it
-  by re-rendering); LECTURE10, GIT-tutorial, MAIN, and LAB1, 2, 5 carry older navbars
+  pages (FINALPROJ, LAB3, LAB4, Links, Bonus_ModelPerformance,
+  Bonus_RandomForest, Week1-Week14; schedule and the newest week page
+  get it by re-rendering); GIT-tutorial, GIT_tutorial, MAIN, and LAB1,
+  2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
   `sed`). Long menus scroll via
   `styles.css` (`css:` in `_site.yml`); pages not re-rendered got its

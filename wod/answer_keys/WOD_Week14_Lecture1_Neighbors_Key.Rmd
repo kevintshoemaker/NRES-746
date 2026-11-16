@@ -1,0 +1,403 @@
+---
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+  - \usepackage{xcolor}
+  - \usepackage{sansmath}
+  - \usepackage{framed}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{\sffamily\sansmath{}#1}}
+  - \newcommand{\ansbegin}{\begin{leftbar}\begingroup\color{ans}\sffamily\sansmath}
+  - \newcommand{\ansend}{\endgroup\end{leftbar}}
+geometry: margin=0.9in
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3, message = FALSE, warning = FALSE)
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+
+# fill-in table drawn as a plot; fill_cols are drawn in the answer color, italic
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, family = "serif", fill_cols = integer(0)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = family)
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      ans <- j %in% fill_cols && !identical(val, "(none)")
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    col = if (ans) ans_col else "black", font = if (ans) 3 else 1)
+    }
+    y <- y - row_height
+  }
+}
+
+library(mvtnorm)
+library(glmmTMB)
+snow <- read.csv("../../data/SnowCourses.csv")
+snow$elev_km <- (snow$elev_m - 2400) / 1000
+fit_lm <- lm(swe_cm ~ elev_km, data = snow)
+X <- model.matrix(fit_lm)
+y <- snow$swe_cm
+D <- as.matrix(dist(snow[, c("x_km", "y_km")]))
+nll_spatial <- function(par) {
+  V <- exp(par[3])^2 * exp(-D / exp(par[4])) + exp(par[5])^2 * diag(length(y))
+  -dmvnorm(y, as.vector(X %*% par[1:2]), V, log = TRUE)
+}
+check_val <- nll_spatial(c(40, 40, log(8), log(10), log(3)))
+fit <- optim(c(40, 40, log(8), log(10), log(3)), nll_spatial, method = "BFGS", hessian = TRUE)
+stopifnot(fit$convergence == 0)
+beta <- fit$par[1:2]
+se <- sqrt(diag(solve(fit$hessian)))
+sigma_s <- exp(fit$par[3])
+ell <- exp(fit$par[4])
+sigma_e <- exp(fit$par[5])
+V <- sigma_s^2 * exp(-D / ell) + sigma_e^2 * diag(length(y))
+
+# prediction at a site: regression part, kriging prediction, weights, SE
+krige <- function(x0, y0, elev_m) {
+  d0 <- sqrt((snow$x_km - x0)^2 + (snow$y_km - y0)^2)
+  k0 <- sigma_s^2 * exp(-d0 / ell)
+  w <- solve(V, k0)
+  reg <- beta[1] + beta[2] * (elev_m - 2400) / 1000
+  list(reg = reg, pred = reg + sum(w * (y - X %*% beta)), w = w, d0 = d0,
+       se = sqrt(sigma_s^2 + sigma_e^2 - sum(k0 * w)))
+}
+new_site <- krige(30, 20, 2450)
+far_site <- krige(100, 20, 2450)
+top3 <- order(-abs(new_site$w))[1:3]
+resid_sp <- as.vector(y - X %*% beta)
+
+snow$pos <- numFactor(snow$x_km, snow$y_km)
+snow$all <- factor(1)
+fit_tmb <- glmmTMB(swe_cm ~ elev_km + exp(pos + 0 | all), data = snow)
+
+# west vs. east: the pattern behind the slope change
+r_lm <- resid(fit_lm)
+elev_r <- cor(snow$elev_km, snow$x_km)
+```
+
+**NRES 746, Week 14, Lecture 1: Neighbors (take-home)**
+
+\ans{\textbf{Answer key.} Answers are in magenta sans-serif type; longer answers have a bar in the margin.}
+
+**Due Monday, Nov. 30.** Work on your own. Parts 1 and 2 are on paper;
+you'll need R for Parts 3 and 4.
+
+A water district measures snow water equivalent (SWE, the depth of
+water in the snowpack, in cm) on April 1 at 60 snow courses spread over
+a 60 by 40 km mountain range. It wants to know how fast SWE rises with
+elevation, and how much snow to expect at a site where it is thinking
+of adding a station. Storms don't deliver snow evenly, so stations near
+each other tend to be alike in ways elevation doesn't explain.
+
+## Part 1: Two stations (on paper)
+
+Two stations have SWE values $y_1$ and $y_2$. Each has variance
+$\sigma^2$, and their correlation is $\rho$.
+
+**1a.** Find the variance of their mean, $\bar y = (y_1 + y_2)/2$, in
+terms of $\sigma^2$ and $\rho$.
+
+\ansbegin
+
+$$\text{Var}(\bar y) = \tfrac{1}{4}\left[\text{Var}(y_1) + \text{Var}(y_2) + 2\,\text{Cov}(y_1, y_2)\right]
+= \tfrac{1}{4}\left[2\sigma^2 + 2\rho\sigma^2\right] = \frac{\sigma^2 (1 + \rho)}{2}$$
+
+\ansend
+
+**1b.** Fill in the table. $n$ independent stations have
+$\text{Var}(\bar y) = \sigma^2 / n$; the last column asks what $n$
+would give the same variance as these two correlated stations.
+
+```{r rho-table, fig.height=1.85}
+rho <- c(0, 0.5, 0.9)
+blank_table(
+  headers = list(expression(rho), expression(Var(bar(y)) / sigma^2), "equivalent number of independent stations"),
+  body = lapply(rho, function(r) list(format(r), sprintf("%.2f", (1 + r) / 2), sprintf("%.2f", 2 / (1 + r)))),
+  col_widths = c(0.7, 1.6, 2.7), fill_cols = 2:3)
+```
+
+## Part 2: Reading a variogram (on paper)
+
+A regression of SWE on elevation leaves residuals. The figure shows
+their semivariance against the distance between stations, in 5-km
+bins.
+
+```{r variogram, fig.width=6.2, fig.height=3.6}
+library(gstat)
+library(sp)
+snow_sp <- snow[, c("x_km", "y_km")]
+snow_sp$r <- r_lm
+coordinates(snow_sp) <- ~ x_km + y_km
+vg <- variogram(r ~ 1, snow_sp, cutoff = 30, width = 5)
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(vg$dist, vg$gamma, type = "n", xlim = c(0, 30), ylim = c(0, 150), xaxs = "i", yaxs = "i",
+     xlab = "Distance between stations (km)", ylab = expression("Semivariance of residuals (" * cm^2 * ")"))
+abline(v = seq(0, 30, 5), h = seq(0, 150, 25), col = "grey88")
+points(vg$dist, vg$gamma, pch = 19, cex = 1.2)
+curve(sigma_e^2 + sigma_s^2 * (1 - exp(-x / ell)), add = TRUE, col = ans_col, lwd = 2, lty = 2)
+legend("bottomright", "fitted spatial model (Part 3)", col = ans_col, lwd = 2, lty = 2, bty = "n", cex = 0.85,
+       text.col = ans_col, text.font = 3)
+box()
+```
+
+**2a.** Sketch a smooth variogram curve through the points, and read
+off rough values:
+
+nugget \ans{about 10 to 30} $\qquad$ sill \ans{about 100 to 120} $\qquad$ range \ans{about 15 to 25} km
+
+\ansbegin
+
+Any smooth rising curve that levels off is fine. With 60 stations the
+points are noisy (the last two fall back below the sill).
+
+\ansend
+
+**2b.** If each residual is a spatially smooth part plus independent
+noise, then $\gamma(d) = \sigma_e^2 + \sigma_s^2\,(1 - \rho(d))$. From
+your curve, about what is the correlation between the residuals of two
+stations 5 km apart? Show how you got it.
+
+\ansbegin
+
+The residuals' covariance at distance $d$ is $\sigma_s^2\rho(d)$, which
+is the sill minus $\gamma(d)$, so their correlation is
+$1 - \gamma(d)/\text{sill}$. Reading $\gamma(5) \approx 40$ and a sill
+of about 110: $1 - 40/110 \approx 0.6$. Anything from 0.5 to 0.7 is
+reasonable. (The fitted model in Part 3 gives
+`r sprintf("%.2f", sigma_s^2 * exp(-5 / ell) / (sigma_s^2 + sigma_e^2))`.)
+
+\ansend
+
+## Part 3: The spatial model, by hand
+
+Each coding question has a label:
+
+- *Recommended: no AI*: this week's core skill. R's help pages, web
+  search, the Week 14 page, and classmates are fine.
+- *AI optional/encouraged*: the results matter, but the code isn't the
+  point.
+
+After each coding question, circle how you used AI.
+
+**What to turn in:** your filled-in answers and **Figure 3a** as an
+image on WebCampus. You don't need to submit code beyond the two lines
+asked for in 3b and 4b.
+
+Read the data with
+
+```{r read-data, echo=TRUE, eval=FALSE}
+snow <- read.csv(
+  "https://kevintshoemaker.github.io/NRES-746/data/SnowCourses.csv")
+snow$elev_km <- (snow$elev_m - 2400) / 1000      # km above 2400 m
+```
+
+The columns are the station, its easting and northing in km (`x_km`,
+`y_km`), elevation (`elev_m`), and April 1 SWE (`swe_cm`).
+
+**3a.** *(AI optional/encouraged.)* Fit `lm(swe_cm ~ elev_km, data = snow)`.
+Make a map of the stations with the symbol size or color showing each
+residual. Name it **Figure 3a**.
+
+SWE rises \ans{`r sprintf("%.1f", coef(fit_lm)[2])`} cm per km of elevation (SE \ans{`r sprintf("%.1f", summary(fit_lm)$coefficients[2, 2])`})
+
+```{r fig-3a, fig.width=6, fig.height=4.2}
+par(mar = c(4, 4, 1.5, 1))
+plot(snow$x_km, snow$y_km, asp = 1, pch = ifelse(r_lm > 0, 16, 1), cex = 0.5 + abs(r_lm) / 6, col = ans_col,
+     xlab = "Easting (km)", ylab = "Northing (km)", main = "Figure 3a (sample)", cex.main = 0.9, col.main = ans_col)
+points(30, 20, pch = 4, cex = 1.5, lwd = 2)
+legend("topright", c("above the line", "below the line", "new site (Part 4)"), pch = c(16, 1, 4),
+       col = c(ans_col, ans_col, "black"), bg = "white", cex = 0.75, title = "size = |residual|")
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+The spatial model is
+
+$$\mathbf{y} \sim \text{MVN}(X\boldsymbol\beta,\ V), \qquad
+V_{ij} = \sigma_s^2 \exp(-d_{ij}/\ell) + \sigma_e^2\,[i = j]$$
+
+where $d_{ij}$ is the distance in km between stations $i$ and $j$, and
+$[i = j]$ is 1 on the diagonal and 0 elsewhere.
+
+**3b.** *(Recommended: no AI.)* Write a function `nll_spatial(par)` that
+returns the negative log-likelihood, where `par` holds the intercept,
+the elevation slope, $\log\sigma_s$, $\log\ell$, and $\log\sigma_e$, in
+that order. Check it: `nll_spatial(c(40, 40, log(8), log(10), log(3)))`
+should return `r sprintf("%.2f", check_val)`.
+
+Your value: \ans{`r sprintf("%.2f", check_val)`} $\qquad$ Copy the line of your function that builds $V$:
+
+\ansbegin
+
+```{r v-line, echo=TRUE, eval=FALSE, highlight=FALSE}
+V <- exp(par[3])^2 * exp(-D / exp(par[4])) + exp(par[5])^2 * diag(nrow(snow))
+```
+
+with `D <- as.matrix(dist(snow[, c("x_km", "y_km")]))` computed once,
+outside the function. Other forms that give the same matrix are fine.
+
+\ansend
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+**3c.** *(Recommended: no AI.)* Minimize it with `optim()`
+(`method = "BFGS"`, `hessian = TRUE`), starting from the values in the
+check above. Confirm `$convergence` is 0, and fill in the table (spatial
+SD is $\hat\sigma_s$, length-scale is $\hat\ell$ in km, noise SD is
+$\hat\sigma_e$).
+
+```{r fit-table, fig.height=1.35}
+blank_table(
+  headers = list("", "slope", "SE of slope", "spatial SD", "length-scale", "noise SD", "logLik"),
+  body = list(list("lm()", sprintf("%.1f", coef(fit_lm)[2]), sprintf("%.1f", summary(fit_lm)$coefficients[2, 2]),
+                   "(none)", "(none)", sprintf("%.1f", sigma(fit_lm)), sprintf("%.1f", logLik(fit_lm))),
+              list("spatial", sprintf("%.1f", beta[2]), sprintf("%.1f", se[2]), sprintf("%.1f", sigma_s),
+                   sprintf("%.1f", ell), sprintf("%.1f", sigma_e), sprintf("%.1f", -fit$value))),
+  col_widths = c(1, 1, 1.2, 1, 1, 1, 1.1), fill_cols = 2:7)
+```
+
+\ansbegin
+
+`sigma(fit_lm)` is `r sprintf("%.1f", sigma(fit_lm))`; the maximum
+likelihood value, `r sprintf("%.1f", sqrt(mean(r_lm^2)))`, is also
+fine.
+
+\ansend
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+**3d.** The slope changed more than its standard error did. Use your
+Figure 3a to explain why the ordinary regression got a different
+slope. How do $\hat\sigma_e^2$, $\hat\sigma_s^2 + \hat\sigma_e^2$, and
+$2\hat\ell$ compare with the nugget, sill, and range you read in 2a?
+
+\ansbegin
+
+Sample: the residuals come in regional patches, and the higher
+stations are mostly in the east (elevation and easting have correlation
+`r sprintf("%.2f", elev_r)`). The east also got less snow than its
+elevation predicts (the spatial model's residuals have correlation
+`r sprintf("%.2f", cor(resid_sp, snow$x_km))` with easting), and the
+regression mixes that east-west difference into the elevation slope. The spatial model
+compares stations with their neighbors, so its slope comes mostly from
+nearby stations at different elevations. The SE changed little because
+elevation also varies a lot between neighboring stations.
+
+$\hat\sigma_e^2 =$ `r sprintf("%.0f", sigma_e^2)` (nugget),
+$\hat\sigma_s^2 + \hat\sigma_e^2 =$ `r sprintf("%.0f", sigma_s^2 + sigma_e^2)`
+(sill), $2\hat\ell =$ `r sprintf("%.0f", 2 * ell)` km (range): in line
+with the variogram, with a nugget at the low end of what the points
+suggest.
+
+\ansend
+
+## Part 4: Predicting at a new site
+
+The district is considering a new station at easting 30 km, northing
+20 km, elevation 2450 m.
+
+**4a.** From the spatial model's intercept and slope alone, the
+predicted SWE at the new site is \ans{`r sprintf("%.1f", new_site$reg)`} cm.
+
+The model can do better, because nearby stations say something about
+the unmeasured part of the snowpack there. Let $\mathbf{k}_0$ hold the
+covariance between the field at the new site and at each station,
+$k_{0i} = \hat\sigma_s^2 \exp(-d_{0i}/\hat\ell)$, with $d_{0i}$ the
+distance from the new site to station $i$. The prediction is
+
+$$\hat y_0 = \mathbf{x}_0^T\hat{\boldsymbol\beta} +
+\mathbf{k}_0^T\, V^{-1} (\mathbf{y} - X\hat{\boldsymbol\beta})$$
+
+**4b.** *(Recommended: no AI.)* Compute $\hat y_0$ in R (`solve(V, b)`
+gives $V^{-1}\mathbf{b}$).
+
+$\hat y_0 =$ \ans{`r sprintf("%.1f", new_site$pred)`} cm $\qquad$ Copy the line that computes it:
+
+\ansbegin
+
+```{r krige-line, echo=TRUE, eval=FALSE, highlight=FALSE}
+y0 <- sum(c(1, 0.05) * beta) + sum(k0 * solve(V, y - X %*% beta))
+```
+
+with `k0 <- sigma_s^2 * exp(-d0 / ell)` and `d0` the 60 distances to
+the new site.
+
+\ansend
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+**4c.** The entries of $\mathbf{k}_0^T V^{-1}$ are the weights each
+station's residual gets. Which three stations have the largest weights,
+and how far is each from the new site? Why did the prediction move the
+way it did from 4a?
+
+\ansbegin
+
+`r paste0(snow$station[top3], " (", sprintf("%.1f", new_site$d0[top3]), " km, weight ", sprintf("%.2f", new_site$w[top3]), ", residual ", sprintf("%+.1f", resid_sp[top3]), " cm)", collapse = "; ")`.
+The nearest stations get the most weight, and they hold more snow than
+their elevations predict, so the prediction rises by
+`r sprintf("%.1f", new_site$pred - new_site$reg)` cm.
+
+\ansend
+
+**4d.** *(AI optional/encouraged.)* Fit the same model with `glmmTMB`
+(the syntax is in section 5 of the Week 14 page) and compare
+log-likelihoods.
+
+Yours: \ans{`r sprintf("%.2f", -fit$value)`} $\qquad$ `glmmTMB`: \ans{`r sprintf("%.2f", logLik(fit_tmb))`}
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+**4e.** Where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest to get working?
+
+\ansbegin
+
+Open-ended.
+
+\ansend
+
+**Bonus (optional).** The prediction's variance is
+$\hat\sigma_s^2 + \hat\sigma_e^2 - \mathbf{k}_0^T V^{-1}\mathbf{k}_0$.
+Compute its square root for the new site, and again for a site at
+easting 100 km, northing 20 km, far outside the network. What does
+the prediction itself become at the far site, and why?
+
+\ansbegin
+
+New site: `r sprintf("%.1f", new_site$se)` cm. Far site:
+`r sprintf("%.1f", far_site$se)` cm, which is
+$\sqrt{\hat\sigma_s^2 + \hat\sigma_e^2}$ =
+`r sprintf("%.1f", sqrt(sigma_s^2 + sigma_e^2))`. At 40 km or more from
+every station $\mathbf{k}_0$ is nearly zero, so the stations say
+nothing about the field there and the prediction is the regression
+part alone (`r sprintf("%.1f", far_site$pred)` cm against
+`r sprintf("%.1f", far_site$reg)`).
+
+\ansend

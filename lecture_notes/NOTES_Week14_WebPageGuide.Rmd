@@ -1,0 +1,300 @@
+---
+title: "Week 14 web page: delivery guide"
+subtitle: "Instructor notes for Week14_SpatialRegression.html"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=3pt, parsep=0pt, topsep=3pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+# General
+
+- Page: <https://kevintshoemaker.github.io/NRES-746/Week14_SpatialRegression.html>.
+  Script: `CODE_Week14_SpatialRegression.R` (same seeds, same numbers).
+- Monday, Nov. 23: spatial regression (first H1). No in-class WOD.
+  *Spline by Hand* is due; go over it at the start of Tuesday, not
+  Monday.
+- Tuesday, Nov. 24: demo (second H1, ~50 min), hand out the take-home
+  WOD *Neighbors* (due Mon., Nov. 30), then project work time. No Act,
+  no lab key.
+- Wednesday, Nov. 25: no class (Thanksgiving).
+- One data set for the lecture and the demo: a simulated cheatgrass
+  survey (say so), `data/CheatgrassSurvey.csv`, 200 plots in a 40 by
+  30 km area, 77 burned (three fires), none in a roadless block.
+  Truth: fire 0.5, elevation $-2$ per km, $\sigma_s = 0.7$,
+  exponential with $\ell = 6$ km, $\sigma_e = 0.3$. Generator:
+  `rcode/sim_Week14_cheatgrass.R` (seed 18).
+- The seed was chosen for a clear contrast: this survey's `lm()` fire
+  estimate (0.98) is two SDs above the truth. Across 70 other seeds it
+  ran from $-0.04$ to 0.98. The 2000-survey simulation in section 1
+  is the fair summary; don't present 0.98 as typical.
+- The WOD uses a different data set (`data/SnowCourses.csv`). Push all
+  three CSVs to `gh-pages` and check the URLs before Tuesday; the
+  companion script and the WOD read them from the web.
+- Packages students need to follow along: `sdmTMB`, `glmmTMB`, `mgcv`,
+  `gstat`, `mvtnorm`. `INLA` is optional (large download, not on CRAN);
+  show it on the projector.
+- Questions on the page have no answers. *Land:* is where discussion
+  should end up.
+- If the Gaussian process section of the Week 13 page wasn't reached,
+  spend 5 min of Monday on it first (its widget, `gp_draws.html`),
+  and drop section 2's widget here.
+
+# Part 1: Spatial regression (Monday, ~50 min)
+
+No laptops needed. Seven sections is more than fits; the plan is
+sections 1 and 3 in full, 2 and 4 briefly, 5 as a table, and 6 as far
+as time allows. Whatever is left of 5 and 6 opens Tuesday.
+
+**Nearby plots are alike (~10 min)**
+
+- Workflow boxes MODELS and FIT: the new piece is in the noise model.
+  Two district questions: the fire effect (a coefficient) and where to
+  treat (a map).
+- `lm()`: fire 0.98 (SE 0.11), elevation $-1.51$ (SE 0.19). Fire
+  multiplies biomass by 2.7.
+- Residual map, then the question.
+- "`lm()` assumes the residuals are independent draws ... What on this
+  map says otherwise? If an important covariate were missing ... what
+  would its map look like?" *Land:* same-sign residuals cluster (blue
+  patches in the southwest and the southeast corner; red along the
+  northern edge and around easting 27, northing 6). A
+  missing covariate would look like this map: smooth patches.
+- Simulation: SD of the fire estimate across 2000 surveys 0.23; `lm()`
+  reports 0.10; 95% intervals cover 59%. Board: 77 burned plots, 3
+  fires. Link to the Two Cores WOD.
+- The sandwich formula is a footnote; skip unless asked.
+
+**The variogram (~7 min)**
+
+- Board: semivariance is half the mean squared difference at distance
+  $d$. Read the printed table: 0.20 at 1.3 km, 0.50 at 9 km, flat
+  near 0.5 to 0.58 after.
+- Name nugget, sill, range on the plot. Board:
+  $\gamma(d) = \sigma_e^2 + \sigma_s^2(1 - \rho(d))$.
+- Widget (`variogram.html`), stops in order (defaults: exponential,
+  $\ell = 4$, $\sigma_s = 0.7$, $\sigma_e = 0.3$; nugget 0.09, sill
+  0.58, correlation at 5 km 0.24, 0.13-distance 8.2 km):
+    1. Nugget SD 0: dots match the background; curve starts at 0 (sill
+       0.49).
+    2. Nugget SD 0.8: dots speckle against the background; nugget 0.64,
+       sill 1.13, correlation at 5 km down to 0.12. Ask what will
+       change before moving it.
+    3. Back to 0.3. $\ell = 1$: salt-and-pepper map, variogram flat by
+       2 km (correlation at 5 km 0.01). $\ell = 10$: broad patches,
+       still rising at 20 km (correlation 0.51).
+    4. $\ell = 8$, "New landscape" 4-5 times: points beyond 12 km
+       wander well off the curve.
+    5. If time: Matérn at $\ell = 4$ (smoother patches; 0.13-distance
+       11.7 km) and squared exponential (8.1 km).
+- Q1 (nugget; length-scale and independent information) *Land:* the
+  nugget adds plot-level noise the map can't show and lifts the whole
+  curve. Most independent information at $\ell = 1$: plots farther
+  apart than a few km are nearly independent, so 150 plots are close
+  to 150 looks. At $\ell = 10$ the landscape has only a handful of
+  independent patches.
+- Q2 (new landscapes at 8 km) *Land:* the empirical variogram is noisy
+  at long distances (few independent pairs), so a range read by eye is
+  rough. Fit the model by likelihood.
+
+**A Gaussian process over the map (~12 min; the core)**
+
+- Board: $y = X\beta + s + \varepsilon$,
+  $V = \sigma_s^2 e^{-D/\ell} + \sigma_e^2 I$. Then the three earlier
+  $V$'s side by side: shared group, years apart, temperature gap. Now
+  km apart.
+- Walk through `nll_spatial()`: one new line (the `V` line).
+- Results: fire 0.50 (SE 0.14), elevation $-1.44$ (SE 0.59),
+  $\hat\sigma_s = 0.71$, $\hat\ell = 4.1$ km, $\hat\sigma_e = 0.27$;
+  log-likelihood $-169.7$ against $-218.1$ (AIC 351.4 against 444.3).
+- Three changes, in order: fire halves (within-neighborhood
+  comparisons), its SE grows, elevation SE triples (smooth covariate
+  against a smooth field).
+- Fitted variogram curve over the `lm()` residual points.
+- Matérn in two sentences: exponential is $\nu = 1/2$; the mesh
+  packages use $\nu = 1$ and report a "range" where correlation is
+  about 0.13, which is $2\ell$ for the exponential (8.2 km here).
+  This is the likely sticking point when students compare outputs.
+- Not on the page by design: the kriging code. The WOD asks for it.
+
+**A mesh makes it fast (~8 min)**
+
+- Cost: factoring $V$ took about 0.06 s for 1000 plots, 0.44 for 2000,
+  3.6 for 4000 (numbers change a little each knit); about 8 min per
+  evaluation at 20,000.
+- Idea in one line: field = tent basis functions on a triangle mesh
+  times vertex values; the vertex values get a Normal prior with a
+  sparse precision matrix. Callbacks: degree-1 B-splines, and the
+  tridiagonal precision of AR(1).
+- Mesh figure: 131 vertices at `cutoff = 2`. One plot's three weights
+  (0.46, 0.25, 0.29). $Q$ has about 17 nonzeros per row.
+- Board summary: penalized spline = basis + prior on weights; GP =
+  kernel; mesh field = a GP written the first way.
+- Widget (`spatial_mesh.html`), stops (range 10 km): edge 15 (12
+  vertices, correlation with the truth 0.32), 10 (20 vertices, 0.83),
+  5 (63, 0.97), 3 (165, 0.996), 2 (336, 0.999). Then range 4 km: edge
+  5 gives 0.53, 2 gives 0.975, 1 gives 0.998.
+- Q (edge length and range) *Land:* little is gained below an edge of
+  about a third of the range (10 km: edge 3; 4 km: edge 1.5 gives
+  0.99). The edge has to be a fraction of the range, so the mesh
+  depends on the field, not on the number of plots.
+
+**One model, three packages (~6 min)**
+
+- Show the three calls, then the table. `glmmTMB` matches `optim()`
+  to four decimals in the log-likelihood ($-169.7104$).
+- Table to read aloud: fire 0.50 / 0.50 / 0.55 / 0.54, all SE 0.14;
+  range 8.2 / 8.2 / 8.9 / 9.8 km; $\sigma_e$ 0.27 for the exponential
+  fits, 0.42 for the mesh fits (a smoother field and a finite mesh push
+  fine-scale variation into the nugget).
+- INLA: don't walk through the stack line by line. Say what the three
+  pieces are (priors, the projection matrix, the stack) and that
+  `inlabru` hides them. PC priors are stated as tail probabilities.
+- Use the name table when students ask "which number is $\sigma_e$?"
+  (`phi` in `sdmTMB`, a precision in INLA).
+
+**The GAM alternative (~7 min)**
+
+- `gam(... + s(x_km, y_km, k = 100), method = "REML")`: edf 53.6,
+  fire 0.42 (SE 0.14). `bs = "gp"`: fire 0.48 (SE 0.14).
+- Elevation: $-0.39$ (SE 3.9) with the thin plate smooth, $-1.54$
+  (SE 2.4) with `bs = "gp"`, against $-1.44$ (SE 0.59) for the
+  exponential field. Reason: both `mgcv` smooths leave planes
+  unpenalized, and easting and northing explain 94% of elevation.
+  `select = TRUE` only lowers the SE to 2.7.
+- Three maps: fitted field's correlation with the true field 0.80;
+  GAM smooth 0.59.
+- "Which approach, when?" table: read three rows aloud (nuisance:
+  GAM; want the range, or prediction away from data: random field;
+  field changing through time: random field). The rest is reference
+  for projects.
+- Caveat to say out loud: in `bs = "gp"` the range is fixed in
+  advance, not estimated.
+
+**Discussion (if time; otherwise Tuesday)**
+
+- Q1 (fire 0.98, SE 0.11, vs. 0.50, SE 0.14; "the field soaked up the
+  fire effect") *Land:* the worry is legitimate in general (spatial
+  confounding), and here the truth is 0.5, so the field removed bias,
+  not signal. What identifies the fire effect is the contrast across
+  fire boundaries between plots close enough to share the field. A
+  better design pairs plots just inside and just outside each
+  perimeter, and samples more fires.
+- Q2 (elevation SE 0.19, 0.59, 3.9; estimates $-1.51$, $-1.44$,
+  $-0.39$) *Land:* report the random field's estimate with its wide
+  interval ($-2.6$ to $-0.3$) and say the survey can't separate
+  elevation from other east-west gradients. The `lm()` SE is wrong for
+  the same reason as the fire SE; the GAM's says the smooth and
+  elevation are interchangeable. Truth is $-2$.
+- Q3 (what to measure next) *Land:* open. Look where the field is
+  strongly positive or negative (blue in the southwest and
+  southeast corners, red around easting 27, northing 6) and ask what
+  differs there: soil, grazing, seed source. If the new covariate is
+  the right one, $\hat\sigma_s$ shrinks and the field map flattens.
+
+**Skip if behind:** the variogram widget's stops 4-5, the mesh widget,
+the INLA code, the "which approach" table (assign as reading).
+
+# Part 2: A spatial analysis from start to finish (Tuesday, ~50 min)
+
+Laptops open; students can run the script alongside. Start with a
+5-min review of *Spline by Hand* (key in `wod/answer_keys/`) and
+anything left from Monday's sections 5-6.
+
+**Problem and candidate models (~5 min)**
+
+- Workflow boxes PROBLEM and THEORIES. Threshold 60 g per square
+  meter is log 4.09. M0 no field, M1 field, M2 field plus fire by
+  elevation interaction.
+- Practical points: project to km (`add_utm_columns()`), center
+  covariates.
+
+**The mesh (~6 min)**
+
+- Table: cutoff 1, 2, 3 km give fire 0.53, 0.55, 0.49 (SE 0.14);
+  range 8.6, 8.9, 6.2. Cutoff 5: log-likelihood falls from about
+  $-172$ to $-187.7$. Cutoff 8: range 0.00, $\sigma_s$ 1633, a failed
+  fit.
+- "The 1-km mesh has almost twice the vertices ... What did the extra
+  vertices buy? When would you need them?" *Land:* nothing here (same
+  estimates, log-likelihood $-172.4$ vs. $-172.9$). They are needed
+  when the range is short relative to 2 km, or plots are dense enough
+  to show finer structure.
+
+**Fit and check (~8 min)**
+
+- `sanity(m1)`: nine green checks.
+- QQ plot close to the line; standardized residual variogram: M0 rises
+  from 0.4 to 1, M1 flat near 1.
+- Say that this is the goodness-of-fit step of COMPARE.
+
+**Compare (~12 min)**
+
+- AIC: M0 444.3, M1 357.8, M2 359.8 ($\Delta$ 86.4, 0, 1.97). The
+  interaction is $-0.08$ (SE 0.49): an uninformative parameter
+  (Week 10).
+- Cross-validation RMSE: random folds 0.730 (M0) vs. 0.538 (M1), 26%
+  lower; 10-km blocks 0.794 vs. 0.784, a tie. Show the block map.
+- Not on the page: `sdmTMB_cv()`'s summed log-likelihood makes M1 look
+  much worse than M0 under blocks ($-358$ vs. $-244$), because it
+  scores held-out points with the field's predicted value and
+  $\sigma_e$ only, ignoring the field's uncertainty. Use RMSE, and
+  don't show `$sum_loglik` without that caveat.
+- "The district wants a map of the surveyed area, including the
+  roadless block. Which of the two cross-validation results describes
+  how well that map will do, and where ...?" *Land:* random folds
+  describe cells with plots within a few km (most of the map); block
+  folds describe the middle of the roadless block and anywhere beyond
+  the survey edge.
+
+**Predict (~12 min)**
+
+- `predict()` columns: `est` = `est_non_rf` + `omega_s`. With `nsim`,
+  one column per draw.
+- Four maps. SE: mean 0.31 in the roadless block, 0.23 elsewhere,
+  highest at the corners. Exceedance map: most of the northwest fire
+  and a patch in the southeast fire are flagged; the northeast fire is
+  not (high elevation).
+- Truth check: RMSE over the grid 0.37 (M1) vs. 0.64 (M0). Of flagged
+  cells, 81% are truly above the threshold; they include 67% of all
+  cells that are.
+- Kriging: name it, point to the Week 13 conditional-mean formula, and
+  stop. The WOD has students code it.
+- "The district can treat only a quarter of the area the map flags.
+  ... highest predicted biomass, or the highest probability of
+  exceeding the threshold?" *Land:* probability, if the goal is not to
+  waste treatment. The rankings disagree where the SE is high: a cell
+  far from plots can have a high prediction and a modest probability.
+  A case for sampling there first.
+
+**What we tell the district (~4 min)**
+
+- Fire multiplies biomass by 1.7 (95% 1.3 to 2.3); `lm()` said 2.7.
+  Elevation slope $-2.7$ to $-0.3$. Unmeasured variation with a range
+  near 9 km and SD 0.64, as large as the fire effect.
+- Corroborated against two rivals, not against a model with the
+  missing covariate. REVISE: go measure it.
+
+**Bonus, counts (~3 min if asked):** Poisson seedlings, fire 0.89
+(SE 0.07) by `glm()`, 0.68 (SE 0.17) with the field; truth 0.5. Only
+`family` changes.
+
+**Hand out *Neighbors* (last 2 min).** Take-home, due Mon., Nov. 30.
+Paper Parts 1-2, R for Parts 3-4, AI labels on each coding item.
+Numbers they should get: Var of the mean $\sigma^2(1+\rho)/2$ (0.50,
+0.75, 0.95; worth 2.00, 1.33, 1.05 stations); variogram nugget 10-30,
+sill 100-120, range 15-25 km; `lm()` slope 31.6 (SE 5.9); `nll`
+check 209.42; spatial slope 48.0 (SE 6.3), $\hat\sigma_s = 10.2$,
+$\hat\ell = 11.8$ km, $\hat\sigma_e = 3.1$, log-likelihood $-206.92$
+(same from `glmmTMB`); new site 43.7 cm from the regression part,
+54.7 cm by kriging (station S28, 6.1 km away, residual $+26$ cm,
+carries the most weight); prediction SE 8.1 cm, 10.6 far from the
+network. Truth: slope 45, $\sigma_s = 8$, $\ell = 10$, $\sigma_e = 3$.
+Key: `wod/answer_keys/`.
+
+**Then:** project work time. Groups with spatial data: ask for their
+coordinates' units, the number of locations, and whether space is the
+question or a nuisance (the "which approach" table).

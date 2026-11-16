@@ -1,0 +1,96 @@
+<div class="w746mesh" id="meshw">
+<style>
+.w746mesh{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:780px}
+.w746mesh .row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.w746mesh .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746mesh .row .lab1{min-width:200px}
+.w746mesh input[type=range]{flex:1;min-width:140px}
+.w746mesh .val{font-weight:600;min-width:60px}
+.w746mesh .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746mesh .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746mesh .card .k{font-size:13px;color:var(--ink2)}
+.w746mesh .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746mesh .panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.w746mesh canvas{width:100%;height:auto;display:block;border:1px solid #ccc}
+.w746mesh .note{font-size:13px;color:var(--ink2);margin:2px 0 6px}
+.w746mesh button{font-size:14px;padding:3px 10px}
+@media (max-width:600px){.w746mesh .panels{grid-template-columns:1fr}.w746mesh .cards{grid-template-columns:1fr 1fr}.w746mesh .row .lab1{min-width:130px}}
+</style>
+<div class="row"><label class="lab1" for="mesh-rng">Range of the true field (km)</label><input type="range" id="mesh-rng" min="3" max="25" step="0.5" value="10"><span class="val" id="mesh-rngout"></span></div>
+<div class="row"><label class="lab1" for="mesh-h">Mesh edge length (km)</label><input type="range" id="mesh-h" min="1" max="15" step="0.5" value="5"><span class="val" id="mesh-hout"></span></div>
+<div class="row">
+  <button type="button" id="mesh-new">New landscape</button>
+  <label><input type="checkbox" id="mesh-lines" checked> draw the triangles</label>
+</div>
+<div class="cards">
+  <div class="card"><div class="k">Mesh vertices (random effects)</div><div class="v" id="mesh-v1"></div></div>
+  <div class="card"><div class="k">Edge length as a share of the range</div><div class="v" id="mesh-v2"></div></div>
+  <div class="card"><div class="k">Correlation of the mesh version with the true field</div><div class="v" id="mesh-v3"></div></div>
+  <div class="card"><div class="k">Matrix entries to store: dense covariance vs. sparse precision</div><div class="v" id="mesh-v4" style="font-size:15px"></div></div>
+</div>
+<div class="panels">
+  <div><canvas id="mesh-true" width="320" height="240" role="img" aria-label="The true spatial field."></canvas><p class="note">The true field on a 40 by 30 km landscape.</p></div>
+  <div><canvas id="mesh-approx" width="320" height="240" role="img" aria-label="The field as the mesh represents it."></canvas><p class="note">The closest a mesh can get: one value per vertex, flat triangles in between.</p></div>
+</div>
+<script>
+(function(){
+let seed=746;
+function rng(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+function rnorm(){let u=0,v=0;while(u===0)u=rng();v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const M=160;let wx=[],wy=[],ph=[];
+function newDraws(){wx=[];wy=[];ph=[];for(let m=0;m<M;m++){wx.push(rnorm());wy.push(rnorm());ph.push(2*Math.PI*rng());}}
+newDraws();
+const rS=document.getElementById('mesh-rng'),hS=document.getElementById('mesh-h'),lC=document.getElementById('mesh-lines');
+const W=320,H=240,px=40/W;
+// squared-exponential field by random cosines; length-scale l gives correlation 0.13 at 2.02 l
+function fieldAt(x,y,l){let s=0;for(let m=0;m<M;m++)s+=Math.cos((wx[m]*x+wy[m]*y)/l+ph[m]);return s*Math.sqrt(2/M);}
+function color(v){
+  const t=Math.max(-1,Math.min(1,v/2.2));
+  return t<0?[255+t*(255-43),255+t*(255-110),255+t*(255-190)]:[255-t*(255-190),255-t*(255-48),255-t*(255-43)];
+}
+let truth=new Float64Array(W*H),lastKey='';
+function paint(id,vals){
+  const ctx=document.getElementById(id).getContext('2d'),img=ctx.createImageData(W,H);
+  for(let j=0;j<H;j++)for(let i=0;i<W;i++){const c=color(vals[(H-1-j)*W+i]),k=4*(j*W+i);img.data[k]=c[0];img.data[k+1]=c[1];img.data[k+2]=c[2];img.data[k+3]=255;}
+  ctx.putImageData(img,0,0);return ctx;
+}
+function draw(){
+  const range=parseFloat(rS.value),h=parseFloat(hS.value),l=range/2.02;
+  document.getElementById('mesh-rngout').textContent=range.toFixed(1);
+  document.getElementById('mesh-hout').textContent=h.toFixed(1);
+  const key=range+'|'+ph[0];
+  if(key!==lastKey){lastKey=key;for(let j=0;j<H;j++)for(let i=0;i<W;i++)truth[j*W+i]=fieldAt((i+0.5)*px,(j+0.5)*px,l);}
+  paint('mesh-true',truth);
+  // regular mesh: vertices every h km, each square cut into two triangles
+  const mx=Math.ceil(40/h)+1,my=Math.ceil(30/h)+1,vv=new Float64Array(mx*my);
+  for(let b=0;b<my;b++)for(let a=0;a<mx;a++)vv[b*mx+a]=fieldAt(a*h,b*h,l);
+  const approx=new Float64Array(W*H);
+  let sxy=0,sxx=0,syy=0,sx=0,sy=0;
+  for(let j=0;j<H;j++)for(let i=0;i<W;i++){
+    const x=(i+0.5)*px,y=(j+0.5)*px,a=Math.min(mx-2,Math.floor(x/h)),b=Math.min(my-2,Math.floor(y/h)),u=x/h-a,v=y/h-b;
+    const f00=vv[b*mx+a],f10=vv[b*mx+a+1],f01=vv[(b+1)*mx+a],f11=vv[(b+1)*mx+a+1];
+    const f=u+v<=1?f00+u*(f10-f00)+v*(f01-f00):f11+(1-u)*(f01-f11)+(1-v)*(f10-f11);
+    approx[j*W+i]=f;const t=truth[j*W+i];sx+=t;sy+=f;sxx+=t*t;syy+=f*f;sxy+=t*f;
+  }
+  const N=W*H,r=(sxy-sx*sy/N)/Math.sqrt((sxx-sx*sx/N)*(syy-sy*sy/N));
+  const ctx=paint('mesh-approx',approx);
+  if(lC.checked){
+    ctx.strokeStyle='rgba(0,0,0,0.28)';ctx.lineWidth=0.6;ctx.beginPath();
+    const X=v=>v/px,Y=v=>H-v/px;
+    for(let a=0;a<mx;a++){ctx.moveTo(X(a*h),Y(0));ctx.lineTo(X(a*h),Y((my-1)*h));}
+    for(let b=0;b<my;b++){ctx.moveTo(X(0),Y(b*h));ctx.lineTo(X((mx-1)*h),Y(b*h));}
+    for(let b=0;b<my-1;b++)for(let a=0;a<mx-1;a++){ctx.moveTo(X((a+1)*h),Y(b*h));ctx.lineTo(X(a*h),Y((b+1)*h));}
+    ctx.stroke();
+  }
+  const k=mx*my;
+  document.getElementById('mesh-v1').textContent=k.toLocaleString();
+  document.getElementById('mesh-v2').textContent=(h/range).toFixed(2);
+  document.getElementById('mesh-v3').textContent=r.toFixed(3);
+  document.getElementById('mesh-v4').textContent=(k*k).toLocaleString()+' vs. about '+Math.min(k*k,19*k).toLocaleString();
+}
+document.getElementById('mesh-new').addEventListener('click',()=>{newDraws();draw();});
+[rS,hS].forEach(s=>s.addEventListener('input',draw));lC.addEventListener('change',draw);
+draw();
+})();
+</script>
+</div>

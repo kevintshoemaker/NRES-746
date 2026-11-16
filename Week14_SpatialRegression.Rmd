@@ -1,0 +1,1139 @@
+---
+title: "Week 14: Spatial Regression"
+author: "NRES 746"
+date: "Nov. 23-24, 2026"
+output:
+  html_document:
+    includes:
+      after_body: footer.html
+    theme: flatly
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 7, fig.height = 4.5, fig.align = "center")
+widget <- function(file) htmltools::includeHTML(file.path("widgets", file))
+f1 <- function(v) formatC(round(v, 1) + 0, format = "f", digits = 1)
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+f3 <- function(v) formatC(round(v, 3) + 0, format = "f", digits = 3)
+```
+
+```{r helpers, echo=FALSE}
+draw_workflow <- function(highlight = NULL, cex = 0.9) {
+  boxes <- c("PROBLEM", "THEORIES", "MODELS", "FIT", "COMPARE")
+  subs <- c("what do we\nneed to know?", "candidate\nexplanations",
+            "data-generating\n(process + noise)", "confront each\nwith data",
+            "fit, prediction,\nrelevance")
+  x <- seq(1, 9, by = 2)
+  y <- 2
+  w <- 0.8
+  h <- 0.55
+  shade <- function(lab) if (!is.null(highlight) && lab %in% highlight) "lightskyblue1" else "white"
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 10), ylim = c(-0.2, 4), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_along(boxes)) {
+    rect(x[i] - w, y - h, x[i] + w, y + h, col = shade(boxes[i]), lwd = 1.5)
+    text(x[i], y + 0.18, boxes[i], font = 2, cex = cex)
+    text(x[i], y - 0.22, subs[i], cex = cex * 0.75)
+  }
+  arrows(x[-5] + w, y, x[-1] - w, y, length = 0.08, lwd = 1.5)
+  rect(6 - 0.7, 3.2 - 0.35, 6 + 0.7, 3.2 + 0.35, lty = 2, lwd = 1.5)
+  text(6, 3.28, "DATA", font = 2, cex = cex)
+  text(6, 3.0, "study design", cex = cex * 0.75)
+  arrows(x[3], y + h, 6 - 0.7, 3.2, length = 0.08, lty = 2, lwd = 1.2)
+  arrows(6 + 0.7, 3.2, x[4], y + h, length = 0.08, lty = 2, lwd = 1.2)
+  segments(x[5], y - h, x[5], 0.4, lwd = 1.5)
+  segments(x[5], 0.4, x[1], 0.4, lwd = 1.5)
+  arrows(x[c(1, 2)], 0.4, x[c(1, 2)], y - h, length = 0.08, lwd = 1.5)
+  text(6, 0.15, "REVISE the problem and theories; drop or down-weight poor models",
+       cex = cex * 0.85, font = 3)
+}
+
+# map helpers: a grid variable as an image, plots as colored points, fire perimeters as lines
+pal_seq <- hcl.colors(64, "YlOrRd", rev = TRUE)
+pal_div <- hcl.colors(65, "Blue-Red 3")
+val_col <- function(v, zlim, pal) pal[pmax(1, pmin(length(pal), 1 + floor((v - zlim[1]) / diff(zlim) * length(pal))))]
+map_base <- function(main = "", ...) {
+  plot(NA, xlim = c(0, 40), ylim = c(0, 30), asp = 1, xaxs = "i", yaxs = "i",
+       xlab = "Easting (km)", ylab = "Northing (km)", main = main, cex.main = 0.95, ...)
+}
+map_image <- function(v, zlim, pal, main = "") {
+  map_base(main)
+  image(ux, uy, matrix(pmax(zlim[1], pmin(zlim[2], v)), length(ux)), zlim = zlim, col = pal, add = TRUE)
+  box()
+}
+map_fires <- function(...) contour(ux, uy, matrix(grid$burned, length(ux)), levels = 0.5,
+                                   drawlabels = FALSE, add = TRUE, ...)
+map_key <- function(zlim, pal, title, digits = 1) {
+  at <- seq(zlim[1], zlim[2], length.out = 5)
+  legend("topright", legend = formatC(at, format = "f", digits = digits), pch = 22, pt.cex = 1.6,
+         pt.bg = val_col(at, zlim, pal), col = "grey30", bg = "white", cex = 0.72, title = title)
+}
+```
+
+[How this page was made](#ai-use)
+
+R code from this page is also in the
+[companion script](lecture_notes/CODE_Week14_SpatialRegression.R).
+Packages: `mvtnorm`, `gstat` (with `sp`), `glmmTMB`, `sdmTMB`, `INLA`,
+`fmesher`, `mgcv`.^[`INLA` isn't on CRAN. Install it with
+`install.packages("INLA", repos = c(getOption("repos"), INLA = "https://inla.r-inla-download.org/R/stable"), dep = TRUE)`.
+It is a large download; the rest of the page runs without it.] Reading:
+Bolker section 10.3 (correlations in time-series and spatial data).
+The data are in
+[CheatgrassSurvey.csv](data/CheatgrassSurvey.csv) (the plots) and
+[CheatgrassGrid.csv](data/CheatgrassGrid.csv) (a grid for prediction).
+
+# Spatial regression {#spatial}
+
+Plots that are close together tend to be alike in ways our covariates
+don't explain, so their residuals are correlated and a regression that
+ignores this is too sure of itself. This part measures that correlation
+with a variogram, models it with a Gaussian process over the map, and
+fits the same model four ways: by hand, and with `glmmTMB`, `sdmTMB`,
+and `R-INLA`. It ends with the GAM alternative, a smooth of the
+coordinates, and some advice on choosing among them.
+
+## 1. Nearby plots are alike {#problem}
+
+```{r workflow-models, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow(c("MODELS", "FIT"))
+```
+
+Cheatgrass (*Bromus tectorum*) is an annual grass that has replaced
+sagebrush over large parts of the Great Basin, and it carries fire. A
+land management district surveys 200 plots across a 40 by 30 km area
+and clips peak-season cheatgrass biomass in each (grams per square
+meter). Three fires have burned in the area since 2000. The district
+has two questions:
+
+1. **How much does a past fire raise cheatgrass biomass?**
+2. **Where, including places nobody sampled, is biomass high enough to
+   need treatment?**
+
+The first question is about a coefficient and the second is about a
+map. A spatial model serves both. This page takes the first question
+through the model and its fitting; the
+[worked analysis](#demo) below takes both to an answer.
+
+```{r read-data}
+cg <- read.csv("data/CheatgrassSurvey.csv")
+grid <- read.csv("data/CheatgrassGrid.csv")
+cg$elev_km <- (cg$elev_m - 1800) / 1000         # km above 1800 m
+grid$elev_km <- (grid$elev_m - 1800) / 1000
+head(cg)
+```
+
+The response is log biomass. Each plot has coordinates in kilometers
+(easting and northing), its elevation, and whether it sits inside a
+fire perimeter. No plots fall in a roadless block in the south. These
+data are simulated, so the true parameter values are known; they appear
+with the fits below.^[The script that generated the data is
+[sim_Week14_cheatgrass.R](rcode/sim_Week14_cheatgrass.R).]
+
+```{r data-map, echo=FALSE, fig.width=7.5, fig.height=5.2}
+ux <- sort(unique(grid$x_km))
+uy <- sort(unique(grid$y_km))
+zl_y <- c(1, 5.5)
+par(mar = c(4, 4, 2, 1))
+map_base("Cheatgrass survey: 200 plots")
+contour(ux, uy, matrix(grid$elev_m, length(ux)), levels = seq(1400, 2400, 100), col = "grey70", add = TRUE,
+        labcex = 0.6)
+map_fires(lwd = 2, lty = 2)
+points(cg$x_km, cg$y_km, pch = ifelse(cg$burned == 1, 24, 21), bg = val_col(cg$log_biomass, zl_y, pal_seq),
+       cex = 1.25)
+rect(13, 1, 22, 10, border = "grey40", lty = 3)
+text(17.5, 5.5, "roadless\n(no plots)", cex = 0.75, col = "grey30")
+map_key(zl_y, pal_seq, "log biomass")
+legend("bottomright", c("burned plot", "unburned plot", "fire perimeter", "elevation (m)"), pch = c(24, 21, NA, NA),
+       lty = c(NA, NA, 2, 1), lwd = c(NA, NA, 2, 1), col = c("black", "black", "black", "grey70"), bg = "white", cex = 0.72)
+```
+
+A first model is an ordinary regression of log biomass on fire and
+elevation:
+
+```{r lm-fit}
+fit_lm <- lm(log_biomass ~ burned + elev_km, data = cg)
+round(summary(fit_lm)$coefficients, 3)
+```
+
+```{r lm-numbers, echo=FALSE}
+lm_tab <- summary(fit_lm)$coefficients
+```
+
+The regression says burned plots have `r f2(lm_tab["burned", 1])` more
+log biomass (SE `r f2(lm_tab["burned", 2])`), which is
+`r f1(exp(lm_tab["burned", 1]))` times the biomass of unburned plots at
+the same elevation. Before believing the standard error, map the
+residuals:
+
+```{r lm-resid-map, echo=FALSE, fig.width=7, fig.height=4.9}
+cg$resid_lm <- resid(fit_lm)
+par(mar = c(4, 4, 2, 1))
+map_base("Residuals from the ordinary regression")
+map_fires(lty = 2, col = "grey40")
+points(cg$x_km, cg$y_km, pch = 21, cex = 0.5 + 1.6 * abs(cg$resid_lm),
+       bg = ifelse(cg$resid_lm > 0, "#c0392b", "#2a78d6"))
+legend("topright", c("above the fitted value", "below the fitted value"), pch = 21,
+       pt.bg = c("#c0392b", "#2a78d6"), bg = "white", cex = 0.75, title = "symbol size = |residual|")
+```
+
+> **Question:** `lm()` assumes the residuals are independent draws from
+> one Normal distribution. What on this map says otherwise? If an
+> important covariate were missing from the model, what would its map
+> look like?
+
+Positive residuals sit next to positive ones, and negative next to
+negative. Something we didn't measure (soil texture, grazing history,
+where seed arrived first) varies smoothly across the landscape, and
+neighboring plots share it. The `r sum(cg$burned)` burned plots sit in
+three fires, so they share it too: they are not `r sum(cg$burned)`
+independent looks at what fire does. This is the two-cores-from-one-tree
+problem of the [random intercept](Week11_LinearModelsAndVariance.html#random-intercept),
+without the tidy groups.
+
+Because the data are simulated, we can see what this costs. The code
+below draws 2000 new surveys from the true model (same plots, same
+fires, a new landscape of unmeasured variation each time) and refits
+the regression to each.
+
+```{r design-and-distances}
+library(mvtnorm)
+X <- model.matrix(~ burned + elev_km, data = cg)
+D <- as.matrix(dist(cg[, c("x_km", "y_km")]))            # distances between plots (km)
+```
+
+```{r lm-coverage, cache=TRUE}
+V_true <- 0.7^2 * exp(-D / 6) + 0.3^2 * diag(nrow(cg))   # the covariance the data came from
+set.seed(746)
+Y <- rmvnorm(2000, X %*% c(3, 0.5, -2), V_true)          # truth: fire effect 0.5
+sims <- t(apply(Y, 1, function(y) summary(lm(y ~ X - 1))$coefficients[2, 1:2]))
+c(sd_of_estimates = sd(sims[, 1]), mean_reported_se = mean(sims[, 2]),
+  coverage_95 = mean(abs(sims[, 1] - 0.5) < qt(0.975, 197) * sims[, 2]))
+```
+
+The fire estimates vary from survey to survey with an SD of
+`r f2(sd(sims[, 1]))`, but `lm()` reports a standard error near
+`r f2(mean(sims[, 2]))`, so its 95% intervals contain the true effect
+only `r round(100 * mean(abs(sims[, 1] - 0.5) < qt(0.975, 197) * sims[, 2]))`%
+of the time.^[The exact answer needs no simulation. If the errors have
+covariance $V$, the least-squares estimate
+$\hat\beta = (X^TX)^{-1}X^Ty$ has covariance
+$(X^TX)^{-1}X^T V X (X^TX)^{-1}$, which reduces to the usual
+$\sigma^2 (X^TX)^{-1}$ only when $V = \sigma^2 I$. With the true $V$
+here the SE of the fire coefficient is
+`r f2(sqrt((solve(t(X) %*% X) %*% t(X) %*% V_true %*% X %*% solve(t(X) %*% X))[2, 2]))`.]
+The survey in hand happens to be one where the estimate landed well
+above the truth of 0.5.
+
+## 2. The variogram {#variogram}
+
+How far does the similarity reach? Take every pair of plots, and
+compare the difference in their residuals with the distance between
+them. The **semivariance** at distance $d$ is half the average squared
+difference between residuals of plots about $d$ apart:
+
+$$\hat\gamma(d) = \frac{1}{2\,N(d)} \sum_{\text{pairs } i,j \text{ about } d \text{ apart}} (e_i - e_j)^2$$
+
+If nearby plots are alike, $\hat\gamma$ is small at short distances and
+rises as the plots get farther apart. A plot of $\hat\gamma$ against
+distance is a **variogram**.
+
+```{r variogram}
+library(gstat)
+library(sp)
+cg_sp <- cg
+coordinates(cg_sp) <- ~ x_km + y_km
+vg_lm <- variogram(resid_lm ~ 1, cg_sp, cutoff = 20, width = 2)     # 2-km distance bins
+vg_lm[, c("np", "dist", "gamma")]
+```
+
+```{r variogram-plot, echo=FALSE, fig.width=6, fig.height=4}
+par(mar = c(4, 4, 1, 1))
+plot(vg_lm$dist, vg_lm$gamma, pch = 16, xlim = c(0, 20), ylim = c(0, 0.7), xaxs = "i", yaxs = "i",
+     xlab = "Distance between plots (km)", ylab = "Semivariance of residuals")
+abline(h = var(cg$resid_lm), lty = 2, col = "grey50")
+text(19.5, var(cg$resid_lm) + 0.03, "variance of all residuals", adj = 1, cex = 0.8, col = "grey30")
+```
+
+Three features of a variogram have names:
+
+- the **nugget**, where the curve meets the vertical axis: the variance
+  between plots that are practically on top of each other (measurement
+  error and very fine-scale variation);
+- the **sill**, where it levels off: the total variance, reached by
+  plots too far apart to share anything;
+- the **range**, the distance at which it gets there.
+
+Here plots 1 km apart differ much less
+(semivariance `r f2(vg_lm$gamma[1])`) than plots 10 km apart
+(`r f2(vg_lm$gamma[vg_lm$dist > 9][1])`), and the curve flattens
+somewhere around 8 to 12 km.^[A one-number summary of the same thing is
+Moran's $I$, a correlation between each residual and a
+distance-weighted average of its neighbors (`ape::Moran.I()`). It makes
+a quick test for "is there any spatial pattern?", but it doesn't say
+how far the pattern reaches, and a model needs to know.]
+
+The variogram is a picture of a covariance function. Suppose each
+residual is the sum of a spatially smooth part with variance
+$\sigma_s^2$, whose correlation between two plots $d$ apart is
+$\rho(d)$, and independent noise with variance $\sigma_e^2$. Then
+
+$$\gamma(d) = \sigma_e^2 + \sigma_s^2\,\bigl(1 - \rho(d)\bigr)$$
+
+so the nugget is $\sigma_e^2$, the sill is $\sigma_s^2 + \sigma_e^2$,
+and the shape of the rise is the correlation function turned upside
+down. The widget simulates a landscape from this model, samples 150
+plots, and draws both the model's variogram and the one computed from
+the plots.
+
+```{r widget-variogram, echo=FALSE}
+widget("variogram.html")
+```
+
+> **Question:** Set the nugget SD to 0 and then raise it to 0.8. What
+> changes on the map, and what changes in the variogram? Then set it
+> back to 0.3 and move the length-scale from 1 to 10 km. At which
+> setting would 150 plots give you the most independent information
+> about the landscape's mean?
+
+> **Question:** Press "New landscape" several times at a length-scale
+> of 8 km. How well do the points follow the curve at 15 to 20 km? What
+> does that say about reading a range off an empirical variogram?
+
+## 3. A Gaussian process over the map {#gp-space}
+
+The model that goes with that variogram adds one term to the
+regression:
+
+$$y_i = \mathbf{x}_i^T\boldsymbol\beta + s_i + \varepsilon_i, \qquad
+\mathbf{s} \sim \text{MVN}(\mathbf{0},\ \sigma_s^2 R), \qquad
+\varepsilon_i \sim \text{Normal}(0, \sigma_e^2)$$
+
+where $s_i$ is the value at plot $i$ of a **spatial random field**: a
+surface of unmeasured variation, with one value at every point on the
+map. The correlation between its values at two plots depends on the
+distance $d_{ij}$ between them. The simplest choice is the exponential
+correlation function,
+
+$$R_{ij} = \exp(-d_{ij}/\ell)$$
+
+with **length-scale** $\ell$ in km. Adding the pieces, all 200
+observations are one draw from a multivariate Normal:
+
+$$\mathbf{y} \sim \text{MVN}(X\boldsymbol\beta,\ V), \qquad
+V = \sigma_s^2 R + \sigma_e^2 I$$
+
+Nothing in this recipe is new. It is the
+[mean vector plus covariance matrix](Week12_MixedModels.html#mixed-models-r)
+of the last three weeks with a different rule for filling in $V$:
+
+- a [random intercept](Week11_LinearModelsAndVariance.html#random-intercept)
+  puts $\sigma_a^2$ wherever two observations share a group;
+- [AR(1)](Week12_MixedModels.html#ar1) puts $\phi^{|s-t|}$ wherever two
+  observations are $|s-t|$ years apart, which is the exponential
+  function above with time in place of distance ($\phi = e^{-1/\ell}$);
+- the [Gaussian process](Week13_HierarchicalModelsAndGAMs.html#gp) for
+  the Bd growth curve used the gap in temperature between two cultures.
+  The field $\mathbf{s}$ is a Gaussian process too, with a kernel
+  that takes the distance in km between two plots.^[Last week's
+  amplitude $\alpha$ is this page's $\sigma_s$. Geostatistics arrived
+  at the same model decades before machine learning named it a
+  Gaussian process, which is why the vocabulary (nugget, sill, range,
+  kriging) is different.]
+
+It is also a [hierarchical model](Week13_HierarchicalModelsAndGAMs.html#what-hierarchical):
+the data given the field, plus a model for the field. Writing one MVN
+with $V$ is the marginal form, with the field integrated out.
+
+So the likelihood is one `dmvnorm()` call, and `optim()` can fit it.
+The parameters are the three regression coefficients and the logs of
+$\sigma_s$, $\ell$, and $\sigma_e$.
+
+```{r by-hand}
+y <- cg$log_biomass
+nll_spatial <- function(par) {
+  beta <- par[1:3]
+  sigma_s <- exp(par[4])
+  ell <- exp(par[5])
+  sigma_e <- exp(par[6])
+  V <- sigma_s^2 * exp(-D / ell) + sigma_e^2 * diag(length(y))
+  -dmvnorm(y, as.vector(X %*% beta), V, log = TRUE)
+}
+fit_hand <- optim(c(coef(fit_lm), log(0.5), log(5), log(0.5)), nll_spatial, method = "BFGS", hessian = TRUE)
+se_hand <- sqrt(diag(solve(fit_hand$hessian)))
+est_hand <- c(fit_hand$par[1:3], exp(fit_hand$par[4:6]))
+names(est_hand) <- c("intercept", "burned", "elev_km", "sigma_s", "ell", "sigma_e")
+round(est_hand, 3)
+round(rbind(lm = c(coef(fit_lm)[2:3], sqrt(diag(vcov(fit_lm)))[2:3]),
+            spatial = c(fit_hand$par[2:3], se_hand[2:3])), 3)        # estimates, then SEs
+c(logLik_lm = as.numeric(logLik(fit_lm)), logLik_spatial = -fit_hand$value)
+```
+
+```{r by-hand-numbers, echo=FALSE}
+aic_lm <- AIC(fit_lm)
+aic_hand <- 2 * fit_hand$value + 2 * 6
+```
+
+Three things changed.
+
+- **The fire effect fell by half**, from `r f2(coef(fit_lm)[2])` to
+  `r f2(fit_hand$par[2])` (truth 0.5). The regression compared burned
+  plots with every unburned plot on the map. The spatial model leans on
+  comparisons between burned plots and *nearby* unburned ones, which
+  share the same unmeasured conditions.
+- **Its standard error grew**, from `r f2(lm_tab["burned", 2])` to
+  `r f2(se_hand[2])`, because plots inside one fire are no longer
+  counted as independent.
+- **The elevation SE tripled**, from `r f2(lm_tab["elev_km", 2])` to
+  `r f2(se_hand[3])`. Elevation changes slowly across the map, so does
+  the field, and the data can't fully tell them apart.
+
+The spatial model has two more parameters and improves the
+log-likelihood by `r f1(-fit_hand$value - as.numeric(logLik(fit_lm)))`
+(AIC `r f1(aic_hand)` against `r f1(aic_lm)`). The estimated
+length-scale is $\hat\ell =$ `r f1(est_hand["ell"])` km: two plots that
+far apart have a field correlation of $e^{-1} = 0.37$, and at
+$2\hat\ell =$ `r f1(2 * est_hand["ell"])` km it is down to 0.14.
+
+```{r variogram-fit-plot, echo=FALSE, fig.width=6, fig.height=4}
+par(mar = c(4, 4, 1, 1))
+plot(vg_lm$dist, vg_lm$gamma, pch = 16, xlim = c(0, 20), ylim = c(0, 0.7), xaxs = "i", yaxs = "i",
+     xlab = "Distance between plots (km)", ylab = "Semivariance of residuals")
+curve(est_hand["sigma_e"]^2 + est_hand["sigma_s"]^2 * (1 - exp(-x / est_hand["ell"])), add = TRUE, lwd = 2.5,
+      col = "#2a78d6")
+abline(h = est_hand["sigma_e"]^2, lty = 3, col = "grey50")
+text(19.5, est_hand["sigma_e"]^2 + 0.03, "nugget", adj = 1, cex = 0.8, col = "grey30")
+legend("bottomright", c("lm residuals", "fitted spatial model"), pch = c(16, NA), lwd = c(NA, 2.5),
+       col = c("black", "#2a78d6"), bty = "n", cex = 0.85)
+```
+
+The fitted model's variogram (the curve) runs through the points it
+never saw: the variogram was computed from `lm()` residuals, and the
+curve comes from maximizing the likelihood.^[Older geostatistics fit
+the curve to the variogram points by least squares and then predicted
+in a second step. Maximum likelihood fits the coefficients and the
+covariance parameters together and gives standard errors for all of
+them.]
+
+The exponential is one member of the **Matérn** family of correlation
+functions, which has a second parameter, the smoothness $\nu$. The
+exponential is $\nu = 1/2$ (rough surfaces), and as $\nu \to \infty$
+the Matérn becomes last week's squared exponential (very smooth
+surfaces). The mesh-based packages below use $\nu = 1$, which is in
+between.^[Smoothness is hard to estimate from field data, so it is
+usually fixed. The Matérn correlation is
+$\rho(d) = \frac{2^{1-\nu}}{\Gamma(\nu)} (\kappa d)^\nu K_\nu(\kappa d)$,
+with $K_\nu$ a modified Bessel function; for $\nu = 1/2$ it reduces to
+$e^{-\kappa d}$. Packages that use the Matérn report a **range**,
+$\sqrt{8\nu}/\kappa$, the distance at which the correlation has fallen
+to about 0.13. For the exponential that distance is $2\ell$.]
+
+## 4. A mesh makes it fast {#mesh}
+
+```{r chol-timing, echo=FALSE, cache=TRUE}
+set.seed(1)
+time_chol <- sapply(c(1000, 2000, 4000), function(n) {
+  V <- exp(-as.matrix(dist(cbind(runif(n, 0, 40), runif(n, 0, 30)))) / 4) + diag(0.1, n)
+  system.time(chol(V))[["elapsed"]]
+})
+```
+
+Every likelihood evaluation above factors a 200 by 200 matrix, which
+takes a few milliseconds. The work grows with the cube of the number of
+plots ([why correlated-data models are hard](Week12_MixedModels.html#harder)):
+on the computer that built this page one factorization took
+`r f2(time_chol[1])` seconds for 1000 plots, `r f2(time_chol[2])` for
+2000, and `r f1(time_chol[3])` for 4000. At that rate 20,000 plots
+(a modest camera-trap or eBird data set) would take about
+`r round(time_chol[3] * 125 / 60)` minutes per evaluation, and
+`optim()` needs hundreds.
+
+The fix used by `sdmTMB` and `R-INLA` goes back to an idea from last
+week: [build the function from basis functions](Week13_HierarchicalModelsAndGAMs.html#basis).
+Cover the study area with a **mesh** of triangles. Give the field one
+unknown value at each vertex, and let its value anywhere else be a
+weighted average of the three vertices of the triangle it falls in:
+
+$$s(\text{location}) = \sum_{k=1}^{K} w_k\,\psi_k(\text{location})$$
+
+Each basis function $\psi_k$ is a little tent: 1 at vertex $k$, falling
+to 0 at the neighboring vertices. These are the two-dimensional version
+of the degree-1 B-splines in last week's spline widget, and the
+vertices play the part of knots.
+
+```{r mesh}
+library(sdmTMB)
+mesh <- make_mesh(cg, xy_cols = c("x_km", "y_km"), cutoff = 2)     # no two vertices closer than 2 km
+mesh$mesh$n                                                        # number of vertices
+```
+
+```{r mesh-plot, echo=FALSE, fig.width=6.5, fig.height=5}
+par(mar = c(0.5, 0.5, 0.5, 0.5))
+plot(mesh$mesh, main = "", asp = 1)
+points(cg$x_km, cg$y_km, pch = 16, cex = 0.6, col = "#c0392b")
+```
+
+The mesh extends past the study area so the edge of the mesh doesn't
+distort the field near the outermost plots. Each plot's field value is
+a weighted average of at most three vertex values, so the matrix that
+maps vertex values to plots is mostly zeros:
+
+```{r mesh-projection}
+A <- fmesher::fm_basis(mesh$mesh, loc = as.matrix(cg[, c("x_km", "y_km")]))
+dim(A)                                    # 200 plots by K vertices
+i <- which(Matrix::rowSums(A != 0) == 3)[1]
+A[i, A[i, ] != 0]                         # one plot's three weights
+```
+
+```{r mesh-sparsity, echo=FALSE}
+Q_demo <- fmesher::fm_matern_precision(mesh$mesh, alpha = 2, rho = 8, sigma = 0.6)
+q_per_row <- Matrix::nnzero(Q_demo) / nrow(Q_demo)
+```
+
+The second half of the idea is the prior on the vertex values
+$\mathbf{w}$. Lindgren, Rue, and Lindström (2011) showed how to choose
+a multivariate Normal for $\mathbf{w}$ so that the tent-function
+surface behaves like a Gaussian process with Matérn covariance, and so
+that the **precision matrix** $Q = \Sigma^{-1}$ of $\mathbf{w}$ is
+sparse: each vertex is tied directly only to vertices a step or two
+away. For this mesh $Q$ averages `r f1(q_per_row)` nonzero entries per
+row, out of `r mesh$mesh$n`. Sparse matrices factor in far less time
+than dense ones, and the cost now grows with the number of vertices,
+not the number of plots.^[This is called the SPDE approach, because the
+link between the Matérn covariance and a sparse $Q$ comes from a
+stochastic partial differential equation whose solutions are Matérn
+fields (Lindgren et al. 2011, *J. R. Stat. Soc. B* 73: 423-498). You
+can use it without the equation. An AR(1) series has the same property
+in one dimension: its covariance matrix $\phi^{|s-t|}$ is full, but its
+precision matrix is tridiagonal, since each year is tied directly only
+to the years before and after.]
+
+Compare the two representations of a smooth function from last week.
+A penalized spline is basis functions times weights, with a Normal
+prior on the weights whose precision matrix is the penalty. A Gaussian
+process is a kernel. The mesh version of a random field is a Gaussian
+process written the first way.
+
+What's left to the user is the mesh. Too coarse, and the tents can't
+follow the field; finer than needed, and the fit slows for nothing.
+
+```{r widget-mesh, echo=FALSE}
+widget("spatial_mesh.html")
+```
+
+> **Question:** With the field's range at 10 km, start with a mesh edge
+> length of 15 km and shorten it. At what edge length does the mesh
+> version stop improving in any way you'd care about? Now set the range
+> to 4 km and repeat. What rule relates the two?
+
+## 5. One model, three packages {#packages}
+
+All three packages below fit the model of [section 3](#gp-space). They
+differ in how they represent the field and how they estimate.
+
+**`glmmTMB`** builds the full covariance matrix, as we did. The
+coordinates go into a `numFactor`, and the field is an `exp()` term
+grouped by a factor with one level (all plots belong to the same
+landscape):
+
+```{r glmmtmb-fit}
+library(glmmTMB)
+cg$pos <- numFactor(cg$x_km, cg$y_km)
+cg$all <- factor(1)
+time_glmmtmb <- system.time(
+  fit_glmmtmb <- glmmTMB(log_biomass ~ burned + elev_km + exp(pos + 0 | all), data = cg)
+)[["elapsed"]]
+c(logLik(fit_glmmtmb), by_hand = -fit_hand$value)
+```
+
+Same model, same likelihood, same answer as `optim()`.^[Swap `exp()`
+for `mat()` to fit a Matérn with the smoothness estimated, or `gau()`
+for the squared exponential. `nlme::gls()` with
+`correlation = corExp(form = ~ x_km + y_km, nugget = TRUE)` fits this
+model too. Both build the dense matrix, so they slow down past a
+thousand or so locations.]
+
+**`sdmTMB`** uses the mesh. The model call is a `glmmTMB`-style formula
+plus the mesh:
+
+```{r sdmtmb-fit}
+time_sdmtmb <- system.time(
+  fit_sdmtmb <- sdmTMB(log_biomass ~ burned + elev_km, data = cg, mesh = mesh, spatial = "on")
+)[["elapsed"]]
+fit_sdmtmb
+```
+
+It maximizes the likelihood, integrating over the vertex values with
+the [Laplace approximation](Week12_MixedModels.html#glmm-by-hand)
+(exact here, since everything is Normal). In its output, `Spatial SD`
+is $\sigma_s$, `Dispersion parameter` is $\sigma_e$, and `Matérn range`
+is the distance at which correlation falls to about 0.13.
+
+**`R-INLA`** uses the same mesh and the same sparse precision matrix,
+and is Bayesian: it returns posterior distributions, computed by a
+fast deterministic approximation in place of MCMC.^[INLA stands for
+integrated nested Laplace approximation (Rue, Martino, and Chopin 2009,
+*J. R. Stat. Soc. B* 71: 319-392). It applies to models whose
+unobserved layer is Gaussian, which covers every model on this page.
+The `inlabru` package wraps `R-INLA` in a shorter formula syntax and
+builds the stack for you.] Its interface asks for more assembly. We
+give it priors for the range and $\sigma_s$, the matrix `A` that maps
+vertices to plots, and a "stack" that bundles the data with `A`:
+
+```{r inla-fit}
+library(INLA)
+spde <- inla.spde2.pcmatern(mesh$mesh,
+                            prior.range = c(5, 0.5),     # P(range < 5 km) = 0.5
+                            prior.sigma = c(1, 0.05))    # P(sigma_s > 1) = 0.05
+A_inla <- inla.spde.make.A(mesh$mesh, loc = as.matrix(cg[, c("x_km", "y_km")]))
+stk <- inla.stack(data = list(y = cg$log_biomass),
+                  A = list(A_inla, 1),
+                  effects = list(s = seq_len(spde$n.spde),
+                                 data.frame(intercept = 1, burned = cg$burned, elev_km = cg$elev_km)))
+time_inla <- system.time(
+  fit_inla <- inla(y ~ 0 + intercept + burned + elev_km + f(s, model = spde),
+                   data = inla.stack.data(stk), control.predictor = list(A = inla.stack.A(stk)))
+)[["elapsed"]]
+round(fit_inla$summary.fixed[, c("mean", "sd", "0.025quant", "0.975quant")], 3)
+round(fit_inla$summary.hyperpar[, c("mean", "0.025quant", "0.5quant", "0.975quant")], 3)
+```
+
+The priors are *penalized complexity* priors, which are stated as tail
+probabilities: here, an even chance that the range is under 5 km, and a
+5% chance that $\sigma_s$ is over 1.^[Fuglstad et al. (2019, *J. Am.
+Stat. Assoc.* 114: 445-452). The prior shrinks the field toward a
+simpler model (a long range and a small variance), so a field has to be
+supported by the data to appear. `sdmTMB` accepts the same priors
+through `sdmTMBpriors()` and `pc_matern()`.] INLA reports the residual
+variation as a precision, $1/\sigma_e^2$.
+
+```{r compare-table, echo=FALSE}
+td <- tidy(fit_sdmtmb)
+tr <- tidy(fit_sdmtmb, "ran_pars")
+tr <- setNames(tr$estimate, tr$term)
+th <- exp(getME(fit_glmmtmb, "theta"))
+se_g <- summary(fit_glmmtmb)$coefficients$cond[, 2]
+hy <- fit_inla$summary.hyperpar
+cmp <- rbind(
+  "Truth" = c(0.5, NA, -2, NA, 0.7, 12, 0.3, NA),
+  "`lm()`, no spatial term" = c(coef(fit_lm)[2], lm_tab[2, 2], coef(fit_lm)[3], lm_tab[3, 2], NA, NA,
+                                 sigma(fit_lm), NA),
+  "`optim()`, exponential" = c(fit_hand$par[2], se_hand[2], fit_hand$par[3], se_hand[3], est_hand["sigma_s"],
+                                2 * est_hand["ell"], est_hand["sigma_e"], NA),
+  "`glmmTMB`, exponential" = c(fixef(fit_glmmtmb)$cond[2], se_g[2], fixef(fit_glmmtmb)$cond[3], se_g[3], th[1],
+                                2 * th[2], sigma(fit_glmmtmb), time_glmmtmb),
+  "`sdmTMB`, mesh (Matérn)" = c(td$estimate[2], td$std.error[2], td$estimate[3], td$std.error[3], tr["sigma_O"],
+                                 tr["range"], tr["phi"], time_sdmtmb),
+  "`R-INLA`, mesh (Matérn)" = c(fit_inla$summary.fixed["burned", "mean"], fit_inla$summary.fixed["burned", "sd"],
+                                 fit_inla$summary.fixed["elev_km", "mean"], fit_inla$summary.fixed["elev_km", "sd"],
+                                 hy["Stdev for s", "0.5quant"], hy["Range for s", "0.5quant"],
+                                 1 / sqrt(hy[1, "0.5quant"]), time_inla))
+cmp_cols <- c("Fire", "SE", "Elevation", "SE", "$\\sigma_s$", "Range (km)", "$\\sigma_e$", "Seconds")
+show_cmp <- function(m) {
+  out <- data.frame(formatC(m[, 1:5], format = "f", digits = 2), formatC(m[, 6], format = "f", digits = 1),
+                    formatC(m[, 7], format = "f", digits = 2), formatC(m[, 8], format = "f", digits = 1),
+                    check.names = FALSE)
+  out[] <- lapply(out, function(col) ifelse(grepl("NA", col), "", col))
+  knitr::kable(out, col.names = cmp_cols, align = "r")
+}
+show_cmp(cmp)
+```
+
+"Range" is the distance at which the field's correlation falls to about
+0.13 ($2\ell$ for the exponential fits). For INLA the estimate and SE
+columns are the posterior mean and SD, and the other entries are
+posterior medians.
+
+The four spatial fits agree on the fire effect to within a fraction of
+a standard error, although two of them use a different correlation
+function from the one the data were simulated with. The mesh fits do
+put more of the variance in $\sigma_e$ (0.42 against 0.27). A Matérn
+field with $\nu = 1$ is smoother than an exponential one, and a mesh
+can't represent variation finer than its triangles, so the roughest
+part of the field gets counted as plot-level noise.
+
+Each package has its own names for the same parameters:
+
+| | $\sigma_s$ | reach of correlation | $\sigma_e$ |
+|:------------|:--------------------|:--------------------|:--------------------|
+| `glmmTMB` `exp()` | `Std.Dev.` of the `all` group in `VarCorr()` | $\ell$: `exp(getME(fit, "theta"))[2]` | `sigma(fit)` |
+| `sdmTMB` | `Spatial SD` (`sigma_O`) | `Matérn range` (about $2\ell$) | `Dispersion parameter` (`phi`) |
+| `R-INLA` | `Stdev for s` | `Range for s` (about $2\ell$) | `Precision for the Gaussian observations` ($1/\sigma_e^2$) |
+
+Which to use?
+
+- **`glmmTMB`** when you already have a `glmmTMB` model and up to a
+  thousand or so locations: the spatial term is one more piece of the
+  formula, next to random effects, zero inflation, and the rest.
+- **`sdmTMB`** for larger data sets and for maps: fast, a short
+  syntax, built-in prediction, simulation, and cross-validation, and
+  fields that change over time (`spatiotemporal = "ar1"`). It was
+  written for species distribution models from survey data.
+- **`R-INLA`** when you want posteriors and priors, or model parts the
+  others lack (several likelihoods sharing a field, barriers the field
+  can't cross, many kinds of random effect). It has the steepest
+  learning curve of the three.
+
+## 6. The GAM alternative: a smooth of the coordinates {#gam-space}
+
+Last week ended with the claim that a penalized spline and a Gaussian
+process are two ways of writing a smooth function with a multivariate
+Normal prior. So the spatial surface can also be a
+[GAM smooth](Week13_HierarchicalModelsAndGAMs.html#gam) of the two
+coordinates:
+
+```{r gam-fit}
+library(mgcv)
+fit_gam <- gam(log_biomass ~ burned + elev_km + s(x_km, y_km, k = 100), data = cg, method = "REML")
+summary(fit_gam)$p.table
+summary(fit_gam)$s.table
+```
+
+`s(x_km, y_km)` is a thin plate spline, the two-dimensional relative of
+last week's curve: basis functions over the map, a penalty on the
+surface's curvature, and REML to choose the penalty. `mgcv` can also
+build the smooth from a Gaussian process kernel:
+
+```{r gam-gp-fit}
+fit_gam_gp <- gam(log_biomass ~ burned + elev_km + s(x_km, y_km, bs = "gp", m = 2, k = 100),
+                  data = cg, method = "REML")       # m = 2: exponential correlation
+summary(fit_gam_gp)$p.table
+```
+
+```{r compare-table-gam, echo=FALSE}
+pg <- summary(fit_gam)$p.table
+pgg <- summary(fit_gam_gp)$p.table
+cmp2 <- rbind(cmp[c(1, 3, 5), ],
+              "`gam()`, thin plate spline" = c(pg[2, 1:2], pg[3, 1:2], NA, NA, sqrt(fit_gam$sig2), NA),
+              "`gam()`, `bs = \"gp\"`" = c(pgg[2, 1:2], pgg[3, 1:2], NA, NA, sqrt(fit_gam_gp$sig2), NA))
+out2 <- data.frame(formatC(cmp2[, c(1:4, 7)], format = "f", digits = 2), check.names = FALSE)
+out2[] <- lapply(out2, function(col) ifelse(grepl("NA", col), "", col))
+knitr::kable(out2,
+             col.names = c("Fire", "SE", "Elevation", "SE", "$\\sigma_e$"), align = "r")
+```
+
+```{r gam-numbers, echo=FALSE}
+elev_r2 <- summary(lm(elev_km ~ x_km + y_km, data = cg))$r.squared
+pred_sd <- predict(fit_sdmtmb, newdata = grid)
+gam_terms <- predict(fit_gam, newdata = grid, type = "terms")
+gam_surface <- gam_terms[, "s(x_km,y_km)"]
+```
+
+The GAMs give nearly the same fire effect as the random field models.
+Elevation is another matter: its standard error under the thin plate
+spline is `r f1(pg[3, 2])`, against `r f2(se_hand[3])` for the
+exponential field (and `r f1(pgg[3, 2])` with `bs = "gp"`). Both `mgcv`
+smooths leave planes unpenalized (any flat tilt of the surface costs
+nothing), and in this landscape
+elevation is close to a tilted plane: easting and northing alone
+explain `r round(100 * elev_r2)`% of its variation. The smooth can
+stand in for elevation at no cost, so the data can't say how much of
+the east-west gradient belongs to which. The random field has mean zero
+and a finite range, which leaves broad gradients mostly to the
+covariates.^[This competition between a spatial term and a spatially
+smooth covariate is called spatial confounding. It affects every model
+on this page to some degree (compare the elevation SEs from `lm()` and
+the field models), and no choice of package removes it. Adding a
+penalty on the planes (`select = TRUE` in `gam()`) helps only a little
+here.]
+
+```{r surface-maps, echo=FALSE, fig.width=10, fig.height=3}
+zl_f <- c(-1.6, 1.6)
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 0.5))
+map_image(grid$field_true, zl_f, pal_div, "True field")
+map_fires(lty = 2)
+map_image(pred_sd$omega_s, zl_f, pal_div, "sdmTMB random field")
+points(cg$x_km, cg$y_km, pch = ".", cex = 2)
+map_image(gam_surface - mean(gam_surface), zl_f, pal_div, "GAM thin plate smooth")
+points(cg$x_km, cg$y_km, pch = ".", cex = 2)
+```
+
+The left map is the field the data were simulated from (blue below
+zero, red above). The fitted field's correlation with it across the
+grid is `r f2(cor(pred_sd$omega_s, grid$field_true))`; the GAM smooth's
+is `r f2(cor(gam_surface, grid$field_true))`, lower partly because the
+smooth has also taken on some of the elevation gradient.
+
+**Which approach, when?** The two are close relatives, and for many
+data sets either will do.^[Miller, Glennie, and Seaton (2020, *J.
+Agric. Biol. Environ. Stat.* 25: 1-16) show that the mesh-based random
+field can itself be fit as an `mgcv` smooth with a custom penalty.]
+Some things do favor one or the other:
+
+| Situation | Leans toward | Why |
+|:-------------------------------|:---------------|:--------------------------------------------|
+| Space is a nuisance: you want valid SEs for covariates and a rough map of what's left | GAM smooth | one extra term in `gam()`; nothing to build or tune beyond `k` |
+| The model already has other smooths (season, depth, a nonlinear covariate) | GAM smooth | everything in one `mgcv` formula; `te()` and `by =` for surfaces that change with a covariate |
+| You want the scale of dependence itself: how far does similarity reach, how much variance is spatial | random field | $\ell$ and $\sigma_s$ are parameters with standard errors; a smooth has only an edf (in `bs = "gp"` the range is fixed in advance, not estimated) |
+| Fine-scale, patchy variation relative to plot spacing | random field | exponential and Matérn fields are rough; a smooth with moderate `k` captures broad trends and can leave short-range correlation in the residuals |
+| Prediction away from the data, with honest uncertainty | random field | the field returns to zero and its SE to $\sigma_s$ beyond the range; a thin plate spline keeps extending its last tilt |
+| A covariate of interest is itself smooth in space | random field, with care | a mean-zero field with finite range competes less for broad gradients; check how the coefficient moves either way |
+| A field that changes through time (annual surveys, tracking a range shift) | random field | `sdmTMB` and `R-INLA` have spatiotemporal fields (independent, random walk, AR(1)) built in |
+| Tens of thousands of locations or more | either | `mgcv::bam()` or a mesh; not a dense covariance matrix |
+| Coastlines, lakes, and other barriers | either, specialized | soap film smooths in `mgcv`; barrier models in `R-INLA` and `sdmTMB` |
+| Bayesian inference with informative priors | random field in `R-INLA`, or either in `brms` | `brms` takes `s()` and `gp()` terms; MCMC with a Gaussian process is slow beyond a few hundred points |
+
+Whichever you choose, check the residuals for leftover spatial pattern
+([below](#demo-check)).
+
+## Discussion {#spatial-discussion}
+
+**Q1.** The ordinary regression puts the fire effect at
+`r f2(coef(fit_lm)[2])` (SE `r f2(lm_tab["burned", 2])`); the spatial
+models put it near `r f2(fit_hand$par[2])` (SE `r f2(se_hand[2])`). A
+colleague objects: "Fire scars are spatial patches. Your random field
+is a patchy surface. It has soaked up half of the fire effect." How
+would you respond? What survey design would have made the two easier
+to separate?
+
+**Q2.** The elevation coefficient has a standard error of
+`r f2(lm_tab["elev_km", 2])` in the ordinary regression,
+`r f2(se_hand[3])` with an exponential random field, and
+`r f1(pg[3, 2])` with a thin plate smooth. The estimates are
+`r f2(coef(fit_lm)[3])`, `r f2(fit_hand$par[3])`, and `r f2(pg[3, 1])`.
+Which would you report to the district, and what would you say about
+it?
+
+**Q3.** The random field stands in for whatever varies smoothly across
+the landscape and isn't in the model. Look at the fitted field in the
+maps above. If you could add one field season of measurements, what
+would you measure and where, and what would you expect to happen to
+$\hat\sigma_s$ if you guessed right?
+
+## Bonus: a spatial term in brms {#bonus-brms}
+
+For a fully Bayesian fit by MCMC, `brms` accepts both forms: an `mgcv`
+smooth, `s(x_km, y_km, k = 100)`, fit as a random effect as in
+[last week's bonus](Week13_HierarchicalModelsAndGAMs.html#smooth-brms),
+or a Gaussian process, `gp(x_km, y_km)`. An exact `gp()` builds the
+dense covariance matrix at every MCMC step, which is slow for 200 plots
+and impractical for thousands; `gp(x_km, y_km, k = 20, c = 5/4)` uses a
+basis-function approximation that scales much better. Neither is run
+here.
+
+# A spatial analysis from start to finish {#demo}
+
+This part takes the cheatgrass survey from the district's two questions
+to an answer: candidate models, a mesh, checks on the fit, comparison
+by AIC and by two kinds of cross-validation, and maps of predicted
+biomass with their uncertainty. It uses `sdmTMB` throughout.
+
+## 1. Problem and candidate models {#demo-problem}
+
+```{r workflow-all, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow(c("PROBLEM", "THEORIES"))
+```
+
+The district's questions again: how much does a past fire raise
+cheatgrass biomass, and where is biomass above its treatment threshold
+of 60 g per square meter (log biomass above `r f2(log(60))`)?
+
+Three candidate models:
+
+- **M0, no spatial term.** Fire and elevation explain what there is to
+  explain; the rest is plot-level noise.
+- **M1, spatial.** Fire and elevation, plus a random field for
+  unmeasured conditions shared by neighbors.
+- **M2, spatial with an interaction.** As M1, with a fire effect that
+  changes with elevation (cheatgrass does poorly at high, cold sites
+  whether or not they burned).
+
+Two practical points before fitting. Coordinates should be projected,
+in units that make distances meaningful, and scaled so the range is a
+moderate number: kilometers here, not meters and not degrees of
+longitude and latitude.^[A degree of longitude is about 85 km at Reno's
+latitude and a degree of latitude about 111 km, so distances computed
+from raw degrees are wrong in a direction-dependent way. With
+longitude/latitude data, project first: `sdmTMB::add_utm_columns()`
+does it in one step, or use `sf::st_transform()`.] And center
+covariates so the intercept means something (elevation is in km above
+1800 m).
+
+## 2. The mesh {#demo-mesh}
+
+`make_mesh()` needs one decision, the resolution. `cutoff` is the
+shortest edge allowed, in the units of the coordinates. A common
+starting point is an edge length of a third to a fifth of the range you
+expect, and the residual [variogram](#variogram) suggested the range is
+around 10 km. Then check that the answers don't depend on the choice:
+
+```{r mesh-sensitivity, cache=TRUE}
+mesh_check <- t(sapply(c(1, 2, 3, 5, 8), function(co) {
+  m <- make_mesh(cg, c("x_km", "y_km"), cutoff = co)
+  f <- sdmTMB(log_biomass ~ burned + elev_km, data = cg, mesh = m, spatial = "on")
+  rp <- tidy(f, "ran_pars")
+  c(cutoff = co, vertices = m$mesh$n, fire = tidy(f)$estimate[2], fire_se = tidy(f)$std.error[2],
+    range = rp$estimate[rp$term == "range"], sigma_s = rp$estimate[rp$term == "sigma_O"],
+    logLik = as.numeric(logLik(f)))
+}))
+round(mesh_check, 2)
+```
+
+With cutoffs of 1 to 3 km the fire effect and its standard error hardly
+move. The range and $\sigma_s$ move more, which says how loosely the
+data determine them. At 5 km the log-likelihood drops, and at 8 km the
+fit falls apart (look at the range). We keep the 2-km mesh from
+[above](#mesh).
+
+> **Question:** The 1-km mesh has almost twice the vertices of the 2-km
+> mesh. What did the extra vertices buy? When would you need them?
+
+## 3. Fit and check {#demo-check}
+
+```{r demo-fits}
+m0 <- sdmTMB(log_biomass ~ burned + elev_km, data = cg, spatial = "off")
+m1 <- sdmTMB(log_biomass ~ burned + elev_km, data = cg, mesh = mesh, spatial = "on")
+m2 <- sdmTMB(log_biomass ~ burned * elev_km, data = cg, mesh = mesh, spatial = "on")
+```
+
+```{r demo-sanity, message=TRUE}
+sanity(m1)
+```
+
+`sanity()` runs the checks you would otherwise do by hand after
+`optim()`: did the optimizer converge, is the Hessian usable, are any
+standard errors or variance parameters suspicious.
+
+Then the residuals. If the field has done its job, what's left should
+look like independent Normal noise, with a flat variogram:
+
+```{r demo-residuals}
+cg$resid_m1 <- residuals(m1, type = "mle-mvn")
+cg_sp$resid_m1 <- cg$resid_m1
+cg_sp$resid_m0 <- as.numeric(scale(cg$resid_lm))
+vg_m0 <- variogram(resid_m0 ~ 1, cg_sp, cutoff = 20, width = 2)
+vg_m1 <- variogram(resid_m1 ~ 1, cg_sp, cutoff = 20, width = 2)
+```
+
+```{r demo-residual-plots, echo=FALSE, fig.width=9, fig.height=3.8}
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
+qqnorm(cg$resid_m1, pch = 16, col = "grey40", main = "M1 residuals", cex.main = 0.95)
+qqline(cg$resid_m1)
+plot(vg_m0$dist, vg_m0$gamma, pch = 1, ylim = c(0, 1.5), xlim = c(0, 20), xlab = "Distance between plots (km)",
+     ylab = "Semivariance of standardized residuals", main = "Residual variograms", cex.main = 0.95)
+points(vg_m1$dist, vg_m1$gamma, pch = 16, col = "#2a78d6")
+abline(h = 1, lty = 2, col = "grey50")
+legend("bottomright", c("M0 (no spatial term)", "M1 (spatial)"), pch = c(1, 16), col = c("black", "#2a78d6"),
+       bty = "n", cex = 0.85)
+```
+
+M1's residuals are close to Normal, and their variogram is flat near 1
+at every distance: no spatial pattern is left.^[`type = "mle-mvn"`
+gives randomized quantile residuals with the random field drawn from
+its estimated distribution, which is the recommended choice in
+`sdmTMB`. For count and other non-Normal models the same call works,
+or use `simulate()` with the `DHARMa` package.]
+
+## 4. Compare {#demo-compare}
+
+```{r workflow-compare, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow("COMPARE")
+```
+
+```{r demo-aic}
+aic <- AIC(m0, m1, m2)
+aic$dAIC <- aic$AIC - min(aic$AIC)
+aic
+tidy(m2)
+```
+
+M1 is best. The interaction costs a parameter and buys nothing, so M2
+is an example of an
+[uninformative parameter](Week10_ModelComparison.html#frequentist):
+within 2 AIC units of the best model only because it contains it. M0
+is far behind.
+
+AIC asks how well each model would predict new data like the data in
+hand. The district's second question is about prediction at places
+without plots, so it is worth asking directly with
+[cross-validation](Week10_ModelComparison.html#cross-validation), and
+here spatial data set a trap. If plots are held out at random, each
+held-out plot has neighbors still in the training set, and the random
+field can predict it from them. That is a fair test of filling gaps
+inside the survey, and a poor test of predicting a new area. For the
+second, hold out whole blocks:
+
+```{r demo-cv, cache=TRUE}
+set.seed(746)
+fold_random <- sample(rep(1:10, length.out = nrow(cg)))                           # 10 random folds
+fold_block <- as.integer(factor(paste(floor(cg$x_km / 10), floor(cg$y_km / 10))))  # 10-km blocks
+cv_rmse <- function(formula, spatial, folds) {
+  cv <- sdmTMB_cv(formula, data = cg, mesh = mesh, spatial = spatial, fold_ids = folds)
+  sqrt(mean((cv$data$cv_predicted - cv$data$log_biomass)^2))
+}
+cv_tab <- rbind(
+  random_folds = c(M0 = cv_rmse(log_biomass ~ burned + elev_km, "off", fold_random),
+                   M1 = cv_rmse(log_biomass ~ burned + elev_km, "on", fold_random)),
+  block_folds = c(M0 = cv_rmse(log_biomass ~ burned + elev_km, "off", fold_block),
+                  M1 = cv_rmse(log_biomass ~ burned + elev_km, "on", fold_block)))
+round(cv_tab, 3)                  # root mean squared prediction error, log biomass
+```
+
+```{r demo-blocks-plot, echo=FALSE, fig.width=6.5, fig.height=4.6}
+par(mar = c(4, 4, 2, 1))
+map_base("Block folds: each 10-km square is held out in turn")
+abline(v = seq(10, 30, 10), h = c(10, 20), col = "grey60", lty = 2)
+points(cg$x_km, cg$y_km, pch = 21, bg = hcl.colors(12, "Set 3")[fold_block], cex = 1.1)
+```
+
+With random folds the spatial model's prediction error is
+`r round(100 * (1 - cv_tab[1, 2] / cv_tab[1, 1]))`% lower than M0's.
+With whole 10-km blocks held out, the two models predict about equally
+well (`r f2(cv_tab[2, 1])` and `r f2(cv_tab[2, 2])`): a block's
+center is farther from the remaining plots than the field's
+correlation reaches, so the field has little to offer there and
+prediction falls back on fire and elevation.^[Roberts et al. (2017,
+*Ecography* 40: 913-929) review blocking strategies for spatial,
+temporal, and grouped data.]
+
+> **Question:** The district wants a map of the surveyed area,
+> including the roadless block. Which of the two cross-validation
+> results describes how well that map will do, and where on the map
+> does each one apply?
+
+## 5. Predict {#demo-predict}
+
+Prediction at a new location uses everything the model knows: the
+regression part, from that location's fire history and elevation, plus
+the field's value there, inferred from nearby plots. For the model of
+[section 3](#gp-space) this is the conditional mean of a multivariate
+Normal, the same formula that drew last week's
+[Gaussian process curve](Week13_HierarchicalModelsAndGAMs.html#gp)
+between cultures. Geostatistics calls it **kriging**.
+
+The prediction grid has a row for each half-kilometer cell, with the
+same covariates as the plots:
+
+```{r demo-predict}
+pred <- predict(m1, newdata = grid)
+head(pred[, c("x_km", "y_km", "est", "est_non_rf", "omega_s")], 3)
+set.seed(746)
+sims <- predict(m1, newdata = grid, nsim = 500)      # 500 draws of the predicted surface
+pred$se <- apply(sims, 1, sd)
+pred$p_exceed <- rowMeans(sims > log(60))            # P(expected log biomass is above the threshold)
+```
+
+`est` is the prediction, `est_non_rf` its regression part, and
+`omega_s` the field. Calling `predict()` with `nsim` returns draws
+from the joint uncertainty in the coefficients and the field, one
+column per draw, which turns any question about the map into a
+calculation on the columns.^[The draws are of the expected log biomass
+in each cell. They leave out the plot-level noise $\sigma_e$, so they
+answer "what is typical here?" and not "what would one clipped quadrat
+weigh?" To report biomass on its original scale, note that
+$e^{\text{est}}$ is the median; the mean is
+$e^{\text{est} + \sigma^2/2}$, with $\sigma^2$ the variance left
+around the prediction.]
+
+```{r demo-maps, echo=FALSE, fig.width=10, fig.height=7.4}
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 0.5))
+map_image(pred$est_non_rf, zl_y, pal_seq, "Regression part: fire and elevation")
+map_key(zl_y, pal_seq, "log biomass")
+map_image(pred$est, zl_y, pal_seq, "Prediction: regression + field")
+points(cg$x_km, cg$y_km, pch = ".", cex = 2)
+map_image(pred$se, c(0.1, 0.5), hcl.colors(64, "Purples", rev = TRUE), "Standard error of the prediction")
+points(cg$x_km, cg$y_km, pch = ".", cex = 2)
+rect(13, 1, 22, 10, border = "grey30", lty = 3)
+map_key(c(0.1, 0.5), hcl.colors(64, "Purples", rev = TRUE), "SE", digits = 2)
+map_image(pred$p_exceed, c(0, 1), hcl.colors(64, "Reds", rev = TRUE), "P(biomass above 60 g per square meter)")
+contour(ux, uy, matrix(pred$p_exceed, length(ux)), levels = 0.5, drawlabels = FALSE, add = TRUE, lwd = 1.5)
+map_key(c(0, 1), hcl.colors(64, "Reds", rev = TRUE), "probability", digits = 2)
+```
+
+```{r demo-truth, echo=FALSE}
+pred0 <- predict(m0, newdata = grid)
+rmse_m0 <- sqrt(mean((pred0$est - grid$log_biomass_true)^2))
+rmse_m1 <- sqrt(mean((pred$est - grid$log_biomass_true)^2))
+roadless <- grid$x_km > 13 & grid$x_km < 22 & grid$y_km > 1 & grid$y_km < 10
+above <- grid$log_biomass_true > log(60)
+flag <- pred$p_exceed > 0.5
+```
+
+The regression part alone (top left) is a map of fire perimeters
+shaded by elevation. The field adds the patches the covariates miss.
+The standard error is lowest next to plots and highest in the roadless
+block and at the corners (mean `r f2(mean(pred$se[roadless]))` in the
+block, `r f2(mean(pred$se[!roadless]))` elsewhere). The last map is
+the one that answers the district's question: the probability that
+each cell is above the threshold, with a contour at 0.5.
+
+Since the data are simulated, the true surface is known. Across the
+grid, M1's predictions miss the true log biomass by
+`r f2(rmse_m1)` (root mean squared error), against `r f2(rmse_m0)` for
+M0. Of the cells flagged with probability above 0.5,
+`r round(100 * mean(above[flag]))`% are truly above the threshold, and
+the flagged cells include `r round(100 * mean(flag[above]))`% of all
+cells that are.
+
+> **Question:** The district can treat only a quarter of the area the
+> map flags. Would you send crews to the cells with the highest
+> predicted biomass, or the highest probability of exceeding the
+> threshold? Where do the two rankings disagree?
+
+## 6. What we tell the district {#demo-answer}
+
+```{r demo-answer, echo=FALSE}
+b1 <- tidy(m1, conf.int = TRUE)
+rp1 <- tidy(m1, "ran_pars", conf.int = TRUE)
+```
+
+- **Fire.** Burned plots carry about `r f1(exp(b1$estimate[2]))` times
+  the cheatgrass biomass of comparable unburned plots (95% interval
+  `r f1(exp(b1$conf.low[2]))` to `r f1(exp(b1$conf.high[2]))`). A
+  regression that ignored the spatial pattern put this at
+  `r f1(exp(coef(fit_lm)[2]))` times, with a standard error less than
+  half of what it should have been.
+- **Elevation.** Biomass falls with elevation, but this survey can't
+  say how steeply (95% interval for the slope
+  `r f1(b1$conf.low[3])` to `r f1(b1$conf.high[3])` per km).
+- **Unmeasured conditions.** Something not in the model varies over
+  distances of about `r round(rp1$estimate[rp1$term == "range"])` km
+  and moves log biomass about as much as fire does ($\hat\sigma_s =$
+  `r f2(rp1$estimate[rp1$term == "sigma_O"])`). The
+  field map shows where; that is where to look for the next covariate.
+- **The map.** Predictions are good near plots and no better than the
+  covariates far from them. The roadless block needs plots before
+  anyone should act on its predictions.
+
+The spatial model is corroborated against two rivals, one without a
+field and one with an interaction. It hasn't been tested against a
+model with the missing covariate in it, because nobody has measured
+that covariate yet.
+
+## Bonus: counts and other responses {#demo-counts}
+
+A random field goes into a GLM the way a random intercept does, on the
+scale of the linear predictor. The survey also counted cheatgrass
+seedlings in a small frame at each plot:
+
+$$\text{seedlings}_i \sim \text{Poisson}(\mu_i), \qquad
+\log \mu_i = \mathbf{x}_i^T\boldsymbol\beta + s_i$$
+
+```{r demo-counts}
+fit_pois_glm <- glm(seedlings ~ burned + elev_km, data = cg, family = poisson)
+fit_pois_sp <- sdmTMB(seedlings ~ burned + elev_km, data = cg, mesh = mesh, spatial = "on", family = poisson())
+round(rbind(glm = summary(fit_pois_glm)$coefficients[2, 1:2],
+            spatial = unlist(tidy(fit_pois_sp)[2, c("estimate", "std.error")])), 3)     # fire effect
+```
+
+The same thing happens as with log biomass: the fire coefficient moves
+toward the truth (0.5) and its standard error more than doubles. The
+likelihood can no longer be written as one multivariate Normal,
+because the field has to be
+[integrated out numerically](Week12_MixedModels.html#glmm-by-hand);
+the packages do it with the Laplace approximation. Only the `family`
+argument changes: `nbinom2()` for overdispersed counts, `binomial()`
+for presence/absence, `tweedie()` or a delta model for biomass with
+zeros. `glmmTMB` and `R-INLA` take the same step in their own syntax.
+
+## A take-home exercise {#wod}
+
+The WOD (workout of the day, a short exercise) that goes with this
+page is
+[*Neighbors*](wod/WOD_Week14_Lecture1_Neighbors.pdf). It uses a
+different data set, snow measurements at 60 stations, and asks for the
+piece this page leaves out: predicting at a new location by hand.

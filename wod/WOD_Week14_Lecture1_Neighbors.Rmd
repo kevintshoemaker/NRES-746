@@ -1,0 +1,324 @@
+---
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+geometry: margin=0.9in
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3)
+
+# draws n full-width blank lines (margin to margin) for handwritten answers,
+# as a single plot so spacing is deterministic; pair with fig.height = 0.3 * n
+blank_lines <- function(n = 1) {
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 1), ylim = c(0, n), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_len(n)) {
+    segments(0, n - i + 0.5, 1, n - i + 0.5, lwd = 1)
+  }
+}
+
+# reserves blank work space (no ruled lines); pair with fig.height
+blank_space <- function() {
+  par(mar = c(0, 0, 0, 0))
+  plot.new()
+}
+
+# keeps a prompt and its answer space on one PDF page: place `r nq(...)` on its
+# own line just above the prompt. lines = lines of prompt text, rows = rows of
+# blank space below it (0.3 in each)
+nq <- function(lines, rows = 0, extra = 0) {
+  if (!knitr::is_latex_output()) return("")
+  knitr::asis_output(sprintf("\n\\needspace{%.2fin}\n", 0.23 * lines + 0.15 + 0.3 * rows + extra))
+}
+
+# fill-in table drawn as a plot; "" leaves a cell blank
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, family = "serif") {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = family)
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex)
+    }
+    y <- y - row_height
+  }
+}
+
+library(mvtnorm)
+snow <- read.csv("../data/SnowCourses.csv")
+snow$elev_km <- (snow$elev_m - 2400) / 1000
+fit_lm <- lm(swe_cm ~ elev_km, data = snow)
+X <- model.matrix(fit_lm)
+D <- as.matrix(dist(snow[, c("x_km", "y_km")]))
+nll_spatial <- function(par) {
+  V <- exp(par[3])^2 * exp(-D / exp(par[4])) + exp(par[5])^2 * diag(nrow(snow))
+  -dmvnorm(snow$swe_cm, as.vector(X %*% par[1:2]), V, log = TRUE)
+}
+check_val <- nll_spatial(c(40, 40, log(8), log(10), log(3)))
+```
+
+**NRES 746, Week 14, Lecture 1: Neighbors (take-home)**
+
+Name: ___________________________________________
+
+**Due Monday, Nov. 30.** Work on your own. Parts 1 and 2 are on paper;
+you'll need R for Parts 3 and 4.
+
+A water district measures snow water equivalent (SWE, the depth of
+water in the snowpack, in cm) on April 1 at 60 snow courses spread over
+a 60 by 40 km mountain range. It wants to know how fast SWE rises with
+elevation, and how much snow to expect at a site where it is thinking
+of adding a station. Storms don't deliver snow evenly, so stations near
+each other tend to be alike in ways elevation doesn't explain.
+
+## Part 1: Two stations (on paper)
+
+Two stations have SWE values $y_1$ and $y_2$. Each has variance
+$\sigma^2$, and their correlation is $\rho$.
+
+**1a.** Find the variance of their mean, $\bar y = (y_1 + y_2)/2$, in
+terms of $\sigma^2$ and $\rho$.
+
+```{r fig.height=2.2}
+blank_space()
+```
+
+`r nq(4, 6.5)`
+
+**1b.** Fill in the table. $n$ independent stations have
+$\text{Var}(\bar y) = \sigma^2 / n$; the last column asks what $n$
+would give the same variance as these two correlated stations.
+
+```{r rho-table, fig.height=1.85}
+blank_table(
+  headers = list(expression(rho), expression(Var(bar(y)) / sigma^2), "equivalent number of independent stations"),
+  body = list(list("0", "", ""), list("0.5", "", ""), list("0.9", "", "")),
+  col_widths = c(0.7, 1.6, 2.7))
+```
+
+## Part 2: Reading a variogram (on paper)
+
+A regression of SWE on elevation leaves residuals. The figure shows
+their semivariance against the distance between stations, in 5-km
+bins.
+
+```{r variogram, fig.width=6.2, fig.height=3.6, message=FALSE, warning=FALSE}
+library(gstat)
+library(sp)
+snow_sp <- snow
+snow_sp$r <- resid(fit_lm)
+coordinates(snow_sp) <- ~ x_km + y_km
+vg <- variogram(r ~ 1, snow_sp, cutoff = 30, width = 5)
+par(mar = c(4, 4.5, 0.5, 0.5))
+plot(vg$dist, vg$gamma, type = "n", xlim = c(0, 30), ylim = c(0, 150), xaxs = "i", yaxs = "i",
+     xlab = "Distance between stations (km)", ylab = expression("Semivariance of residuals (" * cm^2 * ")"))
+abline(v = seq(0, 30, 5), h = seq(0, 150, 25), col = "grey88")
+points(vg$dist, vg$gamma, pch = 19, cex = 1.2)
+box()
+```
+
+`r nq(3, 1)`
+
+**2a.** Sketch a smooth variogram curve through the points, and read
+off rough values:
+
+nugget ________ $\qquad$ sill ________ $\qquad$ range ________ km
+
+`r nq(4, 6)`
+
+**2b.** If each residual is a spatially smooth part plus independent
+noise, then $\gamma(d) = \sigma_e^2 + \sigma_s^2\,(1 - \rho(d))$. From
+your curve, about what is the correlation between the residuals of two
+stations 5 km apart? Show how you got it.
+
+```{r fig.height=1.8}
+blank_space()
+```
+
+## Part 3: The spatial model, by hand
+
+Each coding question has a label:
+
+- *Recommended: no AI*: this week's core skill. R's help pages, web
+  search, the Week 14 page, and classmates are fine.
+- *AI optional/encouraged*: the results matter, but the code isn't the
+  point.
+
+After each coding question, circle how you used AI.
+
+**What to turn in:** your filled-in answers and **Figure 3a** as an
+image on WebCampus. You don't need to submit code beyond the two lines
+asked for in 3b and 4b.
+
+Read the data with
+
+```{r read-data, echo=TRUE, eval=FALSE}
+snow <- read.csv(
+  "https://kevintshoemaker.github.io/NRES-746/data/SnowCourses.csv")
+snow$elev_km <- (snow$elev_m - 2400) / 1000      # km above 2400 m
+```
+
+The columns are the station, its easting and northing in km (`x_km`,
+`y_km`), elevation (`elev_m`), and April 1 SWE (`swe_cm`).
+
+`r nq(5, 3)`
+
+**3a.** *(AI optional/encouraged.)* Fit `lm(swe_cm ~ elev_km, data = snow)`.
+Make a map of the stations with the symbol size or color showing each
+residual. Name it **Figure 3a**.
+
+SWE rises ________ cm per km of elevation (SE ________)
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+The spatial model is
+
+$$\mathbf{y} \sim \text{MVN}(X\boldsymbol\beta,\ V), \qquad
+V_{ij} = \sigma_s^2 \exp(-d_{ij}/\ell) + \sigma_e^2\,[i = j]$$
+
+where $d_{ij}$ is the distance in km between stations $i$ and $j$, and
+$[i = j]$ is 1 on the diagonal and 0 elsewhere.
+
+`r nq(7, 4)`
+
+**3b.** *(Recommended: no AI.)* Write a function `nll_spatial(par)` that
+returns the negative log-likelihood, where `par` holds the intercept,
+the elevation slope, $\log\sigma_s$, $\log\ell$, and $\log\sigma_e$, in
+that order. Check it: `nll_spatial(c(40, 40, log(8), log(10), log(3)))`
+should return `r sprintf("%.2f", check_val)`.
+
+Your value: ________ $\qquad$ Copy the line of your function that builds $V$:
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(6, 8)`
+
+**3c.** *(Recommended: no AI.)* Minimize it with `optim()`
+(`method = "BFGS"`, `hessian = TRUE`), starting from the values in the
+check above. Confirm `$convergence` is 0, and fill in the table (spatial
+SD is $\hat\sigma_s$, length-scale is $\hat\ell$ in km, noise SD is
+$\hat\sigma_e$).
+
+```{r fit-table, fig.height=1.35}
+blank_table(
+  headers = list("", "slope", "SE of slope", "spatial SD", "length-scale", "noise SD", "logLik"),
+  body = list(list("lm()", "", "", "(none)", "(none)", "", ""), list("spatial", "", "", "", "", "", "")),
+  col_widths = c(1, 1, 1.2, 1, 1, 1, 1.1))
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(4, 7)`
+
+**3d.** The slope changed more than its standard error did. Use your
+Figure 3a to explain why the ordinary regression got a different
+slope. How do $\hat\sigma_e^2$, $\hat\sigma_s^2 + \hat\sigma_e^2$, and
+$2\hat\ell$ compare with the nugget, sill, and range you read in 2a?
+
+```{r fig.height=0.3*7}
+blank_lines(7)
+```
+
+## Part 4: Predicting at a new site
+
+The district is considering a new station at easting 30 km, northing
+20 km, elevation 2450 m.
+
+`r nq(3, 1)`
+
+**4a.** From the spatial model's intercept and slope alone, the
+predicted SWE at the new site is ________ cm.
+
+The model can do better, because nearby stations say something about
+the unmeasured part of the snowpack there. Let $\mathbf{k}_0$ hold the
+covariance between the field at the new site and at each station,
+$k_{0i} = \hat\sigma_s^2 \exp(-d_{0i}/\hat\ell)$, with $d_{0i}$ the
+distance from the new site to station $i$. The prediction is
+
+$$\hat y_0 = \mathbf{x}_0^T\hat{\boldsymbol\beta} +
+\mathbf{k}_0^T\, V^{-1} (\mathbf{y} - X\hat{\boldsymbol\beta})$$
+
+`r nq(5, 4)`
+
+**4b.** *(Recommended: no AI.)* Compute $\hat y_0$ in R (`solve(V, b)`
+gives $V^{-1}\mathbf{b}$).
+
+$\hat y_0 =$ ________ cm $\qquad$ Copy the line that computes it:
+
+```{r fig.height=0.3*2}
+blank_lines(2)
+```
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(4, 6)`
+
+**4c.** The entries of $\mathbf{k}_0^T V^{-1}$ are the weights each
+station's residual gets. Which three stations have the largest weights,
+and how far is each from the new site? Why did the prediction move the
+way it did from 4a?
+
+```{r fig.height=0.3*6}
+blank_lines(6)
+```
+
+`r nq(5, 1)`
+
+**4d.** *(AI optional/encouraged.)* Fit the same model with `glmmTMB`
+(the syntax is in section 5 of the Week 14 page) and compare
+log-likelihoods.
+
+Yours: ________ $\qquad$ `glmmTMB`: ________
+
+AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+
+`r nq(3, 5)`
+
+**4e.** Where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest to get working?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(6, 5)`
+
+**Bonus (optional).** The prediction's variance is
+$\hat\sigma_s^2 + \hat\sigma_e^2 - \mathbf{k}_0^T V^{-1}\mathbf{k}_0$.
+Compute its square root for the new site, and again for a site at
+easting 100 km, northing 20 km, far outside the network. What does
+the prediction itself become at the far site, and why?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```

@@ -1,0 +1,148 @@
+<div class="w746vg" id="vg">
+<style>
+.w746vg{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:780px}
+.w746vg .row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.w746vg .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746vg .row .lab1{min-width:190px}
+.w746vg select{font-size:14px;padding:2px 4px}
+.w746vg input[type=range]{flex:1;min-width:140px}
+.w746vg .val{font-weight:600;min-width:52px}
+.w746vg .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746vg .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746vg .card .k{font-size:13px;color:var(--ink2)}
+.w746vg .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746vg .panels{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;align-items:start}
+.w746vg canvas{width:100%;height:auto;display:block;border:1px solid #ccc}
+.w746vg .ax{stroke:var(--muted);stroke-width:1}
+.w746vg .lab{fill:var(--ink2);font-size:13px}
+.w746vg .tk{fill:var(--muted);font-size:11px}
+.w746vg .note{font-size:13px;color:var(--ink2);margin:2px 0 6px}
+.w746vg button{font-size:14px;padding:3px 10px}
+@media (max-width:600px){.w746vg .panels{grid-template-columns:1fr}.w746vg .cards{grid-template-columns:1fr 1fr}.w746vg .row .lab1{min-width:130px}}
+</style>
+<div class="row">
+  <label class="lab1" for="vg-kern">Correlation function</label>
+  <select id="vg-kern">
+    <option value="exp" selected>Exponential</option>
+    <option value="mat">Matérn, smoothness 1</option>
+    <option value="se">Squared exponential</option>
+  </select>
+  <button type="button" id="vg-new">New landscape</button>
+</div>
+<div class="row"><label class="lab1" for="vg-ell">Length-scale ℓ (km)</label><input type="range" id="vg-ell" min="0.5" max="12" step="0.25" value="4"><span class="val" id="vg-ellout"></span></div>
+<div class="row"><label class="lab1" for="vg-ss">Spatial SD σ<sub>s</sub></label><input type="range" id="vg-ss" min="0" max="1.2" step="0.05" value="0.7"><span class="val" id="vg-ssout"></span></div>
+<div class="row"><label class="lab1" for="vg-se">Nugget (residual) SD σ<sub>e</sub></label><input type="range" id="vg-se" min="0" max="1.2" step="0.05" value="0.3"><span class="val" id="vg-seout"></span></div>
+<div class="cards">
+  <div class="card"><div class="k">Nugget σ<sub>e</sub>²</div><div class="v" id="vg-v1"></div></div>
+  <div class="card"><div class="k">Sill σ<sub>s</sub>² + σ<sub>e</sub>²</div><div class="v" id="vg-v2"></div></div>
+  <div class="card"><div class="k">Correlation of two plots 5 km apart</div><div class="v" id="vg-v3"></div></div>
+  <div class="card"><div class="k">Distance where the field's correlation is 0.13</div><div class="v" id="vg-v4"></div></div>
+</div>
+<div class="panels">
+  <div>
+    <canvas id="vg-map" width="560" height="420" role="img" aria-label="Map of the simulated spatial field with 150 sampled plots."></canvas>
+    <p class="note">A 40 by 30 km landscape. Background: the spatial field. Dots: 150 plots, colored by field plus nugget noise.</p>
+  </div>
+  <div>
+    <svg viewBox="0 0 330 300" width="100%" role="img" aria-label="Semivariogram: half the mean squared difference between plots against distance."><g id="vg-plot"></g></svg>
+    <p class="note">Points: semivariance of the 150 plots in 2-km distance bins. Curve: the model's variogram.</p>
+  </div>
+</div>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+let seed=14;
+function rng(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+function rnorm(){let u=0,v=0;while(u===0)u=rng();v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+const nx=28,ny=21,n=nx*ny,dx=40/nx,gx=[],gy=[];
+for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){gx.push((i+0.5)*dx);gy.push((j+0.5)*dx);}
+const Dm=new Float64Array(n*n);
+for(let a=0;a<n;a++)for(let b=0;b<n;b++)Dm[a*n+b]=Math.hypot(gx[a]-gx[b],gy[a]-gy[b]);
+let z=[],e=[],plots=[];
+function newDraws(){
+  z=[];e=[];for(let i=0;i<n;i++){z.push(rnorm());e.push(rnorm());}
+  const idx=[];for(let i=0;i<n;i++)idx.push(i);
+  for(let i=n-1;i>0;i--){const j=Math.floor(rng()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+  plots=idx.slice(0,150);
+}
+newDraws();
+const kS=document.getElementById('vg-kern'),lS=document.getElementById('vg-ell'),sS=document.getElementById('vg-ss'),eS=document.getElementById('vg-se');
+function besselK1(x){
+  if(x<=2){const y=x*x/4,t=x/3.75,t2=t*t;
+    const i1=x*(0.5+t2*(0.87890594+t2*(0.51498869+t2*(0.15084934+t2*(0.02658733+t2*(0.00301532+t2*0.00032411))))));
+    return Math.log(x/2)*i1+(1/x)*(1+y*(0.15443144+y*(-0.67278579+y*(-0.18156897+y*(-0.01919402+y*(-0.00110404+y*(-0.00004686)))))));}
+  const y=2/x;
+  return Math.exp(-x)/Math.sqrt(x)*(1.25331414+y*(0.23498619+y*(-0.03655620+y*(0.01504268+y*(-0.00780353+y*(0.00325614+y*(-0.00068245)))))));
+}
+function corr(d,l){
+  if(d===0)return 1;
+  const k=kS.value;
+  if(k==='exp')return Math.exp(-d/l);
+  if(k==='se')return Math.exp(-d*d/(2*l*l));
+  const r=d/l;return r<1e-6?1:r*besselK1(r);
+}
+let field=new Float64Array(n),lastKey='';
+function simulate(l){
+  const key=kS.value+'|'+l+'|'+z[0];
+  if(key===lastKey)return;lastKey=key;
+  const L=new Float64Array(n*n),jit=kS.value==='se'?1e-4:1e-8;
+  for(let a=0;a<n;a++)for(let b=0;b<=a;b++)L[a*n+b]=corr(Dm[a*n+b],l)+(a===b?jit:0);
+  for(let j=0;j<n;j++){
+    let s=L[j*n+j];for(let k=0;k<j;k++)s-=L[j*n+k]*L[j*n+k];
+    const d=Math.sqrt(Math.max(s,1e-10));L[j*n+j]=d;
+    for(let i=j+1;i<n;i++){let q=L[i*n+j];const ri=i*n,rj=j*n;for(let k=0;k<j;k++)q-=L[ri+k]*L[rj+k];L[ri+j]=q/d;}
+  }
+  for(let i=0;i<n;i++){let s=0;for(let k=0;k<=i;k++)s+=L[i*n+k]*z[k];field[i]=s;}
+}
+function color(v){
+  const t=Math.max(-1,Math.min(1,v/2));
+  const c=t<0?[255+t*(255-43),255+t*(255-110),255+t*(255-190)]:[255-t*(255-190),255-t*(255-48),255-t*(255-43)];
+  return 'rgb('+c.map(u=>Math.round(u)).join(',')+')';
+}
+function draw(){
+  const l=parseFloat(lS.value),ss=parseFloat(sS.value),se=parseFloat(eS.value);
+  document.getElementById('vg-ellout').textContent=l.toFixed(2);
+  document.getElementById('vg-ssout').textContent=ss.toFixed(2);
+  document.getElementById('vg-seout').textContent=se.toFixed(2);
+  simulate(l);
+  const sill=ss*ss+se*se;
+  document.getElementById('vg-v1').textContent=(se*se).toFixed(2);
+  document.getElementById('vg-v2').textContent=sill.toFixed(2);
+  document.getElementById('vg-v3').textContent=sill>0?(ss*ss*corr(5,l)/sill).toFixed(2):'0.00';
+  let d13=0;while(corr(d13,l)>0.13&&d13<200)d13+=0.05;
+  document.getElementById('vg-v4').textContent=d13.toFixed(1)+' km';
+  // map
+  const cv=document.getElementById('vg-map'),ctx=cv.getContext('2d'),cw=cv.width/nx,ch=cv.height/ny;
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){ctx.fillStyle=color(ss*field[j*nx+i]);ctx.fillRect(i*cw,cv.height-(j+1)*ch,cw+1,ch+1);}
+  const yobs=plots.map(p=>ss*field[p]+se*e[p]);
+  plots.forEach((p,k)=>{ctx.beginPath();ctx.arc(gx[p]/40*cv.width,cv.height-gy[p]/30*cv.height,5.5,0,2*Math.PI);
+    ctx.fillStyle=color(yobs[k]);ctx.fill();ctx.strokeStyle='#222';ctx.lineWidth=1;ctx.stroke();});
+  // empirical variogram
+  const nb=10,bw=2,sum=new Array(nb).fill(0),cnt=new Array(nb).fill(0),dsum=new Array(nb).fill(0);
+  for(let a=0;a<plots.length;a++)for(let b=0;b<a;b++){
+    const d=Dm[plots[a]*n+plots[b]],k=Math.floor(d/bw);
+    if(k<nb){sum[k]+=0.5*(yobs[a]-yobs[b])*(yobs[a]-yobs[b]);cnt[k]++;dsum[k]+=d;}
+  }
+  const g=document.getElementById('vg-plot');g.innerHTML='';
+  const ymax=Math.max(1.2,sill*1.35),Q={x0:44,x1:322,y0:258,y1:14},qx=v=>Q.x0+v/20*(Q.x1-Q.x0),qy=v=>Q.y0-Math.min(v,ymax)/ymax*(Q.y0-Q.y1);
+  el('line',{class:'ax',x1:Q.x0,y1:Q.y0,x2:Q.x1,y2:Q.y0},g);el('line',{class:'ax',x1:Q.x0,y1:Q.y0,x2:Q.x0,y2:Q.y1},g);
+  el('line',{x1:Q.x0,y1:qy(sill),x2:Q.x1,y2:qy(sill),stroke:'#999','stroke-dasharray':'4 3'},g);
+  txt('tk',Q.x1-2,qy(sill)-5,'sill',g,'end');
+  if(se>0){el('line',{x1:Q.x0,y1:qy(se*se),x2:Q.x1,y2:qy(se*se),stroke:'#999','stroke-dasharray':'2 3'},g);txt('tk',Q.x1-2,qy(se*se)-5,'nugget',g,'end');}
+  let p='M'+qx(0).toFixed(1)+','+qy(se*se).toFixed(1);
+  for(let i=1;i<=200;i++){const d=20*i/200;p+='L'+qx(d).toFixed(1)+','+qy(se*se+ss*ss*(1-corr(d,l))).toFixed(1);}
+  el('path',{d:p,fill:'none',stroke:'#2a78d6','stroke-width':2.5},g);
+  for(let k=0;k<nb;k++)if(cnt[k]>0)el('circle',{cx:qx(dsum[k]/cnt[k]),cy:qy(sum[k]/cnt[k]),r:4.5,fill:'#222',stroke:'#fff','stroke-width':1},g);
+  for(let t=0;t<=ymax+1e-9;t+=ymax>2?0.5:0.2)txt('tk',Q.x0-5,qy(t)+4,t.toFixed(1),g,'end');
+  [0,5,10,15,20].forEach(t=>txt('tk',qx(t),Q.y0+14,t,g));
+  txt('lab',(Q.x0+Q.x1)/2,Q.y0+32,'distance between plots (km)',g);
+  const yl=txt('lab',12,(Q.y0+Q.y1)/2,'semivariance',g);yl.setAttribute('transform','rotate(-90 12 '+(Q.y0+Q.y1)/2+')');
+}
+document.getElementById('vg-new').addEventListener('click',()=>{newDraws();draw();});
+[lS,sS,eS].forEach(s=>s.addEventListener('input',draw));kS.addEventListener('change',draw);
+draw();
+})();
+</script>
+</div>
