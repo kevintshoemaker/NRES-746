@@ -839,7 +839,13 @@ Snapshot: Sun., Nov. 15, 2026 (Weeks 1-12 taught; Weeks 13 and 14 built, not yet
   hand with `bs(df = 20, intercept = TRUE)`, lambda 0/10/1000, vs.
   `gam(bs = "ps")`), with key. Revised Nov. 15: asides moved to 12
   footnotes (the model for the footnote rule), "hierarchical" = "mixed"
-  = "multilevel" wording, Stan kept as a bonus. Tuesday = project check-ins, no
+  = "multilevel" wording, Stan kept as a bonus. Added Nov. 16: level-
+  banded DAGs (helper `draw_level_dag()` in the page's `helpers` chunk:
+  one band per level, fixed prior boxes on top, plates, curved edges;
+  reuse it for later hierarchical models) for the random slope model and
+  a one-layer vs. two-layer contrast in `#what-hierarchical`, and a
+  P-spline in `#penalty` (flat prior on $\beta_1, \beta_2$; the guide
+  says not to explain why before the sloped-line question). Tuesday = project check-ins, no
   lab. Thanksgiving: no class Wed., Nov. 25 (CSV updated), so spatial
   gets Nov. 23 + the Nov. 24 demo; the GP section spills there if not
   reached.

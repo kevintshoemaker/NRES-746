@@ -59,6 +59,99 @@ plot_bd <- function(...) {
        ylab = "Growth rate r (per day)", ...)
   abline(h = 0, col = "grey85")
 }
+
+# Layered DAG: one horizontal band per level of the hierarchy
+# nodes: list of list(id, lab (expression or string), x, y, type)
+#   type: "latent" (open circle), "data" (shaded circle),
+#         "fixed" (square: prior constant), "covariate" (shaded square)
+# edges: character matrix (from, to, optional bend for a curved arrow)
+# levels: data.frame(lab, ymin, ymax); plates: list of list(x0, x1, y0, y1, lab)
+draw_level_dag <- function(nodes, edges, levels, plates = list(), xlim, main = "",
+                           r = 0.36, cex = 1, level_x = xlim[1] + 0.05) {
+  par(mar = c(0.2, 0.2, if (nzchar(main)) 1.6 else 0.2, 0.2))
+  ylim <- range(c(levels$ymin, levels$ymax))
+  plot(NA, xlim = xlim, ylim = ylim, asp = 1, axes = FALSE, xlab = "", ylab = "")
+  if (nzchar(main)) mtext(main, side = 3, line = 0.3, font = 2, cex = cex)
+  band_cols <- rep(c("grey96", "white"), length.out = nrow(levels))
+  usr <- par("usr")
+  for (k in seq_len(nrow(levels))) {
+    rect(usr[1], levels$ymin[k], usr[2], levels$ymax[k], col = band_cols[k], border = NA)
+    text(level_x, levels$ymax[k] - 0.12, levels$lab[k], adj = c(0, 1), cex = cex * 0.75,
+         font = 3, col = "grey30")
+  }
+  abline(h = unique(c(levels$ymin, levels$ymax))[-c(1)], col = "grey80", lty = 3)
+  for (p in plates) {
+    rect(p$x0, p$y0, p$x1, p$y1, border = "grey35", lwd = 1.2)
+    if (isTRUE(p$left)) {
+      text(p$x0 + 0.08, p$y0 + 0.06, p$lab, adj = c(0, 0), cex = cex * 0.72, col = "grey25")
+    } else if (isTRUE(p$top)) {
+      text(p$x1 - 0.08, p$y1 - 0.08, p$lab, adj = c(1, 1), cex = cex * 0.72, col = "grey25")
+    } else {
+      text(p$x1 - 0.08, p$y0 + 0.08, p$lab, adj = c(1, 0), cex = cex * 0.72, col = "grey25")
+    }
+  }
+  ids <- vapply(nodes, `[[`, "", "id")
+  half <- function(n) {
+    w <- if (is.null(n$w)) max(r, 0.5 * strwidth(n$lab, cex = cex) + 0.1) else n$w
+    c(w, r * 0.8)
+  }
+  edge_point <- function(n, dx, dy) {
+    if (n$type %in% c("latent", "data")) {
+      s <- if (is.null(n$w)) 1 else n$w / r
+      d <- sqrt((dx / s)^2 + dy^2)
+      return(c(n$x, n$y) + r * c(dx, dy) / d)
+    }
+    h <- half(n)
+    t <- min(h[1] / abs(dx), h[2] / abs(dy))
+    c(n$x, n$y) + t * c(dx, dy)
+  }
+  for (k in seq_len(nrow(edges))) {
+    a <- nodes[[match(edges[k, 1], ids)]]
+    b <- nodes[[match(edges[k, 2], ids)]]
+    bend <- if (ncol(edges) > 2 && !is.na(edges[k, 3])) as.numeric(edges[k, 3]) else 0
+    if (bend == 0) {
+      dx <- b$x - a$x
+      dy <- b$y - a$y
+      p0 <- edge_point(a, dx, dy)
+      p1 <- edge_point(b, -dx, -dy)
+      arrows(p0[1], p0[2], p1[1], p1[2], length = 0.07, lwd = 1.3, col = "grey20")
+    } else {
+      # quadratic curve bowed by `bend` (perpendicular, to the left of a -> b)
+      len <- sqrt((b$x - a$x)^2 + (b$y - a$y)^2)
+      cx <- (a$x + b$x) / 2 - bend * (b$y - a$y) / len
+      cy <- (a$y + b$y) / 2 + bend * (b$x - a$x) / len
+      p0 <- edge_point(a, cx - a$x, cy - a$y)
+      p1 <- edge_point(b, cx - b$x, cy - b$y)
+      tt <- seq(0, 1, length.out = 40)
+      qx <- (1 - tt)^2 * p0[1] + 2 * tt * (1 - tt) * cx + tt^2 * p1[1]
+      qy <- (1 - tt)^2 * p0[2] + 2 * tt * (1 - tt) * cy + tt^2 * p1[2]
+      lines(qx[-40], qy[-40], lwd = 1.3, col = "grey20")
+      arrows(qx[39], qy[39], qx[40], qy[40], length = 0.07, lwd = 1.3, col = "grey20")
+    }
+  }
+  th <- seq(0, 2 * pi, length.out = 100)
+  for (n in nodes) {
+    if (n$type %in% c("latent", "data")) {
+      s <- if (is.null(n$w)) 1 else n$w / r
+      polygon(n$x + s * r * cos(th), n$y + r * sin(th), lwd = 1.5,
+              col = if (n$type == "data") "grey75" else "white")
+    } else {
+      h <- half(n)
+      rect(n$x - h[1], n$y - h[2], n$x + h[1], n$y + h[2], lwd = 1.2,
+           col = if (n$type == "covariate") "grey75" else "white")
+    }
+    text(n$x, n$y, n$lab, cex = cex)
+  }
+}
+
+nd <- function(id, lab, x, y, type = "latent", w = NULL) list(id = id, lab = lab, x = x, y = y, type = type, w = w)
+
+levels_rs <- data.frame(lab = c("Level 1: year t", "Level 2: stand j",
+                                "Level 3: population", "Fixed: prior settings"),
+                        ymin = c(0, 2.4, 4.6, 6.4), ymax = c(2.4, 4.6, 6.4, 7.8))
+plates_rs <- function(x0, x1) list(
+  list(x0 = x0, x1 = x1, y0 = 0.08, y1 = 4.3, lab = "stands j = 1, ..., 12", left = TRUE),
+  list(x0 = x0 + 0.2, x1 = x1 - 0.2, y0 = 0.42, y1 = 1.95, lab = "years t"))
 ```
 
 [How this page was made](#ai-use)
@@ -94,6 +187,45 @@ For the drought data used below (the
   distribution, $(a_j, b_j) \sim \text{MVN}(0, G)$;
 - **parameters:** $\mu_a$, $\mu_b$, $G$, and $\sigma_e$ are estimated (and
   in a Bayesian model, each gets a prior).
+
+A directed acyclic graph (DAG) shows these layers as levels, stacked
+from the data up. This one uses the priors from the [brms fit](#brms):
+
+```{r dag-random-slope, echo=FALSE, fig.width=8, fig.height=6}
+nodes <- list(nd("se", quote(sigma[e]), 2.2, 5.5), nd("ma", quote(mu[a]), 3.6, 5.5),
+              nd("mb", quote(mu[b]), 4.8, 5.5), nd("sa", quote(sigma[a]), 6.3, 5.5),
+              nd("sb", quote(sigma[b]), 7.5, 5.5), nd("rho", quote(rho[ab]), 8.7, 5.5),
+              nd("pse", "half-N(0, 0.3)", 2.2, 7.0, "fixed"),
+              nd("pma", "N(1, 0.5)", 3.85, 7.0, "fixed"), nd("pmb", "N(0, 0.5)", 5.15, 7.0, "fixed"),
+              nd("ps", "half-N(0, 0.3)", 6.9, 7.0, "fixed"), nd("plkj", "LKJ(2)", 8.7, 7.0, "fixed"),
+              nd("ab", quote(list(a[j], b[j])), 7.2, 3.3, w = 0.62),
+              nd("y", quote(width[jt]), 5.2, 1.25, "data", w = 0.62),
+              nd("x", quote(x[jt]), 7.2, 1.25, "covariate"))
+edges <- rbind(c("pma", "ma"), c("pmb", "mb"), c("ps", "sa"), c("ps", "sb"), c("plkj", "rho"),
+               c("pse", "se"), c("sa", "ab"), c("sb", "ab"), c("rho", "ab"),
+               c("ma", "y"), c("mb", "y"), c("ab", "y"), c("x", "y"), c("se", "y"))
+draw_level_dag(nodes, edges, levels_rs, plates_rs(4.0, 8.4), xlim = c(0, 9.6))
+```
+
+Each arrow points from a quantity to one whose distribution is written
+in terms of it. Open circles are unknowns the model estimates, the
+shaded oval is the data, the shaded square is a measured covariate
+(precipitation), and white boxes are prior settings we choose. A
+rectangle (a *plate*) means "repeat what's inside": once per stand,
+and within each stand once per year.^[These DAGs are a different use
+of the idea than the [causal diagrams](Week10_ModelComparison.html#dags)
+of Week 10. There an arrow claims that one real-world variable affects
+another. Here an arrow describes the model: each node's distribution is
+written conditional on its parents, and the joint distribution of
+everything is the product of those conditional pieces. Diagrams like
+this are also called Bayesian networks or plate diagrams.]
+
+Read from the bottom up. Each ring width (level 1) depends on its
+stand's deviations $(a_j, b_j)$ (level 2), and every stand's deviations
+depend on the same $\sigma_a$, $\sigma_b$, and $\rho_{ab}$ (level 3).
+That shared level is what makes the model hierarchical. The mean
+intercept and slope and the residual SD are shared too, but they act on
+the data directly, so their arrows skip level 2.
 
 Categories/groups are only one kind of unobserved layer. In a spatial model it is
 a surface over the landscape, with nearby sites more alike than distant
@@ -144,6 +276,37 @@ in where the prior on $b_j$ comes from.
 The data layer is the same in both models. The difference is who sets
 the prior's SD -- either we choose it (no partial pooling) or we let the data 
 determine how strongly each stand is pulled toward the others (partial pooling).
+As DAGs (intercepts left out, as above):
+
+```{r dag-contrast, echo=FALSE, fig.width=9, fig.height=4.1}
+par(mfrow = c(1, 2))
+common <- list(nd("x", quote(x[jt]), 6.4, 1.2, "covariate"),
+               nd("y", quote(width[jt]), 4.5, 1.2, "data", w = 0.7),
+               nd("se", quote(sigma[e]), 9.1, 5.5),
+               nd("pse", "half-N(0, 0.3)", 9.1, 7.0, "fixed"))
+common_edges <- rbind(c("x", "y"), c("se", "y"), c("pse", "se"), c("b", "y"))
+draw_level_dag(c(common, list(nd("b", quote(b[j]), 4.5, 3.3),
+                              nd("pb", "Normal(0, 1)", 4.5, 7.0, "fixed"))),
+               rbind(common_edges, c("pb", "b")),
+               levels_rs, plates_rs(3.3, 7.5), xlim = c(0, 10.3),
+               main = "One layer: stand as a fixed factor")
+draw_level_dag(c(common, list(nd("b", quote(b[j]), 4.5, 3.3),
+                              nd("mb", quote(mu[b]), 3.7, 5.5),
+                              nd("sb", quote(sigma[b]), 5.6, 5.5),
+                              nd("pmb", "N(0, 0.5)", 3.1, 7.0, "fixed"),
+                              nd("psb", "half-N(0, 0.3)", 6.0, 7.0, "fixed"))),
+               rbind(common_edges, c("mb", "b"), c("sb", "b"), c("pmb", "mb"), c("psb", "sb")),
+               levels_rs, plates_rs(3.3, 7.5), xlim = c(0, 10.3),
+               main = "Two layers: stand as a random effect")
+```
+
+On the left, the arrow into $b_j$ comes straight from a box of numbers
+we chose. Nothing estimated sits above the slopes, so one stand's data
+can't change another stand's slope. On the right, every $b_j$ has the
+same two estimated parents, $\mu_b$ and $\sigma_b$. Each stand's data
+inform $\mu_b$ and $\sigma_b$, and those in turn inform every other
+stand's slope. Both models share $\sigma_e$ across stands, but a shared
+residual SD doesn't pool the slopes.
 
 One misconception that I had for a long time is that a 'hierarchical model'
 necessarily has more than one probability distribution contributing to the 
@@ -379,7 +542,8 @@ As discussed above, a Bayesian fit usually keeps the stand effects in the
 model explicitly. We put priors on
 the population-level parameters ($\mu_a$, $\mu_b$, $\sigma_a$, $\sigma_b$,
 $\rho_{ab}$, $\sigma_e$), and the sampler draws each stand's random intercept and
-slope along with everything else. In Bayesian/MCMC fitting, the hierarchical nature
+slope along with everything else (every open circle in the
+[DAG](#what-hierarchical)). In Bayesian/MCMC fitting, the hierarchical nature
 of these models is fully front and center (in a way, Bayesian models are more 'hierarchical'
 than frequentist versions of the same model because the hierarchy is made explicit!).
 That is why 'Bayesian' and 'hierarchical' are nearly synonymous in some circles!
@@ -913,6 +1077,41 @@ deviations drawn from a Normal distribution whose SD $\sigma_d$ is
 estimated from the data. So $\lambda$ can be chosen the way `lmer()`
 estimates $\sigma_a$, by maximizing the restricted likelihood (REML)
 with the weights integrated out.
+
+Drawn as a DAG, a P-spline has the same levels as the random slope
+model, with basis weights in place of stands:
+
+```{r dag-pspline, echo=FALSE, fig.width=8, fig.height=6}
+levels_ps <- data.frame(lab = c("Level 1: culture i", "Level 2: basis weight k",
+                                "Level 3: smoothness", "Fixed: prior settings"),
+                        ymin = c(0, 2.4, 4.6, 6.4), ymax = c(2.4, 4.6, 6.4, 7.8))
+nodes <- list(nd("b1", quote(beta[1]), 3.0, 3.4), nd("b2", quote(beta[2]), 4.2, 3.4),
+              nd("b3", quote(beta[3]), 5.4, 3.4), nd("b4", quote(beta[4]), 6.6, 3.4),
+              nd("sd", quote(sigma[d]), 6.0, 5.5), nd("se", quote(sigma[e]), 8.8, 5.5),
+              nd("pb", "flat", 3.6, 7.0, "fixed"),
+              nd("psd", "prior", 6.0, 7.0, "fixed"), nd("pse", "prior", 8.8, 7.0, "fixed"),
+              nd("y", quote(r[i]), 5.4, 1.25, "data"), nd("x", quote(temp[i]), 7.4, 1.25, "covariate"))
+edges <- rbind(c("pb", "b1", 0), c("pb", "b2", 0), c("psd", "sd", 0), c("pse", "se", 0),
+               c("sd", "b3", 0), c("sd", "b4", 0), c("b1", "b3", 0.75), c("b2", "b3", 0),
+               c("b2", "b4", 0.75), c("b3", "b4", 0), c("b1", "y", 0), c("b2", "y", 0),
+               c("b3", "y", 0), c("b4", "y", 0), c("x", "y", 0), c("se", "y", 0))
+draw_level_dag(nodes, edges, levels_ps,
+               list(list(x0 = 4.4, x1 = 8.3, y0 = 0.25, y1 = 2.1, lab = "cultures i = 1, ..., 48")),
+               xlim = c(0, 9.6))
+text(7.5, 3.4, "...", cex = 1.6)
+```
+
+The second-difference prior says
+$\beta_k \sim \text{Normal}(2\beta_{k-1} - \beta_{k-2},\ \sigma_d^2)$
+for $k \geq 3$, so each weight's parents are the two weights before it
+plus the shared $\sigma_d$; that is why arrows also run along level 2.
+The first two weights have no parents to pool toward, so they get only
+a flat prior, like fixed effects.^[In a `gam()` fit with REML, $\sigma_d$ and $\sigma_e$ get no
+priors; they are estimated the way `lmer()` estimates $\sigma_a$. A
+Bayesian fit (see [a smooth in brms](#smooth-brms)) gives them priors,
+which is what the top boxes stand for. `mgcv` also reparameterizes the
+basis so the penalized and unpenalized parts are separate, but the
+levels are the same.]
 
 The widget fits the Bd data with a P-spline (cubic B-splines on evenly
 spaced knots, plus the second-difference penalty) and plots the REML
