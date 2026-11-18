@@ -190,7 +190,10 @@ Week 12 Monday covered the opening recap, AR(1), and why-harder, 2 of 4
 sections (random slopes and packages moved to the lab period, Bayesian
 hierarchical models to the next week); the ~60-min lab-period lecture
 then finished the rest (random slopes, packages, discussion). Week 13
-Monday covered all 6 sections (brms briefly) but not the discussion. Plan **3-4 sub-topics**
+Monday covered all 6 sections (brms briefly) but not the discussion;
+Week 13 Wednesday covered the thermal intro, basis functions, the
+penalty, and `gam()`, with only a few minutes on GPs and no discussion.
+Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
 marked "Bonus" section. A derivation eats its whole slot, so put
@@ -574,7 +577,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Sun., Nov. 15, 2026 (Weeks 1-12 taught; Weeks 13 and 14 built, not yet taught; Week 1-9 pages built after the fact).
+Snapshot: Wed., Nov. 18, 2026 (Weeks 1-13 taught; Week 14 built, not yet taught; Week 1-9 pages built after the fact).
 
 - **Week 14 (Nov. 23-24), built and pushed Nov. 15, not yet taught:**
   Monday lecture + Tuesday demo (no Lab 10 on
@@ -808,7 +811,7 @@ Snapshot: Sun., Nov. 15, 2026 (Weeks 1-12 taught; Weeks 13 and 14 built, not yet
     the rest was the final-project work session. Guide has dated notes
     for both meetings.
 
-- **Week 13 (Nov. 16-18), built Nov. 10, not yet taught:** page
+- **Week 13 (Nov. 16-18), built Nov. 10, taught:** page
   `Week13_HierarchicalModelsAndGAMs.Rmd`. H1 `#bayesian-hierarchical`
   (Monday; moved from Week 12, drought data re-simulated on the page,
   numbers unchanged; section 2 `#pooling-by-hand` works the two-pond
@@ -863,6 +866,13 @@ Snapshot: Sun., Nov. 15, 2026 (Weeks 1-12 taught; Weeks 13 and 14 built, not yet
   bonus `#spline-smoothness` (derivatives of a cubic spline via
   `splineDesign()`); Distill GP tutorial linked from `#gp` and Week
   14's `#gp-space`.
+  **As taught (Wed., Nov. 18, from the announcement):** basis
+  functions, splines, penalized splines, GAMs, then a few minutes on
+  GPs (Distill link; "more next week"). Discussion and bonuses not
+  covered. The Week 14 guide now opens Monday with a 3-min GP recap,
+  notes the "short" Tuesday lecture (demo held to ~40 min if needed),
+  and the rough-draft and peer-review logistics. The page needed no
+  change (it already had the Distill link and the spatial tie-in).
   **As taught (Mon., Nov. 16, from the announcement):** definition,
   conditional vs. marginal fitting, shrinkage/partial pooling and the
   ridge link, LKJ (left out of the announcement as a technical detail),
