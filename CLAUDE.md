@@ -852,6 +852,17 @@ Snapshot: Sun., Nov. 15, 2026 (Weeks 1-12 taught; Weeks 13 and 14 built, not yet
   penalty-as-prior argument and an empirical-Bayes footnote; `#penalty`
   keeps a one-paragraph "REML, like `lmer()`" summary and the P-spline
   definition.
+  Added Nov. 18 (Wednesday's H1): gradient plate schematic in
+  `#thermal` and a footnote on negative growth rates; in `#basis`, a
+  basis-function-vs-matrix-column paragraph with a row-of-$X$ figure,
+  a knots footnote, basis figures cut at the boundary knots (they had
+  extrapolated past them), and the widget questions moved to a
+  footnote (no time to discuss); `spline_basis.html` gained a thin
+  plate option (Wood 2003 construction at 40 points, same span as
+  `mgcv`'s; "Columns" menu: as built vs. rotated smoothest first);
+  bonus `#spline-smoothness` (derivatives of a cubic spline via
+  `splineDesign()`); Distill GP tutorial linked from `#gp` and Week
+  14's `#gp-space`.
   **As taught (Mon., Nov. 16, from the announcement):** definition,
   conditional vs. marginal fitting, shrinkage/partial pooling and the
   ridge link, LKJ (left out of the announcement as a technical detail),

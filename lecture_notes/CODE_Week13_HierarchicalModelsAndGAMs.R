@@ -246,8 +246,14 @@ attr(X, "knots")
 fit_bs6 <- lm(r ~ bs(temp, df = 6), data = bd)
 fit_bs25 <- lm(r ~ bs(temp, df = 25), data = bd)
 
+# row i of X = each basis curve's height at culture i's temperature, B_k(x_i)
+i <- which.min(abs(bd$temp - 15))
+bd$temp[i]
+round(X[i, ], 3)
+
 temp_grid <- seq(4, 29, by = 0.05)
-matplot(temp_grid, predict(X, temp_grid), type = "l", lty = 1, lwd = 2,
+basis_grid <- seq(attr(X, "Boundary.knots")[1], attr(X, "Boundary.knots")[2], length.out = 501)
+matplot(basis_grid, predict(X, basis_grid), type = "l", lty = 1, lwd = 2,
         xlab = "Temperature (C)", ylab = "Basis function value")
 abline(v = attr(X, "knots"), lty = 3)
 plot(r ~ temp, data = bd, pch = 16, xlab = "Temperature (C)", ylab = "Growth rate r (per day)")
@@ -319,6 +325,31 @@ c(bell = bell(32, fit_bell$par[1], fit_bell$par[2], fit_bell$par[3]),
   gp = gp_predict(32))
 
 #  [PAUSE] Why do the three predictions at 32 C disagree? Which would you use?
+
+# Bonus: how smooth is a cubic spline? ----------------------------------------------------
+
+# d-th derivative of the 6-function fit = weights x d-th derivatives of the basis functions
+bk <- attr(X, "Boundary.knots")
+all_knots <- c(rep(bk[1], 4), attr(X, "knots"), rep(bk[2], 4))
+spline_deriv <- function(x, d, fit = fit_bs6) {
+  D <- splineDesign(all_knots, x, ord = 4, derivs = d)[, -1]
+  drop((d == 0) * coef(fit)[1] + D %*% coef(fit)[-1])
+}
+knots_in <- attr(X, "knots")
+jumps <- sapply(0:3, function(d) spline_deriv(knots_in + 1e-6, d) - spline_deriv(knots_in - 1e-6, d))
+dimnames(jumps) <- list(paste("knot at", round(knots_in, 1)), paste0("derivative ", 0:3))
+round(jumps, 6)    # change across each knot (left vs. right of it)
+
+g <- head(seq(bk[1], bk[2], length.out = 2001), -1)
+par(mfrow = c(4, 1), mar = c(2, 5, 1, 1))
+for (d in 0:3) {
+  plot(g, spline_deriv(g, d), type = "n", xlab = "", ylab = paste("derivative", d))
+  abline(v = knots_in, lty = 3)
+  for (s in split(g, findInterval(g, knots_in))) lines(s, spline_deriv(s, d), lwd = 2)
+}
+par(mfrow = c(1, 1))
+
+#  [PAUSE] For a degree-1 spline, which of these panels is the first to break at the knots?
 
 # Bonus: uncertainty in derived quantities ------------------------------------------------
 

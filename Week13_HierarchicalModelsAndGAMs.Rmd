@@ -1026,12 +1026,17 @@ a spline works the same way.
 When no function from the 'bestiary' has the right shape, we can build
 one out of simple pieces. Let's start with some vocabulary:
 
-A **spline** is a weighted sum of **basis function**.
+A **spline** is a weighted sum of **basis functions**.
 
-A **basis function** is a simple building block which, along with additional independent basis functions, enable 
-specification of complex functional forms. For example, a 
+A **basis function** is a simple function which, along with additional
+independent basis functions, serves as a 'building block' for more complex functional forms. For example, a 
 polynomial basis function would be something like $x^2$, which can generate highly complex functions when 
-paired with other polynomial basis functions like $x$ and $x^3$. 
+combined with other polynomial basis functions like $x$ and $x^3$. 
+
+$$\mathbb{E}(y_i) = \beta_0 +\beta_1x+\beta_2x^2+\beta_3x^3+\ldots$$
+Note that in this equation each basis function is assigned its own 'weight', which is 
+completely analogous to a regression coefficient -- except that the entire set of coefficients 
+and basis functions are describing a single functional relationship: $y_i = f(x)$.
 
 In the end, fitting a spline is just another kind of linear model 
 ($\mathbf{y} = X\boldsymbol{\beta} + \boldsymbol{\varepsilon}$), where X is a matrix 
@@ -1040,23 +1045,71 @@ whose domain encompasses one or more of your predictor variables).
 
 In spline regressions like **Generalized Additive Models (GAM)**, a penalty on 'wiggliness'
 tries to prevent splines from fitting noise.^[The penalty is a prior! This makes
-the fitted spline a kind of random effect.] A Gaussian process skips the basis
-functions and puts a multivariate Normal directly on the curve, using a correlation 
-function (e.g., correlation decays with distance) to build a 
-covariance matrix like the ones built for
-[autocorrelation](Week12_MixedModels.html#ar1).
+the fitted spline a kind of random effect (see the
+[penalty-as-prior bonus](#penalty-prior)).] A Gaussian process skips the basis
+functions and describes the curve as a sample from a multivariate normal distribution, using a 
+covariance (or correlation) function (e.g., correlation decays with distance) to build a 
+covariance matrix.
 
 ## 1. A thermal performance curve {#thermal}
 
-The chytrid fungus Bd grows fastest at moderate temperatures and dies
+Recall that the chytrid fungus (Bd) grows fastest at moderate temperatures and dies
 when it gets too warm, which is one reason warm ponds have less
-infection. Managers pose the question: **above what water temperature does
-Bd stop growing?** To find out, we grow 48 Bd cultures on a thermal
+infection. Managers might want to know: **above what water temperature does
+Bd stop growing?** 
+
+To find out, we grow 48 Bd cultures on a thermal
 gradient plate (a block heated at one end and cooled at the other), so
 each culture sits at a slightly different temperature, and estimate each
 culture's growth rate $r$ (per day) from a week of optical density
-readings. These data are simulated; the curve they came from is in the
+readings.^[Some growth rates are negative. At the cold end, where true
+growth is near zero, these are measurement error: optical density
+changes little over a week, so noise can make a slow culture look like
+it is shrinking. At the hot end, a negative rate can be real: above
+the critical maximum, cells die and optical density falls. Real
+thermal performance data often include negative rates at one or both
+extremes, so a model for them should allow it.] These data are simulated; the curve they came from is in the
 code below, and none of the models on this page has that form.
+
+```{r gradient-plate, echo=FALSE, fig.width=7.5, fig.height=5}
+plate_temps <- seq(4, 29, length.out = 48)
+pal <- colorRampPalette(c("#2c7bb6", "#abd9e9", "#ffffbf", "#fdae61", "#d7191c"))(100)
+tcol <- function(t) pal[pmax(1, pmin(100, round((t - 4) / 25 * 99) + 1))]
+layout(matrix(1:2, 2), heights = c(1.15, 1))
+par(mar = c(3.2, 1, 1.2, 1))
+plot(NA, xlim = c(-1.6, 26.6), ylim = c(-0.9, 3.2), axes = FALSE, xlab = "", ylab = "")
+xs <- seq(0, 25, length.out = 200)
+rect(head(xs, -1), 0, xs[-1], 2, col = tcol(4 + head(xs, -1)), border = NA)
+rect(0, 0, 25, 2, border = "grey30", lwd = 1.5)
+rect(-1.5, -0.2, 0, 2.2, col = "#2c7bb6", border = "grey30")
+rect(25, -0.2, 26.5, 2.2, col = "#d7191c", border = "grey30")
+text(-0.75, 1, "chilled", srt = 90, col = "white", font = 2, cex = 0.85)
+text(25.75, 1, "heated", srt = 90, col = "white", font = 2, cex = 0.85)
+points(plate_temps - 4, rep(1, 48), pch = 21, bg = "white", col = "grey20", cex = 0.9)
+arrows(22, 2.75, 3, 2.75, length = 0.08, col = "grey30")
+text(12.5, 2.75, "heat flows from the warm end to the cold end", pos = 3, cex = 0.8, col = "grey20", offset = 0.3)
+axis(1, at = seq(0, 25, 5), labels = seq(4, 29, 5), pos = -0.25, cex.axis = 0.8)
+mtext("Temperature along the plate (°C)", side = 1, line = 1.4, cex = 0.8)
+mtext("(a) Thermal gradient plate, 48 culture wells", side = 3, adj = 0, cex = 0.85, font = 2, line = 0)
+par(mar = c(4, 4.2, 1.8, 1))
+days <- 0:7
+ex <- c(12, 20, 27)
+excol <- c("#2c7bb6", "#e08214", "#d7191c")
+expch <- c(16, 17, 15)
+plot(NA, xlim = c(0, 8.6), ylim = c(0, 2.3), xaxt = "n", xlab = "Day",
+     ylab = "log(OD / OD on day 0)", las = 1, cex.axis = 0.8, cex.lab = 0.85)
+axis(1, at = days, cex.axis = 0.8)
+set.seed(3)
+for (i in seq_along(ex)) {
+  r <- 0.3 * ifelse(ex[i] <= 20, exp(-((ex[i] - 20) / 8)^2), 1 - ((ex[i] - 20) / 8)^2)
+  points(days, r * days + rnorm(8, 0, 0.05), pch = expch[i], col = excol[i], cex = 1.1)
+  segments(0, 0, 7.2, 7.2 * r, col = excol[i], lwd = 2)
+  text(7.25, 7.2 * r + c(0, 0.04, -0.04)[i], bquote(.(ex[i]) * "°C:  " * italic(r) == .(sprintf("%.2f", r))),
+       pos = 4, cex = 0.8, offset = 0.2, col = excol[i])
+}
+mtext("(b) Each well's growth rate r is the slope of log optical density over a week",
+      side = 3, adj = 0, cex = 0.85, font = 2, line = 0.4)
+```
 
 ```{r bd-data}
 # truth: a two-piece thermal performance curve (Gaussian rise, quadratic fall)
@@ -1067,12 +1120,13 @@ bd$r <- round(tpc_true(bd$temp) + rnorm(48, 0, 0.03), 3)
 head(bd)
 ```
 
-Thermal performance curves are usually asymmetric: a slow rise, an
-optimum $T_\text{opt}$, then a steep fall to a critical maximum
-$\text{CT}_\text{max}$ where growth stops. A first try from the
-bestiary is a Gaussian (bell) curve, with a peak height, a location
-($T_\text{opt}$), and a width, fit by maximum likelihood with Normal
-noise:
+Thermal performance curves are typically asymmetric: a slow rise, followed by an
+optimum $T_\text{opt}$, then falling steeply to a critical maximum
+$\text{CT}_\text{max}$ where growth stops. 
+
+We might start by fitting a Gaussian (bell) curve as the functional form (since 
+we suspect a unimodal functional form), using a location
+($T_\text{opt}$), and a spread parameter ($width$):
 
 ```{r bell-fit}
 bell <- function(temp, rmax, topt, width) rmax * exp(-(temp - topt)^2 / (2 * width^2))
@@ -1121,9 +1175,39 @@ column $k$ holds one basis function evaluated at every $x_i$. With
 Normal errors, $y = X\boldsymbol\beta + \varepsilon$, the same form as
 any linear regression.
 
+Keep the basis function and its column apart. A basis function is a
+continuous curve, defined at every $x$, like $x^2$. Its column in the
+model matrix keeps only that curve's heights at the observed values of
+the covariate: the entry in row $i$, column $k$ is $B_k(x_i)$, the
+height of curve $k$ at observation $i$'s value of $x$. With the
+polynomial basis $1, x, x^2$, a culture at 6 °C gets the row
+$(1, 6, 36)$ and one at 15 °C gets $(1, 15, 225)$. The weights are
+estimated from these rows, but they multiply the whole curves, so the
+fitted $f(x)$ is defined at any temperature, observed or not.
+
+Typically, each covariate is assigned an independent set of basis functions- that is, 
+each predictor variable gets its own model matrix and weights vector. However, you can 
+also fit multivariate splines, where the basis functions cover (e.g.) a 2-D or even 
+higher dimensional space. In this way, splines can be used to fit arbitrary interactions!
+
 The most common basis is the **B-spline**. Each cubic B-spline is a
-small 'bump' built from cubic pieces that join smoothly at points called
-**knots**, and it is zero outside a short stretch of $x$. More knots
+small 'bump' built from cubic pieces that join smoothly^[Smoothly
+here means the pieces match in value, slope, and curvature at each
+knot. The [smoothness bonus](#spline-smoothness) plots these
+derivatives.] at points called
+**knots**,^[Knots are the values of $x$ where one polynomial piece
+ends and the next begins. Between two neighboring knots, every basis
+function, and so the whole spline, is a single cubic. Knots are chosen
+before fitting, not estimated, and they need not fall on data points.
+A cubic B-spline spans four knot intervals (fewer near the ends, where
+the boundary knots are repeated) and is zero outside them, so each knot
+is where some basis functions start or stop. By default `bs()` puts the interior knots
+at quantiles of $x$, so each interval holds about the same number of
+observations, and adds a boundary knot at each end of the data. A
+cubic basis without an intercept column has (number of interior knots
+\+ 3) functions, which is why `df = 6` gives 3 interior knots.
+Penalized splines usually place many knots and let the penalty decide
+how much flexibility to use.] and it is zero outside a short stretch of $x$. More knots
 mean more, narrower bumps and a more flexible curve. In R,
 `splines::bs()` builds the columns:
 
@@ -1136,12 +1220,44 @@ fit_bs6 <- lm(r ~ bs(temp, df = 6), data = bd)
 fit_bs25 <- lm(r ~ bs(temp, df = 25), data = bd)
 ```
 
+Each row of `X` is read off the six curves at one culture's
+temperature. For the culture nearest 15 °C:
+
+```{r bs-row}
+i <- which.min(abs(bd$temp - 15))
+bd$temp[i]
+round(X[i, ], 3)
+```
+
+```{r bs-row-plot, echo=FALSE, fig.width=7, fig.height=3.8}
+basis_pal <- c("#2a78d6", "#c0392b", "#27ae60", "#8e44ad", "#d68910", "black")
+grid_t <- seq(attr(X, "Boundary.knots")[1], attr(X, "Boundary.knots")[2], length.out = 501)
+par(mar = c(4, 4, 1.5, 1))
+matplot(grid_t, predict(X, grid_t), type = "l", lty = 1, lwd = 2, col = basis_pal,
+        xlab = "Temperature (°C)", ylab = "Basis function value", ylim = c(0, 1),
+        main = "Row i of X: each curve's height at one culture's temperature", cex.main = 0.9)
+rug(bd$temp, col = "grey40")
+abline(v = bd$temp[i], lty = 2, col = "grey40")
+points(rep(bd$temp[i], 6), X[i, ], pch = 21, bg = basis_pal, cex = 1.3)
+lab_y <- X[i, ]
+lab_show <- lab_y > 0.01
+text(bd$temp[i] + 0.4, lab_y[lab_show], sprintf("%.3f", lab_y[lab_show]),
+     pos = 4, cex = 0.8, col = basis_pal[lab_show])
+```
+
+The tick marks along the bottom are the 48 observed temperatures. The
+model matrix holds the six curves' heights at those ticks and nowhere
+else. The last two entries in this row are zero, because each B-spline
+is zero away from its own neighborhood within the domain of $x$; at any temperature, at most
+four of these cubic curves are nonzero.
+
 ```{r bs-plot, echo=FALSE, fig.width=9, fig.height=3.8}
 temp_grid <- seq(4, 29, by = 0.05)
-Xg <- predict(X, temp_grid)
+basis_grid <- seq(attr(X, "Boundary.knots")[1], attr(X, "Boundary.knots")[2], length.out = 501)
+Xg <- predict(X, basis_grid)
 pal <- c("#2a78d6", "#c0392b", "#27ae60", "#8e44ad", "#d68910", "black")
 par(mfrow = c(1, 2), mar = c(4, 4, 1.5, 1))
-matplot(temp_grid, Xg, type = "l", lty = 1, lwd = 2, col = pal, xlab = "Temperature (°C)",
+matplot(basis_grid, Xg, type = "l", lty = 1, lwd = 2, col = pal, xlab = "Temperature (°C)",
         ylab = "Basis function value", main = "Six B-spline basis functions", cex.main = 0.9)
 abline(v = attr(X, "knots"), lty = 3, col = "grey50")
 plot_bd(main = "Unpenalized spline fits", cex.main = 0.9)
@@ -1152,34 +1268,58 @@ legend("topleft", c("6 basis functions", "25 basis functions"), lwd = c(2.5, 1.5
 ```
 
 The six-function fit (left: its basis functions, with dotted lines at
-the knots) has the right shape. With 25 basis functions, the curve
-starts chasing individual cultures (fitting the noise).
+the interior knots; the outer knots sit at the lowest and highest
+observed temperatures, where the curves end) has the right shape. With 25 basis functions, the curve
+is clearly fitting the noise.
 
-Other bases work the same way. The widget builds $f(x)$ from four kinds
+Other bases work the same way. The widget builds $f(x)$ from five kinds
 of basis functions and random weights. Polynomials ($1, x, x^2, \dots$)
-are the oldest choice, but each power stretches across the whole range,
+are the oldest choice of basis function, but each power stretches across the whole range,
 so changing one weight moves the curve everywhere. B-splines and
 Gaussian bumps are local: each weight changes the curve over one stretch
 of $x$.
+
+The fifth, the **thin plate regression spline**, is the default in
+`mgcv` (`s(x)` means `s(x, bs = "tp")`). It has no knots to place.
+Instead it starts from one basis function per data point and keeps the
+$k$ combinations of them that matter most for smooth curves.^[In one
+dimension, the full thin plate spline puts a cubic $|x - x_i|^3$ at
+every data point $x_i$, plus a constant and a straight line, so it is
+a cubic spline with a knot at every data point. Wood (2003, *Journal
+of the Royal Statistical Society B* 65: 95-114) made it practical:
+take the eigenvectors of the $n \times n$ matrix of those cubics at
+the data, keep the $k$ with the largest eigenvalues (constrained to
+leave the straight line unpenalized), and use them as the basis. The
+widget does this for 40 evenly spaced data points. The same idea
+extends to two or more covariates, where knot placement is hardest,
+and the basis doesn't change if the axes are rotated, which suits
+coordinates like easting and northing.] The resulting basis functions
+are global and look irregular. Any rotation of them spans the same set
+of curves, and one rotation sorts them from smoothest to wiggliest;
+the widget's "Columns" menu switches between the two.
 
 ```{r widget-basis, echo=FALSE}
 widget("spline_basis.html")
 ```
 
-> **Question:** With B-splines of degree 1 and 4 interior knots, where
-> can the function bend? Switch to degree 3 and compare. Then choose the
-> polynomial basis with highest power 12 and randomize a few times:
-> where does the function do most of its moving?
-
-> **Question:** Switch the weights to a random walk and lower the step
-> SD. What happens to the function, and what would you have to assume
-> about the weights to get a smooth curve from many knots?
+Questions to explore with the widget are in this footnote.^[(1) With B-splines of degree 1 (tent basis
+functions) and 4 interior knots, where can the function bend? Switch to
+degree 3 and compare. Then choose the polynomial basis with highest
+power 12 and randomize a few times: where does the function do most of
+its moving? (2) Switch the weights to a random walk and lower the step
+SD. What happens to the function, and what would you have to assume
+about the weights to get a smooth curve from many knots? (3) Choose the
+thin plate basis with $k = 10$ and switch the columns between "as
+built" and "rotated, smoothest first." Can one set of columns make any
+curve the other can't? If a penalty shrinks some weights toward zero,
+which rotated columns should it shrink hardest?]
 
 ## 3. Penalizing wiggliness {#penalty}
 
 Choosing the number of knots by hand is awkward: too few and the curve
-can't bend where it needs to, too many and it overfits. The usual
-fix is to use plenty of basis functions and add a **penalty** to the
+can't bend where it needs to, too many and it overfits! The usual
+solution (commonly implemented in mgcv/GAM) is to use 'plenty' (i.e., more than enough) of 
+basis functions and add a **penalty** to the
 NLL that grows with how wiggly the curve is:
 
 $$\text{NLL}_\text{pen}(\beta) = \text{NLL}(\beta) +
@@ -1243,9 +1383,10 @@ edf_gcv <- sum(gam(r ~ s(temp, k = 20), data = bd)$edf) - 1
 flexibility; the penalty decides how much of it to use (edf
 `r f1(sum(fit_gam$edf) - 1)` here). Ask for `method = "REML"`:
 `gam()`'s default, generalized cross-validation, tends to pick wigglier
-curves (edf `r f1(edf_gcv)` for these data).^[`gam()`'s default basis is a thin
-plate regression spline, which works like the B-splines above;
-`s(temp, bs = "ps")` asks for the P-spline from the widget instead.] For
+curves (edf `r f1(edf_gcv)` for these data).^[`gam()`'s default basis is the
+[thin plate regression spline](#basis) from the basis widget;
+`s(temp, bs = "ps")` asks for the P-spline from the penalty widget
+instead. With REML both give nearly the same curve here.] For
 counts, use `family = poisson` as in `glm()`.
 
 ```{r compare-fits, echo=FALSE}
@@ -1273,7 +1414,7 @@ topt_gam <- temp_grid[which.max(pg$fit)]
 ctmax_gam <- temp_grid[temp_grid > topt_gam & pg$fit < 0][1]
 ```
 
-The GAM finds the steep fall the bell can't make. Its curve peaks at
+The GAM finds the zero-crossing in a way that the Gaussian can't! Its curve peaks at
 `r f1(topt_gam)` °C and crosses zero at `r f1(ctmax_gam)` °C; the
 bell puts the peak at `r f1(fit_bell$par[2])` °C and never reaches
 zero.^[AIC for a GAM uses the edf as its parameter count; it's a
@@ -1282,15 +1423,17 @@ estimated.]
 
 ## 5. Gaussian processes {#gp}
 
-A spline puts a prior on basis-function weights. A **Gaussian process**
-(GP) puts a prior directly on the curve: the values of $f$ at any set
+A penalized spline essentially puts a prior on basis-function weights. 
+
+A **Gaussian process** (GP) puts a prior directly on the curve: the values of $f$ at any set
 of temperatures are multivariate Normal,
 
 $$f(x_1), \dots, f(x_n) \sim \text{MVN}(m\mathbf{1}, K), \qquad
 K_{ij} = \alpha^2 \exp\!\left(-\frac{(x_i - x_j)^2}{2\ell^2}\right)$$
 
 The **kernel** $K_{ij}$ says that cultures at similar temperatures have
-similar growth rates: the correlation falls from 1 to near 0 as the
+similar growth rates (note: there are many possible kernels- this one is just 
+one of many possible kernels): the correlation falls from 1 to near 0 as the
 temperature gap grows past a few **length-scales** $\ell$. The amplitude
 $\alpha$ sets how far $f$ wanders from its mean $m$. This kernel (the
 squared exponential) gives very smooth curves. The exponential kernel,
@@ -1355,7 +1498,11 @@ spline and a GP are both a smooth curve with a multivariate Normal
 prior, one written through basis weights and the other through a kernel.
 
 In the widget, choose a kernel and length-scale, draw random curves from
-the prior, then click to add observations and see the posterior.
+the prior, then click to add observations and see the posterior. For a
+longer interactive tour (kernels, conditioning on data, and combining
+kernels), see
+[A Visual Exploration of Gaussian Processes](https://distill.pub/2019/visual-exploration-gaussian-processes/)
+(Görtler, Kehlbeck, and Deussen 2019, *Distill*).
 
 ```{r widget-gp, echo=FALSE}
 widget("gp_draws.html")
@@ -1366,11 +1513,11 @@ widget("gp_draws.html")
 > observations? Then shrink $\ell$ to 0.3: what does the posterior do
 > far from any observation?
 
-The $x$ in a GP can be anything with a distance: temperature, time, or
+The $x$ in a GP can be any continuous gradient that can define a 'distance': temperature, time, or
 position. Replace $|x_i - x_j|$ with the distance between two sampling
 sites and the same kernel describes how similar nearby sites are, which
 is the core of spatial regression models (in geostatistics, prediction
-from this model is called kriging).
+from this model is called 'kriging').
 
 ## Discussion {#gam-discussion}
 
@@ -1394,6 +1541,84 @@ What parametric rival would you add?
 growing, with an interval. The bell has a parameter for $T_\text{opt}$;
 the GAM has no parameter for anything. Which model would you report
 from, and how?
+
+## Bonus: how smooth is a cubic spline? {#spline-smoothness}
+
+Every weighted sum of cubic B-splines is smooth, whatever the weights.
+The reason shows up in the derivatives. Within each stretch between
+knots, the spline is a single cubic polynomial, so all its derivatives
+exist there. The only places it could break are the knots, where one
+cubic piece hands off to the next.
+
+`splines::splineDesign()` evaluates B-splines and their derivatives,
+so the derivatives of the six-function fit from
+[splines as linear models](#basis) are its weights times the
+derivatives of the basis functions:
+
+```{r spline-deriv}
+bk <- attr(X, "Boundary.knots")
+all_knots <- c(rep(bk[1], 4), attr(X, "knots"), rep(bk[2], 4))
+spline_deriv <- function(x, d, fit = fit_bs6) {
+  D <- splineDesign(all_knots, x, ord = 4, derivs = d)[, -1]
+  drop((d == 0) * coef(fit)[1] + D %*% coef(fit)[-1])
+}
+knots_in <- attr(X, "knots")
+jumps <- sapply(0:3, function(d) spline_deriv(knots_in + 1e-6, d) - spline_deriv(knots_in - 1e-6, d))
+dimnames(jumps) <- list(paste("knot at", round(knots_in, 1)), paste0("derivative ", 0:3))
+round(jumps, 6)    # change across each knot (left vs. right of it)
+```
+
+```{r spline-deriv-plot, echo=FALSE, fig.width=7, fig.height=8}
+g <- head(seq(bk[1], bk[2], length.out = 2001), -1)
+deriv_labs <- c("f(x)", "f'(x), slope", "f''(x), curvature", "f'''(x) x 1000")
+par(mfrow = c(4, 1), mar = c(1.5, 6, 1, 1), oma = c(3, 0, 0, 0))
+for (d in 0:3) {
+  scale_d <- if (d == 3) 1000 else 1
+  plot(NA, xlim = range(g), ylim = range(spline_deriv(g, d) * scale_d), xlab = "",
+       ylab = "", las = 1, cex.axis = 0.85)
+  mtext(deriv_labs[d + 1], side = 2, line = 4.2, cex = 0.75)
+  abline(v = knots_in, lty = 3, col = "grey50")
+  abline(h = 0, col = "grey85")
+  if (d == 0) points(bd$temp, bd$r, pch = 16, col = "grey70", cex = 0.7)
+  for (s in split(g, findInterval(g, knots_in))) lines(s, spline_deriv(s, d) * scale_d, lwd = 2)
+}
+mtext("Temperature (°C)", side = 1, outer = TRUE, line = 1.5)
+```
+
+Reading down the panels (dotted lines are the knots):
+
+- The curve and its slope show no trace of the knots.
+- The curvature is a straight line within each stretch (the second
+  derivative of a cubic is linear) and changes direction at the knots,
+  but it never jumps.
+- The third derivative is a constant within each stretch and jumps at
+  every knot (barely, at the middle one).
+
+So a cubic spline is continuous in its value, slope, and curvature, and
+the first break comes in the third derivative. Each cubic B-spline is
+built to have exactly this property, and a weighted sum inherits it:
+the derivative of a sum is the sum of the derivatives, so if every
+$B_k''$ is continuous at a knot, so is $\sum_k \beta_k B_k''$. That is
+why the weights can't create a corner.^[A B-spline of degree $p$ with
+single knots has $p - 1$ continuous derivatives at each knot (de Boor,
+*A Practical Guide to Splines*, 1978). Repeating a knot removes one
+continuous derivative per repeat, which is how `bs()` handles the
+boundary (four copies of each end knot).] A jump in the third
+derivative is invisible to the eye, which notices a jump in
+value or slope easily and a jump in curvature only sometimes.^[Cubics
+are also the natural degree for a deeper reason. Among all curves with
+a continuous second derivative that pass through a set of points, the
+one that minimizes the total squared curvature $\int f''(x)^2\,dx$ is
+a natural cubic spline with knots at the points (Holladay's theorem;
+see Green and Silverman, *Nonparametric Regression and Generalized
+Linear Models*, 1994). The same integral is the wiggliness penalty
+behind smoothing splines, and the [P-spline](#penalty) difference
+penalty approximates it.]
+
+> **Question:** Picture the same four panels for a spline of degree 1
+> (straight pieces joined at the knots, the tent-shaped basis in the
+> [basis widget](#basis)). Which panel is the first to break at the
+> knots, and how?
 
 ## Bonus: the penalty is a prior {#penalty-prior}
 

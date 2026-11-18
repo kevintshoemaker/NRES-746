@@ -1241,13 +1241,16 @@ short_compare &lt;- data.frame(
 <div id="gams" class="section level1">
 <h1>Splines, GAMs, and Gaussian processes</h1>
 <p>When no function from the 'bestiary' has the right shape, we can build one out of simple pieces. Let's start with some vocabulary:</p>
-<p>A <strong>spline</strong> is a weighted sum of <strong>basis function</strong>.</p>
-<p>A <strong>basis function</strong> is a simple building block which, along with additional independent basis functions, enable specification of complex functional forms. For example, a polynomial basis function would be something like <span class="math inline">\(x^2\)</span>, which can generate highly complex functions when paired with other polynomial basis functions like <span class="math inline">\(x\)</span> and <span class="math inline">\(x^3\)</span>.</p>
+<p>A <strong>spline</strong> is a weighted sum of <strong>basis functions</strong>.</p>
+<p>A <strong>basis function</strong> is a simple function which, along with additional independent basis functions, serves as a 'building block' for more complex functional forms. For example, a polynomial basis function would be something like <span class="math inline">\(x^2\)</span>, which can generate highly complex functions when combined with other polynomial basis functions like <span class="math inline">\(x\)</span> and <span class="math inline">\(x^3\)</span>.</p>
+<p><span class="math display">\[\mathbb{E}(y_i) = \beta_0 +\beta_1x+\beta_2x^2+\beta_3x^3+\ldots\]</span> Note that in this equation each basis function is assigned its own 'weight', which is completely analogous to a regression coefficient -- except that the entire set of coefficients and basis functions are describing a single functional relationship: <span class="math inline">\(y_i = f(x)\)</span>.</p>
 <p>In the end, fitting a spline is just another kind of linear model (<span class="math inline">\(\mathbf{y} = X\boldsymbol{\beta} + \boldsymbol{\varepsilon}\)</span>), where X is a matrix of basis functions (each column represents a basis function whose domain encompasses one or more of your predictor variables).</p>
-<p>In spline regressions like <strong>Generalized Additive Models (GAM)</strong>, a penalty on 'wiggliness' tries to prevent splines from fitting noise.<a href="#fn10" class="footnoteRef" id="fnref10"><sup>10</sup></a> A Gaussian process skips the basis functions and puts a multivariate Normal directly on the curve, using a correlation function (e.g., correlation decays with distance) to build a covariance matrix like the ones built for <a href="Week12_MixedModels.html#ar1">autocorrelation</a>.</p>
+<p>In spline regressions like <strong>Generalized Additive Models (GAM)</strong>, a penalty on 'wiggliness' tries to prevent splines from fitting noise.<a href="#fn10" class="footnoteRef" id="fnref10"><sup>10</sup></a> A Gaussian process skips the basis functions and describes the curve as a sample from a multivariate normal distribution, using a covariance (or correlation) function (e.g., correlation decays with distance) to build a covariance matrix.</p>
 <div id="thermal" class="section level2">
 <h2>1. A thermal performance curve</h2>
-<p>The chytrid fungus Bd grows fastest at moderate temperatures and dies when it gets too warm, which is one reason warm ponds have less infection. Managers pose the question: <strong>above what water temperature does Bd stop growing?</strong> To find out, we grow 48 Bd cultures on a thermal gradient plate (a block heated at one end and cooled at the other), so each culture sits at a slightly different temperature, and estimate each culture's growth rate <span class="math inline">\(r\)</span> (per day) from a week of optical density readings. These data are simulated; the curve they came from is in the code below, and none of the models on this page has that form.</p>
+<p>Recall that the chytrid fungus (Bd) grows fastest at moderate temperatures and dies when it gets too warm, which is one reason warm ponds have less infection. Managers might want to know: <strong>above what water temperature does Bd stop growing?</strong></p>
+<p>To find out, we grow 48 Bd cultures on a thermal gradient plate (a block heated at one end and cooled at the other), so each culture sits at a slightly different temperature, and estimate each culture's growth rate <span class="math inline">\(r\)</span> (per day) from a week of optical density readings.<a href="#fn11" class="footnoteRef" id="fnref11"><sup>11</sup></a> These data are simulated; the curve they came from is in the code below, and none of the models on this page has that form.</p>
+<p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/gradient-plate-1.png" width="720" style="display: block; margin: auto;" /></p>
 <pre class="r"><code># truth: a two-piece thermal performance curve (Gaussian rise, quadratic fall)
 tpc_true &lt;- function(temp) 0.3 * ifelse(temp &lt;= 20, exp(-((temp - 20) / 8)^2), 1 - ((temp - 20) / 8)^2)
 set.seed(13)
@@ -1261,7 +1264,8 @@ head(bd)</code></pre>
 ## 4  5.4 -0.050
 ## 5  6.3 -0.016
 ## 6  6.5 -0.004</code></pre>
-<p>Thermal performance curves are usually asymmetric: a slow rise, an optimum <span class="math inline">\(T_\text{opt}\)</span>, then a steep fall to a critical maximum <span class="math inline">\(\text{CT}_\text{max}\)</span> where growth stops. A first try from the bestiary is a Gaussian (bell) curve, with a peak height, a location (<span class="math inline">\(T_\text{opt}\)</span>), and a width, fit by maximum likelihood with Normal noise:</p>
+<p>Thermal performance curves are typically asymmetric: a slow rise, followed by an optimum <span class="math inline">\(T_\text{opt}\)</span>, then falling steeply to a critical maximum <span class="math inline">\(\text{CT}_\text{max}\)</span> where growth stops.</p>
+<p>We might start by fitting a Gaussian (bell) curve as the functional form (since we suspect a unimodal functional form), using a location (<span class="math inline">\(T_\text{opt}\)</span>), and a spread parameter (<span class="math inline">\(width\)</span>):</p>
 <pre class="r"><code>bell &lt;- function(temp, rmax, topt, width) rmax * exp(-(temp - topt)^2 / (2 * width^2))
 nll_bell &lt;- function(par) {
   -sum(dnorm(bd$r, bell(bd$temp, par[1], par[2], par[3]), exp(par[4]), log = TRUE))
@@ -1290,7 +1294,9 @@ B_1(x_n) &amp; B_2(x_n) &amp; \cdots &amp; B_K(x_n)
 \begin{pmatrix} \beta_1 \\ \beta_2 \\ \vdots \\ \beta_K \end{pmatrix},
 \qquad \text{or} \qquad \mathbf{f} = X\boldsymbol{\beta}\]</span></p>
 <p>Row <span class="math inline">\(i\)</span> of <span class="math inline">\(X\)</span> holds every basis function evaluated at <span class="math inline">\(x_i\)</span>, and column <span class="math inline">\(k\)</span> holds one basis function evaluated at every <span class="math inline">\(x_i\)</span>. With Normal errors, <span class="math inline">\(y = X\boldsymbol\beta + \varepsilon\)</span>, the same form as any linear regression.</p>
-<p>The most common basis is the <strong>B-spline</strong>. Each cubic B-spline is a small 'bump' built from cubic pieces that join smoothly at points called <strong>knots</strong>, and it is zero outside a short stretch of <span class="math inline">\(x\)</span>. More knots mean more, narrower bumps and a more flexible curve. In R, <code>splines::bs()</code> builds the columns:</p>
+<p>Keep the basis function and its column apart. A basis function is a continuous curve, defined at every <span class="math inline">\(x\)</span>, like <span class="math inline">\(x^2\)</span>. Its column in the model matrix keeps only that curve's heights at the observed values of the covariate: the entry in row <span class="math inline">\(i\)</span>, column <span class="math inline">\(k\)</span> is <span class="math inline">\(B_k(x_i)\)</span>, the height of curve <span class="math inline">\(k\)</span> at observation <span class="math inline">\(i\)</span>'s value of <span class="math inline">\(x\)</span>. With the polynomial basis <span class="math inline">\(1, x, x^2\)</span>, a culture at 6 °C gets the row <span class="math inline">\((1, 6, 36)\)</span> and one at 15 °C gets <span class="math inline">\((1, 15, 225)\)</span>. The weights are estimated from these rows, but they multiply the whole curves, so the fitted <span class="math inline">\(f(x)\)</span> is defined at any temperature, observed or not.</p>
+<p>Typically, each covariate is assigned an independent set of basis functions- that is, each predictor variable gets its own model matrix and weights vector. However, you can also fit multivariate splines, where the basis functions cover (e.g.) a 2-D or even higher dimensional space. In this way, splines can be used to fit arbitrary interactions!</p>
+<p>The most common basis is the <strong>B-spline</strong>. Each cubic B-spline is a small 'bump' built from cubic pieces that join smoothly<a href="#fn12" class="footnoteRef" id="fnref12"><sup>12</sup></a> at points called <strong>knots</strong>,<a href="#fn13" class="footnoteRef" id="fnref13"><sup>13</sup></a> and it is zero outside a short stretch of <span class="math inline">\(x\)</span>. More knots mean more, narrower bumps and a more flexible curve. In R, <code>splines::bs()</code> builds the columns:</p>
 <pre class="r"><code>library(splines)
 X &lt;- bs(bd$temp, df = 6)          # 6 cubic B-spline columns (3 interior knots)
 round(head(X), 3)</code></pre>
@@ -1305,9 +1311,19 @@ round(head(X), 3)</code></pre>
 <pre><code>## [1] 10.375 16.400 22.650</code></pre>
 <pre class="r"><code>fit_bs6 &lt;- lm(r ~ bs(temp, df = 6), data = bd)
 fit_bs25 &lt;- lm(r ~ bs(temp, df = 25), data = bd)</code></pre>
+<p>Each row of <code>X</code> is read off the six curves at one culture's temperature. For the culture nearest 15 °C:</p>
+<pre class="r"><code>i &lt;- which.min(abs(bd$temp - 15))
+bd$temp[i]</code></pre>
+<pre><code>## [1] 15.2</code></pre>
+<pre class="r"><code>round(X[i, ], 3)</code></pre>
+<pre><code>##     1     2     3     4     5     6 
+## 0.002 0.285 0.631 0.082 0.000 0.000</code></pre>
+<p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/bs-row-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>The tick marks along the bottom are the 48 observed temperatures. The model matrix holds the six curves' heights at those ticks and nowhere else. The last two entries in this row are zero, because each B-spline is zero away from its own neighborhood within the domain of <span class="math inline">\(x\)</span>; at any temperature, at most four of these cubic curves are nonzero.</p>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/bs-plot-1.png" width="864" style="display: block; margin: auto;" /></p>
-<p>The six-function fit (left: its basis functions, with dotted lines at the knots) has the right shape. With 25 basis functions, the curve starts chasing individual cultures (fitting the noise).</p>
-<p>Other bases work the same way. The widget builds <span class="math inline">\(f(x)\)</span> from four kinds of basis functions and random weights. Polynomials (<span class="math inline">\(1, x, x^2, \dots\)</span>) are the oldest choice, but each power stretches across the whole range, so changing one weight moves the curve everywhere. B-splines and Gaussian bumps are local: each weight changes the curve over one stretch of <span class="math inline">\(x\)</span>.</p>
+<p>The six-function fit (left: its basis functions, with dotted lines at the interior knots; the outer knots sit at the lowest and highest observed temperatures, where the curves end) has the right shape. With 25 basis functions, the curve is clearly fitting the noise.</p>
+<p>Other bases work the same way. The widget builds <span class="math inline">\(f(x)\)</span> from five kinds of basis functions and random weights. Polynomials (<span class="math inline">\(1, x, x^2, \dots\)</span>) are the oldest choice of basis function, but each power stretches across the whole range, so changing one weight moves the curve everywhere. B-splines and Gaussian bumps are local: each weight changes the curve over one stretch of <span class="math inline">\(x\)</span>.</p>
+<p>The fifth, the <strong>thin plate regression spline</strong>, is the default in <code>mgcv</code> (<code>s(x)</code> means <code>s(x, bs = &quot;tp&quot;)</code>). It has no knots to place. Instead it starts from one basis function per data point and keeps the <span class="math inline">\(k\)</span> combinations of them that matter most for smooth curves.<a href="#fn14" class="footnoteRef" id="fnref14"><sup>14</sup></a> The resulting basis functions are global and look irregular. Any rotation of them spans the same set of curves, and one rotation sorts them from smoothest to wiggliest; the widget's &quot;Columns&quot; menu switches between the two.</p>
 <div class="w746sb" id="sb">
 <style>
 .w746sb{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
@@ -1334,9 +1350,12 @@ fit_bs25 &lt;- lm(r ~ bs(temp, df = 25), data = bd)</code></pre>
     <option value="trunc">Truncated power (piecewise)</option>
     <option value="bs" selected>B-spline</option>
     <option value="rbf">Gaussian bumps</option>
+    <option value="tp">Thin plate (mgcv default)</option>
   </select>
   <label for="sb-deg" id="sb-deglab">Degree</label>
   <select id="sb-deg"><option value="1">1 (linear)</option><option value="2">2 (quadratic)</option><option value="3" selected>3 (cubic)</option></select>
+  <label for="sb-ord" id="sb-ordlab">Columns</label>
+  <select id="sb-ord"><option value="mgcv" selected>as built (like mgcv's)</option><option value="ord">rotated, smoothest first</option></select>
 </div>
 <div class="row"><label class="lab1" for="sb-k" id="sb-klab">Interior knots</label><input type="range" id="sb-k"><span class="val" id="sb-kout"></span></div>
 <div class="row">
@@ -1370,8 +1389,9 @@ function newZ(){z=[];for(let i=0;i<40;i++)z.push(rnorm());}
 newZ();
 const cols=['#2a78d6','#c0392b','#27ae60','#8e44ad','#d68910','#16a085','#7f8c8d','#e84393','#34495e','#a0522d'];
 const cfg={poly:{lab:'Highest power',min:1,max:15,val:3},trunc:{lab:'Interior knots',min:0,max:15,val:4},
-           bs:{lab:'Interior knots',min:0,max:15,val:4},rbf:{lab:'Number of bumps',min:2,max:20,val:6}};
-const typeSel=document.getElementById('sb-type'),degSel=document.getElementById('sb-deg'),
+           bs:{lab:'Interior knots',min:0,max:15,val:4},rbf:{lab:'Number of bumps',min:2,max:20,val:6},
+           tp:{lab:'Basis dimension k',min:3,max:20,val:6}};
+const typeSel=document.getElementById('sb-type'),degSel=document.getElementById('sb-deg'),ordSel=document.getElementById('sb-ord'),
       kS=document.getElementById('sb-k'),stepS=document.getElementById('sb-step'),showC=document.getElementById('sb-show');
 let type='bs';
 function interior(m){const k=[];for(let j=1;j<=m;j++)k.push(j/(m+1));return k;}
@@ -1387,6 +1407,70 @@ function bspline(x,kn,d){
   }
   return N.slice(0,K);
 }
+// thin plate regression spline (Wood 2003), 1-D, m = 2: eta(r) = |r|^3 / 12 at 40 data x's;
+// keep the k eigenvectors of E with the largest |eigenvalue|, constrained orthogonal to (1, x)
+const NTP=40,xd=[];for(let i=0;i<NTP;i++)xd.push(i/(NTP-1));
+const eta=r=>Math.abs(r*r*r)/12;
+function jacobi(A0){
+  const n=A0.length,A=A0.map(r=>r.slice()),V=[];
+  for(let i=0;i<n;i++){V.push(new Array(n).fill(0));V[i][i]=1;}
+  for(let sweep=0;sweep<100;sweep++){
+    let off=0;for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)off+=A[i][j]*A[i][j];
+    if(off<1e-22)break;
+    for(let p=0;p<n;p++)for(let q=p+1;q<n;q++){
+      if(Math.abs(A[p][q])<1e-300)continue;
+      const th=(A[q][q]-A[p][p])/(2*A[p][q]);
+      const t=(th>=0?1:-1)/(Math.abs(th)+Math.sqrt(th*th+1)),c=1/Math.sqrt(t*t+1),sn=t*c;
+      for(let r=0;r<n;r++){const arp=A[r][p],arq=A[r][q];A[r][p]=c*arp-sn*arq;A[r][q]=sn*arp+c*arq;}
+      for(let r=0;r<n;r++){const apr=A[p][r],aqr=A[q][r];A[p][r]=c*apr-sn*aqr;A[q][r]=sn*apr+c*aqr;}
+      for(let r=0;r<n;r++){const vrp=V[r][p],vrq=V[r][q];V[r][p]=c*vrp-sn*vrq;V[r][q]=sn*vrp+c*vrq;}
+    }
+  }
+  return {values:A.map((r,i)=>r[i]),vectors:V};
+}
+const Etp=xd.map(a=>xd.map(b=>eta(a-b))),eigE=jacobi(Etp);
+const eigOrder=eigE.values.map((v,i)=>i).sort((a,b)=>Math.abs(eigE.values[b])-Math.abs(eigE.values[a]));
+const tpCache={};
+function tpWeights(k,ord){
+  const key=k+ord;if(tpCache[key])return tpCache[key];
+  const idx=eigOrder.slice(0,k),U=xd.map((_,i)=>idx.map(j=>eigE.vectors[i][j])),D=idx.map(j=>eigE.values[j]);
+  // A = U'T (k x 2); Householder QR; Z = last k - 2 columns of the complete Q
+  const A=idx.map(()=>[0,0]);
+  for(let r=0;r<k;r++)for(let i=0;i<NTP;i++){A[r][0]+=U[i][r];A[r][1]+=U[i][r]*xd[i];}
+  const vs=[];
+  for(let c=0;c<2;c++){
+    let nrm=0;for(let r=c;r<k;r++)nrm+=A[r][c]*A[r][c];nrm=Math.sqrt(nrm);
+    const v=new Array(k).fill(0);for(let r=c;r<k;r++)v[r]=A[r][c];
+    v[c]+=(A[c][c]>=0?1:-1)*nrm;
+    let vv=0;for(let r=c;r<k;r++)vv+=v[r]*v[r];
+    for(let cc=c;cc<2;cc++){let dot=0;for(let r=c;r<k;r++)dot+=v[r]*A[r][cc];for(let r=c;r<k;r++)A[r][cc]-=2*dot/vv*v[r];}
+    vs.push([v,vv]);
+  }
+  let Z=[];
+  for(let j=2;j<k;j++){const e=new Array(k).fill(0);e[j]=1;
+    for(let h=1;h>=0;h--){const [v,vv]=vs[h];let dot=0;for(let r=0;r<k;r++)dot+=v[r]*e[r];for(let r=0;r<k;r++)e[r]-=2*dot/vv*v[r];}
+    Z.push(e);}
+  if(ord==='ord'){
+    // rotate to diagonalize the penalty Z'DZ; largest eigenvalue = smoothest function
+    const m=Z.length,S=[];for(let a=0;a<m;a++){S.push([]);for(let b=0;b<m;b++){let s=0;for(let r=0;r<k;r++)s+=Z[a][r]*D[r]*Z[b][r];S[a].push(s);}}
+    const es=jacobi(S),o=es.values.map((v,i)=>i).sort((a,b)=>es.values[b]-es.values[a]);
+    Z=o.map(c=>{const z2=new Array(k).fill(0);for(let a=0;a<m;a++)for(let r=0;r<k;r++)z2[r]+=es.vectors[a][c]*Z[a][r];return z2;});
+  }
+  // weights on the 40 eta functions for each wiggly basis function: U Z
+  const W=Z.map(zc=>xd.map((_,i)=>{let s=0;for(let r=0;r<k;r++)s+=U[i][r]*zc[r];return s;}));
+  tpCache[key]=W;return W;
+}
+function tpBasisAll(xs,k,ord){
+  const W=tpWeights(k,ord),m=W.length;
+  const B=xs.map(x=>{const e=xd.map(xi=>eta(x-xi));return W.map(w=>w.reduce((s,v,i)=>s+v*e[i],0));});
+  if(ord==='ord'){ // the line is already in the basis, so drop each function's linear part
+    for(let j=0;j<m;j++){const n=xs.length;let sx=0,sy=0,sxx=0,sxy=0;
+      xs.forEach((x,i)=>{sx+=x;sy+=B[i][j];sxx+=x*x;sxy+=x*B[i][j];});
+      const b1=(n*sxy-sx*sy)/(n*sxx-sx*sx),b0=(sy-b1*sx)/n;xs.forEach((x,i)=>{B[i][j]-=b0+b1*x;});}
+  }
+  for(let j=0;j<m;j++){let mx=0;B.forEach(b=>{if(Math.abs(b[j])>mx)mx=Math.abs(b[j]);});B.forEach(b=>{b[j]/=mx||1;});}
+  return B.map((b,i)=>ord==='ord'?[1,2*xs[i]-1].concat(b):b.concat([1,2*xs[i]-1]));
+}
 function basis(x,k,d){
   if(type==='poly'){const u=2*x-1,b=[];for(let p=0;p<=k;p++)b.push(Math.pow(u,p));return b;}
   if(type==='trunc'){const b=[];for(let p=0;p<=d;p++)b.push(Math.pow(x,p));interior(k).forEach(c=>b.push(x>c?Math.pow(x-c,d):0));return b;}
@@ -1399,6 +1483,7 @@ function setType(t){
   kS.min=c.min;kS.max=c.max;kS.step=1;kS.value=c.val;
   const useDeg=(t==='trunc'||t==='bs');
   degSel.style.display=useDeg?'':'none';document.getElementById('sb-deglab').style.display=useDeg?'':'none';
+  ordSel.style.display=t==='tp'?'':'none';document.getElementById('sb-ordlab').style.display=t==='tp'?'':'none';
   draw();
 }
 function draw(){
@@ -1409,15 +1494,18 @@ function draw(){
   document.getElementById('sb-steprow').style.display=rw?'':'none';
   const step=parseFloat(stepS.value);document.getElementById('sb-stepout').textContent=step.toFixed(2);
   const nx=301,xs=[],B=[];
-  for(let i=0;i<nx;i++){const x=i/(nx-1);xs.push(x);B.push(basis(x,k,d));}
+  for(let i=0;i<nx;i++)xs.push(i/(nx-1));
+  if(type==='tp')tpBasisAll(xs,k,ordSel.value).forEach(b=>B.push(b));
+  else xs.forEach(x=>B.push(basis(x,k,d)));
   const K=B[0].length;
   const w=[];for(let j=0;j<K;j++)w.push(rw?(j===0?z[0]:w[j-1]+step*z[j]):z[j]);
   const f=B.map(b=>b.reduce((s,v,j)=>s+v*w[j],0));
   const kn=(type==='trunc'||type==='bs')?interior(k):[];
   document.getElementById('sb-v1').textContent=K;
-  document.getElementById('sb-v2').textContent=type==='poly'?'none':(type==='rbf'?k+' centers':kn.length);
+  document.getElementById('sb-v2').textContent=type==='poly'?'none':(type==='rbf'?k+' centers':(type==='tp'?NTP+" (the data x's)":kn.length));
   let join='';
   if(type==='poly')join='no pieces';
+  else if(type==='tp')join='curvature smooth';
   else if(type==='rbf')join='smooth everywhere';
   else join=['kinks (slope jumps)','slope smooth','curvature smooth'][d-1];
   document.getElementById('sb-v3').textContent=join;
@@ -1429,11 +1517,12 @@ function draw(){
   const P1={y0:165,y1:12},py1=y=>P1.y0-(y-bmin)/(bmax-bmin)*(P1.y0-P1.y1);
   el('line',{class:'ax',x1:x0,y1:P1.y0,x2:x1,y2:P1.y0},gb);el('line',{class:'ax',x1:x0,y1:P1.y0,x2:x0,y2:P1.y1},gb);
   kn.forEach(c=>el('line',{x1:px(c),y1:P1.y1,x2:px(c),y2:P1.y0,stroke:'#bbb','stroke-dasharray':'3 3'},gb));
+  if(type==='tp')xd.forEach(c=>el('line',{x1:px(c),y1:P1.y0,x2:px(c),y2:P1.y0-5,stroke:'#999'},gb));
   for(let j=0;j<K;j++){let p='';B.forEach((b,i)=>{p+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py1(b[j]).toFixed(1);});
     el('path',{d:p,fill:'none',stroke:cols[j%cols.length],'stroke-width':1.6},gb);}
   txt('tk',x0-5,py1(bmin)+4,bmin.toFixed(1),gb,'end');txt('tk',x0-5,py1(bmax)+4,bmax.toFixed(1),gb,'end');
   [0,0.25,0.5,0.75,1].forEach(t=>txt('tk',px(t),P1.y0+14,t,gb));
-  txt('lab',x0+6,P1.y1+4,'basis functions B_k(x)'+(kn.length?'  (dashed: knots)':''),gb,'start');
+  txt('lab',x0+6,P1.y1+4,'basis functions B_k(x)'+(kn.length?'  (dashed: knots)':'')+(type==='tp'?"  (ticks: data x's)":''),gb,'start');
   // weights
   const gw=document.getElementById('sb-wts');gw.innerHTML='';
   const wm=Math.max(1e-9,...w.map(Math.abs)),bw=(x1-x0)/K;
@@ -1460,28 +1549,23 @@ function draw(){
   txt('lab',x0+6,P2.y1+4,'f(x) = sum of w_k B_k(x)',gf,'start');
 }
 typeSel.addEventListener('change',()=>setType(typeSel.value));
-degSel.addEventListener('change',draw);kS.addEventListener('input',draw);stepS.addEventListener('input',draw);showC.addEventListener('change',draw);
+degSel.addEventListener('change',draw);ordSel.addEventListener('change',draw);kS.addEventListener('input',draw);stepS.addEventListener('input',draw);showC.addEventListener('change',draw);
 document.querySelectorAll('#sb input[name=sb-wmode]').forEach(r=>r.addEventListener('change',draw));
 document.getElementById('sb-new').addEventListener('click',()=>{newZ();draw();});
 setType('bs');
 })();
 </script>
 </div>
-<blockquote>
-<p><strong>Question:</strong> With B-splines of degree 1 and 4 interior knots, where can the function bend? Switch to degree 3 and compare. Then choose the polynomial basis with highest power 12 and randomize a few times: where does the function do most of its moving?</p>
-</blockquote>
-<blockquote>
-<p><strong>Question:</strong> Switch the weights to a random walk and lower the step SD. What happens to the function, and what would you have to assume about the weights to get a smooth curve from many knots?</p>
-</blockquote>
+<p>Questions to explore with the widget are in this footnote.<a href="#fn15" class="footnoteRef" id="fnref15"><sup>15</sup></a></p>
 </div>
 <div id="penalty" class="section level2">
 <h2>3. Penalizing wiggliness</h2>
-<p>Choosing the number of knots by hand is awkward: too few and the curve can't bend where it needs to, too many and it overfits. The usual fix is to use plenty of basis functions and add a <strong>penalty</strong> to the NLL that grows with how wiggly the curve is:</p>
+<p>Choosing the number of knots by hand is awkward: too few and the curve can't bend where it needs to, too many and it overfits! The usual solution (commonly implemented in mgcv/GAM) is to use 'plenty' (i.e., more than enough) of basis functions and add a <strong>penalty</strong> to the NLL that grows with how wiggly the curve is:</p>
 <p><span class="math display">\[\text{NLL}_\text{pen}(\beta) = \text{NLL}(\beta) +
 \lambda \sum_{k=3}^{K} (\beta_k - 2\beta_{k-1} + \beta_{k-2})^2\]</span></p>
-<p>The penalty adds up squared second differences of neighboring weights, a stand-in for the curvature of <span class="math inline">\(f\)</span>.<a href="#fn11" class="footnoteRef" id="fnref11"><sup>11</sup></a> With <span class="math inline">\(\lambda = 0\)</span> we get the unpenalized <code>lm()</code> fit. As <span class="math inline">\(\lambda\)</span> grows, the weights are forced onto a straight line, and with evenly spaced knots so is <span class="math inline">\(f\)</span>. In between, the <strong>effective degrees of freedom</strong> (edf) measure how many parameters' worth of flexibility the curve uses; edf runs from <span class="math inline">\(K\)</span> (no penalty) down to 2 (a straight line).</p>
+<p>The penalty adds up squared second differences of neighboring weights, a stand-in for the curvature of <span class="math inline">\(f\)</span>.<a href="#fn16" class="footnoteRef" id="fnref16"><sup>16</sup></a> With <span class="math inline">\(\lambda = 0\)</span> we get the unpenalized <code>lm()</code> fit. As <span class="math inline">\(\lambda\)</span> grows, the weights are forced onto a straight line, and with evenly spaced knots so is <span class="math inline">\(f\)</span>. In between, the <strong>effective degrees of freedom</strong> (edf) measure how many parameters' worth of flexibility the curve uses; edf runs from <span class="math inline">\(K\)</span> (no penalty) down to 2 (a straight line).</p>
 <p>Choosing <span class="math inline">\(\lambda\)</span> is the remaining problem. <a href="Week10_ModelComparison.html#cross-validation">Cross-validation</a> would work, but <code>gam()</code> usually uses a faster route: it treats the wiggly part of the curve like a random effect and picks <span class="math inline">\(\lambda\)</span> by maximizing the restricted likelihood (REML), the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span> (the <a href="#penalty-prior">penalty-as-prior bonus</a> shows why this works).</p>
-<p>B-splines on evenly spaced knots with this difference penalty are called a <strong>P-spline</strong> (for penalized B-spline).<a href="#fn12" class="footnoteRef" id="fnref12"><sup>12</sup></a></p>
+<p>B-splines on evenly spaced knots with this difference penalty are called a <strong>P-spline</strong> (for penalized B-spline).<a href="#fn17" class="footnoteRef" id="fnref17"><sup>17</sup></a></p>
 <p>The widget fits the Bd data with a cubic P-spline and plots the REML criterion against <span class="math inline">\(\lambda\)</span>.</p>
 <div class="w746pf" id="pf">
 <style>
@@ -1670,7 +1754,7 @@ summary(fit_gam)</code></pre>
 ## scale   0.02628135 0.020457942 0.03376239
 ## 
 ## Rank: 2/2</code></pre>
-<p><code>k = 20</code> sets the number of basis functions, an upper limit on flexibility; the penalty decides how much of it to use (edf 8.2 here). Ask for <code>method = &quot;REML&quot;</code>: <code>gam()</code>'s default, generalized cross-validation, tends to pick wigglier curves (edf 13.9 for these data).<a href="#fn13" class="footnoteRef" id="fnref13"><sup>13</sup></a> For counts, use <code>family = poisson</code> as in <code>glm()</code>.</p>
+<p><code>k = 20</code> sets the number of basis functions, an upper limit on flexibility; the penalty decides how much of it to use (edf 8.2 here). Ask for <code>method = &quot;REML&quot;</code>: <code>gam()</code>'s default, generalized cross-validation, tends to pick wigglier curves (edf 13.9 for these data).<a href="#fn18" class="footnoteRef" id="fnref18"><sup>18</sup></a> For counts, use <code>family = poisson</code> as in <code>glm()</code>.</p>
 <table>
 <thead>
 <tr class="header">
@@ -1706,15 +1790,16 @@ summary(fit_gam)</code></pre>
 </tbody>
 </table>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/gam-plot-1.png" width="624" style="display: block; margin: auto;" /></p>
-<p>The GAM finds the steep fall the bell can't make. Its curve peaks at 20.2 °C and crosses zero at 28.0 °C; the bell puts the peak at 19.4 °C and never reaches zero.<a href="#fn14" class="footnoteRef" id="fnref14"><sup>14</sup></a></p>
+<p>The GAM finds the zero-crossing in a way that the Gaussian can't! Its curve peaks at 20.2 °C and crosses zero at 28.0 °C; the bell puts the peak at 19.4 °C and never reaches zero.<a href="#fn19" class="footnoteRef" id="fnref19"><sup>19</sup></a></p>
 </div>
 <div id="gp" class="section level2">
 <h2>5. Gaussian processes</h2>
-<p>A spline puts a prior on basis-function weights. A <strong>Gaussian process</strong> (GP) puts a prior directly on the curve: the values of <span class="math inline">\(f\)</span> at any set of temperatures are multivariate Normal,</p>
+<p>A penalized spline essentially puts a prior on basis-function weights.</p>
+<p>A <strong>Gaussian process</strong> (GP) puts a prior directly on the curve: the values of <span class="math inline">\(f\)</span> at any set of temperatures are multivariate Normal,</p>
 <p><span class="math display">\[f(x_1), \dots, f(x_n) \sim \text{MVN}(m\mathbf{1}, K), \qquad
 K_{ij} = \alpha^2 \exp\!\left(-\frac{(x_i - x_j)^2}{2\ell^2}\right)\]</span></p>
-<p>The <strong>kernel</strong> <span class="math inline">\(K_{ij}\)</span> says that cultures at similar temperatures have similar growth rates: the correlation falls from 1 to near 0 as the temperature gap grows past a few <strong>length-scales</strong> <span class="math inline">\(\ell\)</span>. The amplitude <span class="math inline">\(\alpha\)</span> sets how far <span class="math inline">\(f\)</span> wanders from its mean <span class="math inline">\(m\)</span>. This kernel (the squared exponential) gives very smooth curves. The exponential kernel, <span class="math inline">\(\exp(-|x_i - x_j|/\ell)\)</span>, gives rough ones, and for equally spaced times it is the <a href="Week12_MixedModels.html#ar1">AR(1) correlation</a> <span class="math inline">\(\phi^{|s-t|}\)</span> with <span class="math inline">\(\phi = e^{-1/\ell}\)</span>.<a href="#fn15" class="footnoteRef" id="fnref15"><sup>15</sup></a></p>
-<p>Adding Normal measurement noise gives <span class="math inline">\(y \sim \text{MVN}(m\mathbf{1}, K + \sigma_e^2 I)\)</span>, so the likelihood is one multivariate Normal density, with four parameters (<span class="math inline">\(m\)</span>, <span class="math inline">\(\alpha\)</span>, <span class="math inline">\(\ell\)</span>, <span class="math inline">\(\sigma_e\)</span>) to fit by <code>optim()</code>.<a href="#fn16" class="footnoteRef" id="fnref16"><sup>16</sup></a></p>
+<p>The <strong>kernel</strong> <span class="math inline">\(K_{ij}\)</span> says that cultures at similar temperatures have similar growth rates (note: there are many possible kernels- this one is just one of many possible kernels): the correlation falls from 1 to near 0 as the temperature gap grows past a few <strong>length-scales</strong> <span class="math inline">\(\ell\)</span>. The amplitude <span class="math inline">\(\alpha\)</span> sets how far <span class="math inline">\(f\)</span> wanders from its mean <span class="math inline">\(m\)</span>. This kernel (the squared exponential) gives very smooth curves. The exponential kernel, <span class="math inline">\(\exp(-|x_i - x_j|/\ell)\)</span>, gives rough ones, and for equally spaced times it is the <a href="Week12_MixedModels.html#ar1">AR(1) correlation</a> <span class="math inline">\(\phi^{|s-t|}\)</span> with <span class="math inline">\(\phi = e^{-1/\ell}\)</span>.<a href="#fn20" class="footnoteRef" id="fnref20"><sup>20</sup></a></p>
+<p>Adding Normal measurement noise gives <span class="math inline">\(y \sim \text{MVN}(m\mathbf{1}, K + \sigma_e^2 I)\)</span>, so the likelihood is one multivariate Normal density, with four parameters (<span class="math inline">\(m\)</span>, <span class="math inline">\(\alpha\)</span>, <span class="math inline">\(\ell\)</span>, <span class="math inline">\(\sigma_e\)</span>) to fit by <code>optim()</code>.<a href="#fn21" class="footnoteRef" id="fnref21"><sup>21</sup></a></p>
 <pre class="r"><code>dist_temp &lt;- abs(outer(bd$temp, bd$temp, &quot;-&quot;))
 nll_gp &lt;- function(par) {
   m &lt;- par[1]
@@ -1741,7 +1826,7 @@ max(abs(gp_fit_grid - pg$fit))          # largest gap between the GP and GAM cur
 <pre><code>## [1] 0.0112882</code></pre>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/gp-plot-1.png" width="624" style="display: block; margin: auto;" /></p>
 <p>The GP and the GAM give nearly the same curve, with length-scale <span class="math inline">\(\hat\ell =\)</span> 10.1 °C. That's no accident: a penalized spline and a GP are both a smooth curve with a multivariate Normal prior, one written through basis weights and the other through a kernel.</p>
-<p>In the widget, choose a kernel and length-scale, draw random curves from the prior, then click to add observations and see the posterior.</p>
+<p>In the widget, choose a kernel and length-scale, draw random curves from the prior, then click to add observations and see the posterior. For a longer interactive tour (kernels, conditioning on data, and combining kernels), see <a href="https://distill.pub/2019/visual-exploration-gaussian-processes/">A Visual Exploration of Gaussian Processes</a> (Görtler, Kehlbeck, and Deussen 2019, <em>Distill</em>).</p>
 <div class="w746gp" id="gp">
 <style>
 .w746gp{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
@@ -1898,7 +1983,7 @@ draw();
 <blockquote>
 <p><strong>Question:</strong> Add the example points. Switch the kernel from squared exponential to exponential. What changes about the curves between the observations? Then shrink <span class="math inline">\(\ell\)</span> to 0.3: what does the posterior do far from any observation?</p>
 </blockquote>
-<p>The <span class="math inline">\(x\)</span> in a GP can be anything with a distance: temperature, time, or position. Replace <span class="math inline">\(|x_i - x_j|\)</span> with the distance between two sampling sites and the same kernel describes how similar nearby sites are, which is the core of spatial regression models (in geostatistics, prediction from this model is called kriging).</p>
+<p>The <span class="math inline">\(x\)</span> in a GP can be any continuous gradient that can define a 'distance': temperature, time, or position. Replace <span class="math inline">\(|x_i - x_j|\)</span> with the distance between two sampling sites and the same kernel describes how similar nearby sites are, which is the core of spatial regression models (in geostatistics, prediction from this model is called 'kriging').</p>
 </div>
 <div id="gam-discussion" class="section level2">
 <h2>Discussion</h2>
@@ -1906,12 +1991,42 @@ draw();
 <p><strong>Q2.</strong> The GAM beats the bell by 30.6 AIC units. A colleague concludes that &quot;Bd's thermal performance curve is asymmetric.&quot; What has the comparison corroborated, and what hasn't it? What parametric rival would you add?</p>
 <p><strong>Q3.</strong> A manager wants one number: the temperature at which Bd stops growing, with an interval. The bell has a parameter for <span class="math inline">\(T_\text{opt}\)</span>; the GAM has no parameter for anything. Which model would you report from, and how?</p>
 </div>
+<div id="spline-smoothness" class="section level2">
+<h2>Bonus: how smooth is a cubic spline?</h2>
+<p>Every weighted sum of cubic B-splines is smooth, whatever the weights. The reason shows up in the derivatives. Within each stretch between knots, the spline is a single cubic polynomial, so all its derivatives exist there. The only places it could break are the knots, where one cubic piece hands off to the next.</p>
+<p><code>splines::splineDesign()</code> evaluates B-splines and their derivatives, so the derivatives of the six-function fit from <a href="#basis">splines as linear models</a> are its weights times the derivatives of the basis functions:</p>
+<pre class="r"><code>bk &lt;- attr(X, &quot;Boundary.knots&quot;)
+all_knots &lt;- c(rep(bk[1], 4), attr(X, &quot;knots&quot;), rep(bk[2], 4))
+spline_deriv &lt;- function(x, d, fit = fit_bs6) {
+  D &lt;- splineDesign(all_knots, x, ord = 4, derivs = d)[, -1]
+  drop((d == 0) * coef(fit)[1] + D %*% coef(fit)[-1])
+}
+knots_in &lt;- attr(X, &quot;knots&quot;)
+jumps &lt;- sapply(0:3, function(d) spline_deriv(knots_in + 1e-6, d) - spline_deriv(knots_in - 1e-6, d))
+dimnames(jumps) &lt;- list(paste(&quot;knot at&quot;, round(knots_in, 1)), paste0(&quot;derivative &quot;, 0:3))
+round(jumps, 6)    # change across each knot (left vs. right of it)</code></pre>
+<pre><code>##              derivative 0 derivative 1 derivative 2 derivative 3
+## knot at 10.4            0            0            0    -0.000473
+## knot at 16.4            0            0            0     0.000053
+## knot at 22.6            0            0            0     0.001992</code></pre>
+<p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/spline-deriv-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>Reading down the panels (dotted lines are the knots):</p>
+<ul>
+<li>The curve and its slope show no trace of the knots.</li>
+<li>The curvature is a straight line within each stretch (the second derivative of a cubic is linear) and changes direction at the knots, but it never jumps.</li>
+<li>The third derivative is a constant within each stretch and jumps at every knot (barely, at the middle one).</li>
+</ul>
+<p>So a cubic spline is continuous in its value, slope, and curvature, and the first break comes in the third derivative. Each cubic B-spline is built to have exactly this property, and a weighted sum inherits it: the derivative of a sum is the sum of the derivatives, so if every <span class="math inline">\(B_k&#39;&#39;\)</span> is continuous at a knot, so is <span class="math inline">\(\sum_k \beta_k B_k&#39;&#39;\)</span>. That is why the weights can't create a corner.<a href="#fn22" class="footnoteRef" id="fnref22"><sup>22</sup></a> A jump in the third derivative is invisible to the eye, which notices a jump in value or slope easily and a jump in curvature only sometimes.<a href="#fn23" class="footnoteRef" id="fnref23"><sup>23</sup></a></p>
+<blockquote>
+<p><strong>Question:</strong> Picture the same four panels for a spline of degree 1 (straight pieces joined at the knots, the tent-shaped basis in the <a href="#basis">basis widget</a>). Which panel is the first to break at the knots, and how?</p>
+</blockquote>
+</div>
 <div id="penalty-prior" class="section level2">
 <h2>Bonus: the penalty is a prior</h2>
-<p>Why can REML choose <span class="math inline">\(\lambda\)</span>? Because <strong>the penalty is a prior.</strong> As in the <a href="#ridge-prior">ridge bonus</a>, a penalty <span class="math inline">\(\lambda \sum d_k^2\)</span> on the second differences <span class="math inline">\(d_k\)</span> is what a Normal(0, <span class="math inline">\(\sigma_d^2\)</span>) prior on each <span class="math inline">\(d_k\)</span> adds to the NLL, with <span class="math inline">\(\lambda = 1/(2\sigma_d^2)\)</span>. Read that way, the wiggly part of the curve is a random effect: a set of deviations drawn from a Normal distribution whose SD <span class="math inline">\(\sigma_d\)</span> is estimated from the data. So <span class="math inline">\(\lambda\)</span> can be chosen the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span>, by maximizing the restricted likelihood (REML) with the weights integrated out!<a href="#fn17" class="footnoteRef" id="fnref17"><sup>17</sup></a></p>
+<p>Why can REML choose <span class="math inline">\(\lambda\)</span>? Because <strong>the penalty is a prior.</strong> As in the <a href="#ridge-prior">ridge bonus</a>, a penalty <span class="math inline">\(\lambda \sum d_k^2\)</span> on the second differences <span class="math inline">\(d_k\)</span> is what a Normal(0, <span class="math inline">\(\sigma_d^2\)</span>) prior on each <span class="math inline">\(d_k\)</span> adds to the NLL, with <span class="math inline">\(\lambda = 1/(2\sigma_d^2)\)</span>. Read that way, the wiggly part of the curve is a random effect: a set of deviations drawn from a Normal distribution whose SD <span class="math inline">\(\sigma_d\)</span> is estimated from the data. So <span class="math inline">\(\lambda\)</span> can be chosen the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span>, by maximizing the restricted likelihood (REML) with the weights integrated out!<a href="#fn24" class="footnoteRef" id="fnref24"><sup>24</sup></a></p>
 <p>Drawn as a DAG, a <a href="#penalty">P-spline</a> has the same levels as the <a href="#what-hierarchical">random slope model</a>, with basis weights in place of stands:</p>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/dag-pspline-1.png" width="768" style="display: block; margin: auto;" /></p>
-<p>The second-difference prior says <span class="math inline">\(\beta_k \sim \text{Normal}(2\beta_{k-1} - \beta_{k-2},\ \sigma_d^2)\)</span> for <span class="math inline">\(k \geq 3\)</span>, so each weight's parents are the two weights before it plus the shared <span class="math inline">\(\sigma_d\)</span>; that is why arrows also run along level 2. For example, <span class="math inline">\(\beta_3\)</span>'s prior mean, <span class="math inline">\(2\beta_2 - \beta_1\)</span>, is where a straight line through <span class="math inline">\(\beta_1\)</span> and <span class="math inline">\(\beta_2\)</span> lands at <span class="math inline">\(k = 3\)</span>. The first two weights have no parents to pool toward, so they get only a flat prior, like fixed effects. The dashed boxes are priors on <span class="math inline">\(\sigma_d\)</span> and <span class="math inline">\(\sigma_e\)</span>, which only a fully Bayesian fit (see <a href="#smooth-brms">a smooth in brms</a>) has.<a href="#fn18" class="footnoteRef" id="fnref18"><sup>18</sup></a></p>
+<p>The second-difference prior says <span class="math inline">\(\beta_k \sim \text{Normal}(2\beta_{k-1} - \beta_{k-2},\ \sigma_d^2)\)</span> for <span class="math inline">\(k \geq 3\)</span>, so each weight's parents are the two weights before it plus the shared <span class="math inline">\(\sigma_d\)</span>; that is why arrows also run along level 2. For example, <span class="math inline">\(\beta_3\)</span>'s prior mean, <span class="math inline">\(2\beta_2 - \beta_1\)</span>, is where a straight line through <span class="math inline">\(\beta_1\)</span> and <span class="math inline">\(\beta_2\)</span> lands at <span class="math inline">\(k = 3\)</span>. The first two weights have no parents to pool toward, so they get only a flat prior, like fixed effects. The dashed boxes are priors on <span class="math inline">\(\sigma_d\)</span> and <span class="math inline">\(\sigma_e\)</span>, which only a fully Bayesian fit (see <a href="#smooth-brms">a smooth in brms</a>) has.<a href="#fn25" class="footnoteRef" id="fnref25"><sup>25</sup></a></p>
 </div>
 <div id="derived" class="section level2">
 <h2>Bonus: uncertainty in derived quantities</h2>
@@ -2020,15 +2135,22 @@ round(rbind(topt = quantile(topt_sims, c(0.5, 0.025, 0.975)),
 <li id="fn7"><p>Without the <code>prior</code> argument, <code>brms</code> uses an LKJ(1) prior on the correlations and half-Student-<span class="math inline">\(t\)</span> priors on the SDs. <code>rstanarm::stan_lmer()</code> fits the same formula from precompiled models, so it skips the compile step.<a href="#fnref7">↩</a></p></li>
 <li id="fn8"><p>For a 2 <span class="math inline">\(\times\)</span> 2 matrix the LKJ(<span class="math inline">\(\eta\)</span>) prior is the same as <span class="math inline">\((\rho_{ab} + 1)/2 \sim \text{Beta}(\eta, \eta)\)</span> (see <a href="#lkj">priors for a covariance matrix</a>), so the program can put the prior on <span class="math inline">\(\rho_{ab}\)</span> directly. For bigger matrices you need the LKJ distribution itself.<a href="#fnref8">↩</a></p></li>
 <li id="fn9"><p>Raising <code>adapt_delta</code> (e.g. <code>adapt_delta = 0.99</code> in <code>$sample()</code>) makes Stan take smaller steps and usually clears the rest.<a href="#fnref9">↩</a></p></li>
-<li id="fn10"><p>The penalty is a prior! This makes the fitted spline a kind of random effect.<a href="#fnref10">↩</a></p></li>
-<li id="fn11"><p>The integral of <span class="math inline">\(f&#39;&#39;(x)^2\)</span> is the other common choice.<a href="#fnref11">↩</a></p></li>
-<li id="fn12"><p>Eilers and Marx (1996, <em>Statistical Science</em> 11: 89-121) introduced the name. Other penalized splines differ in the basis or the penalty (for example, the integral of <span class="math inline">\(f&#39;&#39;(x)^2\)</span>), but they work the same way.<a href="#fnref12">↩</a></p></li>
-<li id="fn13"><p><code>gam()</code>'s default basis is a thin plate regression spline, which works like the B-splines above; <code>s(temp, bs = &quot;ps&quot;)</code> asks for the P-spline from the widget instead.<a href="#fnref13">↩</a></p></li>
-<li id="fn14"><p>AIC for a GAM uses the edf as its parameter count; it's a reasonable guide, not an exact one, since <span class="math inline">\(\lambda\)</span> was itself estimated.<a href="#fnref14">↩</a></p></li>
-<li id="fn15"><p>Box 1 of <a href="https://www.nature.com/articles/s44358-026-00215-4">Yang, Pan, Warton, and Nakagawa (2026)</a> lays out temporal, spatial, and phylogenetic correlation functions side by side.<a href="#fnref15">↩</a></p></li>
-<li id="fn16"><p>In this fit the length-scale is long compared with the 25-degree range of the data, so the curve is one broad excursion from <span class="math inline">\(m\)</span>, and <span class="math inline">\(m\)</span> trades off against <span class="math inline">\(\alpha\)</span>; don't read much into its value.<a href="#fnref16">↩</a></p></li>
-<li id="fn17"><p>This makes <code>gam()</code> with REML an <em>empirical Bayes</em> method: <span class="math inline">\(\sigma_d\)</span> is estimated from the marginal likelihood rather than given a prior, and the weights then have a Normal posterior given that estimate. That posterior is what <code>vcov(fit_gam)</code> returns and what the bands from <code>plot()</code> and <code>predict(se.fit = TRUE)</code> summarize, so they are credible intervals (see <a href="#derived">uncertainty in derived quantities</a>). Plugging in <span class="math inline">\(\hat\sigma_d\)</span> ignores its uncertainty, which makes the intervals a little narrow; <code>vcov(fit_gam, unconditional = TRUE)</code> adds a correction, and a fully Bayesian fit (see <a href="#smooth-brms">a smooth in brms</a>) gives <span class="math inline">\(\sigma_d\)</span> a prior instead.<a href="#fnref17">↩</a></p></li>
-<li id="fn18"><p>In a <code>gam()</code> fit with REML, <span class="math inline">\(\sigma_d\)</span> and <span class="math inline">\(\sigma_e\)</span> get no priors; they are estimated the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span>. <code>mgcv</code> also reparameterizes the basis so the penalized and unpenalized parts are separate, but the levels are the same.<a href="#fnref18">↩</a></p></li>
+<li id="fn10"><p>The penalty is a prior! This makes the fitted spline a kind of random effect (see the <a href="#penalty-prior">penalty-as-prior bonus</a>).<a href="#fnref10">↩</a></p></li>
+<li id="fn11"><p>Some growth rates are negative. At the cold end, where true growth is near zero, these are measurement error: optical density changes little over a week, so noise can make a slow culture look like it is shrinking. At the hot end, a negative rate can be real: above the critical maximum, cells die and optical density falls. Real thermal performance data often include negative rates at one or both extremes, so a model for them should allow it.<a href="#fnref11">↩</a></p></li>
+<li id="fn12"><p>Smoothly here means the pieces match in value, slope, and curvature at each knot. The <a href="#spline-smoothness">smoothness bonus</a> plots these derivatives.<a href="#fnref12">↩</a></p></li>
+<li id="fn13"><p>Knots are the values of <span class="math inline">\(x\)</span> where one polynomial piece ends and the next begins. Between two neighboring knots, every basis function, and so the whole spline, is a single cubic. Knots are chosen before fitting, not estimated, and they need not fall on data points. A cubic B-spline spans four knot intervals (fewer near the ends, where the boundary knots are repeated) and is zero outside them, so each knot is where some basis functions start or stop. By default <code>bs()</code> puts the interior knots at quantiles of <span class="math inline">\(x\)</span>, so each interval holds about the same number of observations, and adds a boundary knot at each end of the data. A cubic basis without an intercept column has (number of interior knots + 3) functions, which is why <code>df = 6</code> gives 3 interior knots. Penalized splines usually place many knots and let the penalty decide how much flexibility to use.<a href="#fnref13">↩</a></p></li>
+<li id="fn14"><p>In one dimension, the full thin plate spline puts a cubic <span class="math inline">\(|x - x_i|^3\)</span> at every data point <span class="math inline">\(x_i\)</span>, plus a constant and a straight line, so it is a cubic spline with a knot at every data point. Wood (2003, <em>Journal of the Royal Statistical Society B</em> 65: 95-114) made it practical: take the eigenvectors of the <span class="math inline">\(n \times n\)</span> matrix of those cubics at the data, keep the <span class="math inline">\(k\)</span> with the largest eigenvalues (constrained to leave the straight line unpenalized), and use them as the basis. The widget does this for 40 evenly spaced data points. The same idea extends to two or more covariates, where knot placement is hardest, and the basis doesn't change if the axes are rotated, which suits coordinates like easting and northing.<a href="#fnref14">↩</a></p></li>
+<li id="fn15"><p>(1) With B-splines of degree 1 (tent basis functions) and 4 interior knots, where can the function bend? Switch to degree 3 and compare. Then choose the polynomial basis with highest power 12 and randomize a few times: where does the function do most of its moving? (2) Switch the weights to a random walk and lower the step SD. What happens to the function, and what would you have to assume about the weights to get a smooth curve from many knots? (3) Choose the thin plate basis with <span class="math inline">\(k = 10\)</span> and switch the columns between &quot;as built&quot; and &quot;rotated, smoothest first.&quot; Can one set of columns make any curve the other can't? If a penalty shrinks some weights toward zero, which rotated columns should it shrink hardest?<a href="#fnref15">↩</a></p></li>
+<li id="fn16"><p>The integral of <span class="math inline">\(f&#39;&#39;(x)^2\)</span> is the other common choice.<a href="#fnref16">↩</a></p></li>
+<li id="fn17"><p>Eilers and Marx (1996, <em>Statistical Science</em> 11: 89-121) introduced the name. Other penalized splines differ in the basis or the penalty (for example, the integral of <span class="math inline">\(f&#39;&#39;(x)^2\)</span>), but they work the same way.<a href="#fnref17">↩</a></p></li>
+<li id="fn18"><p><code>gam()</code>'s default basis is the <a href="#basis">thin plate regression spline</a> from the basis widget; <code>s(temp, bs = &quot;ps&quot;)</code> asks for the P-spline from the penalty widget instead. With REML both give nearly the same curve here.<a href="#fnref18">↩</a></p></li>
+<li id="fn19"><p>AIC for a GAM uses the edf as its parameter count; it's a reasonable guide, not an exact one, since <span class="math inline">\(\lambda\)</span> was itself estimated.<a href="#fnref19">↩</a></p></li>
+<li id="fn20"><p>Box 1 of <a href="https://www.nature.com/articles/s44358-026-00215-4">Yang, Pan, Warton, and Nakagawa (2026)</a> lays out temporal, spatial, and phylogenetic correlation functions side by side.<a href="#fnref20">↩</a></p></li>
+<li id="fn21"><p>In this fit the length-scale is long compared with the 25-degree range of the data, so the curve is one broad excursion from <span class="math inline">\(m\)</span>, and <span class="math inline">\(m\)</span> trades off against <span class="math inline">\(\alpha\)</span>; don't read much into its value.<a href="#fnref21">↩</a></p></li>
+<li id="fn22"><p>A B-spline of degree <span class="math inline">\(p\)</span> with single knots has <span class="math inline">\(p - 1\)</span> continuous derivatives at each knot (de Boor, <em>A Practical Guide to Splines</em>, 1978). Repeating a knot removes one continuous derivative per repeat, which is how <code>bs()</code> handles the boundary (four copies of each end knot).<a href="#fnref22">↩</a></p></li>
+<li id="fn23"><p>Cubics are also the natural degree for a deeper reason. Among all curves with a continuous second derivative that pass through a set of points, the one that minimizes the total squared curvature <span class="math inline">\(\int f&#39;&#39;(x)^2\,dx\)</span> is a natural cubic spline with knots at the points (Holladay's theorem; see Green and Silverman, <em>Nonparametric Regression and Generalized Linear Models</em>, 1994). The same integral is the wiggliness penalty behind smoothing splines, and the <a href="#penalty">P-spline</a> difference penalty approximates it.<a href="#fnref23">↩</a></p></li>
+<li id="fn24"><p>This makes <code>gam()</code> with REML an <em>empirical Bayes</em> method: <span class="math inline">\(\sigma_d\)</span> is estimated from the marginal likelihood rather than given a prior, and the weights then have a Normal posterior given that estimate. That posterior is what <code>vcov(fit_gam)</code> returns and what the bands from <code>plot()</code> and <code>predict(se.fit = TRUE)</code> summarize, so they are credible intervals (see <a href="#derived">uncertainty in derived quantities</a>). Plugging in <span class="math inline">\(\hat\sigma_d\)</span> ignores its uncertainty, which makes the intervals a little narrow; <code>vcov(fit_gam, unconditional = TRUE)</code> adds a correction, and a fully Bayesian fit (see <a href="#smooth-brms">a smooth in brms</a>) gives <span class="math inline">\(\sigma_d\)</span> a prior instead.<a href="#fnref24">↩</a></p></li>
+<li id="fn25"><p>In a <code>gam()</code> fit with REML, <span class="math inline">\(\sigma_d\)</span> and <span class="math inline">\(\sigma_e\)</span> get no priors; they are estimated the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span>. <code>mgcv</code> also reparameterizes the basis so the penalized and unpenalized parts are separate, but the levels are the same.<a href="#fnref25">↩</a></p></li>
 </ol>
 </div>
 

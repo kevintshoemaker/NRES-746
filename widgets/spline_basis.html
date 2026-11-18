@@ -24,9 +24,12 @@
     <option value="trunc">Truncated power (piecewise)</option>
     <option value="bs" selected>B-spline</option>
     <option value="rbf">Gaussian bumps</option>
+    <option value="tp">Thin plate (mgcv default)</option>
   </select>
   <label for="sb-deg" id="sb-deglab">Degree</label>
   <select id="sb-deg"><option value="1">1 (linear)</option><option value="2">2 (quadratic)</option><option value="3" selected>3 (cubic)</option></select>
+  <label for="sb-ord" id="sb-ordlab">Columns</label>
+  <select id="sb-ord"><option value="mgcv" selected>as built (like mgcv's)</option><option value="ord">rotated, smoothest first</option></select>
 </div>
 <div class="row"><label class="lab1" for="sb-k" id="sb-klab">Interior knots</label><input type="range" id="sb-k"><span class="val" id="sb-kout"></span></div>
 <div class="row">
@@ -60,8 +63,9 @@ function newZ(){z=[];for(let i=0;i<40;i++)z.push(rnorm());}
 newZ();
 const cols=['#2a78d6','#c0392b','#27ae60','#8e44ad','#d68910','#16a085','#7f8c8d','#e84393','#34495e','#a0522d'];
 const cfg={poly:{lab:'Highest power',min:1,max:15,val:3},trunc:{lab:'Interior knots',min:0,max:15,val:4},
-           bs:{lab:'Interior knots',min:0,max:15,val:4},rbf:{lab:'Number of bumps',min:2,max:20,val:6}};
-const typeSel=document.getElementById('sb-type'),degSel=document.getElementById('sb-deg'),
+           bs:{lab:'Interior knots',min:0,max:15,val:4},rbf:{lab:'Number of bumps',min:2,max:20,val:6},
+           tp:{lab:'Basis dimension k',min:3,max:20,val:6}};
+const typeSel=document.getElementById('sb-type'),degSel=document.getElementById('sb-deg'),ordSel=document.getElementById('sb-ord'),
       kS=document.getElementById('sb-k'),stepS=document.getElementById('sb-step'),showC=document.getElementById('sb-show');
 let type='bs';
 function interior(m){const k=[];for(let j=1;j<=m;j++)k.push(j/(m+1));return k;}
@@ -77,6 +81,70 @@ function bspline(x,kn,d){
   }
   return N.slice(0,K);
 }
+// thin plate regression spline (Wood 2003), 1-D, m = 2: eta(r) = |r|^3 / 12 at 40 data x's;
+// keep the k eigenvectors of E with the largest |eigenvalue|, constrained orthogonal to (1, x)
+const NTP=40,xd=[];for(let i=0;i<NTP;i++)xd.push(i/(NTP-1));
+const eta=r=>Math.abs(r*r*r)/12;
+function jacobi(A0){
+  const n=A0.length,A=A0.map(r=>r.slice()),V=[];
+  for(let i=0;i<n;i++){V.push(new Array(n).fill(0));V[i][i]=1;}
+  for(let sweep=0;sweep<100;sweep++){
+    let off=0;for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)off+=A[i][j]*A[i][j];
+    if(off<1e-22)break;
+    for(let p=0;p<n;p++)for(let q=p+1;q<n;q++){
+      if(Math.abs(A[p][q])<1e-300)continue;
+      const th=(A[q][q]-A[p][p])/(2*A[p][q]);
+      const t=(th>=0?1:-1)/(Math.abs(th)+Math.sqrt(th*th+1)),c=1/Math.sqrt(t*t+1),sn=t*c;
+      for(let r=0;r<n;r++){const arp=A[r][p],arq=A[r][q];A[r][p]=c*arp-sn*arq;A[r][q]=sn*arp+c*arq;}
+      for(let r=0;r<n;r++){const apr=A[p][r],aqr=A[q][r];A[p][r]=c*apr-sn*aqr;A[q][r]=sn*apr+c*aqr;}
+      for(let r=0;r<n;r++){const vrp=V[r][p],vrq=V[r][q];V[r][p]=c*vrp-sn*vrq;V[r][q]=sn*vrp+c*vrq;}
+    }
+  }
+  return {values:A.map((r,i)=>r[i]),vectors:V};
+}
+const Etp=xd.map(a=>xd.map(b=>eta(a-b))),eigE=jacobi(Etp);
+const eigOrder=eigE.values.map((v,i)=>i).sort((a,b)=>Math.abs(eigE.values[b])-Math.abs(eigE.values[a]));
+const tpCache={};
+function tpWeights(k,ord){
+  const key=k+ord;if(tpCache[key])return tpCache[key];
+  const idx=eigOrder.slice(0,k),U=xd.map((_,i)=>idx.map(j=>eigE.vectors[i][j])),D=idx.map(j=>eigE.values[j]);
+  // A = U'T (k x 2); Householder QR; Z = last k - 2 columns of the complete Q
+  const A=idx.map(()=>[0,0]);
+  for(let r=0;r<k;r++)for(let i=0;i<NTP;i++){A[r][0]+=U[i][r];A[r][1]+=U[i][r]*xd[i];}
+  const vs=[];
+  for(let c=0;c<2;c++){
+    let nrm=0;for(let r=c;r<k;r++)nrm+=A[r][c]*A[r][c];nrm=Math.sqrt(nrm);
+    const v=new Array(k).fill(0);for(let r=c;r<k;r++)v[r]=A[r][c];
+    v[c]+=(A[c][c]>=0?1:-1)*nrm;
+    let vv=0;for(let r=c;r<k;r++)vv+=v[r]*v[r];
+    for(let cc=c;cc<2;cc++){let dot=0;for(let r=c;r<k;r++)dot+=v[r]*A[r][cc];for(let r=c;r<k;r++)A[r][cc]-=2*dot/vv*v[r];}
+    vs.push([v,vv]);
+  }
+  let Z=[];
+  for(let j=2;j<k;j++){const e=new Array(k).fill(0);e[j]=1;
+    for(let h=1;h>=0;h--){const [v,vv]=vs[h];let dot=0;for(let r=0;r<k;r++)dot+=v[r]*e[r];for(let r=0;r<k;r++)e[r]-=2*dot/vv*v[r];}
+    Z.push(e);}
+  if(ord==='ord'){
+    // rotate to diagonalize the penalty Z'DZ; largest eigenvalue = smoothest function
+    const m=Z.length,S=[];for(let a=0;a<m;a++){S.push([]);for(let b=0;b<m;b++){let s=0;for(let r=0;r<k;r++)s+=Z[a][r]*D[r]*Z[b][r];S[a].push(s);}}
+    const es=jacobi(S),o=es.values.map((v,i)=>i).sort((a,b)=>es.values[b]-es.values[a]);
+    Z=o.map(c=>{const z2=new Array(k).fill(0);for(let a=0;a<m;a++)for(let r=0;r<k;r++)z2[r]+=es.vectors[a][c]*Z[a][r];return z2;});
+  }
+  // weights on the 40 eta functions for each wiggly basis function: U Z
+  const W=Z.map(zc=>xd.map((_,i)=>{let s=0;for(let r=0;r<k;r++)s+=U[i][r]*zc[r];return s;}));
+  tpCache[key]=W;return W;
+}
+function tpBasisAll(xs,k,ord){
+  const W=tpWeights(k,ord),m=W.length;
+  const B=xs.map(x=>{const e=xd.map(xi=>eta(x-xi));return W.map(w=>w.reduce((s,v,i)=>s+v*e[i],0));});
+  if(ord==='ord'){ // the line is already in the basis, so drop each function's linear part
+    for(let j=0;j<m;j++){const n=xs.length;let sx=0,sy=0,sxx=0,sxy=0;
+      xs.forEach((x,i)=>{sx+=x;sy+=B[i][j];sxx+=x*x;sxy+=x*B[i][j];});
+      const b1=(n*sxy-sx*sy)/(n*sxx-sx*sx),b0=(sy-b1*sx)/n;xs.forEach((x,i)=>{B[i][j]-=b0+b1*x;});}
+  }
+  for(let j=0;j<m;j++){let mx=0;B.forEach(b=>{if(Math.abs(b[j])>mx)mx=Math.abs(b[j]);});B.forEach(b=>{b[j]/=mx||1;});}
+  return B.map((b,i)=>ord==='ord'?[1,2*xs[i]-1].concat(b):b.concat([1,2*xs[i]-1]));
+}
 function basis(x,k,d){
   if(type==='poly'){const u=2*x-1,b=[];for(let p=0;p<=k;p++)b.push(Math.pow(u,p));return b;}
   if(type==='trunc'){const b=[];for(let p=0;p<=d;p++)b.push(Math.pow(x,p));interior(k).forEach(c=>b.push(x>c?Math.pow(x-c,d):0));return b;}
@@ -89,6 +157,7 @@ function setType(t){
   kS.min=c.min;kS.max=c.max;kS.step=1;kS.value=c.val;
   const useDeg=(t==='trunc'||t==='bs');
   degSel.style.display=useDeg?'':'none';document.getElementById('sb-deglab').style.display=useDeg?'':'none';
+  ordSel.style.display=t==='tp'?'':'none';document.getElementById('sb-ordlab').style.display=t==='tp'?'':'none';
   draw();
 }
 function draw(){
@@ -99,15 +168,18 @@ function draw(){
   document.getElementById('sb-steprow').style.display=rw?'':'none';
   const step=parseFloat(stepS.value);document.getElementById('sb-stepout').textContent=step.toFixed(2);
   const nx=301,xs=[],B=[];
-  for(let i=0;i<nx;i++){const x=i/(nx-1);xs.push(x);B.push(basis(x,k,d));}
+  for(let i=0;i<nx;i++)xs.push(i/(nx-1));
+  if(type==='tp')tpBasisAll(xs,k,ordSel.value).forEach(b=>B.push(b));
+  else xs.forEach(x=>B.push(basis(x,k,d)));
   const K=B[0].length;
   const w=[];for(let j=0;j<K;j++)w.push(rw?(j===0?z[0]:w[j-1]+step*z[j]):z[j]);
   const f=B.map(b=>b.reduce((s,v,j)=>s+v*w[j],0));
   const kn=(type==='trunc'||type==='bs')?interior(k):[];
   document.getElementById('sb-v1').textContent=K;
-  document.getElementById('sb-v2').textContent=type==='poly'?'none':(type==='rbf'?k+' centers':kn.length);
+  document.getElementById('sb-v2').textContent=type==='poly'?'none':(type==='rbf'?k+' centers':(type==='tp'?NTP+" (the data x's)":kn.length));
   let join='';
   if(type==='poly')join='no pieces';
+  else if(type==='tp')join='curvature smooth';
   else if(type==='rbf')join='smooth everywhere';
   else join=['kinks (slope jumps)','slope smooth','curvature smooth'][d-1];
   document.getElementById('sb-v3').textContent=join;
@@ -119,11 +191,12 @@ function draw(){
   const P1={y0:165,y1:12},py1=y=>P1.y0-(y-bmin)/(bmax-bmin)*(P1.y0-P1.y1);
   el('line',{class:'ax',x1:x0,y1:P1.y0,x2:x1,y2:P1.y0},gb);el('line',{class:'ax',x1:x0,y1:P1.y0,x2:x0,y2:P1.y1},gb);
   kn.forEach(c=>el('line',{x1:px(c),y1:P1.y1,x2:px(c),y2:P1.y0,stroke:'#bbb','stroke-dasharray':'3 3'},gb));
+  if(type==='tp')xd.forEach(c=>el('line',{x1:px(c),y1:P1.y0,x2:px(c),y2:P1.y0-5,stroke:'#999'},gb));
   for(let j=0;j<K;j++){let p='';B.forEach((b,i)=>{p+=(i?'L':'M')+px(xs[i]).toFixed(1)+','+py1(b[j]).toFixed(1);});
     el('path',{d:p,fill:'none',stroke:cols[j%cols.length],'stroke-width':1.6},gb);}
   txt('tk',x0-5,py1(bmin)+4,bmin.toFixed(1),gb,'end');txt('tk',x0-5,py1(bmax)+4,bmax.toFixed(1),gb,'end');
   [0,0.25,0.5,0.75,1].forEach(t=>txt('tk',px(t),P1.y0+14,t,gb));
-  txt('lab',x0+6,P1.y1+4,'basis functions B_k(x)'+(kn.length?'  (dashed: knots)':''),gb,'start');
+  txt('lab',x0+6,P1.y1+4,'basis functions B_k(x)'+(kn.length?'  (dashed: knots)':'')+(type==='tp'?"  (ticks: data x's)":''),gb,'start');
   // weights
   const gw=document.getElementById('sb-wts');gw.innerHTML='';
   const wm=Math.max(1e-9,...w.map(Math.abs)),bw=(x1-x0)/K;
@@ -150,7 +223,7 @@ function draw(){
   txt('lab',x0+6,P2.y1+4,'f(x) = sum of w_k B_k(x)',gf,'start');
 }
 typeSel.addEventListener('change',()=>setType(typeSel.value));
-degSel.addEventListener('change',draw);kS.addEventListener('input',draw);stepS.addEventListener('input',draw);showC.addEventListener('change',draw);
+degSel.addEventListener('change',draw);ordSel.addEventListener('change',draw);kS.addEventListener('input',draw);stepS.addEventListener('input',draw);showC.addEventListener('change',draw);
 document.querySelectorAll('#sb input[name=sb-wmode]').forEach(r=>r.addEventListener('change',draw));
 document.getElementById('sb-new').addEventListener('click',()=>{newZ();draw();});
 setType('bs');
