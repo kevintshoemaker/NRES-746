@@ -130,12 +130,14 @@ but writing that signals it makes them take exercises less seriously.
   - *AI optional/encouraged*: results matter, the code isn't the point
     (plot formatting, loops over a grid).
 
-  After each coding question: `AI use (circle one): no AI / AI helped
-  (e.g., debugging) / AI wrote the code`. Explain the labels at the
-  start of the laptop section. Don't add "using AI never costs
-  points." Labs get no closing AI-use reflection question (dropped
-  Nov. 3, 2026); take-home WODs may close with one (where AI helped
-  and what you had to fix; or, if none, what was hardest). Keys treat a
+  Labs: after each coding question, `AI use (circle one): no AI / AI
+  helped (e.g., debugging) / AI wrote the code`, and no closing AI-use
+  reflection question (dropped Nov. 3, 2026). WODs (from Nov. 17, 2026):
+  labels only, no circle lines; one closing AI-use reflection question
+  instead (where AI helped and what you had to fix; or, if none, what
+  was hardest), announced in the intro ("The last question asks how you
+  used AI"). Explain the labels at the start of the laptop section.
+  Don't add "using AI never costs points." Keys treat a
   label/disclosure mismatch as a conversation, not a penalty.
 - **Students submit outputs, not code:** filled-in values,
   interpretation, and named figures/tables. Prefer outputs that show

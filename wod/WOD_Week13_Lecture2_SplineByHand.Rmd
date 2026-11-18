@@ -78,7 +78,7 @@ pnll <- function(par, lambda) {
   -sum(dnorm(chl$log_chl, B %*% beta, exp(par[21]), log = TRUE)) +
     lambda * sum(diff(beta, differences = 2)^2)
 }
-check_val <- pnll(c(rep(1, 20), log(0.2)), lambda = 10)
+check_val <- pnll(c(rep(c(1, 1.2), 10), log(0.2)), lambda = 10)
 ```
 
 **NRES 746, Week 13, Lecture 2: Spline by Hand (take-home)**
@@ -106,8 +106,8 @@ points(log_chl ~ week, data = chl, pch = 19)
 
 ## Part 1: Your guess (on paper)
 
-**1a.** On the figure above, sketch the smooth seasonal curve you think
-lies under the noise.
+**1a.** On the figure above, sketch the seasonal curve you think best
+represents the 'true' signal underlying the noise.
 
 **1b.** From your sketch, the spring bloom peaks in week ________ at
 log$_{10}$ chlorophyll ________.
@@ -123,10 +123,10 @@ Each coding question has a label:
 - *AI optional/encouraged*: the results matter, but the code isn't the
   point.
 
-After each coding question, circle how you used AI.
+The last question asks how you used AI.
 
-**What to turn in:** your filled-in answers and the three named figures
-(2b, 3c, 4a) as images on WebCampus. You don't need to submit code.
+**What to turn in:** your filled-in answers on WebCampus. You don't need
+to submit code or figures.
 
 Read the data with
 
@@ -171,14 +171,14 @@ blank_table(
   col_widths = c(0.6, 1.2, 3.2))
 ```
 
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+`r nq(3, 5)`
 
-`r nq(4, 0)`
+**2b.** Which $K$ would you choose? What features of the curves did you
+use to decide, and was AIC helpful?
 
-**2b.** *(AI optional/encouraged.)* Plot the data with the fitted curves for
-$K = 4$ and $K = 20$. Name it **Figure 2b**.
-
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
 
 ## Part 3: A penalized spline, by hand
 
@@ -201,17 +201,16 @@ $$\text{NLL}_\text{pen} = -\sum_{i=1}^{44} \log p(y_i \mid \mu_i, \sigma) +
 
 **3a.** *(Recommended: no AI.)* Write a function `pnll(par, lambda)` that
 returns $\text{NLL}_\text{pen}$, where `par` holds the 20 weights followed
-by $\log\sigma$. Check it: `pnll(c(rep(1, 20), log(0.2)), lambda = 10)`
+by $\log\sigma$. Check it: `pnll(c(rep(c(1, 1.2), 10), log(0.2)), lambda = 10)`
 should return `r sprintf("%.2f", check_val)`.
 
-Your value: ________
-
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+How much of this penalized NLL value (`r sprintf("%.2f", check_val)`) is the penalty term? ________
 
 `r nq(6, 7)`
 
 **3b.** *(Recommended: no AI.)* Minimize `pnll()` with `optim()` for each
-$\lambda$ below, starting from `c(rep(1, 20), log(0.2))`. Use
+$\lambda$ below, starting from `c(rep(1, 20), log(0.2))` (the 20 weights,
+then $\log\sigma$). Use
 `method = "BFGS"` and `control = list(maxit = 2000)`, and check
 `$convergence`. Record $\hat\sigma$ and the penalty term
 $\lambda \sum (\beta_k - 2\beta_{k-1} + \beta_{k-2})^2$ at the optimum.
@@ -223,38 +222,46 @@ blank_table(
   col_widths = c(1, 1.4, 2.6))
 ```
 
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+`r nq(3, 0)`
 
-`r nq(4, 0)`
-
-**3c.** *(AI optional/encouraged.)* Plot the data with your three fitted curves
-(`B_grid <- predict(B, newx = 1:52)` gives the basis at every week).
-Name it **Figure 3c**.
-
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
-
-`r nq(3, 6)`
-
-**3d.** Which $\lambda$ would you use? Why does $\hat\sigma$ change the
+**3c.** Which $\lambda$ would you use? Why does $\hat\sigma$ change the
 way it does as $\lambda$ grows?
+
+To see the curves, store your three `optim()` results in a list `fits`
+(in the order $\lambda$ = 0, 10, 1000) and run:
+
+```{r plot-curves, echo=TRUE, eval=FALSE}
+wk <- seq(1, 52, by = 0.25)
+B_grid <- predict(B, newx = wk)            # same basis functions as B, at new weeks
+curves <- sapply(fits, function(f) B_grid %*% f$par[1:20])
+plot(log_chl ~ week, data = chl, pch = 19, xlab = "Week of the year",
+     ylab = "log10 chlorophyll a")
+matlines(wk, curves, lty = 1:3, lwd = 2, col = "black")
+legend("topright", paste("lambda =", c(0, 10, 1000)), lty = 1:3, lwd = 2,
+       bty = "n")
+```
+
+`predict()` reuses the knots stored in `B`, so `B_grid %*% beta` is the
+fitted curve at every value in `wk`.
+
+`r nq(0, 6)`
 
 ```{r fig.height=0.3*6}
 blank_lines(6)
 ```
 
-## Part 4: The same model in mgcv
+`r nq(8, 0)`
 
-`r nq(5, 0)`
+## Part 4: The same model in mgcv
 
 **4a.** *(AI optional/encouraged.)* Fit
 `gam(log_chl ~ s(week, bs = "ps", k = 20), data = chl, method = "REML")`
 (package `mgcv`), which uses the same kind of basis and penalty and
-chooses $\lambda$ itself. Plot its curve with your chosen fit from 3d.
-Name it **Figure 4a**.
+chooses $\lambda$ itself (here by REML). Record the smooth's effective
+degrees of freedom (edf) and $\hat\sigma$, both from `summary()`
+("Scale est." there is $\hat\sigma^2$).
 
 Effective degrees of freedom (edf): ________ $\qquad \hat\sigma$: ________
-
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
 
 `r nq(4, 4)`
 
@@ -269,7 +276,15 @@ blank_lines(4)
 
 `r nq(3, 5)`
 
-**4c.** Where did you use AI, if anywhere, and what did you have to
+**4c.** How does the edf from 4a compare with the $K$ you chose in 2b?
+
+```{r fig.height=0.3*5}
+blank_lines(5)
+```
+
+`r nq(3, 5)`
+
+**4d.** Where did you use AI, if anywhere, and what did you have to
 check or fix? If you didn't use it, what was hardest to get working?
 
 ```{r fig.height=0.3*5}
