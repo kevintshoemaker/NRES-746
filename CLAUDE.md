@@ -187,7 +187,8 @@ random intercept, 2 of 4 planned sections, though Week 11 Monday
 Week 12 Monday covered the opening recap, AR(1), and why-harder, 2 of 4
 sections (random slopes and packages moved to the lab period, Bayesian
 hierarchical models to the next week); the ~60-min lab-period lecture
-then finished the rest (random slopes, packages, discussion). Plan **3-4 sub-topics**
+then finished the rest (random slopes, packages, discussion). Week 13
+Monday covered all 6 sections (brms briefly) but not the discussion. Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
 marked "Bonus" section. A derivation eats its whole slot, so put
@@ -845,7 +846,20 @@ Snapshot: Sun., Nov. 15, 2026 (Weeks 1-12 taught; Weeks 13 and 14 built, not yet
   reuse it for later hierarchical models) for the random slope model and
   a one-layer vs. two-layer contrast in `#what-hierarchical`, and a
   P-spline in `#penalty` (flat prior on $\beta_1, \beta_2$; the guide
-  says not to explain why before the sloped-line question). Tuesday = project check-ins, no
+  says not to explain why before the sloped-line question).
+  **As taught (Mon., Nov. 16, from the announcement):** definition,
+  conditional vs. marginal fitting, shrinkage/partial pooling and the
+  ridge link, LKJ (left out of the announcement as a technical detail),
+  brief `brms`; the discussion wasn't mentioned (logged as not covered). Its
+  wording ("hyperparameters", "global information used for local
+  inference") is folded into `#what-hierarchical` and `#pooling-by-hand`.
+  Added Nov. 16: the Stan bonus now opens with a plain program
+  `#stan-plain` (explicit $G$, centered `multi_normal`, loops, LKJ(2) as
+  Beta(2, 2) on $(\rho_{ab}+1)/2$), then `#stan-tricks` (Cholesky +
+  non-centered, vectorized; brms does both by default). Full data: both
+  clean. Six short-record stands: plain 86 divergences, ESS($\sigma_b$)
+  101 vs. 10 and 1386.
+  Tuesday = project check-ins, no
   lab. Thanksgiving: no class Wed., Nov. 25 (CSV updated), so spatial
   gets Nov. 23 + the Nov. 24 demo; the GP section spills there if not
   reached.

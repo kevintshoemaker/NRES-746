@@ -175,8 +175,8 @@ then fits the drought random slope model by MCMC using `brms` (with a bonus sect
 
 A **hierarchical model** is composed of two or more layers. The data are described
 conditional on some unobserved quantities, and those quantities are in
-turn drawn from a probability distribution whose parameters are
-estimated from the data. 
+turn drawn from a probability distribution whose parameters (often
+called *hyperparameters*) are also estimated from the data.
 
 For the drought data used below (the
 [random slope](Week12_MixedModels.html#random-slopes) example):
@@ -416,7 +416,9 @@ every group gets the overall mean (complete pooling).
 
 Pulling each group's estimate toward the overall mean like this is
 called **shrinkage**: the distance $\bar y_j - \mu$ shrinks by the
-factor $w_j$. Groups with low sample size shrink the most. 
+factor $w_j$. Groups with low sample size shrink the most. Each group
+borrows information from the full set of observations: global
+information used for local inference.
 Extreme group means are partly luck, so
 shrinking them makes the estimates less variable -- and generally more accurate 
 when averaged over groups -- at the cost of a little bias toward the global mean.
@@ -819,10 +821,87 @@ formula, with estimates of $\mu$, $\sigma_a$, and $\sigma_e$ plugged in.
 
 Writing the Stan program yourself shows what `brms` does behind the
 scenes, and it is the starting point for models no formula can express
-(nonlinear functions, latent states, observation models). The program
-below is the random slope model with the same priors as the
-[brms fit](#brms).
-Two choices in it need explaining.
+(nonlinear functions, latent states, observation models). We'll write the random slope model, with the same priors as the
+[brms fit](#brms), twice: first as plainly as possible, then with two
+standard tricks that make it sample faster and more reliably.
+
+### The plain version {#stan-plain}
+
+This program reads like the math in
+[what makes a model hierarchical](#what-hierarchical). It builds the
+covariance matrix $G$ from $\sigma_a$, $\sigma_b$, and $\rho_{ab}$, draws
+each stand's $(a_j, b_j)$ from $\text{MVN}(0, G)$, and loops over the
+observations.^[For a 2 $\times$ 2 matrix the LKJ($\eta$) prior is the
+same as $(\rho_{ab} + 1)/2 \sim \text{Beta}(\eta, \eta)$ (see
+[priors for a covariance matrix](#lkj)), so the program can put the prior
+on $\rho_{ab}$ directly. For bigger matrices you need the LKJ
+distribution itself.]
+
+```{r stan-plain, cache=TRUE, echo=-6, results="hide"}
+library(cmdstanr)
+plain_code <- "
+data {
+  int<lower=1> N;                       // stand-years
+  int<lower=1> J;                       // stands
+  array[N] int<lower=1, upper=J> stand;
+  vector[N] x;                          // precipitation (10 cm, centered at 20 cm)
+  vector[N] y;                          // ring width (mm)
+}
+parameters {
+  real mu_a;                            // mean intercept
+  real mu_b;                            // mean slope
+  real<lower=0> sigma_a;                // among-stand SD of intercepts
+  real<lower=0> sigma_b;                // among-stand SD of slopes
+  real<lower=-1, upper=1> rho_ab;       // intercept-slope correlation
+  real<lower=0> sigma_e;                // residual SD
+  array[J] vector[2] ab;                // stand j's deviations (a_j, b_j)
+}
+transformed parameters {
+  cov_matrix[2] G;                      // among-stand covariance matrix
+  G[1, 1] = sigma_a^2;
+  G[2, 2] = sigma_b^2;
+  G[1, 2] = rho_ab * sigma_a * sigma_b;
+  G[2, 1] = G[1, 2];
+}
+model {
+  // priors
+  mu_a ~ normal(1, 0.5);
+  mu_b ~ normal(0, 0.5);
+  sigma_a ~ normal(0, 0.3);             // half-normal, because sigma_a > 0
+  sigma_b ~ normal(0, 0.3);
+  (rho_ab + 1) / 2 ~ beta(2, 2);        // LKJ(2) for a 2 x 2 matrix
+  sigma_e ~ normal(0, 0.3);
+  // group layer
+  for (j in 1:J) {
+    ab[j] ~ multi_normal(rep_vector(0, 2), G);
+  }
+  // data layer
+  for (i in 1:N) {
+    y[i] ~ normal(mu_a + ab[stand[i]][1] + (mu_b + ab[stand[i]][2]) * x[i], sigma_e);
+  }
+}
+"
+plain_model <- cmdstan_model(write_stan_file(plain_code))
+stan_data <- list(N = nrow(drought), J = 12, stand = as.integer(drought$stand),
+                  x = drought$precip10, y = drought$width)
+fit_plain <- plain_model$sample(data = stan_data, chains = 4, parallel_chains = 4,
+                                seed = 746, refresh = 0)
+fit_plain$draws()
+```
+
+```{r stan-plain-check}
+fit_plain$diagnostic_summary()
+fit_plain$summary(c("mu_a", "mu_b", "sigma_a", "sigma_b", "rho_ab", "sigma_e"))
+```
+
+The estimates match the `brms` fit up to Monte Carlo error, and the
+sampler reports no problems. With these data, the plain version works.
+
+### Two tricks {#stan-tricks}
+
+The plain program can struggle when the data say little about each
+group, because the stand effects and their SDs are then tightly linked
+in the posterior. Two changes fix most of this:
 
 - **The Cholesky factor.** Stan works with $L$, the lower-triangular
   matrix with $LL^T = \Omega$. Any value Stan proposes for
@@ -836,8 +915,10 @@ Two choices in it need explaining.
   that makes hierarchical models hard to sample
   ([when HMC struggles](Week9_MCMC.html#hmc-failures)).
 
-```{r stan-fit, cache=TRUE, echo=-6, results="hide"}
-library(cmdstanr)
+The program also replaces the loops with vectorized statements, which
+gives the same answer in less time.
+
+```{r stan-fit, cache=TRUE, echo=-4, results="hide"}
 slopes_code <- "
 data {
   int<lower=1> N;                       // stand-years
@@ -871,8 +952,6 @@ generated quantities {
 }
 "
 slopes_model <- cmdstan_model(write_stan_file(slopes_code))
-stan_data <- list(N = nrow(drought), J = 12, stand = as.integer(drought$stand),
-                  x = drought$precip10, y = drought$width)
 fit_stan <- slopes_model$sample(data = stan_data, chains = 4, parallel_chains = 4,
                                 seed = 746, refresh = 0)
 fit_stan$draws()
@@ -885,9 +964,47 @@ fit_stan$diagnostic_summary()
 fit_stan$summary(c("mu", "sigma_ab", "rho_ab", "sigma_e"))
 ```
 
-The estimates match the `brms` fit up to Monte Carlo error.
-`stancode(fit_brms)` prints the program `brms` wrote; it uses the same
-Cholesky factor and non-centered stand effects.
+The two programs give the same posterior. With all 12 stands, the
+tricks mostly buy speed: more effective samples per second. They
+matter more when the data are thin. Here are both programs fit to the six
+stands with 5 to 12 years of records:
+
+```{r stan-short, cache=TRUE, results="hide"}
+plain_model <- cmdstan_model(write_stan_file(plain_code))      # reuses the compiled programs
+slopes_model <- cmdstan_model(write_stan_file(slopes_code))
+short <- droplevels(drought[n_years[as.integer(drought$stand)] <= 12, ])
+short_data <- list(N = nrow(short), J = nlevels(short$stand), stand = as.integer(short$stand),
+                   x = short$precip10, y = short$width)
+fit_plain_short <- plain_model$sample(data = short_data, chains = 4, parallel_chains = 4,
+                                      seed = 746, refresh = 0)
+fit_stan_short <- slopes_model$sample(data = short_data, chains = 4, parallel_chains = 4,
+                                      seed = 746, refresh = 0)
+short_compare <- data.frame(
+  program = c("plain", "Cholesky + non-centered"),
+  divergent = c(sum(fit_plain_short$diagnostic_summary()$num_divergent),
+                sum(fit_stan_short$diagnostic_summary()$num_divergent)),
+  ess_sigma_b = c(fit_plain_short$summary("sigma_b")$ess_bulk,
+                  fit_stan_short$summary("sigma_ab[2]")$ess_bulk))
+```
+
+```{r stan-short-table, echo=FALSE}
+knitr::kable(short_compare, digits = 0,
+             col.names = c("Program", "Divergent transitions", "Effective sample size for $\\sigma_b$"))
+```
+
+The plain program now has `r short_compare$divergent[1]` divergent
+transitions and only `r round(short_compare$ess_sigma_b[1])` effective
+samples for $\sigma_b$ out of 4000 draws: it is stuck in the funnel. The
+reparameterized program samples $\sigma_b$ far better, though a few
+divergences remain.^[Raising `adapt_delta` (e.g.
+`adapt_delta = 0.99` in `$sample()`) makes Stan take smaller steps and
+usually clears the rest.]
+
+You rarely have to apply these tricks yourself. `brms` uses both by
+default: `stancode(fit_brms)` prints the program it wrote, which has the
+same Cholesky factor and non-centered stand effects. Writing the plain
+version first is still a good habit for a custom model. It is easier to
+check against the math, and once it runs you can reparameterize it.
 
 ## Bonus: ridge regression as a prior {#ridge-prior}
 

@@ -609,7 +609,7 @@ div.tocify {
 <p>Last week we fit mixed models by maximum likelihood; this week we go Bayesian! This part defines what makes a model 'hierarchical', works through partial pooling (a major advantage of hierarchical models), and then fits the drought random slope model by MCMC using <code>brms</code> (with a bonus section in Stan).</p>
 <div id="what-hierarchical" class="section level2">
 <h2>1. What makes a model hierarchical?</h2>
-<p>A <strong>hierarchical model</strong> is composed of two or more layers. The data are described conditional on some unobserved quantities, and those quantities are in turn drawn from a probability distribution whose parameters are estimated from the data.</p>
+<p>A <strong>hierarchical model</strong> is composed of two or more layers. The data are described conditional on some unobserved quantities, and those quantities are in turn drawn from a probability distribution whose parameters (often called <em>hyperparameters</em>) are also estimated from the data.</p>
 <p>For the drought data used below (the <a href="Week12_MixedModels.html#random-slopes">random slope</a> example):</p>
 <ul>
 <li><strong>data layer:</strong> each ring width is Normal around its own stand's regression line, <span class="math inline">\(\text{width}_{jt} \sim \text{Normal}(\mu_a + a_j + (\mu_b + b_j)\,x_{jt},\ \sigma_e^2)\)</span>;</li>
@@ -648,7 +648,7 @@ w_j = \frac{\sigma_a^2}{\sigma_a^2 + \sigma_e^2/n_j},\]</span></p>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/pooling-plot-1.png" width="576" style="display: block; margin: auto;" /></p>
 <p>Pond A has the higher raw mean, but after pooling pond B has the higher estimate! Four frogs give a noisy pond mean (sampling variance 0.25, as large as the among-pond variance 0.25), so half of pond A's distance from the overall mean is treated as noise. With a much larger sample size (n = 16) pond B gets to keep most of its own mean (it 'earned' this via its large sample size!).</p>
 <p>As <span class="math inline">\(n_j\)</span> grows, <span class="math inline">\(w_j \to 1\)</span> and the group keeps its own mean (no pooling). As <span class="math inline">\(\sigma_a \to 0\)</span>, <span class="math inline">\(w_j \to 0\)</span> and every group gets the overall mean (complete pooling).</p>
-<p>Pulling each group's estimate toward the overall mean like this is called <strong>shrinkage</strong>: the distance <span class="math inline">\(\bar y_j - \mu\)</span> shrinks by the factor <span class="math inline">\(w_j\)</span>. Groups with low sample size shrink the most. Extreme group means are partly luck, so shrinking them makes the estimates less variable -- and generally more accurate when averaged over groups -- at the cost of a little bias toward the global mean. This is actually the same idea as the <a href="Week10_ModelComparison.html#regularization">ridge and lasso penalties</a>, which also 'shrink' coefficients toward zero. The difference is where the shrinkage comes from: ridge regression chooses its penalty <span class="math inline">\(\lambda\)</span> (often by a separate cross-validation step), while a random intercept model estimates <span class="math inline">\(\sigma_a\)</span> from the data at the same time as the other parameters are estimated (and <span class="math inline">\(\sigma_a\)</span> sets every <span class="math inline">\(w_j\)</span>: see the <a href="#ridge-prior">ridge bonus</a>).</p>
+<p>Pulling each group's estimate toward the overall mean like this is called <strong>shrinkage</strong>: the distance <span class="math inline">\(\bar y_j - \mu\)</span> shrinks by the factor <span class="math inline">\(w_j\)</span>. Groups with low sample size shrink the most. Each group borrows information from the full set of observations: global information used for local inference. Extreme group means are partly luck, so shrinking them makes the estimates less variable -- and generally more accurate when averaged over groups -- at the cost of a little bias toward the global mean. This is actually the same idea as the <a href="Week10_ModelComparison.html#regularization">ridge and lasso penalties</a>, which also 'shrink' coefficients toward zero. The difference is where the shrinkage comes from: ridge regression chooses its penalty <span class="math inline">\(\lambda\)</span> (often by a separate cross-validation step), while a random intercept model estimates <span class="math inline">\(\sigma_a\)</span> from the data at the same time as the other parameters are estimated (and <span class="math inline">\(\sigma_a\)</span> sets every <span class="math inline">\(w_j\)</span>: see the <a href="#ridge-prior">ridge bonus</a>).</p>
 </div>
 <div id="partial-pooling" class="section level2">
 <h2>3. Partial pooling</h2>
@@ -1056,13 +1056,88 @@ w_j = \frac{\sigma_a^2}{\sigma_a^2 + \sigma_e^2/n_j}.\]</span></p>
 </div>
 <div id="stan-model" class="section level2">
 <h2>Bonus: the same model written in Stan</h2>
-<p>Writing the Stan program yourself shows what <code>brms</code> does behind the scenes, and it is the starting point for models no formula can express (nonlinear functions, latent states, observation models). The program below is the random slope model with the same priors as the <a href="#brms">brms fit</a>. Two choices in it need explaining.</p>
+<p>Writing the Stan program yourself shows what <code>brms</code> does behind the scenes, and it is the starting point for models no formula can express (nonlinear functions, latent states, observation models). We'll write the random slope model, with the same priors as the <a href="#brms">brms fit</a>, twice: first as plainly as possible, then with two standard tricks that make it sample faster and more reliably.</p>
+<div id="stan-plain" class="section level3">
+<h3>The plain version</h3>
+<p>This program reads like the math in <a href="#what-hierarchical">what makes a model hierarchical</a>. It builds the covariance matrix <span class="math inline">\(G\)</span> from <span class="math inline">\(\sigma_a\)</span>, <span class="math inline">\(\sigma_b\)</span>, and <span class="math inline">\(\rho_{ab}\)</span>, draws each stand's <span class="math inline">\((a_j, b_j)\)</span> from <span class="math inline">\(\text{MVN}(0, G)\)</span>, and loops over the observations.<a href="#fn8" class="footnoteRef" id="fnref8"><sup>8</sup></a></p>
+<pre class="r"><code>library(cmdstanr)
+plain_code &lt;- &quot;
+data {
+  int&lt;lower=1&gt; N;                       // stand-years
+  int&lt;lower=1&gt; J;                       // stands
+  array[N] int&lt;lower=1, upper=J&gt; stand;
+  vector[N] x;                          // precipitation (10 cm, centered at 20 cm)
+  vector[N] y;                          // ring width (mm)
+}
+parameters {
+  real mu_a;                            // mean intercept
+  real mu_b;                            // mean slope
+  real&lt;lower=0&gt; sigma_a;                // among-stand SD of intercepts
+  real&lt;lower=0&gt; sigma_b;                // among-stand SD of slopes
+  real&lt;lower=-1, upper=1&gt; rho_ab;       // intercept-slope correlation
+  real&lt;lower=0&gt; sigma_e;                // residual SD
+  array[J] vector[2] ab;                // stand j&#39;s deviations (a_j, b_j)
+}
+transformed parameters {
+  cov_matrix[2] G;                      // among-stand covariance matrix
+  G[1, 1] = sigma_a^2;
+  G[2, 2] = sigma_b^2;
+  G[1, 2] = rho_ab * sigma_a * sigma_b;
+  G[2, 1] = G[1, 2];
+}
+model {
+  // priors
+  mu_a ~ normal(1, 0.5);
+  mu_b ~ normal(0, 0.5);
+  sigma_a ~ normal(0, 0.3);             // half-normal, because sigma_a &gt; 0
+  sigma_b ~ normal(0, 0.3);
+  (rho_ab + 1) / 2 ~ beta(2, 2);        // LKJ(2) for a 2 x 2 matrix
+  sigma_e ~ normal(0, 0.3);
+  // group layer
+  for (j in 1:J) {
+    ab[j] ~ multi_normal(rep_vector(0, 2), G);
+  }
+  // data layer
+  for (i in 1:N) {
+    y[i] ~ normal(mu_a + ab[stand[i]][1] + (mu_b + ab[stand[i]][2]) * x[i], sigma_e);
+  }
+}
+&quot;
+plain_model &lt;- cmdstan_model(write_stan_file(plain_code))
+stan_data &lt;- list(N = nrow(drought), J = 12, stand = as.integer(drought$stand),
+                  x = drought$precip10, y = drought$width)
+fit_plain &lt;- plain_model$sample(data = stan_data, chains = 4, parallel_chains = 4,
+                                seed = 746, refresh = 0)</code></pre>
+<pre class="r"><code>fit_plain$diagnostic_summary()</code></pre>
+<pre><code>## $num_divergent
+## [1] 0 0 0 0
+## 
+## $num_max_treedepth
+## [1] 0 0 0 0
+## 
+## $ebfmi
+## [1] 0.8847031 0.9805361 0.9153795 0.8903194</code></pre>
+<pre class="r"><code>fit_plain$summary(c(&quot;mu_a&quot;, &quot;mu_b&quot;, &quot;sigma_a&quot;, &quot;sigma_b&quot;, &quot;rho_ab&quot;, &quot;sigma_e&quot;))</code></pre>
+<pre><code>## # A tibble: 6 × 10
+##   variable   mean median      sd     mad      q5   q95  rhat ess_bulk ess_tail
+##   &lt;chr&gt;     &lt;dbl&gt;  &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;    &lt;dbl&gt;    &lt;dbl&gt;
+## 1 mu_a      0.845  0.845 0.0470  0.0438   0.768  0.922  1.01     667.     866.
+## 2 mu_b      0.262  0.263 0.0407  0.0367   0.194  0.325  1.00     812.     964.
+## 3 sigma_a   0.156  0.150 0.0393  0.0351   0.105  0.230  1.00    2276.    2576.
+## 4 sigma_b   0.111  0.106 0.0321  0.0288   0.0691 0.170  1.00    1550.    2051.
+## 5 rho_ab   -0.327 -0.356 0.290   0.291   -0.749  0.202  1.00    1634.    2197.
+## 6 sigma_e   0.119  0.119 0.00670 0.00660  0.109  0.131  1.00    3163.    2772.</code></pre>
+<p>The estimates match the <code>brms</code> fit up to Monte Carlo error, and the sampler reports no problems. With these data, the plain version works.</p>
+</div>
+<div id="stan-tricks" class="section level3">
+<h3>Two tricks</h3>
+<p>The plain program can struggle when the data say little about each group, because the stand effects and their SDs are then tightly linked in the posterior. Two changes fix most of this:</p>
 <ul>
 <li><strong>The Cholesky factor.</strong> Stan works with <span class="math inline">\(L\)</span>, the lower-triangular matrix with <span class="math inline">\(LL^T = \Omega\)</span>. Any value Stan proposes for <code>cholesky_factor_corr</code> gives a valid correlation matrix, so the sampler can't leave the allowed region (the third problem in <a href="Week12_MixedModels.html#harder">why these models are harder to fit</a>), and it's cheaper to compute with.</li>
 <li><strong>Non-centered stand effects.</strong> Instead of sampling <span class="math inline">\((a_j, b_j)\)</span> directly, Stan samples standard Normal <span class="math inline">\(z_j\)</span> and computes <span class="math inline">\((a_j, b_j)^T = \text{diag}(\sigma_a, \sigma_b)\,L\,z_j\)</span>. This avoids the funnel that makes hierarchical models hard to sample (<a href="Week9_MCMC.html#hmc-failures">when HMC struggles</a>).</li>
 </ul>
-<pre class="r"><code>library(cmdstanr)
-slopes_code &lt;- &quot;
+<p>The program also replaces the loops with vectorized statements, which gives the same answer in less time.</p>
+<pre class="r"><code>slopes_code &lt;- &quot;
 data {
   int&lt;lower=1&gt; N;                       // stand-years
   int&lt;lower=1&gt; J;                       // stands
@@ -1095,8 +1170,6 @@ generated quantities {
 }
 &quot;
 slopes_model &lt;- cmdstan_model(write_stan_file(slopes_code))
-stan_data &lt;- list(N = nrow(drought), J = 12, stand = as.integer(drought$stand),
-                  x = drought$precip10, y = drought$width)
 fit_stan &lt;- slopes_model$sample(data = stan_data, chains = 4, parallel_chains = 4,
                                 seed = 746, refresh = 0)</code></pre>
 <p>Check the sampler first, then the estimates:</p>
@@ -1119,7 +1192,46 @@ fit_stan &lt;- slopes_model$sample(data = stan_data, chains = 4, parallel_chains
 ## 4 sigma_ab[…  0.111  0.106 0.0317  0.0283   0.0688 0.170  1.00    1748.    2165.
 ## 5 rho_ab     -0.341 -0.366 0.282   0.292   -0.756  0.172  1.00    2259.    2415.
 ## 6 sigma_e     0.119  0.119 0.00664 0.00653  0.109  0.131  1.00    4092.    2598.</code></pre>
-<p>The estimates match the <code>brms</code> fit up to Monte Carlo error. <code>stancode(fit_brms)</code> prints the program <code>brms</code> wrote; it uses the same Cholesky factor and non-centered stand effects.</p>
+<p>The two programs give the same posterior. With all 12 stands, the tricks mostly buy speed: more effective samples per second. They matter more when the data are thin. Here are both programs fit to the six stands with 5 to 12 years of records:</p>
+<pre class="r"><code>plain_model &lt;- cmdstan_model(write_stan_file(plain_code))      # reuses the compiled programs
+slopes_model &lt;- cmdstan_model(write_stan_file(slopes_code))
+short &lt;- droplevels(drought[n_years[as.integer(drought$stand)] &lt;= 12, ])
+short_data &lt;- list(N = nrow(short), J = nlevels(short$stand), stand = as.integer(short$stand),
+                   x = short$precip10, y = short$width)
+fit_plain_short &lt;- plain_model$sample(data = short_data, chains = 4, parallel_chains = 4,
+                                      seed = 746, refresh = 0)
+fit_stan_short &lt;- slopes_model$sample(data = short_data, chains = 4, parallel_chains = 4,
+                                      seed = 746, refresh = 0)
+short_compare &lt;- data.frame(
+  program = c(&quot;plain&quot;, &quot;Cholesky + non-centered&quot;),
+  divergent = c(sum(fit_plain_short$diagnostic_summary()$num_divergent),
+                sum(fit_stan_short$diagnostic_summary()$num_divergent)),
+  ess_sigma_b = c(fit_plain_short$summary(&quot;sigma_b&quot;)$ess_bulk,
+                  fit_stan_short$summary(&quot;sigma_ab[2]&quot;)$ess_bulk))</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Program</th>
+<th align="right">Divergent transitions</th>
+<th align="right">Effective sample size for <span class="math inline">\(\sigma_b\)</span></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">plain</td>
+<td align="right">86</td>
+<td align="right">101</td>
+</tr>
+<tr class="even">
+<td align="left">Cholesky + non-centered</td>
+<td align="right">10</td>
+<td align="right">1386</td>
+</tr>
+</tbody>
+</table>
+<p>The plain program now has 86 divergent transitions and only 101 effective samples for <span class="math inline">\(\sigma_b\)</span> out of 4000 draws: it is stuck in the funnel. The reparameterized program samples <span class="math inline">\(\sigma_b\)</span> far better, though a few divergences remain.<a href="#fn9" class="footnoteRef" id="fnref9"><sup>9</sup></a></p>
+<p>You rarely have to apply these tricks yourself. <code>brms</code> uses both by default: <code>stancode(fit_brms)</code> prints the program it wrote, which has the same Cholesky factor and non-centered stand effects. Writing the plain version first is still a good habit for a custom model. It is easier to check against the math, and once it runs you can reparameterize it.</p>
+</div>
 </div>
 <div id="ridge-prior" class="section level2">
 <h2>Bonus: ridge regression as a prior</h2>
@@ -1128,7 +1240,7 @@ fit_stan &lt;- slopes_model$sample(data = stan_data, chains = 4, parallel_chains
 </div>
 <div id="gams" class="section level1">
 <h1>Splines, GAMs, and Gaussian processes</h1>
-<p>When no function from the 'bestiary' has the right shape, we can build one out of simple pieces. A spline is a weighted sum of basis functions (a set of 'variables' strategically derived from one or more predictor variables), so fitting it is a linear model (<span class="math inline">\(\mathbf{y} = X\boldsymbol{\beta} + \boldsymbol{\varepsilon}\)</span>); a penalty on 'wiggliness' tries to prevent it from fitting noise.<a href="#fn8" class="footnoteRef" id="fnref8"><sup>8</sup></a> A Gaussian process skips the basis functions and puts a multivariate Normal directly on the curve, using a correlation function (e.g., correlation decays with distance) to build a covariance matrix like the ones built for <a href="Week12_MixedModels.html#ar1">autocorrelation</a>.</p>
+<p>When no function from the 'bestiary' has the right shape, we can build one out of simple pieces. A spline is a weighted sum of basis functions (a set of 'variables' strategically derived from one or more predictor variables), so fitting it is a linear model (<span class="math inline">\(\mathbf{y} = X\boldsymbol{\beta} + \boldsymbol{\varepsilon}\)</span>); a penalty on 'wiggliness' tries to prevent it from fitting noise.<a href="#fn10" class="footnoteRef" id="fnref10"><sup>10</sup></a> A Gaussian process skips the basis functions and puts a multivariate Normal directly on the curve, using a correlation function (e.g., correlation decays with distance) to build a covariance matrix like the ones built for <a href="Week12_MixedModels.html#ar1">autocorrelation</a>.</p>
 <div id="thermal" class="section level2">
 <h2>1. A thermal performance curve</h2>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/workflow-models-1.png" width="1750" style="display: block; margin: auto;" /></p>
@@ -1364,11 +1476,11 @@ setType('bs');
 <p>Choosing the number of knots by hand is awkward: too few and the curve can't bend where it needs to, too many and it overfits. The usual fix is to use plenty of basis functions and add a <strong>penalty</strong> to the NLL that grows with how wiggly the curve is:</p>
 <p><span class="math display">\[\text{NLL}_\text{pen}(\beta) = \text{NLL}(\beta) +
 \lambda \sum_{k=3}^{K} (\beta_k - 2\beta_{k-1} + \beta_{k-2})^2\]</span></p>
-<p>The penalty adds up squared second differences of neighboring weights, a stand-in for the curvature of <span class="math inline">\(f\)</span>.<a href="#fn9" class="footnoteRef" id="fnref9"><sup>9</sup></a> With <span class="math inline">\(\lambda = 0\)</span> we get the unpenalized <code>lm()</code> fit. As <span class="math inline">\(\lambda\)</span> grows, the weights are forced onto a straight line, and with evenly spaced knots so is <span class="math inline">\(f\)</span>. In between, the <strong>effective degrees of freedom</strong> (edf) measure how many parameters' worth of flexibility the curve uses; edf runs from <span class="math inline">\(K\)</span> (no penalty) down to 2 (a straight line).</p>
+<p>The penalty adds up squared second differences of neighboring weights, a stand-in for the curvature of <span class="math inline">\(f\)</span>.<a href="#fn11" class="footnoteRef" id="fnref11"><sup>11</sup></a> With <span class="math inline">\(\lambda = 0\)</span> we get the unpenalized <code>lm()</code> fit. As <span class="math inline">\(\lambda\)</span> grows, the weights are forced onto a straight line, and with evenly spaced knots so is <span class="math inline">\(f\)</span>. In between, the <strong>effective degrees of freedom</strong> (edf) measure how many parameters' worth of flexibility the curve uses; edf runs from <span class="math inline">\(K\)</span> (no penalty) down to 2 (a straight line).</p>
 <p>Choosing <span class="math inline">\(\lambda\)</span> is the remaining problem. <a href="Week10_ModelComparison.html#cross-validation">Cross-validation</a> would work, but there's a faster route, because <strong>the penalty is a prior.</strong> As in the <a href="#ridge-prior">ridge bonus</a>, a penalty <span class="math inline">\(\lambda \sum d_k^2\)</span> on the second differences <span class="math inline">\(d_k\)</span> is what a Normal(0, <span class="math inline">\(\sigma_d^2\)</span>) prior on each <span class="math inline">\(d_k\)</span> adds to the NLL, with <span class="math inline">\(\lambda = 1/(2\sigma_d^2)\)</span>. Read that way, the wiggly part of the curve is a random effect: a set of deviations drawn from a Normal distribution whose SD <span class="math inline">\(\sigma_d\)</span> is estimated from the data. So <span class="math inline">\(\lambda\)</span> can be chosen the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span>, by maximizing the restricted likelihood (REML) with the weights integrated out.</p>
 <p>Drawn as a DAG, a P-spline has the same levels as the random slope model, with basis weights in place of stands:</p>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/dag-pspline-1.png" width="768" style="display: block; margin: auto;" /></p>
-<p>The second-difference prior says <span class="math inline">\(\beta_k \sim \text{Normal}(2\beta_{k-1} - \beta_{k-2},\ \sigma_d^2)\)</span> for <span class="math inline">\(k \geq 3\)</span>, so each weight's parents are the two weights before it plus the shared <span class="math inline">\(\sigma_d\)</span>; that is why arrows also run along level 2. The first two weights have no parents to pool toward, so they get only a flat prior, like fixed effects.<a href="#fn10" class="footnoteRef" id="fnref10"><sup>10</sup></a></p>
+<p>The second-difference prior says <span class="math inline">\(\beta_k \sim \text{Normal}(2\beta_{k-1} - \beta_{k-2},\ \sigma_d^2)\)</span> for <span class="math inline">\(k \geq 3\)</span>, so each weight's parents are the two weights before it plus the shared <span class="math inline">\(\sigma_d\)</span>; that is why arrows also run along level 2. The first two weights have no parents to pool toward, so they get only a flat prior, like fixed effects.<a href="#fn12" class="footnoteRef" id="fnref12"><sup>12</sup></a></p>
 <p>The widget fits the Bd data with a P-spline (cubic B-splines on evenly spaced knots, plus the second-difference penalty) and plots the REML criterion against <span class="math inline">\(\lambda\)</span>.</p>
 <div class="w746pf" id="pf">
 <style>
@@ -1557,7 +1669,7 @@ summary(fit_gam)</code></pre>
 ## scale   0.02628135 0.020457942 0.03376239
 ## 
 ## Rank: 2/2</code></pre>
-<p><code>k = 20</code> sets the number of basis functions, an upper limit on flexibility; the penalty decides how much of it to use (edf 8.2 here). Ask for <code>method = &quot;REML&quot;</code>: <code>gam()</code>'s default, generalized cross-validation, tends to pick wigglier curves (edf 13.9 for these data).<a href="#fn11" class="footnoteRef" id="fnref11"><sup>11</sup></a> For counts, use <code>family = poisson</code> as in <code>glm()</code>.</p>
+<p><code>k = 20</code> sets the number of basis functions, an upper limit on flexibility; the penalty decides how much of it to use (edf 8.2 here). Ask for <code>method = &quot;REML&quot;</code>: <code>gam()</code>'s default, generalized cross-validation, tends to pick wigglier curves (edf 13.9 for these data).<a href="#fn13" class="footnoteRef" id="fnref13"><sup>13</sup></a> For counts, use <code>family = poisson</code> as in <code>glm()</code>.</p>
 <table>
 <thead>
 <tr class="header">
@@ -1593,15 +1705,15 @@ summary(fit_gam)</code></pre>
 </tbody>
 </table>
 <p><img src="Week13_HierarchicalModelsAndGAMs_files/figure-html/gam-plot-1.png" width="624" style="display: block; margin: auto;" /></p>
-<p>The GAM finds the steep fall the bell can't make. Its curve peaks at 20.2 °C and crosses zero at 28.0 °C; the bell puts the peak at 19.4 °C and never reaches zero.<a href="#fn12" class="footnoteRef" id="fnref12"><sup>12</sup></a></p>
+<p>The GAM finds the steep fall the bell can't make. Its curve peaks at 20.2 °C and crosses zero at 28.0 °C; the bell puts the peak at 19.4 °C and never reaches zero.<a href="#fn14" class="footnoteRef" id="fnref14"><sup>14</sup></a></p>
 </div>
 <div id="gp" class="section level2">
 <h2>5. Gaussian processes</h2>
 <p>A spline puts a prior on basis-function weights. A <strong>Gaussian process</strong> (GP) puts a prior directly on the curve: the values of <span class="math inline">\(f\)</span> at any set of temperatures are multivariate Normal,</p>
 <p><span class="math display">\[f(x_1), \dots, f(x_n) \sim \text{MVN}(m\mathbf{1}, K), \qquad
 K_{ij} = \alpha^2 \exp\!\left(-\frac{(x_i - x_j)^2}{2\ell^2}\right)\]</span></p>
-<p>The <strong>kernel</strong> <span class="math inline">\(K_{ij}\)</span> says that cultures at similar temperatures have similar growth rates: the correlation falls from 1 to near 0 as the temperature gap grows past a few <strong>length-scales</strong> <span class="math inline">\(\ell\)</span>. The amplitude <span class="math inline">\(\alpha\)</span> sets how far <span class="math inline">\(f\)</span> wanders from its mean <span class="math inline">\(m\)</span>. This kernel (the squared exponential) gives very smooth curves. The exponential kernel, <span class="math inline">\(\exp(-|x_i - x_j|/\ell)\)</span>, gives rough ones, and for equally spaced times it is the <a href="Week12_MixedModels.html#ar1">AR(1) correlation</a> <span class="math inline">\(\phi^{|s-t|}\)</span> with <span class="math inline">\(\phi = e^{-1/\ell}\)</span>.<a href="#fn13" class="footnoteRef" id="fnref13"><sup>13</sup></a></p>
-<p>Adding Normal measurement noise gives <span class="math inline">\(y \sim \text{MVN}(m\mathbf{1}, K + \sigma_e^2 I)\)</span>, so the likelihood is one multivariate Normal density, with four parameters (<span class="math inline">\(m\)</span>, <span class="math inline">\(\alpha\)</span>, <span class="math inline">\(\ell\)</span>, <span class="math inline">\(\sigma_e\)</span>) to fit by <code>optim()</code>.<a href="#fn14" class="footnoteRef" id="fnref14"><sup>14</sup></a></p>
+<p>The <strong>kernel</strong> <span class="math inline">\(K_{ij}\)</span> says that cultures at similar temperatures have similar growth rates: the correlation falls from 1 to near 0 as the temperature gap grows past a few <strong>length-scales</strong> <span class="math inline">\(\ell\)</span>. The amplitude <span class="math inline">\(\alpha\)</span> sets how far <span class="math inline">\(f\)</span> wanders from its mean <span class="math inline">\(m\)</span>. This kernel (the squared exponential) gives very smooth curves. The exponential kernel, <span class="math inline">\(\exp(-|x_i - x_j|/\ell)\)</span>, gives rough ones, and for equally spaced times it is the <a href="Week12_MixedModels.html#ar1">AR(1) correlation</a> <span class="math inline">\(\phi^{|s-t|}\)</span> with <span class="math inline">\(\phi = e^{-1/\ell}\)</span>.<a href="#fn15" class="footnoteRef" id="fnref15"><sup>15</sup></a></p>
+<p>Adding Normal measurement noise gives <span class="math inline">\(y \sim \text{MVN}(m\mathbf{1}, K + \sigma_e^2 I)\)</span>, so the likelihood is one multivariate Normal density, with four parameters (<span class="math inline">\(m\)</span>, <span class="math inline">\(\alpha\)</span>, <span class="math inline">\(\ell\)</span>, <span class="math inline">\(\sigma_e\)</span>) to fit by <code>optim()</code>.<a href="#fn16" class="footnoteRef" id="fnref16"><sup>16</sup></a></p>
 <pre class="r"><code>dist_temp &lt;- abs(outer(bd$temp, bd$temp, &quot;-&quot;))
 nll_gp &lt;- function(par) {
   m &lt;- par[1]
@@ -1898,13 +2010,15 @@ round(rbind(topt = quantile(topt_sims, c(0.5, 0.025, 0.975)),
 <li id="fn5"><p>The LKJ prior is named for Lewandowski, Kurowicka, and Joe (2009, <em>Journal of Multivariate Analysis</em>). Older BUGS and JAGS code often used an inverse-Wishart prior on <span class="math inline">\(G\)</span> instead, which ties the prior on the SDs to the prior on the correlations; splitting them makes each easier to choose.<a href="#fnref5">↩</a></p></li>
 <li id="fn6"><p><code>brms</code> puts the <code>Intercept</code> prior on the intercept at the <em>sample mean</em> of each predictor, not at zero. Here the mean of <code>precip10</code> is 0.13, so the two are close.<a href="#fnref6">↩</a></p></li>
 <li id="fn7"><p>Without the <code>prior</code> argument, <code>brms</code> uses an LKJ(1) prior on the correlations and half-Student-<span class="math inline">\(t\)</span> priors on the SDs. <code>rstanarm::stan_lmer()</code> fits the same formula from precompiled models, so it skips the compile step.<a href="#fnref7">↩</a></p></li>
-<li id="fn8"><p>The penalty is a prior! This makes the fitted spline a kind of random effect.<a href="#fnref8">↩</a></p></li>
-<li id="fn9"><p>The integral of <span class="math inline">\(f&#39;&#39;(x)^2\)</span> is the other common choice.<a href="#fnref9">↩</a></p></li>
-<li id="fn10"><p>In a <code>gam()</code> fit with REML, <span class="math inline">\(\sigma_d\)</span> and <span class="math inline">\(\sigma_e\)</span> get no priors; they are estimated the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span>. A Bayesian fit (see <a href="#smooth-brms">a smooth in brms</a>) gives them priors, which is what the top boxes stand for. <code>mgcv</code> also reparameterizes the basis so the penalized and unpenalized parts are separate, but the levels are the same.<a href="#fnref10">↩</a></p></li>
-<li id="fn11"><p><code>gam()</code>'s default basis is a thin plate regression spline, which works like the B-splines above; <code>s(temp, bs = &quot;ps&quot;)</code> asks for the P-spline from the widget instead.<a href="#fnref11">↩</a></p></li>
-<li id="fn12"><p>AIC for a GAM uses the edf as its parameter count; it's a reasonable guide, not an exact one, since <span class="math inline">\(\lambda\)</span> was itself estimated.<a href="#fnref12">↩</a></p></li>
-<li id="fn13"><p>Box 1 of <a href="https://www.nature.com/articles/s44358-026-00215-4">Yang, Pan, Warton, and Nakagawa (2026)</a> lays out temporal, spatial, and phylogenetic correlation functions side by side.<a href="#fnref13">↩</a></p></li>
-<li id="fn14"><p>In this fit the length-scale is long compared with the 25-degree range of the data, so the curve is one broad excursion from <span class="math inline">\(m\)</span>, and <span class="math inline">\(m\)</span> trades off against <span class="math inline">\(\alpha\)</span>; don't read much into its value.<a href="#fnref14">↩</a></p></li>
+<li id="fn8"><p>For a 2 <span class="math inline">\(\times\)</span> 2 matrix the LKJ(<span class="math inline">\(\eta\)</span>) prior is the same as <span class="math inline">\((\rho_{ab} + 1)/2 \sim \text{Beta}(\eta, \eta)\)</span> (see <a href="#lkj">priors for a covariance matrix</a>), so the program can put the prior on <span class="math inline">\(\rho_{ab}\)</span> directly. For bigger matrices you need the LKJ distribution itself.<a href="#fnref8">↩</a></p></li>
+<li id="fn9"><p>Raising <code>adapt_delta</code> (e.g. <code>adapt_delta = 0.99</code> in <code>$sample()</code>) makes Stan take smaller steps and usually clears the rest.<a href="#fnref9">↩</a></p></li>
+<li id="fn10"><p>The penalty is a prior! This makes the fitted spline a kind of random effect.<a href="#fnref10">↩</a></p></li>
+<li id="fn11"><p>The integral of <span class="math inline">\(f&#39;&#39;(x)^2\)</span> is the other common choice.<a href="#fnref11">↩</a></p></li>
+<li id="fn12"><p>In a <code>gam()</code> fit with REML, <span class="math inline">\(\sigma_d\)</span> and <span class="math inline">\(\sigma_e\)</span> get no priors; they are estimated the way <code>lmer()</code> estimates <span class="math inline">\(\sigma_a\)</span>. A Bayesian fit (see <a href="#smooth-brms">a smooth in brms</a>) gives them priors, which is what the top boxes stand for. <code>mgcv</code> also reparameterizes the basis so the penalized and unpenalized parts are separate, but the levels are the same.<a href="#fnref12">↩</a></p></li>
+<li id="fn13"><p><code>gam()</code>'s default basis is a thin plate regression spline, which works like the B-splines above; <code>s(temp, bs = &quot;ps&quot;)</code> asks for the P-spline from the widget instead.<a href="#fnref13">↩</a></p></li>
+<li id="fn14"><p>AIC for a GAM uses the edf as its parameter count; it's a reasonable guide, not an exact one, since <span class="math inline">\(\lambda\)</span> was itself estimated.<a href="#fnref14">↩</a></p></li>
+<li id="fn15"><p>Box 1 of <a href="https://www.nature.com/articles/s44358-026-00215-4">Yang, Pan, Warton, and Nakagawa (2026)</a> lays out temporal, spatial, and phylogenetic correlation functions side by side.<a href="#fnref15">↩</a></p></li>
+<li id="fn16"><p>In this fit the length-scale is long compared with the 25-degree range of the data, so the curve is one broad excursion from <span class="math inline">\(m\)</span>, and <span class="math inline">\(m\)</span> trades off against <span class="math inline">\(\alpha\)</span>; don't read much into its value.<a href="#fnref16">↩</a></p></li>
 </ol>
 </div>
 

@@ -99,6 +99,59 @@ points(ab_post, pch = 19, col = "steelblue")
 # Bonus: the same model written in Stan ------------------------------------------------
 
 library(cmdstanr)
+
+# plain version: explicit G, centered stand effects, loops
+plain_code <- "
+data {
+  int<lower=1> N;                       // stand-years
+  int<lower=1> J;                       // stands
+  array[N] int<lower=1, upper=J> stand;
+  vector[N] x;                          // precipitation (10 cm, centered at 20 cm)
+  vector[N] y;                          // ring width (mm)
+}
+parameters {
+  real mu_a;                            // mean intercept
+  real mu_b;                            // mean slope
+  real<lower=0> sigma_a;                // among-stand SD of intercepts
+  real<lower=0> sigma_b;                // among-stand SD of slopes
+  real<lower=-1, upper=1> rho_ab;       // intercept-slope correlation
+  real<lower=0> sigma_e;                // residual SD
+  array[J] vector[2] ab;                // stand j's deviations (a_j, b_j)
+}
+transformed parameters {
+  cov_matrix[2] G;                      // among-stand covariance matrix
+  G[1, 1] = sigma_a^2;
+  G[2, 2] = sigma_b^2;
+  G[1, 2] = rho_ab * sigma_a * sigma_b;
+  G[2, 1] = G[1, 2];
+}
+model {
+  // priors
+  mu_a ~ normal(1, 0.5);
+  mu_b ~ normal(0, 0.5);
+  sigma_a ~ normal(0, 0.3);             // half-normal, because sigma_a > 0
+  sigma_b ~ normal(0, 0.3);
+  (rho_ab + 1) / 2 ~ beta(2, 2);        // LKJ(2) for a 2 x 2 matrix
+  sigma_e ~ normal(0, 0.3);
+  // group layer
+  for (j in 1:J) {
+    ab[j] ~ multi_normal(rep_vector(0, 2), G);
+  }
+  // data layer
+  for (i in 1:N) {
+    y[i] ~ normal(mu_a + ab[stand[i]][1] + (mu_b + ab[stand[i]][2]) * x[i], sigma_e);
+  }
+}
+"
+plain_model <- cmdstan_model(write_stan_file(plain_code))     # compiles (slow, once)
+stan_data <- list(N = nrow(drought), J = 12, stand = as.integer(drought$stand),
+                  x = drought$precip10, y = drought$width)
+fit_plain <- plain_model$sample(data = stan_data, chains = 4, parallel_chains = 4,
+                                seed = 746, refresh = 0)
+fit_plain$diagnostic_summary()
+fit_plain$summary(c("mu_a", "mu_b", "sigma_a", "sigma_b", "rho_ab", "sigma_e"))
+
+# two tricks: Cholesky factor of the correlation matrix, non-centered stand effects
 slopes_code <- "
 data {
   int<lower=1> N;                       // stand-years
@@ -131,9 +184,7 @@ generated quantities {
   real rho_ab = multiply_lower_tri_self_transpose(L)[1, 2];
 }
 "
-slopes_model <- cmdstan_model(write_stan_file(slopes_code))   # compiles (slow, once)
-stan_data <- list(N = nrow(drought), J = 12, stand = as.integer(drought$stand),
-                  x = drought$precip10, y = drought$width)
+slopes_model <- cmdstan_model(write_stan_file(slopes_code))
 fit_stan <- slopes_model$sample(data = stan_data, chains = 4, parallel_chains = 4,
                                 seed = 746, refresh = 0)
 
@@ -142,6 +193,19 @@ fit_stan$diagnostic_summary()
 fit_stan$summary(c("mu", "sigma_ab", "rho_ab", "sigma_e"))
 
 # try it: change lkj_corr_cholesky(2) to (1), then (10), recompile, and refit
+
+# both programs on the six stands with 5-12 years: divergences and ESS for sigma_b
+short <- droplevels(drought[n_years[as.integer(drought$stand)] <= 12, ])
+short_data <- list(N = nrow(short), J = nlevels(short$stand), stand = as.integer(short$stand),
+                   x = short$precip10, y = short$width)
+fit_plain_short <- plain_model$sample(data = short_data, chains = 4, parallel_chains = 4,
+                                      seed = 746, refresh = 0)
+fit_stan_short <- slopes_model$sample(data = short_data, chains = 4, parallel_chains = 4,
+                                      seed = 746, refresh = 0)
+sapply(list(plain = fit_plain_short, tricks = fit_stan_short),
+       function(f) sum(f$diagnostic_summary()$num_divergent))
+c(plain = fit_plain_short$summary("sigma_b")$ess_bulk,
+  tricks = fit_stan_short$summary("sigma_ab[2]")$ess_bulk)
 
 stancode(fit_brms)          # the program brms wrote: same Cholesky factor, non-centered effects
 
