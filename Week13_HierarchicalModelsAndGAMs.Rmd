@@ -63,7 +63,7 @@ plot_bd <- function(...) {
 # Layered DAG: one horizontal band per level of the hierarchy
 # nodes: list of list(id, lab (expression or string), x, y, type)
 #   type: "latent" (open circle), "data" (shaded circle),
-#         "fixed" (square: prior constant), "covariate" (shaded square)
+#         "fixed" (square: prior constant), "covariate" (shaded square); lty = 2 dashes a box
 # edges: character matrix (from, to, optional bend for a curved arrow)
 # levels: data.frame(lab, ymin, ymax); plates: list of list(x0, x1, y0, y1, lab)
 draw_level_dag <- function(nodes, edges, levels, plates = list(), xlim, main = "",
@@ -137,14 +137,16 @@ draw_level_dag <- function(nodes, edges, levels, plates = list(), xlim, main = "
               col = if (n$type == "data") "grey75" else "white")
     } else {
       h <- half(n)
-      rect(n$x - h[1], n$y - h[2], n$x + h[1], n$y + h[2], lwd = 1.2,
+      rect(n$x - h[1], n$y - h[2], n$x + h[1], n$y + h[2], lwd = 1.2, lty = n$lty,
            col = if (n$type == "covariate") "grey75" else "white")
     }
     text(n$x, n$y, n$lab, cex = cex)
   }
 }
 
-nd <- function(id, lab, x, y, type = "latent", w = NULL) list(id = id, lab = lab, x = x, y = y, type = type, w = w)
+nd <- function(id, lab, x, y, type = "latent", w = NULL, lty = 1) {
+  list(id = id, lab = lab, x = x, y = y, type = type, w = w, lty = lty)
+}
 
 levels_rs <- data.frame(lab = c("Level 1: year t", "Level 2: stand j",
                                 "Level 3: population", "Fixed: prior settings"),
@@ -1022,10 +1024,22 @@ a spline works the same way.
 # Splines, GAMs, and Gaussian processes {#gams}
 
 When no function from the 'bestiary' has the right shape, we can build
-one out of simple pieces. A spline is a weighted sum of basis
-functions (a set of 'variables' strategically derived from one or more predictor variables), 
-so fitting it is a linear model ($\mathbf{y} = X\boldsymbol{\beta} + \boldsymbol{\varepsilon}$); a penalty on 'wiggliness'
-tries to prevent it from fitting noise.^[The penalty is a prior! This makes
+one out of simple pieces. Let's start with some vocabulary:
+
+A **spline** is a weighted sum of **basis function**.
+
+A **basis function** is a simple building block which, along with additional independent basis functions, enable 
+specification of complex functional forms. For example, a 
+polynomial basis function would be something like $x^2$, which can generate highly complex functions when 
+paired with other polynomial basis functions like $x$ and $x^3$. 
+
+In the end, fitting a spline is just another kind of linear model 
+($\mathbf{y} = X\boldsymbol{\beta} + \boldsymbol{\varepsilon}$), where X is a matrix 
+of basis functions (each column represents a basis function 
+whose domain encompasses one or more of your predictor variables).
+
+In spline regressions like **Generalized Additive Models (GAM)**, a penalty on 'wiggliness'
+tries to prevent splines from fitting noise.^[The penalty is a prior! This makes
 the fitted spline a kind of random effect.] A Gaussian process skips the basis
 functions and puts a multivariate Normal directly on the curve, using a correlation 
 function (e.g., correlation decays with distance) to build a 
@@ -1034,13 +1048,9 @@ covariance matrix like the ones built for
 
 ## 1. A thermal performance curve {#thermal}
 
-```{r workflow-models, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
-draw_workflow("MODELS")
-```
-
 The chytrid fungus Bd grows fastest at moderate temperatures and dies
 when it gets too warm, which is one reason warm ponds have less
-infection. Managers might want to know: **above what water temperature does
+infection. Managers pose the question: **above what water temperature does
 Bd stop growing?** To find out, we grow 48 Bd cultures on a thermal
 gradient plate (a block heated at one end and cooled at the other), so
 each culture sits at a slightly different temperature, and estimate each
@@ -1112,7 +1122,7 @@ Normal errors, $y = X\boldsymbol\beta + \varepsilon$, the same form as
 any linear regression.
 
 The most common basis is the **B-spline**. Each cubic B-spline is a
-small bump built from cubic pieces that join smoothly at points called
+small 'bump' built from cubic pieces that join smoothly at points called
 **knots**, and it is zero outside a short stretch of $x$. More knots
 mean more, narrower bumps and a more flexible curve. In R,
 `splines::bs()` builds the columns:
@@ -1185,53 +1195,19 @@ edf runs from $K$ (no penalty) down to 2 (a straight line).
 
 Choosing $\lambda$ is the remaining problem.
 [Cross-validation](Week10_ModelComparison.html#cross-validation) would
-work, but there's a faster route, because **the penalty is a prior.**
-As in the [ridge bonus](#ridge-prior), a penalty $\lambda \sum d_k^2$
-on the second differences $d_k$ is what a Normal(0, $\sigma_d^2$) prior on
-each $d_k$ adds to the NLL, with $\lambda = 1/(2\sigma_d^2)$. Read that
-way, the wiggly part of the curve is a random effect: a set of
-deviations drawn from a Normal distribution whose SD $\sigma_d$ is
-estimated from the data. So $\lambda$ can be chosen the way `lmer()`
-estimates $\sigma_a$, by maximizing the restricted likelihood (REML)
-with the weights integrated out.
+work, but `gam()` usually uses a faster route: it treats the wiggly
+part of the curve like a random effect and picks $\lambda$ by
+maximizing the restricted likelihood (REML), the way `lmer()`
+estimates $\sigma_a$ (the
+[penalty-as-prior bonus](#penalty-prior) shows why this works).
 
-Drawn as a DAG, a P-spline has the same levels as the random slope
-model, with basis weights in place of stands:
+B-splines on evenly spaced knots with this difference penalty are
+called a **P-spline** (for penalized B-spline).^[Eilers and Marx (1996,
+*Statistical Science* 11: 89-121) introduced the name. Other penalized
+splines differ in the basis or the penalty (for example, the integral
+of $f''(x)^2$), but they work the same way.]
 
-```{r dag-pspline, echo=FALSE, fig.width=8, fig.height=6}
-levels_ps <- data.frame(lab = c("Level 1: culture i", "Level 2: basis weight k",
-                                "Level 3: smoothness", "Fixed: prior settings"),
-                        ymin = c(0, 2.4, 4.6, 6.4), ymax = c(2.4, 4.6, 6.4, 7.8))
-nodes <- list(nd("b1", quote(beta[1]), 3.0, 3.4), nd("b2", quote(beta[2]), 4.2, 3.4),
-              nd("b3", quote(beta[3]), 5.4, 3.4), nd("b4", quote(beta[4]), 6.6, 3.4),
-              nd("sd", quote(sigma[d]), 6.0, 5.5), nd("se", quote(sigma[e]), 8.8, 5.5),
-              nd("pb", "flat", 3.6, 7.0, "fixed"),
-              nd("psd", "prior", 6.0, 7.0, "fixed"), nd("pse", "prior", 8.8, 7.0, "fixed"),
-              nd("y", quote(r[i]), 5.4, 1.25, "data"), nd("x", quote(temp[i]), 7.4, 1.25, "covariate"))
-edges <- rbind(c("pb", "b1", 0), c("pb", "b2", 0), c("psd", "sd", 0), c("pse", "se", 0),
-               c("sd", "b3", 0), c("sd", "b4", 0), c("b1", "b3", 0.75), c("b2", "b3", 0),
-               c("b2", "b4", 0.75), c("b3", "b4", 0), c("b1", "y", 0), c("b2", "y", 0),
-               c("b3", "y", 0), c("b4", "y", 0), c("x", "y", 0), c("se", "y", 0))
-draw_level_dag(nodes, edges, levels_ps,
-               list(list(x0 = 4.4, x1 = 8.3, y0 = 0.25, y1 = 2.1, lab = "cultures i = 1, ..., 48")),
-               xlim = c(0, 9.6))
-text(7.5, 3.4, "...", cex = 1.6)
-```
-
-The second-difference prior says
-$\beta_k \sim \text{Normal}(2\beta_{k-1} - \beta_{k-2},\ \sigma_d^2)$
-for $k \geq 3$, so each weight's parents are the two weights before it
-plus the shared $\sigma_d$; that is why arrows also run along level 2.
-The first two weights have no parents to pool toward, so they get only
-a flat prior, like fixed effects.^[In a `gam()` fit with REML, $\sigma_d$ and $\sigma_e$ get no
-priors; they are estimated the way `lmer()` estimates $\sigma_a$. A
-Bayesian fit (see [a smooth in brms](#smooth-brms)) gives them priors,
-which is what the top boxes stand for. `mgcv` also reparameterizes the
-basis so the penalized and unpenalized parts are separate, but the
-levels are the same.]
-
-The widget fits the Bd data with a P-spline (cubic B-splines on evenly
-spaced knots, plus the second-difference penalty) and plots the REML
+The widget fits the Bd data with a cubic P-spline and plots the REML
 criterion against $\lambda$.
 
 ```{r widget-penalty, echo=FALSE}
@@ -1419,6 +1395,68 @@ growing, with an interval. The bell has a parameter for $T_\text{opt}$;
 the GAM has no parameter for anything. Which model would you report
 from, and how?
 
+## Bonus: the penalty is a prior {#penalty-prior}
+
+Why can REML choose $\lambda$? Because **the penalty is a prior.**
+As in the [ridge bonus](#ridge-prior), a penalty $\lambda \sum d_k^2$
+on the second differences $d_k$ is what a Normal(0, $\sigma_d^2$) prior on
+each $d_k$ adds to the NLL, with $\lambda = 1/(2\sigma_d^2)$. Read that
+way, the wiggly part of the curve is a random effect: a set of
+deviations drawn from a Normal distribution whose SD $\sigma_d$ is
+estimated from the data. So $\lambda$ can be chosen the way `lmer()`
+estimates $\sigma_a$, by maximizing the restricted likelihood (REML)
+with the weights integrated out!^[This makes `gam()` with REML an
+*empirical Bayes* method: $\sigma_d$ is estimated from the marginal
+likelihood rather than given a prior, and the weights then have a
+Normal posterior given that estimate. That posterior is what
+`vcov(fit_gam)` returns and what the bands from `plot()` and
+`predict(se.fit = TRUE)` summarize, so they are credible intervals
+(see [uncertainty in derived quantities](#derived)). Plugging in
+$\hat\sigma_d$ ignores its uncertainty, which makes the intervals a
+little narrow; `vcov(fit_gam, unconditional = TRUE)` adds a correction,
+and a fully Bayesian fit (see [a smooth in brms](#smooth-brms)) gives
+$\sigma_d$ a prior instead.]
+
+Drawn as a DAG, a [P-spline](#penalty) has the same levels as the
+[random slope model](#what-hierarchical), with basis weights in place
+of stands:
+
+```{r dag-pspline, echo=FALSE, fig.width=8, fig.height=6}
+levels_ps <- data.frame(lab = c("Level 1: culture i", "Level 2: basis weight k",
+                                "Level 3: smoothness", "Fixed: prior settings"),
+                        ymin = c(0, 2.4, 4.6, 6.4), ymax = c(2.4, 4.6, 6.4, 7.8))
+nodes <- list(nd("b1", quote(beta[1]), 3.0, 3.4), nd("b2", quote(beta[2]), 4.2, 3.4),
+              nd("b3", quote(beta[3]), 5.4, 3.4), nd("b4", quote(beta[4]), 6.6, 3.4),
+              nd("sd", quote(sigma[d]), 6.0, 5.5), nd("se", quote(sigma[e]), 8.5, 5.5),
+              nd("pb", "flat", 3.6, 7.0, "fixed"),
+              nd("psd", "prior (Bayes only)", 6.0, 7.0, "fixed", lty = 2),
+              nd("pse", "prior (Bayes only)", 8.5, 7.0, "fixed", lty = 2),
+              nd("y", quote(r[i]), 5.4, 1.25, "data"), nd("x", quote(temp[i]), 7.4, 1.25, "covariate"))
+edges <- rbind(c("pb", "b1", 0), c("pb", "b2", 0), c("psd", "sd", 0), c("pse", "se", 0),
+               c("sd", "b3", 0), c("sd", "b4", 0), c("b1", "b3", 0.75), c("b2", "b3", 0),
+               c("b2", "b4", 0.75), c("b3", "b4", 0), c("b1", "y", 0), c("b2", "y", 0),
+               c("b3", "y", 0), c("b4", "y", 0), c("x", "y", 0), c("se", "y", 0))
+draw_level_dag(nodes, edges, levels_ps,
+               list(list(x0 = 4.4, x1 = 8.3, y0 = 0.25, y1 = 2.1, lab = "cultures i = 1, ..., 48")),
+               xlim = c(0, 9.6))
+text(7.5, 3.4, "...", cex = 1.6)
+```
+
+The second-difference prior says
+$\beta_k \sim \text{Normal}(2\beta_{k-1} - \beta_{k-2},\ \sigma_d^2)$
+for $k \geq 3$, so each weight's parents are the two weights before it
+plus the shared $\sigma_d$; that is why arrows also run along level 2.
+For example, $\beta_3$'s prior mean, $2\beta_2 - \beta_1$, is where a
+straight line through $\beta_1$ and $\beta_2$ lands at $k = 3$.
+The first two weights have no parents to pool toward, so they get only
+a flat prior, like fixed effects. The dashed boxes are priors on
+$\sigma_d$ and $\sigma_e$, which only a fully Bayesian fit (see
+[a smooth in brms](#smooth-brms)) has.^[In a `gam()` fit with REML,
+$\sigma_d$ and $\sigma_e$ get no priors; they are estimated the way
+`lmer()` estimates $\sigma_a$. `mgcv` also reparameterizes the
+basis so the penalized and unpenalized parts are separate, but the
+levels are the same.]
+
 ## Bonus: uncertainty in derived quantities {#derived}
 
 $T_\text{opt}$ and $\text{CT}_\text{max}$ aren't parameters of the GAM,
@@ -1446,7 +1484,7 @@ The true curve peaks at 20 °C and reaches zero at 28 °C.
 ## Bonus: a smooth in brms {#smooth-brms}
 
 `brms` accepts `mgcv`'s `s()` terms and fits them as random effects,
-which makes the [penalty-as-prior](#penalty) idea concrete:
+which makes the [penalty-as-prior](#penalty-prior) idea concrete:
 
 ```{r brms-gam, cache=TRUE, results="hide"}
 fit_brms_gam <- brm(r ~ s(temp, k = 20), data = bd, backend = "cmdstanr",
@@ -1459,7 +1497,7 @@ summary(fit_brms_gam)
 ```
 
 The `sds(stemp_1)` line is the SD of the smooth's wiggly part (the
-$\sigma_d$ above), on a different scale from `gam.vcomp()`'s because the
+$\sigma_d$ in the [penalty-as-prior bonus](#penalty-prior)), on a different scale from `gam.vcomp()`'s because the
 two packages scale the basis functions differently. In
 `stancode(fit_brms_gam)`, the wiggly weights are
 standard Normal draws multiplied by that SD, the same non-centered form

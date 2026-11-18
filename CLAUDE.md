@@ -847,8 +847,11 @@ Snapshot: Sun., Nov. 15, 2026 (Weeks 1-12 taught; Weeks 13 and 14 built, not yet
   one band per level, fixed prior boxes on top, plates, curved edges;
   reuse it for later hierarchical models) for the random slope model and
   a one-layer vs. two-layer contrast in `#what-hierarchical`, and a
-  P-spline in `#penalty` (flat prior on $\beta_1, \beta_2$; the guide
-  says not to explain why before the sloped-line question).
+  P-spline (flat prior on $\beta_1, \beta_2$; dashed "prior (Bayes only)"
+  boxes). Moved Nov. 17, for time, to the bonus `#penalty-prior` with the
+  penalty-as-prior argument and an empirical-Bayes footnote; `#penalty`
+  keeps a one-paragraph "REML, like `lmer()`" summary and the P-spline
+  definition.
   **As taught (Mon., Nov. 16, from the announcement):** definition,
   conditional vs. marginal fitting, shrinkage/partial pooling and the
   ridge link, LKJ (left out of the announcement as a technical detail),
