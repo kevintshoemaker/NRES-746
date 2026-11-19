@@ -143,6 +143,21 @@ c(sdmTMB = cor(pred_sd$omega_s, grid$field_true), gam = cor(gam_surface, grid$fi
 
 #  [PAUSE] Elevation SE: 0.19 (lm), 0.59 (exponential field), 3.9 (thin plate smooth). Which would you report?
 
+# Bonus: the same model in gls() --------------------------------------------------------------
+
+library(nlme)
+fit_gls <- gls(log_biomass ~ burned + elev_km, data = cg, method = "ML",
+               correlation = corExp(form = ~ x_km + y_km, nugget = TRUE))
+round(summary(fit_gls)$tTable, 3)
+c(logLik_gls = as.numeric(logLik(fit_gls)), logLik_by_hand = -fit_hand$value)
+
+# gls's range = ell; nugget = sigma_e^2 / (sigma_s^2 + sigma_e^2); residual SE = sqrt(sigma_s^2 + sigma_e^2)
+gls_cor <- coef(fit_gls$modelStruct$corStruct, unconstrained = FALSE)
+total_sd <- sigma(fit_gls)
+round(c(sigma_s = total_sd * sqrt(1 - gls_cor[["nugget"]]), ell = gls_cor[["range"]],
+        sigma_e = total_sd * sqrt(gls_cor[["nugget"]])), 3)
+intervals(fit_gls, which = "var-cov")
+
 # A SPATIAL ANALYSIS FROM START TO FINISH ====================================================
 
 # (run section 1 and the mesh in section 4 first)

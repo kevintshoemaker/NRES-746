@@ -281,7 +281,13 @@ Root-level `Week<N>_<Topic>.Rmd` (model:
 - **Prompts:** `> **Question:**` blockquotes and a `## Discussion`
   section, with no answers on the page (answers go in the instructor
   notes). No timings or instructor-only text; there is no instructor
-  version of the page.
+  version of the page. **Hidden *Land:* notes** (from Week 14, Nov. 18):
+  right under each question, a ```` ```{asis, echo=FALSE} ```` chunk
+  holding its *Land:* line, so the instructor sees it in the `.Rmd`;
+  it never reaches the HTML (never use `<!-- -->` comments, which do
+  end up in the public HTML source). The guide keeps its own copy; the
+  instructor asks to sync the guide before each lecture, so when
+  revising a page question, update its hidden note and flag the guide.
 - **Code:** demo code in visible chunks; figure helpers and
   figure-only code in `echo = FALSE` chunks. Numbers in the prose come
   from inline R.
@@ -633,7 +639,17 @@ Snapshot: Wed., Nov. 18, 2026 (Weeks 1-13 taught; Week 14 built, not yet taught;
     `mgcv`, `bs = "gp"` fixes the range in advance. Don't put
     `library()` calls inside `cache = TRUE` chunks (they aren't re-run).
     Scripted edits through the Bash tool collapse `\\` to `\`, so
-    `\\nu` became a newline; use the Edit tool for LaTeX.
+    `\\nu` became a newline; use the Edit tool for LaTeX. Pandoc 1.17
+    attaches `{#id}` to an inline code span that ends a header, so the
+    header gets no anchor; put plain text after the code.
+  - **Revised Nov. 18:** bonus `#bonus-gls` (`gls()` + `corExp(nugget =
+    TRUE)`, ML, matches the by-hand logLik; range CI 2.1 to 8.0 km;
+    REML gives $\hat\ell$ 5.3); a `#packages` footnote on `spmodel`
+    (installed 0.15.0; `splm()` with `estmethod = "ml"` matches),
+    `inlabru` (fire 0.49), and point vs. areal data; `nlme` has no
+    Matérn structure. Also Tobler's law in the opening, a semivariance
+    footnote, sdmTMB barrier meshes (`sdmTMBextra`), and hidden *Land:*
+    notes. Not committed (instructor is batching revisions).
   - **Syllabus (Nov. 15):** `Syllabus.docx` schedule table edited to
     match `CourseSchedule.csv` (Nov. 9-30 rows) by editing
     `word/document.xml` and repacking; `Syllabus.pdf` re-exported
