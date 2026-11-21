@@ -106,7 +106,9 @@ elev_r <- cor(snow$elev_km, snow$x_km)
 \ans{\textbf{Answer key.} Answers are in magenta sans-serif type; longer answers have a bar in the margin.}
 
 **Due Monday, Nov. 30.** Work on your own. Parts 1 and 2 are on paper;
-you'll need R for Parts 3 and 4.
+you'll need R for Parts 3 and 4. Turn in this sheet only: you'll make
+a figure and write code along the way, but don't submit them. The last
+question asks how you used AI.
 
 A water district measures snow water equivalent (SWE, the depth of
 water in the snowpack, in cm) on April 1 at 60 snow courses spread over
@@ -203,12 +205,6 @@ Each coding question has a label:
 - *AI optional/encouraged*: the results matter, but the code isn't the
   point.
 
-After each coding question, circle how you used AI.
-
-**What to turn in:** your filled-in answers and **Figure 3a** as an
-image on WebCampus. You don't need to submit code beyond the two lines
-asked for in 3b and 4b.
-
 Read the data with
 
 ```{r read-data, echo=TRUE, eval=FALSE}
@@ -220,22 +216,34 @@ snow$elev_km <- (snow$elev_m - 2400) / 1000      # km above 2400 m
 The columns are the station, its easting and northing in km (`x_km`,
 `y_km`), elevation (`elev_m`), and April 1 SWE (`swe_cm`).
 
-**3a.** *(AI optional/encouraged.)* Fit `lm(swe_cm ~ elev_km, data = snow)`.
-Make a map of the stations with the symbol size or color showing each
-residual. Name it **Figure 3a**.
+**3a.** *(AI optional/encouraged.)* Fit `lm(swe_cm ~ elev_km, data = snow)`
+and make a map of the stations with the symbol size or color showing
+each residual (for yourself; don't turn it in).
 
 SWE rises \ans{`r sprintf("%.1f", coef(fit_lm)[2])`} cm per km of elevation (SE \ans{`r sprintf("%.1f", summary(fit_lm)$coefficients[2, 2])`})
 
 ```{r fig-3a, fig.width=6, fig.height=4.2}
 par(mar = c(4, 4, 1.5, 1))
 plot(snow$x_km, snow$y_km, asp = 1, pch = ifelse(r_lm > 0, 16, 1), cex = 0.5 + abs(r_lm) / 6, col = ans_col,
-     xlab = "Easting (km)", ylab = "Northing (km)", main = "Figure 3a (sample)", cex.main = 0.9, col.main = ans_col)
+     xlab = "Easting (km)", ylab = "Northing (km)", main = "Sample residual map", cex.main = 0.9, col.main = ans_col)
 points(30, 20, pch = 4, cex = 1.5, lwd = 2)
 legend("topright", c("above the line", "below the line", "new site (Part 4)"), pch = c(16, 1, 4),
        col = c(ans_col, ans_col, "black"), bg = "white", cex = 0.75, title = "size = |residual|")
 ```
 
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+Describe the map: are residuals of the same sign scattered or grouped,
+and where are the largest positive and negative ones?
+
+\ansbegin
+
+Grouped: neighboring stations tend to share a sign. Stations east of
+40 km mostly sit below the line (mean residual
+`r sprintf("%.1f", mean(r_lm[snow$x_km > 40]))` cm); the largest
+positive residuals are in the west and center (S28, S51, S04), and the
+largest negative ones in the far northwest and the east (S18, S23,
+S12).
+
+\ansend
 
 The spatial model is
 
@@ -251,20 +259,19 @@ the elevation slope, $\log\sigma_s$, $\log\ell$, and $\log\sigma_e$, in
 that order. Check it: `nll_spatial(c(40, 40, log(8), log(10), log(3)))`
 should return `r sprintf("%.2f", check_val)`.
 
-Your value: \ans{`r sprintf("%.2f", check_val)`} $\qquad$ Copy the line of your function that builds $V$:
+Your value: \ans{`r sprintf("%.2f", check_val)`}
+
+Which term of $V$ makes nearby stations alike? What does $V$ become as
+$\ell$ shrinks toward 0, and which model is that?
 
 \ansbegin
 
-```{r v-line, echo=TRUE, eval=FALSE, highlight=FALSE}
-V <- exp(par[3])^2 * exp(-D / exp(par[4])) + exp(par[5])^2 * diag(nrow(snow))
-```
-
-with `D <- as.matrix(dist(snow[, c("x_km", "y_km")]))` computed once,
-outside the function. Other forms that give the same matrix are fine.
+The off-diagonal term $\sigma_s^2 \exp(-d_{ij}/\ell)$, which is large
+when $d_{ij}$ is small. As $\ell \to 0$ it vanishes for every pair, so
+$V = (\sigma_s^2 + \sigma_e^2) I$: independent errors with one
+variance, the ordinary regression.
 
 \ansend
-
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
 
 **3c.** *(Recommended: no AI.)* Minimize it with `optim()`
 (`method = "BFGS"`, `hessian = TRUE`), starting from the values in the
@@ -290,10 +297,8 @@ fine.
 
 \ansend
 
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
-
 **3d.** The slope changed more than its standard error did. Use your
-Figure 3a to explain why the ordinary regression got a different
+residual map from 3a to explain why the ordinary regression got a different
 slope. How do $\hat\sigma_e^2$, $\hat\sigma_s^2 + \hat\sigma_e^2$, and
 $2\hat\ell$ compare with the nugget, sill, and range you read in 2a?
 
@@ -337,20 +342,7 @@ $$\hat y_0 = \mathbf{x}_0^T\hat{\boldsymbol\beta} +
 **4b.** *(Recommended: no AI.)* Compute $\hat y_0$ in R (`solve(V, b)`
 gives $V^{-1}\mathbf{b}$).
 
-$\hat y_0 =$ \ans{`r sprintf("%.1f", new_site$pred)`} cm $\qquad$ Copy the line that computes it:
-
-\ansbegin
-
-```{r krige-line, echo=TRUE, eval=FALSE, highlight=FALSE}
-y0 <- sum(c(1, 0.05) * beta) + sum(k0 * solve(V, y - X %*% beta))
-```
-
-with `k0 <- sigma_s^2 * exp(-d0 / ell)` and `d0` the 60 distances to
-the new site.
-
-\ansend
-
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
+$\hat y_0 =$ \ans{`r sprintf("%.1f", new_site$pred)`} cm
 
 **4c.** The entries of $\mathbf{k}_0^T V^{-1}$ are the weights each
 station's residual gets. Which three stations have the largest weights,
@@ -371,8 +363,6 @@ their elevations predict, so the prediction rises by
 log-likelihoods.
 
 Yours: \ans{`r sprintf("%.2f", -fit$value)`} $\qquad$ `glmmTMB`: \ans{`r sprintf("%.2f", logLik(fit_tmb))`}
-
-AI use (circle one): no AI / AI helped (e.g., debugging) / AI wrote the code
 
 **4e.** Where did you use AI, if anywhere, and what did you have to
 check or fix? If you didn't use it, what was hardest to get working?
