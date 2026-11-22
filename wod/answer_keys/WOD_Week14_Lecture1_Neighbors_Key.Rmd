@@ -78,17 +78,15 @@ ell <- exp(fit$par[4])
 sigma_e <- exp(fit$par[5])
 V <- sigma_s^2 * exp(-D / ell) + sigma_e^2 * diag(length(y))
 
-# prediction at a site: regression part, kriging prediction, weights, SE
+# prediction at a site: regression part, kriging prediction, weights
 krige <- function(x0, y0, elev_m) {
   d0 <- sqrt((snow$x_km - x0)^2 + (snow$y_km - y0)^2)
   k0 <- sigma_s^2 * exp(-d0 / ell)
   w <- solve(V, k0)
   reg <- beta[1] + beta[2] * (elev_m - 2400) / 1000
-  list(reg = reg, pred = reg + sum(w * (y - X %*% beta)), w = w, d0 = d0,
-       se = sqrt(sigma_s^2 + sigma_e^2 - sum(k0 * w)))
+  list(reg = reg, pred = reg + sum(w * (y - X %*% beta)), w = w, d0 = d0)
 }
 new_site <- krige(30, 20, 2450)
-far_site <- krige(100, 20, 2450)
 top3 <- order(-abs(new_site$w))[1:3]
 resid_sp <- as.vector(y - X %*% beta)
 
@@ -96,26 +94,59 @@ snow$pos <- numFactor(snow$x_km, snow$y_km)
 snow$all <- factor(1)
 fit_tmb <- glmmTMB(swe_cm ~ elev_km + exp(pos + 0 | all), data = snow)
 
-# west vs. east: the pattern behind the slope change
 r_lm <- resid(fit_lm)
-elev_r <- cor(snow$elev_km, snow$x_km)
 ```
 
 **NRES 746, Week 14, Lecture 1: Neighbors (take-home)**
 
 \ans{\textbf{Answer key.} Answers are in magenta sans-serif type; longer answers have a bar in the margin.}
 
-**Due Monday, Nov. 30.** Work on your own. Parts 1 and 2 are on paper;
-you'll need R for Parts 3 and 4. Turn in this sheet only: you'll make
-a figure and write code along the way, but don't submit them. The last
-question asks how you used AI.
+**Due Monday, Nov. 30.** Work on your own or in small groups. Parts 1
+and 2 are on paper; Part 3 and the optional Part 4 involve R. Turn in
+this sheet only: you'll make a figure and write code along the way,
+but no need to submit them.
 
-A water district measures snow water equivalent (SWE, the depth of
-water in the snowpack, in cm) on April 1 at 60 snow courses spread over
-a 60 by 40 km mountain range. It wants to know how fast SWE rises with
-elevation, and how much snow to expect at a site where it is thinking
-of adding a station. Storms don't deliver snow evenly, so stations near
-each other tend to be alike in ways elevation doesn't explain.
+A water district forecasts its spring supply from snow courses:
+permanent sites where surveyors sample the snowpack by hand. It has
+April 1 snow water equivalent (SWE, the depth of water in the snowpack,
+in cm) from 60 snow courses spread over a 60 by 40 km mountain range.
+It wants to know how fast SWE rises with elevation, and how much snow
+to expect at a site where it has proposed adding a station. Storms
+don't deliver snow evenly, so stations near each other tend to be alike in ways elevation doesn't fully explain.
+
+## Notation and key equations
+
+- $y_i$: SWE at station $i$ (cm). $e_i$: its residual from a
+  regression of SWE on elevation.
+- $\text{Var}(y)$ is a variance, $\text{Cov}(y_1, y_2)$ a covariance.
+  If $y_1$ and $y_2$ each have variance $\sigma^2$ and correlation
+  $\rho$, then $\text{Cov}(y_1, y_2) = \rho\sigma^2$. For constants $a$
+  and $b$, $\text{Var}(a y_1 + b y_2) = a^2\text{Var}(y_1) +
+  b^2\text{Var}(y_2) + 2ab\,\text{Cov}(y_1, y_2)$.
+- $d$ or $d_{ij}$: distance between two locations (km).
+- **Semivariance** $\gamma(d)$: half the expected squared difference
+  between the residuals at two locations $d$ km apart,
+  $\gamma(d) = \tfrac{1}{2}E\big[(e_i - e_j)^2\big]$ for $d_{ij} = d$.
+  A **variogram** plots semivariance against $d$; the points in an empirical
+  variogram average $\tfrac{1}{2}(e_i - e_j)^2$ over all pairs of
+  stations in each distance bin. Similar neighbors make $\gamma(d)$
+  small at short distances.
+- On a variogram, the **nugget** is the height the curve starts from
+  just above $d = 0$, the **sill** is the level where it flattens out,
+  and the **range** is the distance where it (nearly) reaches the sill,
+  beyond which residuals are effectively uncorrelated.
+- $\sigma_s$: SD of the spatially smooth part of the residuals;
+  $\sigma_e$: SD of the independent station-level noise; $\ell$:
+  length-scale (km), how quickly the smooth part's correlation fades
+  with distance; $\rho(d)$: correlation of the smooth part at two
+  locations $d$ km apart.
+- $\mathbf{y} \sim \text{MVN}(\boldsymbol\mu, V)$: the multivariate
+  normal, with mean vector $\boldsymbol\mu$ and covariance matrix $V$
+  ($V_{ii}$ is station $i$'s variance, $V_{ij}$ the covariance of
+  stations $i$ and $j$). $X$ is the model matrix and
+  $\boldsymbol\beta$ the coefficients ($\beta_0$ the intercept,
+  $\beta_1$ the elevation slope), so $\boldsymbol\mu =
+  X\boldsymbol\beta$.
 
 ## Part 1: Two stations (on paper)
 
@@ -175,22 +206,35 @@ nugget \ans{about 10 to 30} $\qquad$ sill \ans{about 100 to 120} $\qquad$ range 
 
 \ansbegin
 
-Any smooth rising curve that levels off is fine. With 60 stations the
-points are noisy (the last two fall back below the sill).
+Any smooth rising curve that levels off is fine.
 
 \ansend
 
-**2b.** If each residual is a spatially smooth part plus independent
-noise, then $\gamma(d) = \sigma_e^2 + \sigma_s^2\,(1 - \rho(d))$. From
-your curve, about what is the correlation between the residuals of two
-stations 5 km apart? Show how you got it.
+**2b.** The semivariance drops at the largest distances. Is there any
+reason to think semivariance could decrease with distance, and is that
+realistic for this system?
 
 \ansbegin
 
-The residuals' covariance at distance $d$ is $\sigma_s^2\rho(d)$, which
-is the sill minus $\gamma(d)$, so their correlation is
-$1 - \gamma(d)/\text{sill}$. Reading $\gamma(5) \approx 40$ and a sill
-of about 110: $1 - 40/110 \approx 0.6$. Anything from 0.5 to 0.7 is
+A drop means stations far apart are more alike than stations at middle
+distances, which takes a repeating pattern (a "hole effect"), such as
+ridges and valleys at a regular spacing. Storm-driven snow over a
+60 by 40 km range has no reason to repeat every 20 km or so, so the
+drop is noise: with patches about 20 km across, the range holds only a
+few independent patches. The far bins have plenty of pairs
+(`r vg$np[nrow(vg)]` in the last one), but those pairs all share the
+same few patches. Don't bend the curve down to follow them.
+
+\ansend
+
+**2c.** The correlation between the residuals of two stations $d$ km
+apart is $1 - \gamma(d)/\text{sill}$. From your curve, about what is
+the correlation for stations 5 km apart?
+
+\ansbegin
+
+Reading $\gamma(5) \approx 40$ and a sill of about 110:
+$1 - 40/110 \approx 0.6$. Anything from 0.5 to 0.7 is
 reasonable. (The fitted model in Part 3 gives
 `r sprintf("%.2f", sigma_s^2 * exp(-5 / ell) / (sigma_s^2 + sigma_e^2))`.)
 
@@ -261,13 +305,13 @@ should return `r sprintf("%.2f", check_val)`.
 
 Your value: \ans{`r sprintf("%.2f", check_val)`}
 
-Which term of $V$ makes nearby stations alike? What does $V$ become as
-$\ell$ shrinks toward 0, and which model is that?
+As $\ell$ shrinks toward 0, what happens to the off-diagonal entries of
+the covariance matrix $V$, and what familiar model is left?
 
 \ansbegin
 
-The off-diagonal term $\sigma_s^2 \exp(-d_{ij}/\ell)$, which is large
-when $d_{ij}$ is small. As $\ell \to 0$ it vanishes for every pair, so
+They go to 0 (each is $\sigma_s^2 \exp(-d_{ij}/\ell)$ with
+$d_{ij} > 0$), so
 $V = (\sigma_s^2 + \sigma_e^2) I$: independent errors with one
 variance, the ordinary regression.
 
@@ -275,13 +319,14 @@ variance, the ordinary regression.
 
 **3c.** *(Recommended: no AI.)* Minimize it with `optim()`
 (`method = "BFGS"`, `hessian = TRUE`), starting from the values in the
-check above. Confirm `$convergence` is 0, and fill in the table (spatial
-SD is $\hat\sigma_s$, length-scale is $\hat\ell$ in km, noise SD is
-$\hat\sigma_e$).
+check above. Confirm `$convergence` is 0, and fill in the table.
 
-```{r fit-table, fig.height=1.35}
+```{r fit-table, fig.height=1.6, dev=if (knitr::is_latex_output()) "cairo_pdf" else "png"}
 blank_table(
-  headers = list("", "slope", "SE of slope", "spatial SD", "length-scale", "noise SD", "logLik"),
+  headers = expression("", atop("slope", hat(beta)[1]), atop("SE of slope", SE(hat(beta)[1])),
+                       atop("spatial SD", hat(sigma)[s]), atop("length-scale", hat("ℓ") ~ "(km)"),
+                       atop("noise SD", hat(sigma)[e]), "logLik"),
+  header_height = 0.6,
   body = list(list("lm()", sprintf("%.1f", coef(fit_lm)[2]), sprintf("%.1f", summary(fit_lm)$coefficients[2, 2]),
                    "(none)", "(none)", sprintf("%.1f", sigma(fit_lm)), sprintf("%.1f", logLik(fit_lm))),
               list("spatial", sprintf("%.1f", beta[2]), sprintf("%.1f", se[2]), sprintf("%.1f", sigma_s),
@@ -297,22 +342,10 @@ fine.
 
 \ansend
 
-**3d.** The slope changed more than its standard error did. Use your
-residual map from 3a to explain why the ordinary regression got a different
-slope. How do $\hat\sigma_e^2$, $\hat\sigma_s^2 + \hat\sigma_e^2$, and
-$2\hat\ell$ compare with the nugget, sill, and range you read in 2a?
+**3d.** How do $\hat\sigma_e^2$, $\hat\sigma_s^2 + \hat\sigma_e^2$, and
+$2\hat\ell$ compare with the nugget, sill, and range you estimated visually in 2a?
 
 \ansbegin
-
-Sample: the residuals come in regional patches, and the higher
-stations are mostly in the east (elevation and easting have correlation
-`r sprintf("%.2f", elev_r)`). The east also got less snow than its
-elevation predicts (the spatial model's residuals have correlation
-`r sprintf("%.2f", cor(resid_sp, snow$x_km))` with easting), and the
-regression mixes that east-west difference into the elevation slope. The spatial model
-compares stations with their neighbors, so its slope comes mostly from
-nearby stations at different elevations. The SE changed little because
-elevation also varies a lot between neighboring stations.
 
 $\hat\sigma_e^2 =$ `r sprintf("%.0f", sigma_e^2)` (nugget),
 $\hat\sigma_s^2 + \hat\sigma_e^2 =$ `r sprintf("%.0f", sigma_s^2 + sigma_e^2)`
@@ -322,13 +355,23 @@ suggest.
 
 \ansend
 
-## Part 4: Predicting at a new site
+**3e.** Final question: where did you use AI, if anywhere, and what did you have to
+check or fix? If you didn't use it, what was hardest to get working?
+
+\ansbegin
+
+Open-ended.
+
+\ansend
+
+## Part 4, Bonus (optional): Predicting at a new site
 
 The district is considering a new station at easting 30 km, northing
 20 km, elevation 2450 m.
 
-**4a.** From the spatial model's intercept and slope alone, the
-predicted SWE at the new site is \ans{`r sprintf("%.1f", new_site$reg)`} cm.
+From the spatial model's intercept and slope alone (SWE as a function
+of elevation), the predicted SWE at the new site is
+`r sprintf("%.1f", new_site$reg)` cm.
 
 The model can do better, because nearby stations say something about
 the unmeasured part of the snowpack there. Let $\mathbf{k}_0$ hold the
@@ -339,15 +382,15 @@ distance from the new site to station $i$. The prediction is
 $$\hat y_0 = \mathbf{x}_0^T\hat{\boldsymbol\beta} +
 \mathbf{k}_0^T\, V^{-1} (\mathbf{y} - X\hat{\boldsymbol\beta})$$
 
-**4b.** *(Recommended: no AI.)* Compute $\hat y_0$ in R (`solve(V, b)`
+**4a.** *(Recommended: no AI.)* Compute $\hat y_0$ in R (`solve(V, b)`
 gives $V^{-1}\mathbf{b}$).
 
 $\hat y_0 =$ \ans{`r sprintf("%.1f", new_site$pred)`} cm
 
-**4c.** The entries of $\mathbf{k}_0^T V^{-1}$ are the weights each
+**4b.** The entries of $\mathbf{k}_0^T V^{-1}$ are the weights each
 station's residual gets. Which three stations have the largest weights,
 and how far is each from the new site? Why did the prediction move the
-way it did from 4a?
+way it did from the elevation-only prediction?
 
 \ansbegin
 
@@ -358,36 +401,14 @@ their elevations predict, so the prediction rises by
 
 \ansend
 
-**4d.** *(AI optional/encouraged.)* Fit the same model with `glmmTMB`
-(the syntax is in section 5 of the Week 14 page) and compare
-log-likelihoods.
+**4c.** Fit the same model with `glmmTMB` and compare log-likelihoods:
+
+```{r glmmtmb-syntax, echo=TRUE, eval=FALSE}
+library(glmmTMB)
+snow$pos <- numFactor(snow$x_km, snow$y_km)   # station coordinates
+snow$all <- factor(1)                         # one field over all stations
+fit_tmb <- glmmTMB(swe_cm ~ elev_km + exp(pos + 0 | all), data = snow)
+logLik(fit_tmb)
+```
 
 Yours: \ans{`r sprintf("%.2f", -fit$value)`} $\qquad$ `glmmTMB`: \ans{`r sprintf("%.2f", logLik(fit_tmb))`}
-
-**4e.** Where did you use AI, if anywhere, and what did you have to
-check or fix? If you didn't use it, what was hardest to get working?
-
-\ansbegin
-
-Open-ended.
-
-\ansend
-
-**Bonus (optional).** The prediction's variance is
-$\hat\sigma_s^2 + \hat\sigma_e^2 - \mathbf{k}_0^T V^{-1}\mathbf{k}_0$.
-Compute its square root for the new site, and again for a site at
-easting 100 km, northing 20 km, far outside the network. What does
-the prediction itself become at the far site, and why?
-
-\ansbegin
-
-New site: `r sprintf("%.1f", new_site$se)` cm. Far site:
-`r sprintf("%.1f", far_site$se)` cm, which is
-$\sqrt{\hat\sigma_s^2 + \hat\sigma_e^2}$ =
-`r sprintf("%.1f", sqrt(sigma_s^2 + sigma_e^2))`. At 40 km or more from
-every station $\mathbf{k}_0$ is nearly zero, so the stations say
-nothing about the field there and the prediction is the regression
-part alone (`r sprintf("%.1f", far_site$pred)` cm against
-`r sprintf("%.1f", far_site$reg)`).
-
-\ansend
