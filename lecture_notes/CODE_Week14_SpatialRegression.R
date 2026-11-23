@@ -1,5 +1,5 @@
 #  NRES 746, Week 14: Spatial regression =====================================================
-#  Sections match the Week 14 web page. Needs mvtnorm, gstat, sp, glmmTMB, sdmTMB, fmesher, INLA, inlabru, sf, mgcv.
+#  Sections match the Week 14 web page. Needs mvtnorm, gstat, sp, glmmTMB, sdmTMB, fmesher, INLA, inlabru, sf, mgcv, DHARMa.
 
 # SPATIAL REGRESSION =========================================================================
 
@@ -181,14 +181,24 @@ m1 <- sdmTMB(log_biomass ~ burned + elev_km, data = cg, mesh = mesh, spatial = "
 m2 <- sdmTMB(log_biomass ~ burned * elev_km, data = cg, mesh = mesh, spatial = "on")
 sanity(m1)
 
-# residuals: Normal, and no spatial pattern left?
+# DHARMa: where does each observation fall among simulations from the fitted model?
+library(DHARMa)
+set.seed(746)
+dh_m1 <- dharma_residuals(simulate(m1, nsim = 250, type = "mle-mvn"), m1, return_DHARMa = TRUE, plot = FALSE)
+plot(dh_m1)                               # uniform QQ plot (KS, dispersion, outlier tests); residuals vs. predicted
+testDispersion(dh_m1, plot = FALSE)       # flags underdispersion: an artifact of keeping the fitted field
+
+# spatial autocorrelation left in the residuals: Moran's I, M0 vs. M1
+dh_m0 <- dharma_residuals(simulate(m0, nsim = 250, type = "mle-mvn"), m0, return_DHARMa = TRUE, plot = FALSE)
+testSpatialAutocorrelation(dh_m0, x = cg$x_km, y = cg$y_km, plot = FALSE)
+testSpatialAutocorrelation(dh_m1, x = cg$x_km, y = cg$y_km, plot = FALSE)
+
+# residual variograms: flat near 1 if no spatial pattern is left
 cg$resid_m1 <- residuals(m1, type = "mle-mvn")
 cg_sp$resid_m1 <- cg$resid_m1
 cg_sp$resid_m0 <- as.numeric(scale(cg$resid_lm))
 vg_m0 <- variogram(resid_m0 ~ 1, cg_sp, cutoff = 20, width = 2)
 vg_m1 <- variogram(resid_m1 ~ 1, cg_sp, cutoff = 20, width = 2)
-qqnorm(cg$resid_m1)
-qqline(cg$resid_m1)
 plot(vg_m0$dist, vg_m0$gamma, ylim = c(0, 1.5), xlab = "Distance between plots (km)",
      ylab = "Semivariance of standardized residuals")
 points(vg_m1$dist, vg_m1$gamma, pch = 16)

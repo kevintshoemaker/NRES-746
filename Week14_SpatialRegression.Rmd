@@ -79,7 +79,7 @@ map_key <- function(zlim, pal, title, digits = 1) {
 R code from this page is also in the
 [companion script](lecture_notes/CODE_Week14_SpatialRegression.R).
 Packages: `mvtnorm`, `gstat` (with `sp`), `glmmTMB`, `sdmTMB`, `INLA`,
-`inlabru`, `sf`, `fmesher`, `mgcv`.^[`INLA` isn't on CRAN. Install it with
+`inlabru`, `sf`, `fmesher`, `mgcv`, `DHARMa`.^[`INLA` isn't on CRAN. Install it with
 `install.packages("INLA", repos = c(getOption("repos"), INLA = "https://inla.r-inla-download.org/R/stable"), dep = TRUE)`.
 It is a large download, and it's fine to skip it.] Reading:
 Bolker section 10.3 (correlations in time-series and spatial data).
@@ -1103,6 +1103,12 @@ fit falls apart (look at the range). We keep the 2-km mesh from
 > **Question:** The 1-km mesh has almost twice the vertices of the 2-km
 > mesh. What did the extra vertices buy? When would you need them?
 
+```{asis, echo=FALSE}
+*Land:* nothing here (same estimates, log-likelihood about -172.4 vs.
+-172.9). Extra vertices are needed when the range is short relative to
+2 km, or plots are dense enough to show finer structure.
+```
+
 ## 3. Fit and check {#demo-check}
 
 ```{r demo-fits}
@@ -1119,8 +1125,64 @@ sanity(m1)
 `optim()`: did the optimizer converge, is the Hessian usable, are any
 standard errors or variance parameters suspicious.
 
-Then the residuals. If the field has done its job, what's left should
-look like independent Normal noise, with a flat variogram:
+Then the residuals, the goodness-of-fit part of COMPARE. If the field
+has done its job, what's left should look like independent noise. The
+`DHARMa` package checks this by simulation: it simulates many new data
+sets from the fitted model and asks where each observation falls among
+its own simulated values. If the model is right, those positions
+(scaled residuals between 0 and 1) are uniform, whatever the response
+distribution.^[See the `DHARMa` vignette (Hartig, on CRAN). A scaled residual of
+0.5 means the observation sits in the middle of its simulations; 0 or
+1 means it is more extreme than all of them. The same calls work for
+counts, presence/absence, and any other family `sdmTMB` fits.]
+`sdmTMB` supplies the simulations, and `dharma_residuals()` hands them
+to `DHARMa`:
+
+```{r demo-dharma, fig.width=9, fig.height=4.5}
+library(DHARMa)
+set.seed(746)
+dh_m1 <- dharma_residuals(simulate(m1, nsim = 250, type = "mle-mvn"), m1, return_DHARMa = TRUE, plot = FALSE)
+plot(dh_m1)
+```
+
+The left panel is a QQ plot of the scaled residuals against a uniform
+distribution, with three tests: uniformity (KS), dispersion, and
+outliers. The right panel plots the residuals against the predictions;
+the quantile lines should run flat at 0.25, 0.5, and 0.75.
+
+```{r demo-dharma-tests, echo=FALSE}
+dh_unif <- testUniformity(dh_m1, plot = FALSE)
+dh_disp <- testDispersion(dh_m1, plot = FALSE)
+```
+
+The uniformity test passes (p = `r f2(dh_unif$p.value)`). The
+dispersion test and the right panel both flag the same thing: the
+residuals bunch toward 0.5 (dispersion ratio `r f2(dh_disp$statistic)`,
+and the outer quantile lines sit inside 0.25 and 0.75). That is an
+artifact, not a problem with the model.^[The simulations keep the fitted field, which sits
+partly on top of the observations, so the observed values are closer
+to the predictions than fresh noise would be. Refitting M1 to six data
+sets simulated from the true model gave dispersion ratios of about 0.45
+to 0.7, every one flagged, and the quantile test in the right panel
+flagged four of the six. The same happens with a Poisson field model.
+To check for overdispersion in a count model, compare Poisson and
+negative binomial (`nbinom2()`) fits by AIC instead.] Check what a test
+assumes before acting on it.
+
+For spatial data the key test is whether neighbors' residuals still
+resemble each other. `testSpatialAutocorrelation()` computes Moran's
+$I$ on the residuals; M0, without a field, is the contrast:
+
+```{r demo-moran}
+dh_m0 <- dharma_residuals(simulate(m0, nsim = 250, type = "mle-mvn"), m0, return_DHARMa = TRUE, plot = FALSE)
+sa_m0 <- testSpatialAutocorrelation(dh_m0, x = cg$x_km, y = cg$y_km, plot = FALSE)
+sa_m1 <- testSpatialAutocorrelation(dh_m1, x = cg$x_km, y = cg$y_km, plot = FALSE)
+round(rbind(M0 = c(sa_m0$statistic["observed"], p = sa_m0$p.value),
+            M1 = c(sa_m1$statistic["observed"], p = sa_m1$p.value)), 3)
+```
+
+A residual variogram shows the same thing, and shows how far the
+pattern reaches:
 
 ```{r demo-residuals}
 cg$resid_m1 <- residuals(m1, type = "mle-mvn")
@@ -1130,24 +1192,25 @@ vg_m0 <- variogram(resid_m0 ~ 1, cg_sp, cutoff = 20, width = 2)
 vg_m1 <- variogram(resid_m1 ~ 1, cg_sp, cutoff = 20, width = 2)
 ```
 
-```{r demo-residual-plots, echo=FALSE, fig.width=9, fig.height=3.8}
-par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
-qqnorm(cg$resid_m1, pch = 16, col = "grey40", main = "M1 residuals", cex.main = 0.95)
-qqline(cg$resid_m1)
+```{r demo-residual-plots, echo=FALSE, fig.width=6, fig.height=4}
+par(mar = c(4, 4, 1, 1))
 plot(vg_m0$dist, vg_m0$gamma, pch = 1, ylim = c(0, 1.5), xlim = c(0, 20), xlab = "Distance between plots (km)",
-     ylab = "Semivariance of standardized residuals", main = "Residual variograms", cex.main = 0.95)
+     ylab = "Semivariance of standardized residuals")
 points(vg_m1$dist, vg_m1$gamma, pch = 16, col = "#2a78d6")
 abline(h = 1, lty = 2, col = "grey50")
 legend("bottomright", c("M0 (no spatial term)", "M1 (spatial)"), pch = c(1, 16), col = c("black", "#2a78d6"),
        bty = "n", cex = 0.85)
 ```
 
-M1's residuals are close to Normal, and their variogram is flat near 1
-at every distance: no spatial pattern is left.^[`type = "mle-mvn"`
-gives randomized quantile residuals with the random field drawn from
-its estimated distribution, which is the recommended choice in
-`sdmTMB`. For count and other non-Normal models the same call works,
-or use `simulate()` with the `DHARMa` package.]
+M0's residuals are strongly autocorrelated (Moran's $I$ p
+`r if (sa_m0$p.value < 0.001) "< 0.001" else paste("=", f2(sa_m0$p.value))`),
+and its variogram rises with distance. M1's are not (p =
+`r f2(sa_m1$p.value)`), and its variogram is flat near 1 at every
+distance: no spatial pattern is left.^[These variogram residuals come
+from `residuals(m1, type = "mle-mvn")`, randomized quantile residuals
+on the Normal scale with the random field drawn from its estimated
+distribution, the choice `sdmTMB` recommends. They are the Normal-scale
+version of `DHARMa`'s scaled residuals.]
 
 ## 4. Compare {#demo-compare}
 
@@ -1215,6 +1278,12 @@ temporal, and grouped data.]
 > including the roadless block. Which of the two cross-validation
 > results describes how well that map will do, and where on the map
 > does each one apply?
+
+```{asis, echo=FALSE}
+*Land:* random folds describe cells with plots within a few km (most
+of the map); block folds describe the middle of the roadless block and
+anywhere beyond the survey edge.
+```
 
 ## 5. Predict {#demo-predict}
 
@@ -1294,6 +1363,13 @@ cells that are.
 > map flags. Would you send crews to the cells with the highest
 > predicted biomass, or the highest probability of exceeding the
 > threshold? Where do the two rankings disagree?
+
+```{asis, echo=FALSE}
+*Land:* probability, if the goal is not to waste treatment. The
+rankings disagree where the SE is high: a cell far from plots can have
+a high prediction and a modest probability. That is a case for sampling
+there first.
+```
 
 ## 6. What we tell the district {#demo-answer}
 

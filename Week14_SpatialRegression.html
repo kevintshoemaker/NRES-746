@@ -603,7 +603,7 @@ div.tocify {
 
 
 <p><a href="#ai-use">How this page was made</a></p>
-<p>R code from this page is also in the <a href="lecture_notes/CODE_Week14_SpatialRegression.R">companion script</a>. Packages: <code>mvtnorm</code>, <code>gstat</code> (with <code>sp</code>), <code>glmmTMB</code>, <code>sdmTMB</code>, <code>INLA</code>, <code>inlabru</code>, <code>sf</code>, <code>fmesher</code>, <code>mgcv</code>.<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a> Reading: Bolker section 10.3 (correlations in time-series and spatial data). The data are in <a href="data/CheatgrassSurvey.csv">CheatgrassSurvey.csv</a> (the plots) and <a href="data/CheatgrassGrid.csv">CheatgrassGrid.csv</a> (a grid for prediction).</p>
+<p>R code from this page is also in the <a href="lecture_notes/CODE_Week14_SpatialRegression.R">companion script</a>. Packages: <code>mvtnorm</code>, <code>gstat</code> (with <code>sp</code>), <code>glmmTMB</code>, <code>sdmTMB</code>, <code>INLA</code>, <code>inlabru</code>, <code>sf</code>, <code>fmesher</code>, <code>mgcv</code>, <code>DHARMa</code>.<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a> Reading: Bolker section 10.3 (correlations in time-series and spatial data). The data are in <a href="data/CheatgrassSurvey.csv">CheatgrassSurvey.csv</a> (the plots) and <a href="data/CheatgrassGrid.csv">CheatgrassGrid.csv</a> (a grid for prediction).</p>
 <div id="spatial" class="section level1">
 <h1>Spatial regression</h1>
 <p>Waldo Tobler's &quot;first law of geography&quot; reads: &quot;Everything is related to everything else, but near things are more related than distant things.&quot;<a href="#fn2" class="footnoteRef" id="fnref2"><sup>2</sup></a></p>
@@ -1474,14 +1474,31 @@ m2 &lt;- sdmTMB(log_biomass ~ burned * elev_km, data = cg, mesh = mesh, spatial 
 <pre><code>## ✔ No sigma parameters are &gt; 100</code></pre>
 <pre><code>## ✔ Range parameter doesn&#39;t look unreasonably large</code></pre>
 <p><code>sanity()</code> runs the checks you would otherwise do by hand after <code>optim()</code>: did the optimizer converge, is the Hessian usable, are any standard errors or variance parameters suspicious.</p>
-<p>Then the residuals. If the field has done its job, what's left should look like independent Normal noise, with a flat variogram:</p>
+<p>Then the residuals, the goodness-of-fit part of COMPARE. If the field has done its job, what's left should look like independent noise. The <code>DHARMa</code> package checks this by simulation: it simulates many new data sets from the fitted model and asks where each observation falls among its own simulated values. If the model is right, those positions (scaled residuals between 0 and 1) are uniform, whatever the response distribution.<a href="#fn24" class="footnoteRef" id="fnref24"><sup>24</sup></a> <code>sdmTMB</code> supplies the simulations, and <code>dharma_residuals()</code> hands them to <code>DHARMa</code>:</p>
+<pre class="r"><code>library(DHARMa)
+set.seed(746)
+dh_m1 &lt;- dharma_residuals(simulate(m1, nsim = 250, type = &quot;mle-mvn&quot;), m1, return_DHARMa = TRUE, plot = FALSE)
+plot(dh_m1)</code></pre>
+<p><img src="Week14_SpatialRegression_files/figure-html/demo-dharma-1.png" width="864" style="display: block; margin: auto;" /></p>
+<p>The left panel is a QQ plot of the scaled residuals against a uniform distribution, with three tests: uniformity (KS), dispersion, and outliers. The right panel plots the residuals against the predictions; the quantile lines should run flat at 0.25, 0.5, and 0.75.</p>
+<p>The uniformity test passes (p = 0.10). The dispersion test and the right panel both flag the same thing: the residuals bunch toward 0.5 (dispersion ratio 0.52, and the outer quantile lines sit inside 0.25 and 0.75). That is an artifact, not a problem with the model.<a href="#fn25" class="footnoteRef" id="fnref25"><sup>25</sup></a> Check what a test assumes before acting on it.</p>
+<p>For spatial data the key test is whether neighbors' residuals still resemble each other. <code>testSpatialAutocorrelation()</code> computes Moran's <span class="math inline">\(I\)</span> on the residuals; M0, without a field, is the contrast:</p>
+<pre class="r"><code>dh_m0 &lt;- dharma_residuals(simulate(m0, nsim = 250, type = &quot;mle-mvn&quot;), m0, return_DHARMa = TRUE, plot = FALSE)
+sa_m0 &lt;- testSpatialAutocorrelation(dh_m0, x = cg$x_km, y = cg$y_km, plot = FALSE)
+sa_m1 &lt;- testSpatialAutocorrelation(dh_m1, x = cg$x_km, y = cg$y_km, plot = FALSE)
+round(rbind(M0 = c(sa_m0$statistic[&quot;observed&quot;], p = sa_m0$p.value),
+            M1 = c(sa_m1$statistic[&quot;observed&quot;], p = sa_m1$p.value)), 3)</code></pre>
+<pre><code>##    observed     p
+## M0    0.094 0.000
+## M1   -0.011 0.545</code></pre>
+<p>A residual variogram shows the same thing, and shows how far the pattern reaches:</p>
 <pre class="r"><code>cg$resid_m1 &lt;- residuals(m1, type = &quot;mle-mvn&quot;)
 cg_sp$resid_m1 &lt;- cg$resid_m1
 cg_sp$resid_m0 &lt;- as.numeric(scale(cg$resid_lm))
 vg_m0 &lt;- variogram(resid_m0 ~ 1, cg_sp, cutoff = 20, width = 2)
 vg_m1 &lt;- variogram(resid_m1 ~ 1, cg_sp, cutoff = 20, width = 2)</code></pre>
-<p><img src="Week14_SpatialRegression_files/figure-html/demo-residual-plots-1.png" width="864" style="display: block; margin: auto;" /></p>
-<p>M1's residuals are close to Normal, and their variogram is flat near 1 at every distance: no spatial pattern is left.<a href="#fn24" class="footnoteRef" id="fnref24"><sup>24</sup></a></p>
+<p><img src="Week14_SpatialRegression_files/figure-html/demo-residual-plots-1.png" width="576" style="display: block; margin: auto;" /></p>
+<p>M0's residuals are strongly autocorrelated (Moran's <span class="math inline">\(I\)</span> p &lt; 0.001), and its variogram rises with distance. M1's are not (p = 0.54), and its variogram is flat near 1 at every distance: no spatial pattern is left.<a href="#fn26" class="footnoteRef" id="fnref26"><sup>26</sup></a></p>
 </div>
 <div id="demo-compare" class="section level2">
 <h2>4. Compare</h2>
@@ -1520,7 +1537,7 @@ round(cv_tab, 3)                  # root mean squared prediction error, log biom
 ## random_folds 0.730 0.538
 ## block_folds  0.794 0.784</code></pre>
 <p><img src="Week14_SpatialRegression_files/figure-html/demo-blocks-plot-1.png" width="624" style="display: block; margin: auto;" /></p>
-<p>With random folds the spatial model's prediction error is 26% lower than M0's. With whole 10-km blocks held out, the two models predict about equally well (0.79 and 0.78): a block's center is farther from the remaining plots than the field's correlation reaches, so the field has little to offer there and prediction falls back on fire and elevation.<a href="#fn25" class="footnoteRef" id="fnref25"><sup>25</sup></a></p>
+<p>With random folds the spatial model's prediction error is 26% lower than M0's. With whole 10-km blocks held out, the two models predict about equally well (0.79 and 0.78): a block's center is farther from the remaining plots than the field's correlation reaches, so the field has little to offer there and prediction falls back on fire and elevation.<a href="#fn27" class="footnoteRef" id="fnref27"><sup>27</sup></a></p>
 <blockquote>
 <p><strong>Question:</strong> The district wants a map of the surveyed area, including the roadless block. Which of the two cross-validation results describes how well that map will do, and where on the map does each one apply?</p>
 </blockquote>
@@ -1539,7 +1556,7 @@ head(pred[, c(&quot;x_km&quot;, &quot;y_km&quot;, &quot;est&quot;, &quot;est_non
 sims &lt;- predict(m1, newdata = grid, nsim = 500)      # 500 draws of the predicted surface
 pred$se &lt;- apply(sims, 1, sd)
 pred$p_exceed &lt;- rowMeans(sims &gt; log(60))            # P(expected log biomass is above the threshold)</code></pre>
-<p><code>est</code> is the prediction, <code>est_non_rf</code> its regression part, and <code>omega_s</code> the field. Calling <code>predict()</code> with <code>nsim</code> returns draws from the joint uncertainty in the coefficients and the field, one column per draw, which turns any question about the map into a calculation on the columns.<a href="#fn26" class="footnoteRef" id="fnref26"><sup>26</sup></a></p>
+<p><code>est</code> is the prediction, <code>est_non_rf</code> its regression part, and <code>omega_s</code> the field. Calling <code>predict()</code> with <code>nsim</code> returns draws from the joint uncertainty in the coefficients and the field, one column per draw, which turns any question about the map into a calculation on the columns.<a href="#fn28" class="footnoteRef" id="fnref28"><sup>28</sup></a></p>
 <p><img src="Week14_SpatialRegression_files/figure-html/demo-maps-1.png" width="960" style="display: block; margin: auto;" /></p>
 <p>The regression part alone (top left) is a map of fire perimeters shaded by elevation. The field adds the patches the covariates miss. The standard error is lowest next to plots and highest in the roadless block and at the corners (mean 0.31 in the block, 0.23 elsewhere). The last map is the one that answers the district's question: the probability that each cell is above the threshold, with a contour at 0.5.</p>
 <p>Since the data are simulated, the true surface is known. Across the grid, M1's predictions miss the true log biomass by 0.37 (root mean squared error), against 0.64 for M0. Of the cells flagged with probability above 0.5, 81% are truly above the threshold, and the flagged cells include 67% of all cells that are.</p>
@@ -1602,9 +1619,11 @@ round(rbind(glm = summary(fit_pois_glm)$coefficients[2, 1:2],
 <li id="fn21"><p>Fuglstad et al. (2019, <em>J. Am. Stat. Assoc.</em> 114: 445-452). The prior shrinks the field toward a simpler model (a long range and a small variance), so a field has to be supported by the data to appear. <code>sdmTMB</code> accepts the same priors through <code>sdmTMBpriors()</code> and <code>pc_matern()</code>, and <code>glmmTMB</code> has a <code>priors</code> argument. Neither package samples a posterior, though. A prior there adds its log density to the log-likelihood, and the fit maximizes the sum, so the estimates are posterior modes (maximum a posteriori, or MAP), and the standard errors still come from the curvature at the peak. The prior acts as a penalty, the way the ridge penalty acts as a <a href="Week13_HierarchicalModelsAndGAMs.html#ridge-prior">Normal prior</a>: it keeps a parameter the data say little about, such as a long range or a variance near zero, from running off to an extreme. For a full posterior, both packages can pass the same model to Stan through the <code>tmbstan</code> package (in <code>sdmTMB</code>, fit with <code>bayesian = TRUE</code> first).<a href="#fnref21">↩</a></p></li>
 <li id="fn22"><p><code>method = &quot;ML&quot;</code> makes <code>gls()</code> match the by-hand likelihood. Its default, REML, corrects the variance parameters for the regression coefficients having been estimated (the same correction <code>lmer()</code> makes); here it gives <span class="math inline">\(\hat\ell\)</span> = 5.3 km and a fire effect of 0.48. Compare models with different fixed effects by AIC only under ML. <code>corExp()</code> can be swapped for <code>corGaus()</code>, <code>corSpher()</code>, and others; <code>corMatern()</code> is not in <code>nlme</code> itself.<a href="#fnref22">↩</a></p></li>
 <li id="fn23"><p>A degree of longitude is about 85 km at Reno's latitude and a degree of latitude about 111 km, so distances computed from raw degrees are wrong in a direction-dependent way. With longitude/latitude data, project first: <code>sdmTMB::add_utm_columns()</code> does it in one step, or use <code>sf::st_transform()</code>.<a href="#fnref23">↩</a></p></li>
-<li id="fn24"><p><code>type = &quot;mle-mvn&quot;</code> gives randomized quantile residuals with the random field drawn from its estimated distribution, which is the recommended choice in <code>sdmTMB</code>. For count and other non-Normal models the same call works, or use <code>simulate()</code> with the <code>DHARMa</code> package.<a href="#fnref24">↩</a></p></li>
-<li id="fn25"><p>Roberts et al. (2017, <em>Ecography</em> 40: 913-929) review blocking strategies for spatial, temporal, and grouped data.<a href="#fnref25">↩</a></p></li>
-<li id="fn26"><p>The draws are of the expected log biomass in each cell. They leave out the plot-level noise <span class="math inline">\(\sigma_e\)</span>, so they answer &quot;what is typical here?&quot; and not &quot;what would one clipped quadrat weigh?&quot; To report biomass on its original scale, note that <span class="math inline">\(e^{\text{est}}\)</span> is the median; the mean is <span class="math inline">\(e^{\text{est} + \sigma^2/2}\)</span>, with <span class="math inline">\(\sigma^2\)</span> the variance left around the prediction.<a href="#fnref26">↩</a></p></li>
+<li id="fn24"><p>See the <code>DHARMa</code> vignette (Hartig, on CRAN). A scaled residual of 0.5 means the observation sits in the middle of its simulations; 0 or 1 means it is more extreme than all of them. The same calls work for counts, presence/absence, and any other family <code>sdmTMB</code> fits.<a href="#fnref24">↩</a></p></li>
+<li id="fn25"><p>The simulations keep the fitted field, which sits partly on top of the observations, so the observed values are closer to the predictions than fresh noise would be. Refitting M1 to six data sets simulated from the true model gave dispersion ratios of about 0.45 to 0.7, every one flagged, and the quantile test in the right panel flagged four of the six. The same happens with a Poisson field model. To check for overdispersion in a count model, compare Poisson and negative binomial (<code>nbinom2()</code>) fits by AIC instead.<a href="#fnref25">↩</a></p></li>
+<li id="fn26"><p>These variogram residuals come from <code>residuals(m1, type = &quot;mle-mvn&quot;)</code>, randomized quantile residuals on the Normal scale with the random field drawn from its estimated distribution, the choice <code>sdmTMB</code> recommends. They are the Normal-scale version of <code>DHARMa</code>'s scaled residuals.<a href="#fnref26">↩</a></p></li>
+<li id="fn27"><p>Roberts et al. (2017, <em>Ecography</em> 40: 913-929) review blocking strategies for spatial, temporal, and grouped data.<a href="#fnref27">↩</a></p></li>
+<li id="fn28"><p>The draws are of the expected log biomass in each cell. They leave out the plot-level noise <span class="math inline">\(\sigma_e\)</span>, so they answer &quot;what is typical here?&quot; and not &quot;what would one clipped quadrat weigh?&quot; To report biomass on its original scale, note that <span class="math inline">\(e^{\text{est}}\)</span> is the median; the mean is <span class="math inline">\(e^{\text{est} + \sigma^2/2}\)</span>, with <span class="math inline">\(\sigma^2\)</span> the variance left around the prediction.<a href="#fnref28">↩</a></p></li>
 </ol>
 </div>
 
