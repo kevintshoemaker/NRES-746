@@ -649,7 +649,26 @@ Snapshot: Wed., Nov. 18, 2026 (Weeks 1-13 taught; Week 14 built, not yet taught;
     `inlabru` (fire 0.49), and point vs. areal data; `nlme` has no
     Matérn structure. Also Tobler's law in the opening, a semivariance
     footnote, sdmTMB barrier meshes (`sdmTMBextra`), and hidden *Land:*
-    notes. Not committed (instructor is batching revisions).
+    notes. Committed Nov. 18.
+  - **Revised Nov. 22 (with the instructor's own edits):** agency is a
+    BLM district office; Matérn details moved to bonus `#bonus-matern`
+    (one sentence left in `#gp-space`); footnotes on what "factor"
+    means (Cholesky) and on HSGPs (`brms` `gp(..., k = )`; exact GP
+    without `k`), plus a GP-vs-basis-expansion passage in `#mesh`; the
+    INLA fit now uses `inlabru` (`bru()`, data as `sf`; same estimates
+    as the old `inla.stack()` code to 3 decimals; hyperparameter names
+    `Range/Stdev for field`); a footnote that priors in `glmmTMB`/
+    `sdmTMB` are penalties giving MAP estimates (`tmbstan` for full
+    posteriors). Script and guide match.
+  - **WOD *Neighbors* revised Nov. 22** (commit 20585fa6): notation
+    section, snow courses defined, new 2b (variogram drop at long
+    distances is noise), correlation formula given in 2c, parameter
+    symbols in the 3c table (`cairo_pdf` device for $\ell$), AI
+    reflection moved to 3e, Part 4 an optional bonus (elevation-only
+    prediction 43.7 given; glmmTMB syntax given; prediction-variance
+    question dropped); students submit the sheet only, no figures or
+    code. The instructor's editor twice saved a stale copy over edits;
+    diff against HEAD before knitting.
   - **Syllabus (Nov. 15):** `Syllabus.docx` schedule table edited to
     match `CourseSchedule.csv` (Nov. 9-30 rows) by editing
     `word/document.xml` and repacking; `Syllabus.pdf` re-exported

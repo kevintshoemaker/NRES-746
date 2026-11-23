@@ -1,5 +1,5 @@
 #  NRES 746, Week 14: Spatial regression =====================================================
-#  Sections match the Week 14 web page. Needs mvtnorm, gstat, sp, glmmTMB, sdmTMB, fmesher, INLA, mgcv.
+#  Sections match the Week 14 web page. Needs mvtnorm, gstat, sp, glmmTMB, sdmTMB, fmesher, INLA, inlabru, sf, mgcv.
 
 # SPATIAL REGRESSION =========================================================================
 
@@ -107,18 +107,16 @@ fit_sdmtmb <- sdmTMB(log_biomass ~ burned + elev_km, data = cg, mesh = mesh, spa
 fit_sdmtmb
 tidy(fit_sdmtmb, "ran_pars")              # range, phi = sigma_e, sigma_O = sigma_s
 
-# R-INLA: same mesh, Bayesian, penalized complexity priors
+# R-INLA through inlabru: same mesh, Bayesian, penalized complexity priors
 library(INLA)
+library(inlabru)
+library(sf)
+cg_sf <- st_as_sf(cg, coords = c("x_km", "y_km"), remove = FALSE)   # plots as spatial points
 spde <- inla.spde2.pcmatern(mesh$mesh,
                             prior.range = c(5, 0.5),     # P(range < 5 km) = 0.5
                             prior.sigma = c(1, 0.05))    # P(sigma_s > 1) = 0.05
-A_inla <- inla.spde.make.A(mesh$mesh, loc = as.matrix(cg[, c("x_km", "y_km")]))
-stk <- inla.stack(data = list(y = cg$log_biomass),
-                  A = list(A_inla, 1),
-                  effects = list(s = seq_len(spde$n.spde),
-                                 data.frame(intercept = 1, burned = cg$burned, elev_km = cg$elev_km)))
-fit_inla <- inla(y ~ 0 + intercept + burned + elev_km + f(s, model = spde),
-                 data = inla.stack.data(stk), control.predictor = list(A = inla.stack.A(stk)))
+fit_inla <- bru(log_biomass ~ Intercept(1) + burned + elev_km + field(geometry, model = spde),
+                data = cg_sf, family = "gaussian")
 round(fit_inla$summary.fixed[, c("mean", "sd", "0.025quant", "0.975quant")], 3)
 round(fit_inla$summary.hyperpar[, c("mean", "0.025quant", "0.5quant", "0.975quant")], 3)
 
