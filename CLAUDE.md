@@ -193,6 +193,8 @@ then finished the rest (random slopes, packages, discussion). Week 13
 Monday covered all 6 sections (brms briefly) but not the discussion;
 Week 13 Wednesday covered the thermal intro, basis functions, the
 penalty, and `gam()`, with only a few minutes on GPs and no discussion.
+Week 14 Monday covered 5 of 6 sections (problem, variogram, GP by
+`optim()`, mesh, packages), not the GAM alternative or the discussion.
 Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
@@ -583,9 +585,16 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Wed., Nov. 18, 2026 (Weeks 1-13 taught; Week 14 built, not yet taught; Week 1-9 pages built after the fact).
+Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 1-9 pages built after the fact).
 
-- **Week 14 (Nov. 23-24), built and pushed Nov. 15, not yet taught:**
+- **Week 14 (Nov. 23-24), built and pushed Nov. 15:**
+  - **As taught (Mon., Nov. 23, from the announcement):** sections
+    1-5; not `#gam-space` or the discussion (the guide's Tuesday part
+    gives them ~3 min plus Q1 at Compare). *Neighbors* went out Monday,
+    now due **Tue., Dec. 1** (handout, key, schedule updated). The
+    announcement's wording went into the page's opening (spatial field
+    as a random effect; Bolker Ch. 10 footnote) and the top of
+    `#packages` (don't use `optim()` in practice).
   Monday lecture + Tuesday demo (no Lab 10 on
   spatial; Thanksgiving Wed.). Page `Week14_SpatialRegression.Rmd`.
   H1 `#spatial` (Monday): nearby plots are alike `#problem`, the
