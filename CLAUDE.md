@@ -989,8 +989,8 @@ Snapshot: Wed., Nov. 18, 2026 (Weeks 1-13 taught; Week 14 built, not yet taught;
   (AUC 0.96 on training data vs. 0.87 out-of-bag and by 10-fold CV;
   logistic 0.85 CV). Script `lecture_notes/CODE_Bonus_RandomForest.R`.
 
-- **Smooths vs. covariance bonus page (built Nov. 22, not taught, not
-  committed yet):** `Bonus_SmoothsAndCovariance.Rmd` (Lectures menu,
+- **Smooths vs. covariance bonus page (built Nov. 22, not taught, committed
+  a6a8f78f):** `Bonus_SmoothsAndCovariance.Rmd` (Lectures menu,
   after Bonus_ModelPerformance): first-order (smooth in the mean) vs.
   second-order (covariance) views of $y = X\beta + B\gamma + \varepsilon$.
   H1 `#two-views`: big picture, random intercept both ways
