@@ -109,8 +109,8 @@ One way to measure that correlation is
 with a variogram (or semivariogram). One way to model it is with a 
 Gaussian process (GP) over the 2D spatial domain (the map coordinates).
 
-Here, we fit the same model four ways: by hand, and with `glmmTMB`, `sdmTMB`,
-and `R-INLA` (through `inlabru`). Finally, we'll walk through the GAM alternative (a smooth across the
+Here, we fit the same model three ways: by hand, and with `glmmTMB` and
+`sdmTMB` (a Bayesian fit with `R-INLA` is a bonus). Finally, we'll walk through the GAM alternative (a smooth across the
 lat/long or projected coordinates), and some advice on choosing among the available methods.
 
 ## 1. Nearby plots are alike {#problem}
@@ -142,15 +142,12 @@ grid$elev_km <- (grid$elev_m - 1800) / 1000
 head(cg)
 ```
 
-The response variable is log cheatgrass biomass. 
-
-As for predictors, we have (1) coordinates in kilometers
-(easting and northing), (2) elevation, and (3) whether the observation 
-is inside or outside the perimeter of a recent fire.
-
-There is a roadless block in the south, with no observations. 
-
-These data are simulated, so the true parameter values are known^[The script that generated the data is
+The response variable is log cheatgrass biomass. As for predictors, we
+have (1) coordinates in kilometers (easting and northing), (2)
+elevation, and (3) whether the plot is inside or outside the perimeter
+of a recent fire. A roadless block in the south has no plots. These
+data are simulated, so the true parameter values are known.^[The
+script that generated the data is
 [sim_Week14_cheatgrass.R](rcode/sim_Week14_cheatgrass.R).]
 
 ```{r data-map, echo=FALSE, fig.width=7.5, fig.height=5.2}
@@ -216,7 +213,7 @@ model. Some spatially correlated variable we didn't measure (soil texture, grazi
 where seed arrived first) seems to be influencing our response. The `r sum(cg$burned)` burned plots sit in
 three fires, so they share it too: they are not `r sum(cg$burned)`
 independent looks at what fire does. This is conceptually the same idea as the "two-cores-from-one-tree"
-problem from [week 11's random intercept example](Week11_LinearModelsAndVariance.html#random-intercept),
+problem from [Week 11's random intercept example](Week11_LinearModelsAndVariance.html#random-intercept),
 without the tidy groups.
 
 Because the data are simulated, we can see how this can affect our interpretation. 
@@ -319,16 +316,8 @@ a quick test for "is there any spatial pattern?", but it doesn't say
 how far the pattern reaches, and a model needs to know.]
 
 The covariance function measures how similar two residuals are at
-distance $d$; the variogram measures how different they are:
-
-$$\gamma(d) = \tfrac{1}{2}\,E\big[(e(s) - e(s+d))^2\big]$$
-
-where $e(s)$ is the residual at location $s$ and $s + d$ is a location
-$d$ km away. Nearby plots tend to be similar, so $\gamma(d)$ starts
-small and rises with distance, leveling off at the sill once plots are
-far enough apart to be effectively independent.
-
-To connect the two, split each residual into two pieces. One varies
+distance $d$; the variogram measures how different they are. To
+connect the two, split each residual into two pieces. One varies
 smoothly across the landscape: it has variance $\sigma_s^2$, and its
 values at two plots $d$ apart have correlation $\rho(d)$. The other is
 plot-level noise, independent from plot to plot, with variance
@@ -360,16 +349,6 @@ independent, so 150 plots are close to 150 looks. At 10 km the
 landscape has only a handful of independent patches.
 ```
 
-> **Question:** Press "New landscape" several times at a length-scale
-> of 8 km. How well do the points follow the curve at 15 to 20 km? What
-> does that say about reading a range off an empirical variogram?
-
-```{asis, echo=FALSE}
-*Land:* the empirical variogram is noisy at long distances (few
-independent pairs), so a range read by eye is rough. Fit the model by
-likelihood.
-```
-
 ## 3. A Gaussian process over the map {#gp-space}
 
 Let's model that variogram! This really just adds one term to the
@@ -381,10 +360,7 @@ $$y_i = \mathbf{x}_i^T\boldsymbol\beta + s_i + \varepsilon_i, \qquad
 
 where $s_i$ is the value at plot $i$ of a **spatial random field**: a
 surface of unmeasured variation, with one value at every point on the
-map.^[This is the [Gaussian process](Week13_HierarchicalModelsAndGAMs.html#gp)
-from Week 13, with distance on the map in place of a temperature gap.
-
-For an interactive introduction to Gaussian processes, see
+map.^[For an interactive introduction to Gaussian processes, see
 [A Visual Exploration of Gaussian Processes](https://distill.pub/2019/visual-exploration-gaussian-processes/)
 (Görtler, Kehlbeck, and Deussen 2019, *Distill*).] The correlation between its values at two plots depends on the
 distance $d_{ij}$ between them. The simplest choice is the exponential
@@ -476,7 +452,9 @@ log-likelihood by `r f1(-fit_hand$value - as.numeric(logLik(fit_lm)))`
 (AIC `r f1(aic_hand)` against `r f1(aic_lm)`). The estimated
 length-scale is $\hat\ell =$ `r f1(est_hand["ell"])` km: two plots that
 far apart have a field correlation of $e^{-1} = 0.37$, and at
-$2\hat\ell =$ `r f1(2 * est_hand["ell"])` km it is down to 0.14.
+$2\hat\ell =$ `r f1(2 * est_hand["ell"])` km it is down to
+$e^{-2} \approx 0.13$. Packages report that second distance, where
+correlation has fallen to about 0.13, as the **range**.
 
 ```{r variogram-fit-plot, echo=FALSE, fig.width=6, fig.height=4}
 par(mar = c(4, 4, 1, 1))
@@ -597,9 +575,8 @@ same job with a covariance function (a kernel) in place of basis
 functions. The mesh version of a random field approximates a Gaussian
 process with a basis expansion.
 
-In general, GPs are conceptually elegant, but they get very slow as
-data sets get large, since every fit factors an $n \times n$ covariance
-matrix. Basis-function approximations like the mesh/SPDE approach in
+GPs are conceptually elegant, but as the timings above show, they get
+slow as data sets get large. Basis-function approximations like the mesh/SPDE approach in
 `sdmTMB` and `R-INLA` are messier conceptually, but they make large
 data sets practical, along with extensions such as barriers and fields
 that change through time. The mesh is one of several ways to
@@ -637,9 +614,9 @@ edge has to be a fraction of the range, so the mesh depends on the
 field, not on the number of plots.
 ```
 
-## 5. One model, three packages {#packages}
+## 5. One model, two packages {#packages}
 
-All three packages below fit the model of [section 3](#gp-space).^[Other
+Both packages below fit the model of [section 3](#gp-space).^[Other
 packages fit it too. `nlme::gls()` takes a spatial correlation structure
 the way it took AR(1) on the [Week 12 page](Week12_MixedModels.html#ar1);
 see the [bonus section](#bonus-gls) below. It handles Normal responses
@@ -673,10 +650,8 @@ c(logLik(fit_glmmtmb), by_hand = -fit_hand$value)
 
 Same model, same likelihood, same answer as `optim()`.^[Swap `exp()`
 for `mat()` to fit a Matérn with the smoothness estimated, or `gau()`
-for the squared exponential. `nlme::gls()` with
-`correlation = corExp(form = ~ x_km + y_km, nugget = TRUE)` fits this
-model too. Both build the dense matrix, so they slow down past a
-thousand or so locations.]
+for the squared exponential. Like our `optim()` fit, `glmmTMB` builds
+the dense matrix, so it slows down past a thousand or so locations.]
 
 **`sdmTMB`** uses the mesh. The model call is a `glmmTMB`-style formula
 plus the mesh:
@@ -692,59 +667,7 @@ It maximizes the likelihood, integrating over the vertex values with
 the [Laplace approximation](Week12_MixedModels.html#glmm-by-hand)
 (exact here, since everything is Normal). In its output, `Spatial SD`
 is $\sigma_s$, `Dispersion parameter` is $\sigma_e$, and `Matérn range`
-is the distance at which correlation falls to about 0.13.
-
-**`R-INLA`** uses the same mesh and the same sparse precision matrix,
-and is Bayesian: it returns posterior distributions, computed by a
-fast deterministic approximation in place of MCMC.^[INLA stands for
-integrated nested Laplace approximation (Rue, Martino, and Chopin 2009,
-*J. R. Stat. Soc. B* 71: 319-392). It applies to models whose
-unobserved layer is Gaussian, which covers every model on this page.]
-We call it through **`inlabru`**, a front end that writes the whole
-model as one formula.^[`inlabru` builds the projection matrix `A` from
-[section 4](#mesh) and the rest of INLA's input for you. Many older
-tutorials call `inla()` directly, building `A` with
-`inla.spde.make.A()` and bundling it with the data in an
-`inla.stack()`; for this model the estimates are identical. `inlabru`
-also fits predictors that are nonlinear in the parameters and
-point-process models of species locations.] The plots go in as an `sf`
-object, so the field term can find each plot's location (`geometry`),
-and the field gets priors for its range and $\sigma_s$:
-
-```{r inla-fit}
-library(INLA)
-library(inlabru)
-library(sf)
-cg_sf <- st_as_sf(cg, coords = c("x_km", "y_km"), remove = FALSE)   # plots as spatial points
-spde <- inla.spde2.pcmatern(mesh$mesh,
-                            prior.range = c(5, 0.5),     # P(range < 5 km) = 0.5
-                            prior.sigma = c(1, 0.05))    # P(sigma_s > 1) = 0.05
-time_inla <- system.time(
-  fit_inla <- bru(log_biomass ~ Intercept(1) + burned + elev_km + field(geometry, model = spde),
-                  data = cg_sf, family = "gaussian")
-)[["elapsed"]]
-round(fit_inla$summary.fixed[, c("mean", "sd", "0.025quant", "0.975quant")], 3)
-round(fit_inla$summary.hyperpar[, c("mean", "0.025quant", "0.5quant", "0.975quant")], 3)
-```
-
-The priors are *penalized complexity* priors, which are stated as tail
-probabilities: here, an even chance that the range is under 5 km, and a
-5% chance that $\sigma_s$ is over 1.^[Fuglstad et al. (2019, *J. Am.
-Stat. Assoc.* 114: 445-452). The prior shrinks the field toward a
-simpler model (a long range and a small variance), so a field has to be
-supported by the data to appear. `sdmTMB` accepts the same priors
-through `sdmTMBpriors()` and `pc_matern()`, and `glmmTMB` has a
-`priors` argument. Neither package samples a posterior, though. A prior
-there adds its log density to the log-likelihood, and the fit maximizes
-the sum, so the estimates are posterior modes (maximum a posteriori, or
-MAP), and the standard errors still come from the curvature at the
-peak. The prior acts as a penalty, the way the ridge penalty acts as a
-[Normal prior](Week13_HierarchicalModelsAndGAMs.html#ridge-prior): it
-keeps a parameter the data say little about, such as a long range or a
-variance near zero, from running off to an extreme. For a full
-posterior, both packages can pass the same model to Stan through the
-`tmbstan` package (in `sdmTMB`, fit with `bayesian = TRUE` first).] INLA reports the residual
-variation as a precision, $1/\sigma_e^2$.
+is the range.
 
 ```{r compare-table, echo=FALSE}
 td <- tidy(fit_sdmtmb)
@@ -752,7 +675,6 @@ tr <- tidy(fit_sdmtmb, "ran_pars")
 tr <- setNames(tr$estimate, tr$term)
 th <- exp(getME(fit_glmmtmb, "theta"))
 se_g <- summary(fit_glmmtmb)$coefficients$cond[, 2]
-hy <- fit_inla$summary.hyperpar
 cmp <- rbind(
   "Truth" = c(0.5, NA, -2, NA, 0.7, 12, 0.3, NA),
   "`lm()`, no spatial term" = c(coef(fit_lm)[2], lm_tab[2, 2], coef(fit_lm)[3], lm_tab[3, 2], NA, NA,
@@ -762,11 +684,7 @@ cmp <- rbind(
   "`glmmTMB`, exponential" = c(fixef(fit_glmmtmb)$cond[2], se_g[2], fixef(fit_glmmtmb)$cond[3], se_g[3], th[1],
                                 2 * th[2], sigma(fit_glmmtmb), time_glmmtmb),
   "`sdmTMB`, mesh (Matérn)" = c(td$estimate[2], td$std.error[2], td$estimate[3], td$std.error[3], tr["sigma_O"],
-                                 tr["range"], tr["phi"], time_sdmtmb),
-  "`inlabru` (`R-INLA`), mesh (Matérn)" = c(fit_inla$summary.fixed["burned", "mean"], fit_inla$summary.fixed["burned", "sd"],
-                                              fit_inla$summary.fixed["elev_km", "mean"], fit_inla$summary.fixed["elev_km", "sd"],
-                                              hy["Stdev for field", "0.5quant"], hy["Range for field", "0.5quant"],
-                                              1 / sqrt(hy[1, "0.5quant"]), time_inla))
+                                 tr["range"], tr["phi"], time_sdmtmb))
 cmp_cols <- c("Fire", "SE", "Elevation", "SE", "$\\sigma_s$", "Range (km)", "$\\sigma_e$", "Seconds")
 show_cmp <- function(m) {
   out <- data.frame(formatC(m[, 1:5], format = "f", digits = 2), formatC(m[, 6], format = "f", digits = 1),
@@ -778,15 +696,12 @@ show_cmp <- function(m) {
 show_cmp(cmp)
 ```
 
-"Range" is the distance at which the field's correlation falls to about
-0.13 ($2\ell$ for the exponential fits). For INLA the estimate and SE
-columns are the posterior mean and SD, and the other entries are
-posterior medians.
+For the exponential fits, the range is $2\hat\ell$.
 
-The four spatial fits agree on the fire effect to within a fraction of
-a standard error, although two of them use a different correlation
-function from the one the data were simulated with. The mesh fits do
-put more of the variance in $\sigma_e$ (0.42 against 0.27). Their
+The three spatial fits agree on the fire effect to within a fraction of
+a standard error, although `sdmTMB` uses a different correlation
+function from the one the data were simulated with. The mesh fit does
+put more of the variance in $\sigma_e$ (0.42 against 0.27). Its
 Matérn field is smoother than an exponential one,^[It has smoothness
 $\nu = 1$, against $1/2$ for the exponential; see the
 [Matérn bonus](#bonus-matern).] and a mesh
@@ -799,7 +714,6 @@ Each package has its own names for the same parameters:
 |:------------|:--------------------|:--------------------|:--------------------|
 | `glmmTMB` `exp()` | `Std.Dev.` of the `all` group in `VarCorr()` | $\ell$: `exp(getME(fit, "theta"))[2]` | `sigma(fit)` |
 | `sdmTMB` | `Spatial SD` (`sigma_O`) | `Matérn range` (about $2\ell$) | `Dispersion parameter` (`phi`) |
-| `inlabru` (`R-INLA`) | `Stdev for field` | `Range for field` (about $2\ell$) | `Precision for the Gaussian observations` ($1/\sigma_e^2$) |
 
 Which to use?
 
@@ -820,14 +734,14 @@ Which to use?
 - **`R-INLA`**, through `inlabru`, when you want posteriors and priors,
   or model parts the others lack (several likelihoods sharing a field,
   many kinds of random effect, point patterns). It has the steepest
-  learning curve of the three.
+  learning curve of the three; the [bonus section](#bonus-inla) fits
+  this model with it.
 
 ## 6. The GAM alternative: a smooth of the coordinates {#gam-space}
 
-Last week ended with the claim that a penalized spline and a Gaussian
-process are two ways of writing a smooth function with a multivariate
-Normal prior. So the spatial surface can also be a
-[GAM smooth](Week13_HierarchicalModelsAndGAMs.html#gam) of the two
+A penalized spline and a Gaussian process are two ways of building a
+smooth surface ([section 4](#mesh)), so the spatial surface can also be
+a [GAM smooth](Week13_HierarchicalModelsAndGAMs.html#gam) of the two
 coordinates:
 
 ```{r gam-fit}
@@ -878,8 +792,8 @@ explain `r round(100 * elev_r2)`% of its variation. The smooth can
 stand in for elevation at no cost, so the data can't say how much of
 the east-west gradient belongs to which. The random field has mean zero
 and a finite range, which leaves broad gradients mostly to the
-covariates.^[This competition between a spatial term and a spatially
-smooth covariate is called spatial confounding. It affects every model
+covariates.^[This is the spatial confounding from
+[section 3](#gp-space). It affects every model
 on this page to some degree (compare the elevation SEs from `lm()` and
 the field models), and no choice of package removes it. Adding a
 penalty on the planes (`select = TRUE` in `gam()`) helps only a little
@@ -911,15 +825,13 @@ Some things do favor one or the other:
 | Situation | Leans toward | Why |
 |:-------------------------------|:---------------|:--------------------------------------------|
 | Space is a nuisance: you want valid SEs for covariates and a rough map of what's left | GAM smooth | one extra term in `gam()`; nothing to build or tune beyond `k` |
-| The model already has other smooths (season, depth, a nonlinear covariate) | GAM smooth | everything in one `mgcv` formula; `te()` and `by =` for surfaces that change with a covariate |
 | You want the scale of dependence itself: how far does similarity reach, how much variance is spatial | random field | $\ell$ and $\sigma_s$ are parameters with standard errors; a smooth has only an edf (in `bs = "gp"` the range is fixed in advance, not estimated) |
-| Fine-scale, patchy variation relative to plot spacing | random field | exponential and Matérn fields are rough; a smooth with moderate `k` captures broad trends and can leave short-range correlation in the residuals |
 | Prediction away from the data, with honest uncertainty | random field | the field returns to zero and its SE to $\sigma_s$ beyond the range; a thin plate spline keeps extending its last tilt |
-| A covariate of interest is itself smooth in space | random field, with care | a mean-zero field with finite range competes less for broad gradients; check how the coefficient moves either way |
 | A field that changes through time (annual surveys, tracking a range shift) | random field | `sdmTMB` and `R-INLA` have spatiotemporal fields (independent, random walk, AR(1)) built in |
-| Tens of thousands of locations or more | either | `mgcv::bam()` or a mesh; not a dense covariance matrix |
-| Coastlines, lakes, and other barriers | either, specialized | soap film smooths in `mgcv`; barrier models in `R-INLA` and `sdmTMB` |
-| Bayesian inference with informative priors | random field in `R-INLA`, or either in `brms` | `brms` takes `s()` and `gp()` terms; MCMC with a Gaussian process is slow beyond a few hundred points |
+
+The [bonus section](#bonus-which) has more cases (other smooths in the
+model, patchy fields, a covariate that is smooth in space, very large
+data sets, barriers, Bayesian fits).
 
 Whichever you choose, check the residuals for leftover spatial pattern
 ([below](#demo-check)).
@@ -965,6 +877,20 @@ maps above. If you could add one field season of measurements, what
 would you measure and where, and what would you expect to happen to
 $\hat\sigma_s$ if you guessed right?
 
+## Bonus: more on choosing a smooth or a random field {#bonus-which}
+
+More situations that favor one approach or the other, beyond those in
+[section 6](#gam-space):
+
+| Situation | Leans toward | Why |
+|:-------------------------------|:---------------|:--------------------------------------------|
+| The model already has other smooths (season, depth, a nonlinear covariate) | GAM smooth | everything in one `mgcv` formula; `te()` and `by =` for surfaces that change with a covariate |
+| Fine-scale, patchy variation relative to plot spacing | random field | exponential and Matérn fields are rough; a smooth with moderate `k` captures broad trends and can leave short-range correlation in the residuals |
+| A covariate of interest is itself smooth in space | random field, with care | a mean-zero field with finite range competes less for broad gradients; check how the coefficient moves either way |
+| Tens of thousands of locations or more | either | `mgcv::bam()` or a mesh; not a dense covariance matrix |
+| Coastlines, lakes, and other barriers | either, specialized | soap film smooths in `mgcv`; barrier models in `R-INLA` and `sdmTMB` |
+| Bayesian inference with informative priors | random field in `R-INLA`, or either in `brms` | `brms` takes `s()` and `gp()` terms; MCMC with a Gaussian process is slow beyond a few hundred points |
+
 ## Bonus: the Matérn family {#bonus-matern}
 
 The Matérn family has a second parameter besides the length-scale: the
@@ -981,6 +907,73 @@ length-scale; for $\nu = 1/2$ it reduces to $e^{-\kappa d}$. Packages
 that use the Matérn report a **range**, $\sqrt{8\nu}/\kappa$, the
 distance at which the correlation has fallen to about 0.13. For the
 exponential that distance is $2\ell$.
+
+## Bonus: a Bayesian fit with R-INLA {#bonus-inla}
+
+`R-INLA` uses the same mesh and the same sparse precision matrix as
+`sdmTMB`, and is Bayesian: it returns posterior distributions, computed by a
+fast deterministic approximation in place of MCMC.^[INLA stands for
+integrated nested Laplace approximation (Rue, Martino, and Chopin 2009,
+*J. R. Stat. Soc. B* 71: 319-392). It applies to models whose
+unobserved layer is Gaussian, which covers every model on this page.]
+We call it through **`inlabru`**, a front end that writes the whole
+model as one formula.^[`inlabru` builds the projection matrix `A` from
+[section 4](#mesh) and the rest of INLA's input for you. Many older
+tutorials call `inla()` directly, building `A` with
+`inla.spde.make.A()` and bundling it with the data in an
+`inla.stack()`; for this model the estimates are identical. `inlabru`
+also fits predictors that are nonlinear in the parameters and
+point-process models of species locations.] The plots go in as an `sf`
+object, so the field term can find each plot's location (`geometry`),
+and the field gets priors for its range and $\sigma_s$:
+
+```{r inla-fit}
+library(INLA)
+library(inlabru)
+library(sf)
+cg_sf <- st_as_sf(cg, coords = c("x_km", "y_km"), remove = FALSE)   # plots as spatial points
+spde <- inla.spde2.pcmatern(mesh$mesh,
+                            prior.range = c(5, 0.5),     # P(range < 5 km) = 0.5
+                            prior.sigma = c(1, 0.05))    # P(sigma_s > 1) = 0.05
+fit_inla <- bru(log_biomass ~ Intercept(1) + burned + elev_km + field(geometry, model = spde),
+                data = cg_sf, family = "gaussian")
+round(fit_inla$summary.fixed[, c("mean", "sd", "0.025quant", "0.975quant")], 3)
+round(fit_inla$summary.hyperpar[, c("mean", "0.025quant", "0.5quant", "0.975quant")], 3)
+```
+
+The priors are *penalized complexity* priors, which are stated as tail
+probabilities: here, an even chance that the range is under 5 km, and a
+5% chance that $\sigma_s$ is over 1.^[Fuglstad et al. (2019, *J. Am.
+Stat. Assoc.* 114: 445-452). The prior shrinks the field toward a
+simpler model (a long range and a small variance), so a field has to be
+supported by the data to appear. `sdmTMB` accepts the same priors
+through `sdmTMBpriors()` and `pc_matern()`, and `glmmTMB` has a
+`priors` argument. Neither package samples a posterior, though. A prior
+there adds its log density to the log-likelihood, and the fit maximizes
+the sum, so the estimates are posterior modes (maximum a posteriori, or
+MAP), and the standard errors still come from the curvature at the
+peak. The prior acts as a penalty, the way the ridge penalty acts as a
+[Normal prior](Week13_HierarchicalModelsAndGAMs.html#ridge-prior): it
+keeps a parameter the data say little about, such as a long range or a
+variance near zero, from running off to an extreme. For a full
+posterior, both packages can pass the same model to Stan through the
+`tmbstan` package (in `sdmTMB`, fit with `bayesian = TRUE` first).] In the output, `Stdev for field` is $\sigma_s$, `Range for field` is
+the range, and `Precision for the Gaussian observations` is
+$1/\sigma_e^2$.
+
+```{r inla-numbers, echo=FALSE}
+hy <- fit_inla$summary.hyperpar
+```
+
+The posterior mean fire effect is
+`r f2(fit_inla$summary.fixed["burned", "mean"])` (posterior SD
+`r f2(fit_inla$summary.fixed["burned", "sd"])`), against
+`r f2(td$estimate[2])` (SE `r f2(td$std.error[2])`) from `sdmTMB`. The
+posterior medians are `r f2(hy["Stdev for field", "0.5quant"])` for
+$\sigma_s$, `r f1(hy["Range for field", "0.5quant"])` km for the range,
+and `r f2(1 / sqrt(hy[1, "0.5quant"]))` for $\sigma_e$, close to
+`sdmTMB`'s `r f2(tr["sigma_O"])`, `r f1(tr["range"])`, and
+`r f2(tr["phi"])`.
 
 ## Bonus: a spatial term in brms {#bonus-brms}
 

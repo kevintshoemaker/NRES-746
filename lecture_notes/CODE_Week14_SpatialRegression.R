@@ -90,7 +90,7 @@ dim(A)
 i <- which(Matrix::rowSums(A != 0) == 3)[1]
 A[i, A[i, ] != 0]
 
-# 5. One model, three packages ---------------------------------------------------------------
+# 5. One model, two packages -----------------------------------------------------------------
 
 # glmmTMB: dense covariance matrix, exponential correlation (the model fit by hand)
 library(glmmTMB)
@@ -106,19 +106,6 @@ sigma(fit_glmmtmb)                        # sigma_e
 fit_sdmtmb <- sdmTMB(log_biomass ~ burned + elev_km, data = cg, mesh = mesh, spatial = "on")
 fit_sdmtmb
 tidy(fit_sdmtmb, "ran_pars")              # range, phi = sigma_e, sigma_O = sigma_s
-
-# R-INLA through inlabru: same mesh, Bayesian, penalized complexity priors
-library(INLA)
-library(inlabru)
-library(sf)
-cg_sf <- st_as_sf(cg, coords = c("x_km", "y_km"), remove = FALSE)   # plots as spatial points
-spde <- inla.spde2.pcmatern(mesh$mesh,
-                            prior.range = c(5, 0.5),     # P(range < 5 km) = 0.5
-                            prior.sigma = c(1, 0.05))    # P(sigma_s > 1) = 0.05
-fit_inla <- bru(log_biomass ~ Intercept(1) + burned + elev_km + field(geometry, model = spde),
-                data = cg_sf, family = "gaussian")
-round(fit_inla$summary.fixed[, c("mean", "sd", "0.025quant", "0.975quant")], 3)
-round(fit_inla$summary.hyperpar[, c("mean", "0.025quant", "0.5quant", "0.975quant")], 3)
 
 # 6. The GAM alternative: a smooth of the coordinates ----------------------------------------
 
@@ -140,6 +127,21 @@ gam_surface <- predict(fit_gam, newdata = grid, type = "terms")[, "s(x_km,y_km)"
 c(sdmTMB = cor(pred_sd$omega_s, grid$field_true), gam = cor(gam_surface, grid$field_true))
 
 #  [PAUSE] Elevation SE: 0.19 (lm), 0.59 (exponential field), 3.9 (thin plate smooth). Which would you report?
+
+# Bonus: a Bayesian fit with R-INLA ---------------------------------------------------------
+
+# same mesh as sdmTMB, through inlabru; penalized complexity priors
+library(INLA)
+library(inlabru)
+library(sf)
+cg_sf <- st_as_sf(cg, coords = c("x_km", "y_km"), remove = FALSE)   # plots as spatial points
+spde <- inla.spde2.pcmatern(mesh$mesh,
+                            prior.range = c(5, 0.5),     # P(range < 5 km) = 0.5
+                            prior.sigma = c(1, 0.05))    # P(sigma_s > 1) = 0.05
+fit_inla <- bru(log_biomass ~ Intercept(1) + burned + elev_km + field(geometry, model = spde),
+                data = cg_sf, family = "gaussian")
+round(fit_inla$summary.fixed[, c("mean", "sd", "0.025quant", "0.975quant")], 3)
+round(fit_inla$summary.hyperpar[, c("mean", "0.025quant", "0.5quant", "0.975quant")], 3)
 
 # Bonus: the same model in gls() --------------------------------------------------------------
 
