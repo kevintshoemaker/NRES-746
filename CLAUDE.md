@@ -989,6 +989,25 @@ Snapshot: Wed., Nov. 18, 2026 (Weeks 1-13 taught; Week 14 built, not yet taught;
   (AUC 0.96 on training data vs. 0.87 out-of-bag and by 10-fold CV;
   logistic 0.85 CV). Script `lecture_notes/CODE_Bonus_RandomForest.R`.
 
+- **Smooths vs. covariance bonus page (built Nov. 22, not taught, not
+  committed yet):** `Bonus_SmoothsAndCovariance.Rmd` (Lectures menu,
+  after Bonus_ModelPerformance): first-order (smooth in the mean) vs.
+  second-order (covariance) views of $y = X\beta + B\gamma + \varepsilon$.
+  H1 `#two-views`: big picture, random intercept both ways
+  `#random-intercept` (4 ponds x 5 frogs, seed 7; ridge = BLUP = lmer),
+  smooths are random effects `#smooth-random` (simulated 40-yr
+  flowering dates, seed 12, truth temp slope -3, exponential field
+  $\sigma_s$ 5, $\ell$ 6, $\sigma_e$ 2; `lm()` -1.36; P-spline via
+  `smooth2random()`, ML $\sigma_e^2/\sigma_b^2$ = gam sp = 42.44, slope
+  -3.21), covariance functions are smooths `#cov-smooth` (exponential
+  ML -2.92, $\hat\ell$ 6.1; eigen basis reproduces GLS to 1e-12;
+  low-rank table). H1 `#differences`: null-space trend `#null-space`
+  (exp + trend -3.04, logLik +0.13), non-normal `#non-normal`
+  (lognormal mean shift 38%), choosing table `#choosing`, discussion,
+  reading (Hefley et al. 2017). Widget `smooth_covariance.html` (JS
+  Jacobi eigen; kernel, $\ell$, $\sigma_s$, $\sigma_e$, k). Script
+  `lecture_notes/CODE_Bonus_SmoothsAndCovariance.R`; no guide.
+
 - **For the time-series/dynamic models week (Nov. 30):** teach AR vs.
   MA identification with ACF and PACF side by side on long simulated
   AR(1) and MA(1) series (~500 points). Not added to Week 11: stand A's

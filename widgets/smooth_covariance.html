@@ -1,0 +1,153 @@
+<div class="w746sc" id="scw">
+<style>
+.w746sc{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:860px}
+.w746sc .row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.w746sc .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746sc .row .lab1{min-width:220px}
+.w746sc select{font-size:14px;padding:2px 4px}
+.w746sc input[type=range]{flex:1;min-width:140px}
+.w746sc .val{font-weight:600;min-width:52px}
+.w746sc .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746sc .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746sc .card .k{font-size:13px;color:var(--ink2)}
+.w746sc .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746sc .panels{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:14px;align-items:start}
+.w746sc .ax{stroke:var(--muted);stroke-width:1}
+.w746sc .lab{fill:var(--ink2);font-size:13px}
+.w746sc .ttl{fill:var(--ink);font-size:14px;font-weight:600}
+.w746sc .tk{fill:var(--muted);font-size:11px}
+.w746sc .note{font-size:13px;color:var(--ink2);margin:2px 0 6px}
+.w746sc button{font-size:14px;padding:3px 10px}
+@media (max-width:640px){.w746sc .panels{grid-template-columns:1fr}.w746sc .cards{grid-template-columns:1fr}.w746sc .row .lab1{min-width:140px}}
+</style>
+<div class="row">
+  <label class="lab1" for="sc-kern">Kernel (covariance function)</label>
+  <select id="sc-kern">
+    <option value="exp" selected>Exponential (AR(1) at annual spacing)</option>
+    <option value="se">Squared exponential</option>
+  </select>
+  <button type="button" id="sc-reset">Fitted settings</button>
+</div>
+<div class="row"><label class="lab1" for="sc-ell">Length-scale ℓ (years)</label><input type="range" id="sc-ell" min="0.5" max="20" step="0.1" value="6.1"><span class="val" id="sc-ellout"></span></div>
+<div class="row"><label class="lab1" for="sc-ss">Field SD σ<sub>s</sub> (days)</label><input type="range" id="sc-ss" min="0.5" max="8" step="0.1" value="3.9"><span class="val" id="sc-ssout"></span></div>
+<div class="row"><label class="lab1" for="sc-se">Noise SD σ<sub>e</sub> (days)</label><input type="range" id="sc-se" min="0.5" max="5" step="0.1" value="2.0"><span class="val" id="sc-seout"></span></div>
+<div class="row"><label class="lab1" for="sc-k">Basis functions kept, k</label><input type="range" id="sc-k" min="1" max="40" step="1" value="40"><span class="val" id="sc-kout"></span></div>
+<div class="cards">
+  <div class="card"><div class="k">Field variance in the k kept functions</div><div class="v" id="sc-v1"></div></div>
+  <div class="card"><div class="k">Effective degrees of freedom of the smooth</div><div class="v" id="sc-v2"></div></div>
+  <div class="card"><div class="k">Log-likelihood (β held at the fit)</div><div class="v" id="sc-v3"></div></div>
+</div>
+<div class="panels">
+  <svg viewBox="0 0 480 330" width="100%" role="img" aria-label="Conditional view: residuals by year, the fitted smooth, and the weighted basis functions that sum to it."><g id="sc-left"></g></svg>
+  <svg viewBox="0 0 300 330" width="100%" role="img" aria-label="Marginal view: the field's covariance matrix implied by the kept basis functions, and one row of it compared with the exact kernel."><g id="sc-right"></g></svg>
+</div>
+<p class="note">Left: grey points are flowering dates minus the temperature effect; thin lines are the kept basis functions times their fitted weights, and the thick line is their sum (the smooth). The dashed line is the full 40-function smooth. Right: the covariance matrix of the field that the kept functions imply (darker = larger), and its row for 2004 (solid) against the exact kernel (dashed).</p>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor,rot){const a={class:cls,x:x,y:y,'text-anchor':anchor||'middle'};if(rot)a.transform='rotate(-90 '+x+' '+y+')';const t=el('text',a,p);t.textContent=s;return t;}
+const r=[0.301,-6.268,-2.237,-3.237,-5.283,-1.483,-6.483,-2.776,-3.606,-5.437,-2.483,-4.36,0.809,4.563,2.271,1.394,4.486,-1.976,-1.683,-2.145,4.317,3.117,8.071,2.732,6.271,8.024,10.317,4.194,2.486,10.071,4.947,2.871,1.609,2.732,-1.514,-3.514,-4.76,-5.222,-2.591,-1.099];
+const n=r.length, yr0=1985, iRow=19;
+const fitted={exp:{ell:6.1,ss:3.9,se:2.0},se:{ell:3.4,ss:3.5,se:2.4}};
+const $=id=>document.getElementById(id);
+function kern(d,ell,kind){return kind==='exp'?Math.exp(-d/ell):Math.exp(-d*d/(2*ell*ell));}
+// cyclic Jacobi eigendecomposition of a symmetric matrix
+function jacobi(A0){
+  const m=A0.length,A=A0.map(r=>r.slice()),V=[];
+  for(let i=0;i<m;i++){V.push(new Array(m).fill(0));V[i][i]=1;}
+  for(let sweep=0;sweep<60;sweep++){
+    let off=0;for(let i=0;i<m;i++)for(let j=i+1;j<m;j++)off+=A[i][j]*A[i][j];
+    if(off<1e-20)break;
+    for(let p=0;p<m;p++)for(let q=p+1;q<m;q++){
+      const apq=A[p][q];if(Math.abs(apq)<1e-300)continue;
+      const th=(A[q][q]-A[p][p])/(2*apq);
+      const t=(th>=0?1:-1)/(Math.abs(th)+Math.sqrt(th*th+1));
+      const c=1/Math.sqrt(t*t+1),s=t*c;
+      for(let k=0;k<m;k++){const akp=A[k][p],akq=A[k][q];A[k][p]=c*akp-s*akq;A[k][q]=s*akp+c*akq;}
+      for(let k=0;k<m;k++){const apk=A[p][k],aqk=A[q][k];A[p][k]=c*apk-s*aqk;A[q][k]=s*apk+c*aqk;}
+      for(let k=0;k<m;k++){const vkp=V[k][p],vkq=V[k][q];V[k][p]=c*vkp-s*vkq;V[k][q]=s*vkp+c*vkq;}
+    }
+  }
+  const idx=[...Array(m).keys()].sort((a,b)=>A[b][b]-A[a][a]);
+  return {values:idx.map(i=>Math.max(A[i][i],0)),vectors:idx.map(i=>V.map(row=>row[i]))};
+}
+let cacheKey='',E=null;
+function eig(kind,ell){
+  const key=kind+ell;if(key===cacheKey)return E;
+  const R=[];for(let i=0;i<n;i++){R.push([]);for(let j=0;j<n;j++)R[i].push(kern(Math.abs(i-j),ell,kind));}
+  E=jacobi(R);cacheKey=key;return E;
+}
+function draw(){
+  const kind=$('sc-kern').value,ell=+$('sc-ell').value,ss=+$('sc-ss').value,se=+$('sc-se').value,k=+$('sc-k').value;
+  $('sc-ellout').textContent=ell.toFixed(1);$('sc-ssout').textContent=ss.toFixed(1);
+  $('sc-seout').textContent=se.toFixed(1);$('sc-kout').textContent=k;
+  const e=eig(kind,ell),lam=e.values.map(v=>v*ss*ss),U=e.vectors,s2=se*se;
+  const proj=U.map(u=>u.reduce((a,ui,i)=>a+ui*r[i],0));
+  const comp=[],full=new Array(n).fill(0),smooth=new Array(n).fill(0);
+  let edf=0,ld=0,quad=0;
+  for(let c=0;c<n;c++){
+    const w=lam[c]*proj[c]/(lam[c]+s2);
+    const kept=c<k;
+    const f=U[c].map(v=>v*w);
+    for(let i=0;i<n;i++){full[i]+=f[i];if(kept)smooth[i]+=f[i];}
+    if(kept){comp.push(f);edf+=lam[c]/(lam[c]+s2);}
+    const ev=(kept?lam[c]:0)+s2;ld+=Math.log(ev);quad+=proj[c]*proj[c]/ev;
+  }
+  const tot=lam.reduce((a,b)=>a+b,0),keptv=lam.slice(0,k).reduce((a,b)=>a+b,0);
+  $('sc-v1').textContent=(100*keptv/tot).toFixed(1)+'%';
+  $('sc-v2').textContent=edf.toFixed(1);
+  $('sc-v3').textContent=(-0.5*(n*Math.log(2*Math.PI)+ld+quad)).toFixed(2);
+  // left panel
+  const L=$('sc-left');L.innerHTML='';
+  const x0=52,x1=468,y0=26,y1=292,ylo=-12,yhi=14;
+  const X=i=>x0+(x1-x0)*i/(n-1),Y=v=>y1-(y1-y0)*(Math.min(Math.max(v,ylo),yhi)-ylo)/(yhi-ylo);
+  txt('ttl',(x0+x1)/2,16,'Conditional view: a smooth in the mean',L);
+  el('line',{class:'ax',x1:x0,y1:y1,x2:x1,y2:y1},L);el('line',{class:'ax',x1:x0,y1:y0,x2:x0,y2:y1},L);
+  el('line',{x1:x0,y1:Y(0),x2:x1,y2:Y(0),stroke:'#ddd'},L);
+  for(let v=-10;v<=10;v+=5){el('line',{class:'ax',x1:x0-4,y1:Y(v),x2:x0,y2:Y(v)},L);txt('tk',x0-7,Y(v)+4,String(v),L,'end');}
+  for(let yv=1985;yv<=2025;yv+=10){const i=yv-yr0;if(i>n-1)continue;el('line',{class:'ax',x1:X(i),y1:y1,x2:X(i),y2:y1+4},L);txt('tk',X(i),y1+16,String(yv),L);}
+  txt('lab',(x0+x1)/2,y1+32,'Year',L);txt('lab',16,(y0+y1)/2,'Days (residual)',L,'middle',true);
+  const pal=['#2a78d6','#c0392b','#27ae60','#8e44ad','#d68910','#16a085','#7f8c8d','#2c3e50'];
+  const path=f=>f.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+  comp.forEach((f,c)=>el('path',{d:path(f),fill:'none',stroke:pal[c%pal.length],'stroke-width':c<8?1.3:0.7,opacity:c<8?0.75:0.35},L));
+  r.forEach((v,i)=>el('circle',{cx:X(i),cy:Y(v),r:3,fill:'#9a9a9a'},L));
+  if(k<n)el('path',{d:path(full),fill:'none',stroke:'#222','stroke-width':1.5,'stroke-dasharray':'5 4'},L);
+  el('path',{d:path(smooth),fill:'none',stroke:'#111','stroke-width':3},L);
+  // right panel: covariance heatmap of the field (kept functions) and one row
+  const Rg=$('sc-right');Rg.innerHTML='';
+  txt('ttl',150,16,'Marginal view: covariance',Rg);
+  const hx=78,hy=26,hs=150,cell=hs/n;
+  const Kk=[];for(let i=0;i<n;i++){Kk.push(new Array(n).fill(0));}
+  for(let c=0;c<k;c++){const u=U[c],l=lam[c];for(let i=0;i<n;i++){const a=l*u[i];for(let j=i;j<n;j++){Kk[i][j]+=a*u[j];}}}
+  const vmax=ss*ss;
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+    const v=i<=j?Kk[i][j]:Kk[j][i];const g=Math.round(255-200*Math.min(Math.max(v/vmax,0),1));
+    el('rect',{x:(hx+j*cell).toFixed(2),y:(hy+i*cell).toFixed(2),width:(cell+0.3).toFixed(2),height:(cell+0.3).toFixed(2),fill:'rgb('+g+','+g+','+g+')'},Rg);
+  }
+  el('rect',{x:hx,y:hy,width:hs,height:hs,fill:'none',stroke:'#999'},Rg);
+  el('line',{x1:hx,y1:hy+(iRow+0.5)*cell,x2:hx+hs,y2:hy+(iRow+0.5)*cell,stroke:'#c0392b','stroke-width':1,opacity:0.8},Rg);
+  txt('tk',hx-4,hy+8,'1985',Rg,'end');txt('tk',hx-4,hy+hs,'2024',Rg,'end');
+  txt('tk',hx,hy+hs+12,'1985',Rg,'start');txt('tk',hx+hs,hy+hs+12,'2024',Rg,'end');
+  // row plot
+  const px0=46,px1=278,py0=206,py1=300;
+  const PX=i=>px0+(px1-px0)*i/(n-1),PY=v=>py1-(py1-py0)*(v-lo)/(hi-lo);
+  const rowk=[],rowx=[];for(let j=0;j<n;j++){rowk.push(iRow<=j?Kk[iRow][j]:Kk[j][iRow]);rowx.push(ss*ss*kern(Math.abs(iRow-j),ell,kind));}
+  let lo=Math.min(0,...rowk),hi=Math.max(vmax,...rowk);
+  el('line',{class:'ax',x1:px0,y1:py1,x2:px1,y2:py1},Rg);el('line',{class:'ax',x1:px0,y1:py0,x2:px0,y2:py1},Rg);
+  el('line',{x1:px0,y1:PY(0),x2:px1,y2:PY(0),stroke:'#ddd'},Rg);
+  txt('tk',px0-4,PY(0)+4,'0',Rg,'end');txt('tk',px0-4,PY(vmax)+4,vmax.toFixed(0),Rg,'end');
+  [0,19,39].forEach(i=>txt('tk',PX(i),py1+13,String(yr0+i),Rg));
+  txt('lab',(px0+px1)/2,py1+27,'Covariance with 2004 (days²)',Rg);
+  const rp=f=>f.map((v,i)=>(i?'L':'M')+PX(i).toFixed(1)+','+PY(v).toFixed(1)).join(' ');
+  el('path',{d:rp(rowx),fill:'none',stroke:'#222','stroke-width':1.5,'stroke-dasharray':'5 4'},Rg);
+  el('path',{d:rp(rowk),fill:'none',stroke:'#c0392b','stroke-width':2.2},Rg);
+}
+function setFitted(){const f=fitted[$('sc-kern').value];$('sc-ell').value=f.ell;$('sc-ss').value=f.ss;$('sc-se').value=f.se;draw();}
+['sc-ell','sc-ss','sc-se','sc-k'].forEach(id=>$(id).addEventListener('input',draw));
+$('sc-kern').addEventListener('change',setFitted);
+$('sc-reset').addEventListener('click',setFitted);
+draw();
+})();
+</script>
+</div>

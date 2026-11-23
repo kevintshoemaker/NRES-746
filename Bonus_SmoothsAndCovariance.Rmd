@@ -1,0 +1,683 @@
+---
+title: "Bonus: Smooths and Correlated Errors, Two Views of One Model"
+author: "NRES 746"
+date: "Fall 2026"
+output:
+  html_document:
+    includes:
+      after_body: footer.html
+    theme: flatly
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 7, fig.height = 4.5, fig.align = "center")
+widget <- function(file) htmltools::includeHTML(file.path("widgets", file))
+f1 <- function(v) formatC(round(v, 1) + 0, format = "f", digits = 1)
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+f3 <- function(v) formatC(round(v, 3) + 0, format = "f", digits = 3)
+```
+
+```{r helpers, echo=FALSE}
+draw_workflow <- function(highlight = NULL, cex = 0.9) {
+  boxes <- c("PROBLEM", "THEORIES", "MODELS", "FIT", "COMPARE")
+  subs <- c("what do we\nneed to know?", "candidate\nexplanations",
+            "data-generating\n(process + noise)", "confront each\nwith data",
+            "fit, prediction,\nrelevance")
+  x <- seq(1, 9, by = 2)
+  y <- 2
+  w <- 0.8
+  h <- 0.55
+  shade <- function(lab) if (!is.null(highlight) && lab == highlight) "lightskyblue1" else "white"
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 10), ylim = c(-0.2, 4), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_along(boxes)) {
+    rect(x[i] - w, y - h, x[i] + w, y + h, col = shade(boxes[i]), lwd = 1.5)
+    text(x[i], y + 0.18, boxes[i], font = 2, cex = cex)
+    text(x[i], y - 0.22, subs[i], cex = cex * 0.75)
+  }
+  arrows(x[-5] + w, y, x[-1] - w, y, length = 0.08, lwd = 1.5)
+  rect(6 - 0.7, 3.2 - 0.35, 6 + 0.7, 3.2 + 0.35, lty = 2, lwd = 1.5)
+  text(6, 3.28, "DATA", font = 2, cex = cex)
+  text(6, 3.0, "study design", cex = cex * 0.75)
+  arrows(x[3], y + h, 6 - 0.7, 3.2, length = 0.08, lty = 2, lwd = 1.2)
+  arrows(6 + 0.7, 3.2, x[4], y + h, length = 0.08, lty = 2, lwd = 1.2)
+  segments(x[5], y - h, x[5], 0.4, lwd = 1.5)
+  segments(x[5], 0.4, x[1], 0.4, lwd = 1.5)
+  arrows(x[c(1, 2)], 0.4, x[c(1, 2)], y - h, length = 0.08, lwd = 1.5)
+  text(6, 0.15, "REVISE the problem and theories; drop or down-weight poor models",
+       cex = cex * 0.85, font = 3)
+}
+```
+
+[How this page was made](#ai-use)
+
+This is a supplemental page: its material may not be covered in class.
+R code from this page is also in the
+[companion script](lecture_notes/CODE_Bonus_SmoothsAndCovariance.R).
+Packages: `mvtnorm`, `lme4`, `nlme`, `mgcv`. Background: the random
+intercept and its covariance matrix ([Week 11](Week11_LinearModelsAndVariance.html#random-intercept)),
+penalized splines ([Week 13](Week13_HierarchicalModelsAndGAMs.html#penalty)),
+and Gaussian processes over a map ([Week 14](Week14_SpatialRegression.html#gp-space)).
+
+# Two ways to write the same model {#two-views}
+
+When observations close together in time or space are more alike than
+the covariates explain, a model can say so in two ways. It can let the
+expected response bend with time or location (a smooth), or it can
+leave the mean simple and let the errors of nearby observations
+covary (a structured covariance matrix). This page shows that for
+normal data the two are often one model written two ways, and then
+where they stop being the same.
+
+## 1. Big picture {#big-picture}
+
+```{r workflow, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow("MODELS")
+```
+
+This page is about the MODELS box: how to write down dependence among
+observations. Two names recur in the literature.^[The terms come from
+spatial statistics, where "first-order" properties of a process concern
+its mean and "second-order" properties its covariance (Cressie 1993,
+*Statistics for Spatial Data*). Hefley et al. (2017, *Ecology* 98:
+632-646) use them for the two ways of building autocorrelation into
+ecological models, which is the framing here.]
+
+- A **first-order** representation models the expectation. Nearby
+  observations are alike because the mean curve or surface passes
+  close to both of them. Splines, GAM smooths, and random effects
+  written into the mean all work this way.
+- A **second-order** representation models the covariance. The mean is
+  a plain regression, and nearby observations are alike because their
+  errors are correlated. AR(1) errors, `corExp()` in `gls()`, and the
+  matrix $V$ from [Week 11](Week11_LinearModelsAndVariance.html#variance)
+  work this way.
+
+Cressie put the point in one line: one person's covariance structure
+may be another person's mean structure.^[Cressie (1993), discussing the
+decomposition of spatial data into large-scale (mean) and small-scale
+(covariance) variation. The same data can be split between the two in
+more than one way, and the split is a modeling choice, not something
+the data dictate.]
+
+The common form behind both is a linear model with an extra set of
+basis functions $B$ (one column per function, one row per observation)
+whose weights $\gamma$ get a normal prior:^[Or a penalty, which is the
+same thing for a normal model; see the
+[Week 13 bonus on penalties as priors](Week13_HierarchicalModelsAndGAMs.html#penalty-prior).]
+
+$$
+\mathbf{y} = X\boldsymbol\beta + B\boldsymbol\gamma + \boldsymbol\varepsilon,
+\qquad \boldsymbol\gamma \sim N(\mathbf{0},\ \Sigma_\gamma),
+\qquad \boldsymbol\varepsilon \sim N(\mathbf{0},\ \sigma_e^2 I).
+$$
+
+Read it **conditionally** (hold $\boldsymbol\gamma$ fixed) and the mean
+bends while the errors stay independent:
+
+$$
+E[\mathbf{y} \mid \boldsymbol\gamma] = X\boldsymbol\beta + B\boldsymbol\gamma,
+\qquad \text{Var}(\mathbf{y} \mid \boldsymbol\gamma) = \sigma_e^2 I.
+$$
+
+Read it **marginally** (average over $\boldsymbol\gamma$) and the mean
+is flat while the errors covary:
+
+$$
+E[\mathbf{y}] = X\boldsymbol\beta,
+\qquad \text{Var}(\mathbf{y}) = V = B\,\Sigma_\gamma B^T + \sigma_e^2 I.
+$$
+
+The second line follows from the variance of a linear combination: if
+$\boldsymbol\gamma$ has covariance $\Sigma_\gamma$, then
+$B\boldsymbol\gamma$ has covariance $B\Sigma_\gamma B^T$, and the
+independent noise adds $\sigma_e^2$ to the diagonal. A sum of normal
+variables is normal, so the marginal model is
+$\mathbf{y} \sim N(X\boldsymbol\beta, V)$ exactly. The same
+$\boldsymbol\beta$ maximizes both, and the best guess of the smooth
+$B\boldsymbol\gamma$ from the conditional view equals the kriging
+prediction from the marginal view. The sections below check each claim
+with numbers.
+
+## 2. A random intercept, both ways {#random-intercept}
+
+The smallest case is a random intercept. Here $B$ is the matrix $Z$ of
+group indicators (a 1 in column $j$ when the observation is from group
+$j$), and $\Sigma_\gamma = \sigma_a^2 I$. Take log Bd loads from 5
+frogs in each of 4 ponds:
+
+```{r ri-data}
+set.seed(7)
+pond <- factor(rep(LETTERS[1:4], each = 5))
+a_true <- rnorm(4, 0, 0.8)
+load <- round(3 + a_true[pond] + rnorm(20, 0, 0.5), 1)
+tapply(load, pond, mean)
+```
+
+**Marginal view.** Each frog's load is the grand mean plus correlated
+noise; two frogs share a covariance $\sigma_a^2$ when they come from
+the same pond and 0 otherwise. Fit by maximizing the multivariate
+normal likelihood:
+
+```{r ri-marginal}
+library(mvtnorm)
+Z <- model.matrix(~ pond - 1)
+nll_ri <- function(p) {
+  V <- exp(2 * p[2]) * Z %*% t(Z) + exp(2 * p[3]) * diag(20)   # V = sigma_a^2 Z Z' + sigma_e^2 I
+  -dmvnorm(load, rep(p[1], 20), V, log = TRUE)
+}
+fit_ri <- optim(c(3, 0, 0), nll_ri, method = "BFGS")
+mu_hat <- fit_ri$par[1]
+sig_a <- exp(fit_ri$par[2])
+sig_e <- exp(fit_ri$par[3])
+c(mu = mu_hat, sigma_a = sig_a, sigma_e = sig_e, logLik = -fit_ri$value)
+```
+
+```{r ri-V-fig, echo=FALSE, fig.width=4, fig.height=3.8}
+V_ri <- sig_a^2 * Z %*% t(Z) + sig_e^2 * diag(20)
+par(mar = c(1, 1, 2, 1))
+image(1:20, 1:20, V_ri[, 20:1], col = grey(seq(1, 0.25, length.out = 50)),
+      axes = FALSE, xlab = "", ylab = "", asp = 1)
+title(main = "V for 4 ponds x 5 frogs", font.main = 1, cex.main = 1)
+box()
+```
+
+**Conditional view.** Each pond has its own mean, $\mu + a_j$, and the
+frogs are independent around it. The prior $a_j \sim N(0, \sigma_a^2)$
+becomes a penalty on the pond effects, so the estimates minimize
+
+$$
+\sum_i \bigl(y_i - \mu - a_{j[i]}\bigr)^2 + \lambda \sum_j a_j^2,
+\qquad \lambda = \sigma_e^2 / \sigma_a^2,
+$$
+
+which is ridge regression on the pond columns.^[Multiply the
+conditional log-density of $\mathbf{y}$ given $\mathbf{a}$ by
+$-2\sigma_e^2$ and add the same multiple of the log-prior on
+$\mathbf{a}$. Minimizing that sum over $\mu$ and $\mathbf{a}$ (with the
+variances held at their estimates) gives Henderson's mixed model
+equations. Their solution for $\mathbf{a}$ is the BLUP, and for $\mu$
+it is the GLS estimate.] With the variances from the marginal fit:
+
+```{r ri-conditional}
+V_ri <- sig_a^2 * Z %*% t(Z) + sig_e^2 * diag(20)
+lambda_ri <- sig_e^2 / sig_a^2
+C <- cbind(1, Z)
+P <- diag(c(0, rep(lambda_ri, 4)))   # no penalty on the intercept
+est <- solve(t(C) %*% C + P, t(C) %*% load)
+blup <- sig_a^2 * t(Z) %*% solve(V_ri, load - mu_hat)   # marginal: G Z' V^-1 (y - X beta)
+library(lme4)
+m_ri <- lmer(load ~ 1 + (1 | pond), REML = FALSE)
+cbind(conditional = est[-1], marginal = drop(blup), lmer = ranef(m_ri)$pond[, 1])
+```
+
+The three columns agree to the sixth decimal, and the intercepts match
+too (`r f3(est[1])` conditional, `r f3(mu_hat)` marginal). The
+conditional view shrinks each pond's mean toward the grand mean by the
+penalty $\lambda$ = `r f2(lambda_ri)`; the marginal view gets the same
+shrinkage from the covariance.^[The
+[Week 11 bonus on integrating out the random effect](Week11_LinearModelsAndVariance.html#integrating)
+does the integral that turns the conditional model into the marginal
+one.]
+
+## 3. Smooths are random effects {#smooth-random}
+
+```{r phen-data}
+set.seed(12)
+n <- 40
+year <- 1985:2024
+yr <- year - 1985
+temp <- round(4 + 0.06 * yr + rnorm(n, 0, 0.7), 1)   # March mean temperature (°C)
+D <- abs(outer(yr, yr, "-"))
+field <- drop(t(chol(25 * exp(-D / 6))) %*% rnorm(n))   # sigma_s 5, length-scale 6 yr
+day <- round(120 - 3 * temp + field + rnorm(n, 0, 2))
+phen <- data.frame(year, yr, temp, day)
+```
+
+The running example is a 40-year record of first-flowering dates for a
+desert annual, with the mean March temperature as the covariate.
+Flowering comes about 3 days earlier per degree in the simulation that
+made these data, and a slowly wandering component (weather patterns,
+seed bank dynamics, whatever the covariate misses) makes nearby years
+alike. March temperatures warm over the record too, so the covariate
+and the time trend overlap.
+
+```{r phen-fig, echo=FALSE, fig.height=3.6}
+m_lm <- lm(day ~ temp, data = phen)
+par(mfrow = c(1, 2), mar = c(4.2, 4.2, 1, 1))
+plot(day ~ year, data = phen, type = "b", pch = 16, col = "grey35",
+     xlab = "Year", ylab = "First flowering (day of year)")
+plot(day ~ temp, data = phen, pch = 16, col = "grey35",
+     xlab = "March temperature (°C)", ylab = "First flowering (day of year)")
+abline(m_lm, lty = 2)
+```
+
+Ordinary regression gives a slope of `r f2(coef(m_lm)[2])` days per
+degree (SE `r f2(summary(m_lm)$coef[2, 2])`), well short of the true
+value of -3. A run of years with late flowering happened to line up
+with cool springs, and `lm()` credits temperature for some of what the
+wandering component did.
+
+A GAM handles the wandering part with a smooth of year. Using the
+P-spline from [Week 13](Week13_HierarchicalModelsAndGAMs.html#penalty)
+(20 B-spline basis functions, second-difference penalty) and fitting by
+maximum likelihood so the likelihoods below are comparable:^[`mgcv`'s
+default and recommended method is REML; it gives a temperature slope
+of -3.22 here, almost the same. ML is used on this page only so that
+the GAM and the hand-coded marginal model maximize the same function.]
+
+```{r gam-ml}
+library(mgcv)
+g_ml <- gam(day ~ temp + s(yr, bs = "ps", k = 20), data = phen, method = "ML")
+c(temp = coef(g_ml)[["temp"]], lambda = g_ml$sp, edf = sum(g_ml$edf[-(1:2)]))
+```
+
+The second-difference penalty doesn't touch straight lines (a line has
+zero second differences), so the smooth splits into two parts:
+
+- an **unpenalized** part, the functions the penalty can't see (here a
+  linear trend in year), which act as ordinary fixed effects, and
+- a **penalized** part whose coefficients, after a change of basis,
+  are independent draws from $N(0, \sigma_b^2)$ with
+  $\sigma_b^2 = \sigma_e^2/\lambda$.
+
+`mgcv` will do the change of basis for us:^[`smooth2random()` is the
+function `gamm()` uses to hand a smooth to `lme()`. It eigendecomposes
+the penalty matrix $S$: eigenvectors with zero eigenvalue span the
+unpenalized part, and the rest are rescaled so the penalty becomes
+$\lambda\sum_k u_k^2$ on the new coefficients.]
+
+```{r smooth2random}
+sm <- smoothCon(s(yr, bs = "ps", k = 20), data = phen, absorb.cons = TRUE)[[1]]
+re <- smooth2random(sm, names(phen), type = 2)
+Xf <- re$Xf          # unpenalized part
+Xr <- re$rand[[1]]   # penalized part: coefficients iid N(0, sigma_b^2)
+c(ncol(Xf), ncol(Xr))
+```
+
+That is `r ncol(Xf)` unpenalized column (the linear trend; the
+intercept went into the model's own intercept) and `r ncol(Xr)`
+penalized ones. Now fit the marginal model with the penalized part
+moved into the covariance, $V = \sigma_b^2 X_r X_r^T + \sigma_e^2 I$,
+and the unpenalized part kept in the mean. For given variances the best
+$\boldsymbol\beta$ is the GLS estimate, so the search is over the two
+SDs only:
+
+```{r gam-marginal}
+X_gam <- cbind(1, phen$temp, Xf)
+nll_gam <- function(q) {
+  V <- exp(2 * q[1]) * Xr %*% t(Xr) + exp(2 * q[2]) * diag(n)
+  b <- solve(t(X_gam) %*% solve(V, X_gam), t(X_gam) %*% solve(V, phen$day))
+  -dmvnorm(phen$day, drop(X_gam %*% b), V, log = TRUE)
+}
+fit_gm <- optim(c(0, log(2)), nll_gam, method = "BFGS")
+sd_gm <- exp(fit_gm$par)   # sigma_b, sigma_e
+V_gm <- sd_gm[1]^2 * Xr %*% t(Xr) + sd_gm[2]^2 * diag(n)
+b_gm <- solve(t(X_gam) %*% solve(V_gm, X_gam), t(X_gam) %*% solve(V_gm, phen$day))
+c(temp = b_gm[2], lambda = sd_gm[2]^2 / sd_gm[1]^2)
+```
+
+The marginal model's $\sigma_e^2/\sigma_b^2$ is `r f2(sd_gm[2]^2 / sd_gm[1]^2)`,
+the GAM's smoothing parameter is `r f2(g_ml$sp)`, and both give a
+temperature slope of `r f2(b_gm[2])`. The smoothing parameter of a GAM
+is a ratio of two variances, and choosing it by ML or REML is the same
+job as estimating a variance component in a mixed model.^[The
+`logLik()` that `mgcv` reports for a fitted GAM is not this marginal
+log-likelihood; it is the conditional log-likelihood at the fitted
+smooth, so it is larger. Compare marginal likelihoods (or the `ML` and
+`REML` scores in `g$gcv.ubre`) when matching a GAM to a mixed model.]
+
+The equivalence runs the other way too. Any `lme()`, `lmer()`, or
+`glmmTMB()` fit with random effects $\mathbf{u} \sim N(0, \sigma^2 I)$
+is a penalized regression with penalty $\lambda \mathbf{u}^T\mathbf{u}$,
+which is why `mgcv` can fit random intercepts as smooths
+(`s(pond, bs = "re")`).
+
+> **Question:** The P-spline penalty leaves straight lines alone. If you
+> used a first-difference penalty instead, which functions would be
+> unpenalized, and which part of the smooth would move between the mean
+> and the covariance?
+
+```{asis, echo=FALSE}
+*Land:* first differences are zero only for a constant, so the null space is the intercept alone; the linear trend would then be penalized, i.e., part of the covariance (a random-walk-like prior) instead of a fixed effect.
+```
+
+## 4. Covariance functions are smooths {#cov-smooth}
+
+Now start from the other end. The marginal model uses an exponential
+covariance over years (the continuous-time version of AR(1)),
+exactly as on the [Week 14 page](Week14_SpatialRegression.html#gp-space)
+but in one dimension:
+
+$$
+V_{st} = \sigma_s^2 \exp\!\left(-\frac{|t_s - t_t|}{\ell}\right) + \sigma_e^2\,\mathbb{1}[s = t].
+$$
+
+```{r exp-marginal}
+X <- cbind(1, phen$temp)
+nll_exp <- function(p) {
+  V <- exp(2 * p[3]) * exp(-D / exp(p[4])) + exp(2 * p[5]) * diag(n)
+  -dmvnorm(phen$day, drop(X %*% p[1:2]), V, log = TRUE)
+}
+fit_exp <- optim(c(coef(m_lm), log(4), log(5), log(2)), nll_exp,
+                 method = "BFGS", hessian = TRUE)
+pe <- fit_exp$par
+sig_s <- exp(pe[3]); ell <- exp(pe[4]); sig_e2 <- exp(pe[5])
+se_exp <- sqrt(diag(solve(fit_exp$hessian)))
+c(temp = pe[[2]], SE = se_exp[[2]], sigma_s = sig_s, ell = ell, sigma_e = sig_e2,
+  logLik = -fit_exp$value)
+```
+
+```{r exp-gls, include=FALSE}
+library(nlme)
+m_gls <- gls(day ~ temp, data = phen, method = "ML",
+             correlation = corExp(form = ~ yr, nugget = TRUE))
+```
+
+The temperature slope is `r f2(pe[2])` (SE `r f2(se_exp[2])`), close to
+the truth, with $\hat\ell$ = `r f1(ell)` years.^[At integer years,
+$\exp(-|s - t|/\ell) = \phi^{|s-t|}$ with $\phi = e^{-1/\ell}$, so an
+exponential covariance at annual spacing is an AR(1) correlation, here
+with $\phi$ = `r f2(exp(-1 / ell))`. `corAR1()` in `nlme` has no nugget,
+so `corExp(nugget = TRUE)` is the version that includes $\sigma_e$.
+`gls(day ~ temp,
+correlation = corExp(form = ~ yr, nugget = TRUE), method = "ML")` gives
+the same log-likelihood, `r f2(logLik(m_gls))`.]
+
+Where is the smooth? Any covariance matrix can be factored into basis
+functions. The eigendecomposition $K = U\Lambda U^T$ of the field's
+covariance matrix $K = \sigma_s^2\exp(-D/\ell)$ gives
+
+$$
+K = (U\Lambda^{1/2})(U\Lambda^{1/2})^T = B B^T,
+\qquad B = U\Lambda^{1/2},
+$$
+
+so the field is $B\boldsymbol\gamma$ with $\boldsymbol\gamma \sim N(\mathbf{0}, I)$:
+40 basis functions over the years, with independent standard normal
+weights.^[This is the Karhunen-Loève expansion, the random-process
+version of principal components. Mercer's theorem gives the same
+expansion for the covariance function itself, with eigenfunctions in
+place of eigenvectors.] Here are the first six columns of $B$:
+
+```{r eigen-basis}
+K <- sig_s^2 * exp(-D / ell)
+eg <- eigen(K, symmetric = TRUE)
+B <- eg$vectors %*% diag(sqrt(eg$values))
+share <- cumsum(eg$values) / sum(eg$values)
+```
+
+```{r eigen-fig, echo=FALSE, fig.height=4.6}
+par(mfrow = c(2, 3), mar = c(3.6, 3.6, 2, 0.8), mgp = c(2.2, 0.7, 0))
+for (k in 1:6) {
+  plot(year, B[, k], type = "l", lwd = 2, ylim = range(B[, 1:6]),
+       xlab = "Year", ylab = "", main = paste("Function", k), font.main = 1)
+  abline(h = 0, col = "grey80")
+}
+```
+
+They look like the basis functions of a spline, wiggling faster as the
+index rises, and the first ones carry most of the variance: 5 of them
+hold `r round(100 * share[5])`% of the field's variance and 10 hold
+`r round(100 * share[10])`%. Fit the conditional model with these
+columns, penalizing their weights by the $N(0, 1)$ prior:
+
+```{r eigen-conditional}
+C <- cbind(X, B)
+P <- diag(c(0, 0, rep(sig_e2^2, n)))   # penalty sigma_e^2 * gamma'gamma
+est_c <- solve(t(C) %*% C + P, t(C) %*% phen$day)
+V_exp <- K + sig_e2^2 * diag(n)
+b_gls <- solve(t(X) %*% solve(V_exp, X), t(X) %*% solve(V_exp, phen$day))
+krig <- K %*% solve(V_exp, phen$day - X %*% b_gls)   # kriging prediction of the field
+c(temp_conditional = est_c[2], temp_marginal = b_gls[2],
+  max_curve_difference = max(abs(B %*% est_c[-(1:2)] - krig)))
+```
+
+```{r krig-fig, echo=FALSE, fig.height=3.6}
+par(mar = c(4.2, 4.2, 1, 1))
+r_exp <- phen$day - drop(X %*% b_gls)
+plot(year, r_exp, pch = 16, col = "grey55", xlab = "Year",
+     ylab = "Date minus temperature effect (days)")
+lines(year, krig, lwd = 4, col = "grey75")
+lines(year, B %*% est_c[-(1:2)], lwd = 1.5, lty = 2)
+legend("topright", c("kriging (marginal view)", "40 basis functions (conditional view)"),
+       lwd = c(4, 1.5), lty = c(1, 2), col = c("grey75", "black"), bty = "n", cex = 0.85)
+```
+
+The slope and the fitted curve are the same to rounding error. The
+covariance model fit by `gls()` has a smooth inside it, built from the
+eigenvectors of its own covariance matrix.
+
+Keeping only the first $k$ columns gives a **low-rank** version: the
+covariance becomes $B_kB_k^T + \sigma_e^2 I$, which is cheaper to work
+with and loses little when the eigenvalues fall off fast.
+
+```{r low-rank}
+low_rank <- t(sapply(c(3, 5, 10, 20, 40), function(k) {
+  Bk <- B[, seq_len(k), drop = FALSE]
+  Vk <- Bk %*% t(Bk) + sig_e2^2 * diag(n)
+  bk <- solve(t(X) %*% solve(Vk, X), t(X) %*% solve(Vk, phen$day))
+  c(k = k, variance_share = share[k], temp = bk[2],
+    logLik = dmvnorm(phen$day, drop(X %*% bk), Vk, log = TRUE))
+}))
+round(low_rank, 3)
+```
+
+Thin plate regression splines in `mgcv`, Hilbert space approximate GPs
+in `brms`, and the SPDE meshes of
+[Week 14](Week14_SpatialRegression.html#mesh) are all ways of choosing
+a small $B$ whose $BB^T$ is close to a target covariance.^[`mgcv`'s
+thin plate regression spline keeps the leading eigenvectors of the full
+thin plate basis (Wood 2003, *JRSS B* 65: 95-114), which is this
+truncation applied to a different starting matrix. The HSGP (Riutort-Mayol
+et al. 2023, *Statistics and Computing* 33: 17) uses sine functions whose
+weights have variances set by the kernel, and the SPDE approach
+(Lindgren et al. 2011, *JRSS B* 73: 423-498) uses tent functions on a
+mesh with a sparse precision matrix for the weights.]
+
+The widget below fits the flowering residuals (dates minus the
+temperature effect, with $\boldsymbol\beta$ held at the exponential
+model's estimate) from both sides at once. The left panel is the
+conditional view: the posterior mean of the field and the weighted
+basis functions it is built from. The right panel is the marginal view:
+the covariance matrix those same functions imply, and one row of it
+against the exact kernel.
+
+```{r widget-smooth-cov, echo=FALSE}
+widget("smooth_covariance.html")
+```
+
+> **Question:** Click "Fitted settings" for each kernel and set the
+> number of basis functions to 10. Which kernel keeps more of the
+> field's variance, and what about the shape of its covariance curve
+> explains it? What happens to both kernels when you shorten $\ell$?
+
+```{asis, echo=FALSE}
+*Land:* at k = 10 the exponential keeps 87% and the squared exponential 99%. The exponential's covariance has a sharp peak at zero lag (rough, jagged paths), and only high-frequency basis functions can build a sharp peak; the squared exponential is smooth, so its variance sits in a few slow functions. A shorter length-scale means more wiggles across 40 years, so both need more functions (squared exponential at the fitted 3.4 yr keeps 80% with k = 5, 97% at 6.1 yr).
+```
+
+# Where the two views part ways {#differences}
+
+The equivalence above holds when the response is normal and the weights
+on the basis functions have a normal prior. Three common situations
+break one of those conditions, or make two models that look equivalent
+differ in a way that is easy to miss.
+
+## 5. The unpenalized part of a smooth {#null-space}
+
+The GAM in [section 3](#smooth-random) and the exponential model in
+[section 4](#cov-smooth) gave temperature slopes of
+`r f2(coef(g_ml)[["temp"]])` and `r f2(pe[2])`. Both handle the
+wandering component, so why do they differ? The GAM's smooth carries
+an unpenalized linear trend in year, a fixed effect with no prior. The
+covariance twin of `s(yr)` is "a linear trend in the mean plus a
+covariance," while the exponential model has no trend. Add one:
+
+```{r exp-trend}
+X3 <- cbind(1, phen$temp, phen$yr)
+nll_exp3 <- function(p) {
+  V <- exp(2 * p[4]) * exp(-D / exp(p[5])) + exp(2 * p[6]) * diag(n)
+  -dmvnorm(phen$day, drop(X3 %*% p[1:3]), V, log = TRUE)
+}
+fit_exp3 <- optim(c(coef(lm(day ~ temp + yr, data = phen)), log(4), log(5), log(2)),
+                  nll_exp3, method = "BFGS", hessian = TRUE)
+se_exp3 <- sqrt(diag(solve(fit_exp3$hessian)))
+c(temp = fit_exp3$par[[2]], trend = fit_exp3$par[[3]], trend_SE = se_exp3[[3]],
+  logLik = -fit_exp3$value)
+```
+
+```{r compare-table, echo=FALSE}
+g_reml <- gam(day ~ temp + s(yr, bs = "ps", k = 20), data = phen, method = "REML")
+g_fx <- gam(day ~ temp + s(yr, k = 10, fx = TRUE), data = phen)
+tab <- data.frame(
+  Model = c("`lm()`, independent errors",
+            "exponential covariance",
+            "exponential covariance + linear trend",
+            "P-spline smooth of year (REML)",
+            "regression spline, 9 df, no penalty"),
+  View = c("", "second order", "both", "first order", "first order (fixed)"),
+  Slope = f2(c(coef(m_lm)[2], pe[2], fit_exp3$par[2], coef(g_reml)[2], coef(g_fx)[2])),
+  SE = f2(c(summary(m_lm)$coef[2, 2], se_exp[2], se_exp3[2],
+            summary(g_reml)$se[2], summary(g_fx)$se[2])))
+names(tab)[3:4] <- c("Temperature slope (days/°C)", "SE")
+knitr::kable(tab, align = "llrr")
+```
+
+With the trend added, the covariance model's slope moves to
+`r f2(fit_exp3$par[2])`, toward the GAM's. The two exponential fits
+differ by only `r f2(fit_exp$value - fit_exp3$value)` in
+log-likelihood, and the trend is `r f2(fit_exp3$par[3])` days per year
+with an SE of `r f2(se_exp3[3])`. These data can't say whether the
+slow drift belongs in the mean or in the covariance, the same problem
+as the trend-versus-correlation fan on the
+[Week 12 page](Week12_MixedModels.html#harder). The choice matters for
+the covariate whenever the covariate shares the drift, as March
+temperature does here.
+
+Two practical consequences:
+
+- **Know what's in the null space.** A thin plate smooth of year has a
+  linear trend in it; a thin plate smooth of two coordinates has a
+  tilted plane (intercept, easting, northing). In the cheatgrass GAM on
+  the [Week 14 page](Week14_SpatialRegression.html#gam-space), those
+  unpenalized planes soaked up most of the elevation signal (easting
+  and northing explained 94% of elevation), and the elevation SE rose
+  to 3.9.
+- **An unpenalized smooth has no covariance twin.** A regression
+  spline with fixed degrees of freedom (`fx = TRUE`, or `bs()` columns
+  entered into `lm()`) is all fixed effects. It removes everything its
+  basis can represent, including any part of the covariate that varies
+  smoothly in time, and estimates the covariate's effect from what is
+  left.^[This is the root of "spatial confounding": when a covariate
+  is smooth in space, a spatial random effect and the covariate compete
+  for the same variation, and adding the random effect can move the
+  covariate's estimate in either direction (Hodges & Reich 2010,
+  *The American Statistician* 64: 325-334). Penalized and unpenalized
+  versions differ in how much they take; neither removes the overlap.]
+
+## 6. Non-normal responses {#non-normal}
+
+The marginal view relied on a sum of normals being normal. With counts
+and a log link, the latent field still sits in the mean on the link
+scale,
+
+$$
+y_i \sim \text{Poisson}(\mu_i), \qquad \log\mu_i = \mathbf{x}_i^T\boldsymbol\beta + s_i,
+\qquad \mathbf{s} \sim N(\mathbf{0}, K),
+$$
+
+but averaging over $\mathbf{s}$ no longer gives a known distribution
+with mean $\exp(\mathbf{x}_i^T\boldsymbol\beta)$ and a tidy covariance.
+Even the mean shifts. If $s_i \sim N(0, \sigma_s^2)$,
+
+$$
+E[y_i] = E\bigl[e^{\mathbf{x}_i^T\boldsymbol\beta + s_i}\bigr]
+= e^{\mathbf{x}_i^T\boldsymbol\beta}\, e^{\sigma_s^2/2},
+$$
+
+which is larger than the curve at $s_i = 0$:
+
+```{r lognormal-mean}
+set.seed(746)
+s_draw <- rnorm(1e6, 0, 0.8)
+c(at_s_zero = exp(log(5)), marginal_simulated = mean(exp(log(5) + s_draw)),
+  marginal_formula = 5 * exp(0.8^2 / 2))
+```
+
+So for non-normal data the two views answer different questions. The
+conditional curve describes a typical place or year (the field at
+zero); the marginal mean describes the average over places or years,
+and it is `r round(100 * (exp(0.8^2 / 2) - 1))`% higher here. The
+likelihood also changes character: the marginal likelihood is an
+integral over the whole field, with no closed form.^[The
+[Week 12 Poisson GLMM by hand](Week12_MixedModels.html#glmm-by-hand)
+computes that integral with `integrate()` for one random intercept.
+For a field of many correlated values, software approximates it: the
+Laplace approximation (`glmmTMB`, `sdmTMB`, `mgcv`'s `gam()` for
+non-normal families), INLA, or MCMC (`brms`).] Software therefore
+fits these models in the first-order form, with the field (or its
+basis weights) written into the linear predictor, even when the field
+is specified by a covariance function. A second-order model that sets
+the marginal mean and a working correlation directly, without a latent
+field, is a different model; generalized estimating equations (GEEs)
+are the usual example.
+
+## 7. Choosing a representation {#choosing}
+
+For normal data with a penalty or prior on the smooth, choose by
+convenience, since the fits are the same. The table lists what differs
+in practice.
+
+| | Smooth in the mean (first order) | Correlated errors (second order) |
+|:--|:--|:--|
+| What you report | the fitted curve or surface | how fast correlation decays ($\ell$, $\phi$, range) |
+| Cost for $n$ observations | grows with the number of basis functions | dense $V$: grows as $n^3$; sparse forms (AR(1), SPDE) far less |
+| Trend in the mean | included by default (the null space) | absent unless you add it |
+| Non-normal responses | natural: the smooth lives on the link scale | needs a latent field, which is the first-order form |
+| Prediction at new places or times | evaluate the basis there | kriging (the same number) |
+| Typical R tools | `mgcv::gam()`, `brms` `s()` and `gp()` | `nlme::gls()`, `glmmTMB` `exp()` and `ar1()`, `spmodel` |
+
+`sdmTMB` and INLA sit in both columns: they specify the field by a
+Matérn covariance and fit it as a smooth, through a mesh basis chosen to
+reproduce that covariance.
+
+## Discussion {#discussion}
+
+1. Two analysts fit the same 30-year series of nest counts. One uses
+   `gam(y ~ rain + s(year), method = "REML")` and the other uses
+   `gls(y ~ rain, correlation = corAR1(form = ~ year))`. The rain
+   slopes are 0.42 and 0.61. Before deciding that one analysis is
+   wrong, what differences between the two models would you check?
+
+```{asis, echo=FALSE}
+*Land:* (1) the smooth's null space contains a linear year trend that the gls model lacks; (2) corAR1 has no nugget, while the GAM has independent residual error on top of the smooth; (3) basis rank k and the estimated edf vs. the AR(1) phi; (4) REML vs. ML for gls (default REML too). Make the two models match on each point (add a year trend to the gls mean, add a nugget) and see whether the slopes converge.
+```
+
+2. In the flowering data, the exponential model with a linear trend
+   puts `r f2(fit_exp3$par[3])` days per year (SE `r f2(se_exp3[3])`)
+   in the mean and fits only `r f2(fit_exp$value - fit_exp3$value)`
+   log-likelihood units better than the model without it. A manager
+   asks whether flowering is getting earlier. Which model would you
+   report, and does the answer depend on what the manager plans to do
+   with it?
+
+```{asis, echo=FALSE}
+*Land:* the data can't separate a trend from slow wandering, so "is there a trend" isn't answerable from 40 years without assumptions; a trend in the mean predicts continued change, while correlated wandering predicts reversion. The choice should follow from the problem (forecasting vs. estimating the temperature effect) and from outside knowledge of mechanism, and the report should show both.
+```
+
+## Further reading {#reading}
+
+- Hefley, T. J., et al. 2017. The basis function approach for modeling
+  autocorrelation in ecological data. *Ecology* 98: 632-646.
+- Kammann, E. E., and M. P. Wand. 2003. Geoadditive models. *Journal
+  of the Royal Statistical Society C* 52: 1-18.
+- Wood, S. N. 2017. *Generalized Additive Models: An Introduction with
+  R*, 2nd ed. CRC Press (the chapters on smooths as random effects and
+  on GAMMs).
+- Hodges, J. S., and B. J. Reich. 2010. Adding spatially-correlated
+  errors can mess up the fixed effect you love. *The American
+  Statistician* 64: 325-334.
