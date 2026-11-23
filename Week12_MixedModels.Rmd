@@ -811,6 +811,128 @@ approximate 95% interval for $\phi$, `r f2(min(in_ci))` to
 `r f2(max(in_ci))`. Twenty-five years can't rule out $\phi = 0$, and
 can't rule out the true value of 0.6 either.
 
+## Bonus: AR or MA? Reading the ACF and PACF {#bonus-acf-pacf}
+
+AR(1) is not the only way errors can be correlated in time. In a
+**moving average** model, MA(1), each year's error is new noise plus a
+fraction $\theta$ of last year's *noise*:
+
+$$\eta_t = \varepsilon_t + \theta\,\varepsilon_{t-1}$$
+
+A shock then lasts exactly two years and is gone: a drought that thins
+this year's ring and next year's, but not the one after. In AR(1), a
+shock fades by a factor $\phi$ each year but never quite ends. The two
+leave different patterns in two plots.^[Higher orders add terms: AR($p$)
+uses the last $p$ errors, MA($q$) the last $q$ shocks, and ARMA($p$, $q$)
+both. These are the building blocks of ARIMA models; Hyndman and
+Athanasopoulos, [*Forecasting: Principles and Practice*](https://otexts.com/fpp3/arima.html)
+(3rd ed., chapter 9, free online), covers them and the identification
+rules below in more detail. The rules assume a stationary series, so
+apply them to residuals after removing trends and covariate effects.]
+
+- The **autocorrelation function** (ACF) is the correlation between
+  errors $k$ steps apart, as in the [AR(1) section](#ar1).
+- The **partial autocorrelation function** (PACF) is the correlation
+  at lag $k$ after removing what lags 1 to $k-1$ already explain. It
+  equals the last coefficient when $\eta_t$ is regressed on
+  $\eta_{t-1}, \dots, \eta_{t-k}$.
+
+In AR(1), $\eta_t$ depends on $\eta_{t-2}$ only through $\eta_{t-1}$,
+so the PACF is $\phi$ at lag 1 and zero after, while the ACF,
+$\phi^k$, tails off. In MA(1), errors two or more steps apart share no
+shocks, so the ACF is $\theta/(1+\theta^2)$ at lag 1 and zero after,
+while the PACF tails off.^[So an MA(1) lag-1 correlation can never
+exceed 0.5 (its maximum, at $\theta = 1$). A lag-1 correlation of 0.7
+that drops to near zero at lag 2 isn't MA(1); look at higher orders.]
+
+```{r acf-pacf-table, echo=FALSE}
+knitr::kable(data.frame(Process = c("AR($p$)", "MA($q$)", "ARMA($p$, $q$)"),
+                        ACF = c("tails off", "cuts off after lag $q$", "tails off"),
+                        PACF = c("cuts off after lag $p$", "tails off", "tails off")))
+```
+
+With a long series the patterns are easy to see:
+
+```{r acf-pacf-sim, fig.width=7, fig.height=6.5}
+set.seed(746)
+ar_series <- arima.sim(list(ar = 0.6), n = 500)     # AR(1), phi = 0.6
+ma_series <- arima.sim(list(ma = 0.6), n = 500)     # MA(1), theta = 0.6
+par(mfrow = c(2, 2), mar = c(4.5, 4.5, 3.5, 1))
+acf(ar_series, lag.max = 15, main = "AR(1): ACF")
+pacf(ar_series, lag.max = 15, main = "AR(1): PACF")
+acf(ma_series, lag.max = 15, main = "MA(1): ACF")
+pacf(ma_series, lag.max = 15, main = "MA(1): PACF")
+```
+
+and AIC agrees (`arima()` fits a model to a single series):
+
+```{r acf-pacf-aic}
+aic_ar_ma <- function(x) c(AR1 = AIC(arima(x, order = c(1, 0, 0))),
+                           MA1 = AIC(arima(x, order = c(0, 0, 1))))
+round(rbind(ar_series = aic_ar_ma(ar_series), ma_series = aic_ar_ma(ma_series)), 1)
+```
+
+Short series are another matter. Stand A's 25 `lm()` residuals have
+lag-1 and lag-2 autocorrelations of `r f2(acf(resid(fit_lm_a), 2, plot = FALSE)$acf[2])`
+and `r f2(acf(resid(fit_lm_a), 2, plot = FALSE)$acf[3])`, and partial
+autocorrelations of `r f2(pacf(resid(fit_lm_a), 2, plot = FALSE)$acf[1])`
+and `r f2(pacf(resid(fit_lm_a), 2, plot = FALSE)$acf[2])`, all inside
+the $\pm 0.39$ bounds. Either pattern could produce them. A simulation
+shows how often a true AR(1) series of this length gets identified:
+
+```{r acf-pacf-short, cache=TRUE}
+set.seed(1)
+short_ar <- replicate(1000, {
+  x <- arima.sim(list(ar = 0.6), n = 25)
+  c(lag1_detected = abs(acf(x, 1, plot = FALSE)$acf[2]) > 1.96 / sqrt(25),
+    aic_picks_ar1 = unname(diff(aic_ar_ma(x)) > 0))
+})
+rowMeans(short_ar)
+```
+
+With $\phi = 0.6$ and 25 years, the lag-1 autocorrelation falls inside
+the bounds in `r round(100 * (1 - mean(short_ar[1, ])))`% of series, and AIC
+prefers AR(1) to MA(1) in `r round(100 * mean(short_ar[2, ]))`% of
+series, not much better than a coin flip. Fitting both structures to
+stand A with `gls()` tells the same story:
+
+```{r acf-pacf-gls}
+fit_gls_ind <- gls(width ~ precip + year_c, data = chron_a, method = "ML")
+fit_gls_ma1 <- gls(width ~ precip + year_c, data = chron_a, method = "ML",
+                   correlation = corARMA(form = ~ year, p = 0, q = 1))
+gls_ar_ma <- rbind(independent = summary(fit_gls_ind)$tTable["year_c", 1:2],
+                   AR1 = summary(fit_gls)$tTable["year_c", 1:2],
+                   MA1 = summary(fit_gls_ma1)$tTable["year_c", 1:2])
+cbind(round(gls_ar_ma, 4), AIC = round(c(AIC(fit_gls_ind), AIC(fit_gls), AIC(fit_gls_ma1)), 2))
+```
+
+```{r acf-pacf-gls-numbers, echo=FALSE}
+d_aic_ma <- AIC(fit_gls_ma1) - AIC(fit_gls)
+```
+
+AR(1) wins by only `r round(d_aic_ma, 1)` AIC units, and the MA(1) fit
+puts the trend's standard error between the other two. With short
+series, let the biology suggest the structure (does a bad year's effect
+last a fixed time, or fade?), compare the candidates, and check whether
+the conclusion depends on the choice.
+
+The widget below simulates a series from a chosen process and shows its
+sample ACF and PACF next to the true values.
+
+```{r widget-acf-pacf, echo=FALSE}
+widget("acf_pacf.html")
+```
+
+> **Question:** Set the widget to AR(1) with $\phi_1 = 0.6$ and a
+> length of 25, and press "New series" several times. How often would
+> the two plots lead you to AR(1)? Then try MA(1) with $\theta_1 = 0.6$.
+> How long a series would you want before trusting the plots to choose
+> an error structure?
+
+```{asis, echo=FALSE}
+*Land:* at 25 the bars bounce around and often contradict the true pattern (lag-1 inside the ±0.39 bounds about a third of the time); MA(1) and AR(1) look alike at lag 1 (0.44 vs. 0.6). By 100 the main features show; at 500 they are clear. With short series, choose from biology and compare fits by AIC, and report whether the conclusion changes.
+```
+
 ## Bonus: a random intercept and AR(1) together {#bonus-combined}
 
 The two structures combine. Using all four pinyon chronologies (100

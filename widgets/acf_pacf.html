@@ -1,0 +1,194 @@
+<div class="w746ap" id="apw">
+<style>
+.w746ap{--ink:#222;--ink2:#555;--muted:#8a8a8a;--card:#f4f4f2;--bar:#2a78d6;--theo:#c0392b;font-family:inherit;margin:1em 0 1.5em;max-width:780px}
+.w746ap .row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.w746ap .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400}
+.w746ap .row .lab1{min-width:150px}
+.w746ap select{font-size:14px;padding:2px 4px}
+.w746ap input[type=range]{flex:1;min-width:140px}
+.w746ap .val{font-weight:600;min-width:52px}
+.w746ap .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.w746ap .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746ap .card .k{font-size:13px;color:var(--ink2)}
+.w746ap .card .v{font-size:19px;font-weight:600;color:var(--ink)}
+.w746ap .panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.w746ap .ax{stroke:var(--muted);stroke-width:1}
+.w746ap .lab{fill:var(--ink2);font-size:13px}
+.w746ap .tk{fill:var(--muted);font-size:11px}
+.w746ap .note{font-size:13px;color:var(--ink2);margin:2px 0 6px}
+.w746ap .sig{font-size:14px;color:var(--ink);margin:4px 0 8px}
+.w746ap .warn{color:#b03a2e;font-weight:600}
+.w746ap button{font-size:14px;padding:3px 10px}
+@media (max-width:600px){.w746ap .panels{grid-template-columns:1fr}.w746ap .cards{grid-template-columns:1fr 1fr}.w746ap .row .lab1{min-width:110px}}
+</style>
+<div class="row">
+  <label class="lab1" for="ap-model">Error process</label>
+  <select id="ap-model">
+    <option value="ar1" selected>AR(1)</option>
+    <option value="ar2">AR(2)</option>
+    <option value="ma1">MA(1)</option>
+    <option value="ma2">MA(2)</option>
+    <option value="arma">ARMA(1,1)</option>
+  </select>
+  <label for="ap-n">Series length</label>
+  <select id="ap-n">
+    <option value="25">25</option>
+    <option value="50">50</option>
+    <option value="100">100</option>
+    <option value="500" selected>500</option>
+  </select>
+  <button type="button" id="ap-new">New series</button>
+</div>
+<div class="row" id="ap-r-p1"><label class="lab1" for="ap-p1">AR coefficient φ<sub>1</sub></label><input type="range" id="ap-p1" min="-0.95" max="0.95" step="0.05" value="0.6"><span class="val" id="ap-p1out"></span></div>
+<div class="row" id="ap-r-p2"><label class="lab1" for="ap-p2">AR coefficient φ<sub>2</sub></label><input type="range" id="ap-p2" min="-0.9" max="0.9" step="0.05" value="0.2"><span class="val" id="ap-p2out"></span></div>
+<div class="row" id="ap-r-t1"><label class="lab1" for="ap-t1">MA coefficient θ<sub>1</sub></label><input type="range" id="ap-t1" min="-0.95" max="0.95" step="0.05" value="0.6"><span class="val" id="ap-t1out"></span></div>
+<div class="row" id="ap-r-t2"><label class="lab1" for="ap-t2">MA coefficient θ<sub>2</sub></label><input type="range" id="ap-t2" min="-0.95" max="0.95" step="0.05" value="0.4"><span class="val" id="ap-t2out"></span></div>
+<p class="sig" id="ap-eq"></p>
+<div class="cards">
+  <div class="card"><div class="k">Lag-1 correlation, true</div><div class="v" id="ap-v1"></div></div>
+  <div class="card"><div class="k">Lag-1 correlation, this series</div><div class="v" id="ap-v2"></div></div>
+  <div class="card"><div class="k">Dashed bounds ±1.96/√n</div><div class="v" id="ap-v3"></div></div>
+</div>
+<svg viewBox="0 0 700 170" width="100%" role="img" aria-label="The simulated time series."><g id="ap-ts"></g></svg>
+<div class="panels">
+  <div><svg viewBox="0 0 340 250" width="100%" role="img" aria-label="Autocorrelation function by lag."><g id="ap-acf"></g></svg></div>
+  <div><svg viewBox="0 0 340 250" width="100%" role="img" aria-label="Partial autocorrelation function by lag."><g id="ap-pacf"></g></svg></div>
+</div>
+<p class="note">Bars: the sample ACF and PACF of the series above (what <code>acf()</code> and <code>pacf()</code> show). Red circles: the true values for the chosen process. Dashed lines: the approximate 95% bounds for a series with no autocorrelation.</p>
+<p class="sig" id="ap-sig"></p>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function txt(cls,x,y,s,p,anchor){const t=el('text',{class:cls,x:x,y:y,'text-anchor':anchor||'middle'},p);t.textContent=s;return t;}
+const $=id=>document.getElementById('ap-'+id);
+let seed=746;
+function rng(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+function rnorm(){let u=0;while(u===0)u=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*rng());}
+const NMAX=500,BURN=200,LAGS=15;
+let eps=[];
+function newNoise(){eps=[];for(let i=0;i<NMAX+BURN;i++)eps.push(rnorm());}
+newNoise();
+const sl={p1:$('p1'),p2:$('p2'),t1:$('t1'),t2:$('t2')};
+function coefs(){
+  const m=$('model').value,v=k=>parseFloat(sl[k].value);
+  const phi=[],th=[];
+  if(m==='ar1'||m==='arma')phi.push(v('p1'));
+  if(m==='ar2'){phi.push(v('p1'));phi.push(v('p2'));}
+  if(m==='ma1'||m==='arma')th.push(v('t1'));
+  if(m==='ma2'){th.push(v('t1'));th.push(v('t2'));}
+  return {m,phi,th};
+}
+function stationary(phi){
+  if(phi.length===1)return Math.abs(phi[0])<1;
+  if(phi.length===2){const [a,b]=phi;return b>-1&&a+b<1&&b-a<1;}
+  return true;
+}
+function simulate(phi,th,n){
+  const x=[];
+  for(let t=0;t<NMAX+BURN;t++){
+    let v=eps[t];
+    for(let j=0;j<th.length;j++)if(t-1-j>=0)v+=th[j]*eps[t-1-j];
+    for(let i=0;i<phi.length;i++)if(t-1-i>=0)v+=phi[i]*x[t-1-i];
+    x.push(v);
+  }
+  return x.slice(BURN,BURN+n);
+}
+function trueAcf(phi,th){
+  const J=3000,psi=[1];
+  for(let j=1;j<J;j++){let v=j<=th.length?th[j-1]:0;for(let i=0;i<phi.length;i++)if(j-1-i>=0)v+=phi[i]*psi[j-1-i];psi.push(v);}
+  const g=[];
+  for(let h=0;h<=LAGS;h++){let s=0;for(let j=0;j+h<J;j++)s+=psi[j]*psi[j+h];g.push(s);}
+  return g.map(v=>v/g[0]);
+}
+function sampleAcf(x){
+  const n=x.length,m=x.reduce((a,b)=>a+b,0)/n,d=x.map(v=>v-m);
+  let c0=0;for(const v of d)c0+=v*v;
+  const r=[1];
+  for(let h=1;h<=LAGS;h++){let s=0;for(let t=0;t+h<n;t++)s+=d[t]*d[t+h];r.push(s/c0);}
+  return r;
+}
+// Durbin-Levinson: partial autocorrelations from autocorrelations
+function pacfFrom(r){
+  const out=[];let prev=[];
+  for(let k=1;k<=LAGS;k++){
+    let num=r[k],den=1;
+    for(let j=1;j<k;j++){num-=prev[j-1]*r[k-j];den-=prev[j-1]*r[j];}
+    const a=num/den,cur=[];
+    for(let j=1;j<k;j++)cur.push(prev[j-1]-a*prev[k-j-1]);
+    cur.push(a);out.push(a);prev=cur;
+  }
+  return out;
+}
+function drawSeries(x){
+  const g=$('ts');g.innerHTML='';
+  const L=46,R=690,T=10,B=140,n=x.length;
+  const mx=Math.max(3,...x.map(Math.abs))*1.05;
+  const sx=i=>L+(R-L)*(n===1?0:i/(n-1)),sy=v=>(T+B)/2-v*(B-T)/2/mx;
+  el('line',{class:'ax',x1:L,x2:R,y1:sy(0),y2:sy(0),'stroke-dasharray':'3,3'},g);
+  el('line',{class:'ax',x1:L,x2:L,y1:T,y2:B},g);
+  let d='';x.forEach((v,i)=>{d+=(i?'L':'M')+sx(i).toFixed(1)+','+sy(v).toFixed(1);});
+  el('path',{d:d,fill:'none',stroke:'#333','stroke-width':n>100?1:1.6},g);
+  if(n<=100)x.forEach((v,i)=>el('circle',{cx:sx(i),cy:sy(v),r:2.2,fill:'#333'},g));
+  const step=n<=25?5:n<=50?10:n<=100?20:100;
+  for(let t=0;t<=n;t+=step){const xx=L+(R-L)*Math.min(t,n-1)/(n-1);el('line',{class:'ax',x1:xx,x2:xx,y1:B,y2:B+4},g);txt('tk',xx,B+15,String(t===0?1:t),g);}
+  txt('lab',(L+R)/2,B+29,'Time step',g);
+  txt('lab',14,(T+B)/2,'Error',g).setAttribute('transform','rotate(-90 14 '+((T+B)/2)+')');
+}
+function drawCorr(gid,title,sample,truth,bound){
+  const g=$(gid);g.innerHTML='';
+  const L=44,R=330,T=24,B=210;
+  const sx=k=>L+(R-L)*(k-0.5)/LAGS,sy=v=>T+(B-T)*(1-v)/2;
+  txt('lab',(L+R)/2,14,title,g);
+  for(const v of [-1,-0.5,0,0.5,1]){el('line',{class:'ax',x1:L-4,x2:L,y1:sy(v),y2:sy(v)},g);txt('tk',L-7,sy(v)+4,String(v),g,'end');}
+  el('line',{class:'ax',x1:L,x2:L,y1:T,y2:B},g);
+  el('line',{class:'ax',x1:L,x2:R,y1:sy(0),y2:sy(0)},g);
+  for(const b of [bound,-bound])el('line',{x1:L,x2:R,y1:sy(b),y2:sy(b),stroke:'#2a78d6','stroke-dasharray':'5,4','stroke-width':1},g);
+  const w=(R-L)/LAGS*0.45;
+  sample.forEach((v,i)=>{const k=i+1;el('rect',{x:sx(k)-w/2,y:Math.min(sy(v),sy(0)),width:w,height:Math.abs(sy(v)-sy(0)),fill:'#9cc0ea',stroke:'#2a78d6','stroke-width':0.8},g);});
+  if(truth)truth.forEach((v,i)=>el('circle',{cx:sx(i+1),cy:sy(v),r:3.6,fill:'none',stroke:'#c0392b','stroke-width':1.8},g));
+  [1,5,10,15].forEach(k=>txt('tk',sx(k),B+15,String(k),g));
+  txt('lab',(L+R)/2,B+31,'Lag',g);
+}
+function fmt(v){return (v<0?'−':'')+Math.abs(v).toFixed(2);}
+function update(){
+  const {m,phi,th}=coefs();
+  $('r-p1').style.display=(m==='ar1'||m==='ar2'||m==='arma')?'':'none';
+  $('r-p2').style.display=m==='ar2'?'':'none';
+  $('r-t1').style.display=(m==='ma1'||m==='ma2'||m==='arma')?'':'none';
+  $('r-t2').style.display=m==='ma2'?'':'none';
+  for(const k in sl)$(k+'out').textContent=fmt(parseFloat(sl[k].value));
+  const n=parseInt($('n').value),bound=1.96/Math.sqrt(n);
+  const ph=i=>fmt(phi[i]).replace('−','− ').replace(/^(\d)/,'+ $1'),tt=i=>fmt(th[i]).replace('−','− ').replace(/^(\d)/,'+ $1');
+  let eq='η<sub>t</sub> = ';
+  phi.forEach((p,i)=>{eq+=(i?' ':'')+(i===0?fmt(p):ph(i))+' η<sub>t−'+(i+1)+'</sub>';});
+  eq+=(phi.length?' + ':'')+'ε<sub>t</sub>';
+  th.forEach((t,i)=>{eq+=' '+tt(i)+' ε<sub>t−'+(i+1)+'</sub>';});
+  $('eq').innerHTML=eq;
+  $('v3').textContent='±'+bound.toFixed(2);
+  if(!stationary(phi)){
+    $('v1').textContent='—';$('v2').textContent='—';
+    $('ts').innerHTML='';$('acf').innerHTML='';$('pacf').innerHTML='';
+    $('sig').innerHTML='<span class="warn">Not stationary: with these coefficients the series grows without bound. Move φ<sub>1</sub> or φ<sub>2</sub> back.</span>';
+    return;
+  }
+  const x=simulate(phi,th,n),ra=sampleAcf(x),ta=trueAcf(phi,th);
+  const rp=pacfFrom(ra),tp=pacfFrom(ta);
+  $('v1').textContent=fmt(ta[1]);$('v2').textContent=fmt(ra[1]);
+  drawSeries(x);
+  drawCorr('acf','ACF',ra.slice(1),ta.slice(1),bound);
+  drawCorr('pacf','PACF',rp,tp,bound);
+  const sig={ar1:'AR(1): the ACF tails off; the PACF cuts off after lag 1.',
+             ar2:'AR(2): the ACF tails off; the PACF cuts off after lag 2.',
+             ma1:'MA(1): the ACF cuts off after lag 1; the PACF tails off.',
+             ma2:'MA(2): the ACF cuts off after lag 2; the PACF tails off.',
+             arma:'ARMA(1,1): both tail off, so neither plot names the order.'}[m];
+  $('sig').innerHTML='<b>True pattern.</b> '+sig;
+}
+$('new').addEventListener('click',()=>{newNoise();update();});
+$('model').addEventListener('change',update);$('n').addEventListener('change',update);
+for(const k in sl)sl[k].addEventListener('input',update);
+update();
+})();
+</script>
+</div>

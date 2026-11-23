@@ -822,7 +822,8 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 bei
   alone give a singular fit with $\hat\rho = -1$. Partial pooling did
   *not* help the short-record stands in this data set; the page says
   so and cites a 500-sim average (slope error 0.070 -> 0.051). Widgets
-  `partial_pooling.html`, `lkj_prior.html`. Script
+  `partial_pooling.html`, `lkj_prior.html`, `acf_pacf.html` (bonus
+  `#bonus-acf-pacf`, added Nov. 23). Script
   `CODE_Week12_MixedModels.R`, guide `NOTES_Week12_WebPageGuide.Rmd`.
   No Monday WOD; required take-home WOD *Formula to Model*
   (`WOD_Week12_Lecture1_FormulaToModel`, due Nov. 16) + key. Tuesday
@@ -1033,14 +1034,19 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 bei
   Crossref); the instructor is vetting the references. The script's
   kriging-plot label matches the page.
 
-- **ACF/PACF idea (possible Week 12 bonus, not built):** Week 15
-  (Nov. 30) focuses on state space models and won't have time, so the
-  instructor suggested a Week 12 bonus (with `#ar1`) instead: a widget
-  for diagnosing time series (lag, AR vs. MA) with ACF and PACF side by
-  side on long simulated AR(1) and MA(1) series (~500 points). Not added to Week 11: stand A's
-  25-year residuals are too short (ACF 0.33, 0.27; PACF 0.33, 0.18;
-  bounds +/-0.39, though true rho is 0.6), a useful example of how short
-  series hide real autocorrelation.
+- **ACF/PACF bonus (Week 12 page, built Nov. 23, not taught):**
+  `#bonus-acf-pacf`, after `#bonus-gls`. MA(1) defined against AR(1);
+  ACF/PACF identification table; seed-746 AR(1)/MA(1) series of 500
+  (`arima()` AIC agrees); stand A's residuals (ACF 0.33, 0.27; PACF
+  0.33, 0.18, all inside +/-0.39); 1000 simulated 25-yr AR(1) series
+  ($\phi$ 0.6, seed 1): lag-1 inside the bounds 33%, AIC picks AR(1)
+  over MA(1) only 62%; stand A `gls()` with `corAR1` vs. `corARMA(q = 1)`
+  (AR(1) better by 1.2 AIC; trend SE 0.0026 independent, 0.0036 AR(1),
+  0.0030 MA(1)). Widget `acf_pacf.html` (AR(1), AR(2), MA(1), MA(2),
+  ARMA(1,1); length 25-500; sample bars vs. true values by
+  Durbin-Levinson; non-stationary AR(2) warning). Hyndman &
+  Athanasopoulos fpp3 ch. 9 linked. Script section added and run end
+  to end. Week 15 (state space models) doesn't cover this.
 
 - **New format from Week 10:** one web page per week plus short
   per-meeting instructor notes (see "Weekly materials"). Week 10's page

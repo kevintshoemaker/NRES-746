@@ -223,6 +223,47 @@ range(phi_seq[ll_seq > max(ll_seq) - 1.92])
 plot(phi_seq, ll_seq, type = "l", lwd = 2, xlab = "phi", ylab = "Profile log-likelihood")
 abline(h = max(ll_seq) - 1.92, lty = 2)
 
+# Bonus: AR or MA? Reading the ACF and PACF ----------------------------------------------
+
+# AR(1): ACF tails off (phi^k), PACF cuts off after lag 1
+# MA(1): eta_t = e_t + theta e_{t-1}; ACF cuts off after lag 1 (theta / (1 + theta^2)), PACF tails off
+set.seed(746)
+ar_series <- arima.sim(list(ar = 0.6), n = 500)
+ma_series <- arima.sim(list(ma = 0.6), n = 500)
+par(mfrow = c(2, 2), mar = c(4.5, 4.5, 3.5, 1))
+acf(ar_series, lag.max = 15, main = "AR(1): ACF")
+pacf(ar_series, lag.max = 15, main = "AR(1): PACF")
+acf(ma_series, lag.max = 15, main = "MA(1): ACF")
+pacf(ma_series, lag.max = 15, main = "MA(1): PACF")
+par(mfrow = c(1, 1))
+
+aic_ar_ma <- function(x) c(AR1 = AIC(arima(x, order = c(1, 0, 0))),
+                           MA1 = AIC(arima(x, order = c(0, 0, 1))))
+round(rbind(ar_series = aic_ar_ma(ar_series), ma_series = aic_ar_ma(ma_series)), 1)
+
+# stand A's 25 residuals: lags 1-2 of the ACF and PACF, all inside +/-0.39
+round(acf(resid(fit_lm_a), 2, plot = FALSE)$acf[2:3], 2)
+round(pacf(resid(fit_lm_a), 2, plot = FALSE)$acf[1:2], 2)
+
+# 1000 AR(1) series of length 25: how often is it detected, and does AIC pick AR(1)?
+set.seed(1)
+short_ar <- replicate(1000, {
+  x <- arima.sim(list(ar = 0.6), n = 25)
+  c(lag1_detected = abs(acf(x, 1, plot = FALSE)$acf[2]) > 1.96 / sqrt(25),
+    aic_picks_ar1 = unname(diff(aic_ar_ma(x)) > 0))
+})
+rowMeans(short_ar)
+
+# stand A: independent vs. AR(1) vs. MA(1) errors
+fit_gls_ind <- gls(width ~ precip + year_c, data = chron_a, method = "ML")
+fit_gls_ma1 <- gls(width ~ precip + year_c, data = chron_a, method = "ML",
+                   correlation = corARMA(form = ~ year, p = 0, q = 1))
+gls_ar_ma <- rbind(independent = summary(fit_gls_ind)$tTable["year_c", 1:2],
+                   AR1 = summary(fit_gls)$tTable["year_c", 1:2],
+                   MA1 = summary(fit_gls_ma1)$tTable["year_c", 1:2])
+cbind(round(gls_ar_ma, 4), AIC = round(c(AIC(fit_gls_ind), AIC(fit_gls), AIC(fit_gls_ma1)), 2))
+#  [PAUSE] How long a series would you want before trusting the ACF and PACF to choose an error structure?
+
 # Bonus: a random intercept and AR(1) together -------------------------------------------
 
 Z_chron <- model.matrix(~ 0 + stand, data = chron)
