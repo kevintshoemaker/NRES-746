@@ -949,40 +949,34 @@ position in the Apollo program. The smoothed estimates in
 through the series (the Rauch-Tung-Striebel smoother), which the
 Laplace approximation reproduces without being asked.]
 
-## Bonus: reading ACF and PACF plots {#acf-pacf}
+## Bonus: what observation noise does to the ACF {#acf-pacf}
 
-The **autocorrelation function** (ACF) is the correlation between a
-series and itself $k$ steps earlier. The **partial** autocorrelation
-function (PACF) is the correlation at lag $k$ left over after
-accounting for lags 1 to $k - 1$. Together they distinguish two
-building blocks of time-series models. In an autoregressive process,
-AR(1), each value depends on the previous *value*:
-$\eta_t = \phi\,\eta_{t-1} + \varepsilon_t$. In a moving-average
-process, MA(1), each value depends on the previous *shock*:
-$\eta_t = \varepsilon_t + \theta\,\varepsilon_{t-1}$. Their signatures
-are mirror images, and are easy to see with long series:
+The Week 12 page shows how to tell autoregressive (AR) from
+moving-average (MA) errors by their autocorrelation and partial
+autocorrelation functions, with a widget for trying it on simulated
+series
+([AR or MA?](Week12_MixedModels.html#bonus-acf-pacf)). The same plots
+say something about a state-space model.
 
-```{r acf-pacf, fig.width=8, fig.height=5.6}
-set.seed(746)
-ar1_series <- arima.sim(list(ar = 0.7), n = 500)
-ma1_series <- arima.sim(list(ma = 0.7), n = 500)
-par(mfrow = c(2, 2), mar = c(4, 4, 2.5, 0.5))
-acf(ar1_series, lag.max = 12, main = "AR(1): ACF decays gradually")
-pacf(ar1_series, lag.max = 12, main = "AR(1): PACF stops after lag 1")
-acf(ma1_series, lag.max = 12, main = "MA(1): ACF stops after lag 1")
-pacf(ma1_series, lag.max = 12, main = "MA(1): PACF decays gradually")
+The Gompertz state is AR(1), so its autocorrelation at lag $k$ is
+$b^k$. Adding observation noise turns the *observed* series into a
+mixture of the two types, an ARMA(1,1). Its ACF still decays at rate
+$b$ per lag, but it starts lower than an AR(1) would, because
+observation noise adds variance to every count without adding any
+covariance between counts:
+
+$$\text{Cor}(y_t, y_{t-k}) = b^k \,
+  \frac{\text{Var}(x)}{\text{Var}(x) + \sigma_o^2}$$
+
+```{r acf-dilution, echo=FALSE}
+var_x_hat <- est_ss["sigma_p"]^2 / (1 - est_ss["b"]^2)
+dilution <- var_x_hat / (var_x_hat + est_ss["sigma_o"]^2)
 ```
 
-A shock to an AR(1) process is passed along from value to value, so
-its ACF fades as $\phi^k$, but once lag 1 is accounted for there is
-nothing more to explain. A shock to an MA(1) process is forgotten
-after one step.
-
-The Gompertz state is AR(1). Adding observation noise turns the
-*observed* series into a mixture of the two types, an ARMA(1,1): its
-ACF still decays at rate $b$ per lag, but starts lower than an AR(1)
-would, because observation noise dilutes every correlation. That
-lowered starting point is the only signal in the data for separating
+At the grouse estimates (leaving precipitation aside) the fraction is
+`r f2(dilution)`, so the lag-1 correlation of the counts would be
+`r f2(est_ss["b"] * dilution)`, not `r f2(est_ss["b"])`. That lowered
+starting point is the only signal in the data for separating
 $\sigma_p$ from $\sigma_o$, which is why the
 [separation is so fragile](#two-variances). And with 30 years the
 plots themselves are barely readable:

@@ -202,16 +202,8 @@ plogis(fit_known$par[2] + c(-1.96, 1.96) * sqrt(diag(solve(fit_known$hessian)))[
 #  [PAUSE] Three fits give b = 0.60, 0.91, and 0.75 (95% interval 0.35 to 0.94). The agency asks how
 #          fast the population recovers from a bad year. What do you tell them?
 
-# Bonus: reading ACF and PACF plots ----------------------------------------------------------
+# Bonus: what observation noise does to the ACF ----------------------------------------------
 
-set.seed(746)
-ar1_series <- arima.sim(list(ar = 0.7), n = 500)
-ma1_series <- arima.sim(list(ma = 0.7), n = 500)
-par(mfrow = c(2, 2), mar = c(4, 4, 2.5, 0.5))
-acf(ar1_series, lag.max = 12, main = "AR(1): ACF decays gradually")
-pacf(ar1_series, lag.max = 12, main = "AR(1): PACF stops after lag 1")
-acf(ma1_series, lag.max = 12, main = "MA(1): ACF stops after lag 1")
-pacf(ma1_series, lag.max = 12, main = "MA(1): PACF decays gradually")
 par(mfrow = c(1, 2))
 acf(y, lag.max = 10, main = "Grouse log counts: ACF")
 pacf(y, lag.max = 10, main = "Grouse log counts: PACF")

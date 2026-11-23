@@ -607,8 +607,9 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 bui
     equation `#covariate-place`, forecasts under precipitation
     scenarios `#forecast`), what goes wrong `#identifiability` (`#bias`,
     `#two-variances`), discussion `#ss-discussion`, bonuses
-    `#kalman-derivation`, `#acf-pacf` (the AR vs. MA item planned for
-    this week), `#ss-counts` (negative binomial in `RTMB`),
+    `#kalman-derivation`, `#acf-pacf` (trimmed Nov. 23 to what observation
+    noise does to the ACF, an ARMA(1,1); AR vs. MA basics are Week 12's
+    `#bonus-acf-pacf`, linked both ways), `#ss-counts` (negative binomial in `RTMB`),
     `#other-dynamic`.
   - **H1 `#demo` (Tuesday, `sdmTMB`):** `#demo-problem`, `#demo-models`
     (M0 no fields, M1 spatial, M2 + iid yearly fields, M3 + AR(1), M4 +
@@ -1132,7 +1133,9 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 bui
   ARMA(1,1); length 25-500; sample bars vs. true values by
   Durbin-Levinson; non-stationary AR(2) warning). Hyndman &
   Athanasopoulos fpp3 ch. 9 linked. Script section added and run end
-  to end. Week 15 (state space models) doesn't cover this.
+  to end. Week 15's `#acf-pacf` bonus links here for the basics and
+  adds only the observation-noise (ARMA(1,1)) point; this section ends
+  with a pointer to it.
 
 - **New format from Week 10:** one web page per week plus short
   per-meeting instructor notes (see "Weekly materials"). Week 10's page
