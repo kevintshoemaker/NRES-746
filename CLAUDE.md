@@ -280,6 +280,9 @@ Root-level `Week<N>_<Topic>.Rmd` (model:
   go in pandoc inline footnotes (`^[...]`), written rigorously enough
   to stand on their own; the main text keeps only what the argument
   needs. Model: the Week 13 page (`#what-hierarchical`, `#brms`, `#gam`).
+- **Citations** (Nov. 23): link each journal article or book to its DOI
+  (`https://doi.org/...`) or journal page, never a PDF. Check every DOI
+  against Crossref (`api.crossref.org/works/<doi>`) before adding it.
 - **Prompts:** `> **Question:**` blockquotes and a `## Discussion`
   section, with no answers on the page (answers go in the instructor
   notes). No timings or instructor-only text; there is no instructor
@@ -585,7 +588,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 1-9 pages built after the fact).
+Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 being built by another agent, state space models, no Lab 10; Week 1-9 pages built after the fact).
 
 - **Week 14 (Nov. 23-24), built and pushed Nov. 15:**
   - **As taught (Mon., Nov. 23, from the announcement):** sections
@@ -595,6 +598,13 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 1-9 pa
     announcement's wording went into the page's opening (spatial field
     as a random effect; Bolker Ch. 10 footnote) and the top of
     `#packages` (don't use `optim()` in practice).
+  - **Nov. 23 follow-ups:** the guide's Tuesday *Spline by Hand* review
+    was dropped (no in-class review); the peer review of rough drafts
+    was explained in class Monday. A short log-biomass rationale (positive,
+    right-skewed, multiplicative fire effect) went into the page's data
+    paragraph, with a footnote on zeros (Tweedie or delta families in
+    `sdmTMB`). `gstat` is used only for empirical variograms
+    (`variogram()`); no `fit.variogram()` or `krige()`.
   Monday lecture + Tuesday demo (no Lab 10 on
   spatial; Thanksgiving Wed.). Page `Week14_SpatialRegression.Rmd`.
   H1 `#spatial` (Monday): nearby plots are alike `#problem`, the
@@ -686,7 +696,9 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 1-9 pa
     week of the semester, linked to that week's page when
     `Week<N>_*.Rmd` exists (found by `Sys.glob`); the Nov. 30 lab was
     renumbered Lab 10 (dynamic models), and the Nov. 23 reading changed
-    from Bolker Ch. 11 to 10.3.
+    from Bolker Ch. 11 to 10.3. **Superseded Nov. 23:** the instructor
+    decided there is no Lab 10; the Nov. 30 lab period is for final
+    presentation work (the Week 15 agent is updating the schedule).
 
 - **Week 1 page (built Nov. 1, after the week):**
   `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
@@ -1016,10 +1028,16 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 1-9 pa
   reading (Hefley et al. 2017). Widget `smooth_covariance.html` (JS
   Jacobi eigen; kernel, $\ell$, $\sigma_s$, $\sigma_e$, k). Script
   `lecture_notes/CODE_Bonus_SmoothsAndCovariance.R`; no guide.
+  Linked from Week 13 `#gp` and Week 14 `#gam-space` (332a1062).
+  Nov. 23: every citation now links its DOI (all eight checked against
+  Crossref); the instructor is vetting the references. The script's
+  kriging-plot label matches the page.
 
-- **For the time-series/dynamic models week (Nov. 30):** teach AR vs.
-  MA identification with ACF and PACF side by side on long simulated
-  AR(1) and MA(1) series (~500 points). Not added to Week 11: stand A's
+- **ACF/PACF idea (possible Week 12 bonus, not built):** Week 15
+  (Nov. 30) focuses on state space models and won't have time, so the
+  instructor suggested a Week 12 bonus (with `#ar1`) instead: a widget
+  for diagnosing time series (lag, AR vs. MA) with ACF and PACF side by
+  side on long simulated AR(1) and MA(1) series (~500 points). Not added to Week 11: stand A's
   25-year residuals are too short (ACF 0.33, 0.27; PACF 0.33, 0.18;
   bounds +/-0.39, though true rho is 0.6), a useful example of how short
   series hide real autocorrelation.

@@ -126,7 +126,7 @@ c(temp_conditional = est_c[2], temp_marginal = b_gls[2],
   max_curve_difference = max(abs(B %*% est_c[-(1:2)] - krig)))
 
 plot(year, phen$day - drop(X %*% b_gls), pch = 16, col = "grey55",
-     xlab = "Year", ylab = "Flowering date minus temperature effect (days)")
+     xlab = "Year", ylab = "Date minus temperature effect (days)")
 lines(year, krig, lwd = 4, col = "grey75")
 lines(year, B %*% est_c[-(1:2)], lwd = 1.5, lty = 2)
 
