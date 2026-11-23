@@ -1,0 +1,368 @@
+---
+title: "Week 15 web page: delivery guide"
+subtitle: "Instructor notes for Week15_DynamicModels.html"
+fontsize: 12pt
+output:
+  pdf_document: default
+header-includes:
+  - \usepackage{enumitem}
+  - \setlist[itemize]{itemsep=3pt, parsep=0pt, topsep=3pt}
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+# General
+
+- Page: <https://kevintshoemaker.github.io/NRES-746/Week15_DynamicModels.html>.
+  Script: `CODE_Week15_DynamicModels.R` (same seeds, same numbers).
+- Monday, Nov. 30: state-space models (first H1). No in-class WOD.
+- Tuesday, Dec. 1: go over *Neighbors* (due today), then the demo
+  (second H1, ~40 min), hand out the take-home WOD *Filter by Hand*
+  (due Mon., Dec. 7), then project work time. No Act, no lab key.
+- Wednesday, Dec. 2: one group presents (~20 min), then dynamic
+  occupancy (third H1, ~25 min).
+- Three simulated data sets (say so), all sage-grouse or pika:
+    - `SageGrouseTrend.csv`: one population, 30 years. Truth:
+      $a = 0.3\log 300$, $b = 0.7$, $c = 0.15$, $\sigma_p = 0.15$,
+      $\sigma_o = 0.20$. Generator `rcode/sim_Week15_grouse.R`, seed 18.
+    - `LekCounts.csv`: 60 leks, 2011-2025. Truth: sagebrush 0.4,
+      precipitation 0.25, $\sigma_s = 0.5$, $\sigma_{st} = 0.4$,
+      $\rho = 0.7$, NB size 8. Generator `sim_Week15_leks.R`, seed 1.
+    - `PikaPatches.csv`: 100 patches, 8 years, 3 visits. Truth:
+      $\psi$ logit $0.5 + 1.0\,$elev, extinction logit
+      $-1.6 + 0.8\,$temp, $\gamma = 0.12$, $p = 0.6$. Generator
+      `sim_Week15_pikas.R`, seed 3.
+- Seeds were chosen so the state-space fit lands in the interior
+  (both SDs above zero) and the three estimates of $b$ differ clearly.
+  In 60 seeds scanned for the grouse series, about 40% put one SD at
+  zero. Section 5's simulation is the fair summary; say the seed was
+  picked.
+- The WOD uses a fourth data set, `BighornCounts.csv` (25 years, seed
+  16). **Push all four CSVs to `gh-pages` and check the URLs before
+  Tuesday**; the companion script and the WOD read them from the web.
+- Packages students need to follow along: `RTMB` (new this week; on
+  CRAN, no compiler needed), `sdmTMB`, `unmarked`, `mvtnorm`.
+- New notation: state $x_t$, log count $y_t$, covariate $w_t$,
+  process SD $\sigma_p$, observation SD $\sigma_o$ (the role
+  $\sigma_e$ has had), density dependence $b$ (the AR(1) coefficient,
+  $\phi$ on earlier pages), Kalman gain $K$. In the demo, `sdmTMB`'s
+  `rho` is the AR(1) coefficient and its `phi` is the NB size.
+- Covariates are in every model, at the instructor's request (most
+  student projects will have them): precipitation in the grouse state
+  equation, a spatiotemporal precipitation covariate in the demo, and
+  summer temperature on pika extinction. The process-vs-observation
+  placement (`#covariate-place`) is the one new idea that comes with
+  them.
+- Questions on the page have no answers. *Land:* is where discussion
+  should end up.
+
+# Part 1: State-space models (Monday, ~50 min)
+
+No laptops needed. Five sections is more than fits. The plan is
+sections 1 to 3 through the Kalman filter, then section 5 from its two
+figures. Section 3's `RTMB` part and all of section 4 open Tuesday if
+they don't fit (they lead into the demo well).
+
+**Big picture (3 min).** Workflow figure, MODELS and FIT. Everything
+since Week 11 has been about writing down the covariance matrix. A
+dynamic model gives it a mechanism: this year depends on last year.
+New question we can answer: where is the population headed?
+
+**1. Two kinds of noise (`#two-noises`, 10 min).**
+
+- The agency's two questions first (decline or low stretch; what to
+  expect in five years).
+- Board: the Gompertz model, then its log form. Spend the time on $b$:
+  1 = random walk, less than 1 = pulled back to $a/(1-b)$.
+- State what `precip_z` is (last spring's precipitation; chicks hatched
+  then are this year's yearling males).
+- Widget, filter box off:
+    1. Defaults ($b = 0.7$, $\sigma_p = 0.15$, $\sigma_o = 0.20$).
+       Point out the true state (black) and the counts (red).
+    2. $\sigma_o = 0$, $\sigma_p = 0.3$: counts sit on the line; runs
+       above and below equilibrium.
+    3. $\sigma_p = 0$, $\sigma_o = 0.3$: flat line, independent
+       scatter. Ask which looks more like the grouse data (can't tell;
+       that is the problem).
+    4. Back to defaults, $b = 0.95$: long excursions. Ask them to
+       predict before moving the slider.
+- **Q:** "Set the observation noise to 0 and raise the process noise;
+  then do the reverse. Both give a jagged series of counts. What
+  differs between them? Look at how long the counts stay on one side
+  of the equilibrium line."
+  *Land:* process noise gives runs (each shock is carried forward);
+  observation noise gives independent scatter around a smooth line.
+- **Q:** "A very wet spring adds 0.3 to $x_t$. With $b = 0.7$, how
+  much of that is left one year later? Two years later? What is left
+  one year after an observer overcounts by the same amount?"
+  *Land:* 0.21, then 0.147. Nothing: the overcount never entered the
+  population.
+
+**2. Fitting with one kind of noise (`#one-noise`, 7 min).**
+
+- One-step-ahead = `lm()` of $y_t$ on $y_{t-1}$ and $w_t$:
+  $\hat b = 0.60$ (SE 0.15). Trajectory matching: $\hat b = 0.91$.
+  Same equation, same data.
+- The figure: dashed line chases last year's count; solid line ignores
+  the counts.
+- **Q:** "The count in 2016 was well below the counts on either side.
+  What does each fit say happened that year? What does each predict
+  for 2017 as a result?"
+  *Land:* process-only: a real crash, now recovering, so 2017 is
+  predicted from the low count. Observation-only: a bad survey; its
+  2017 prediction doesn't use the 2016 count. (Truth: 171 counted, 213
+  really there, down from 289.)
+
+**3. The state-space model (`#ssm`, 15 min).**
+
+- Both equations, and the diagram. The states are random effects, one
+  per year; the likelihood integrates them out. Three ways to do it.
+- *One multivariate Normal* (3 min): AR(1) matrix with $b$ for $\phi$,
+  plus $\sigma_o^2$ on the diagonal. They have written this function
+  before. Mention the starting assumption (equilibrium) in a sentence.
+- *Kalman filter* (9 min): the main event. Board the three moves with
+  numbers before showing the code. A good set (it is the WOD's Part 1
+  with different values, so use these, not the WOD's): belief
+  $\hat x = 5.60$, $P = 0.02$; $a = 1.7$, $b = 0.7$, $c = 0$,
+  $\sigma_p^2 = 0.02$, $\sigma_o^2 = 0.04$. Predict:
+  $1.7 + 0.7(5.60) = 5.62$, $P = 0.49(0.02) + 0.02 = 0.0298$. Count
+  $y = 5.40$. $K = 0.0298/0.0698 = 0.43$; update
+  $5.62 + 0.43(-0.22) = 5.53$; $P = 0.57(0.0298) = 0.017$.
+- $K$ is the partial-pooling weight from Week 13. Don't derive it
+  (bonus `#kalman-derivation`).
+- Same NLL from `nll_mvn()` and `nll_ss()` (0.2488 at the start
+  values; $-0.2045$ at the optimum).
+- Estimates table: $\hat b = 0.75$, interval 0.35 to 0.94;
+  $\hat c = 0.135$; $\hat\sigma_p = 0.145$, $\hat\sigma_o = 0.167$;
+  equilibrium 289 males. Dwell on the width of the interval for $b$.
+- Widget, filter box on:
+    1. Defaults: gain 0.44; blue line splits the difference.
+    2. $\sigma_o = 0.05$: gain about 0.9; the filter follows the
+       counts.
+    3. $\sigma_o = 0.4$: gain about 0.2; the filter smooths through
+       them. Ask for a prediction before this stop.
+    4. Read the left card at each stop: the regression's $b$ averages
+       0.70, 0.37 (defaults), and 0.15 as $\sigma_o$ goes 0, 0.2, 0.4.
+       This sets up section 5.
+- **Q:** "In the widget, with the filter on, raise the observation
+  noise from 0.05 to 0.4 while leaving the process noise at 0.15. What
+  happens to the Kalman gain, and to how the filtered line treats a
+  single unusually high count?"
+  *Land:* gain falls from about 0.9 to about 0.2; one high count
+  barely moves the estimate, several in a row do.
+- *`RTMB`* (3 min, or Tuesday): three `dnorm()` lines, one per arrow
+  type; `random = "x"`. Same number as the Kalman filter. This is the
+  engine inside `glmmTMB` and `sdmTMB`, and the route their own
+  projects will take if they need a custom dynamic model.
+
+**4. States, covariates, forecasts (`#states`, 8 min, likely
+Tuesday).**
+
+- Smoothed states figure: 2016 count 171, estimate 213, truth 213.
+  Band covers the truth in every year.
+- Covariate placement: state equation logLik 0.20 vs. observation
+  equation $-1.63$ (1.8 units; some support, not decisive). The
+  impulse-response figure is the point: $c\,b^k$ vs. gone next year.
+  Long-run effect $\hat c/(1-\hat b) = 0.54$ (a factor of 1.7).
+- **Q:** "For each of these covariates, which equation does it belong
+  in, and could it belong in both? (a) acres burned in the
+  population's range last summer; (b) the number of mornings each lek
+  was visited; (c) snow depth on the day of the count."
+  *Land:* (a) state; (b) observation; (c) arguable (access vs.
+  winter mortality): fit both terms or use a different measure for
+  each.
+- Forecast: predict step with no update. 2030: 269 males with average
+  precipitation (band 176 to 410), 178 with dry springs. Equilibrium
+  289, or 168 under permanent dry springs. Say that the bands leave
+  out parameter uncertainty.
+- The three bullets for the agency, and the closing caveat (no rival
+  with a lowered equilibrium has been fit).
+
+**5. What goes wrong (`#identifiability`, 7 min).**
+
+- Bias figure: truth 0.7; `lm()` averages 0.39 (30 years) and 0.46
+  (100 years), limit 0.48; state-space 0.64 and 0.68. The left panel's
+  blue curve runs from about 0.2 to 1: centered near the truth and
+  very uncertain.
+- Ridge figure: the 95% region touches both axes. 42% of 30-year fits
+  put an SD at zero (3% with 100 years).
+- Remedies: replicate counts, outside information on $\sigma_o$,
+  several populations. Fixing $\sigma_o$ narrows the interval for $b$
+  from 0.35-0.94 to 0.48-0.94 (modest; the upper end doesn't move).
+  This sets up Wednesday, where replicate visits do the job.
+
+**Discussion (`#ss-discussion`, remaining time).**
+
+- **D1:** "Three fits of the same data give density dependence
+  $\hat b$ of 0.60 (process noise only), 0.91 (observation noise
+  only), and 0.75 (state-space, 95% interval 0.35 to 0.94). The agency
+  wants to know how fast the population would recover from a bad year.
+  What would you tell them, and which of the three numbers would you
+  put in the report?"
+  *Land:* half-life of a shock is $\log 0.5/\log b$: 1.4 years at
+  0.60, 2.4 at 0.75, 7 at 0.91. Best estimate a few years; a decade
+  can't be excluded. Report the state-space estimate with its
+  interval; Bolker (section 11.4.2) suggests the two one-noise fits as
+  brackets when the variances can't be separated.
+- **D2:** "A colleague fits the state-space model to 12 years of
+  counts from another population and gets $\hat\sigma_o = 0$. She
+  concludes the counts are exact and switches to the one-step-ahead
+  regression, which is simpler. What is wrong with the reasoning, and
+  what would you do with 12 years of data?"
+  *Land:* zero is where the optimizer ends on a flat ridge, and the
+  regression then exaggerates density dependence. Bring in $\sigma_o$
+  from replicate counts or another study, pool populations, or use an
+  informative prior; say what can't be estimated.
+
+**If behind:** skip the multivariate Normal code (say it in a
+sentence), skip `RTMB`, and do section 5 from the two figures only.
+**Bonuses** (not planned): Kalman derivation, ACF/PACF (AR vs. MA on
+500-point series; the grouse ACF bounds are $\pm 0.36$), negative
+binomial counts in `RTMB` ($\hat b = 0.76$), other dynamic models.
+
+# Part 2: Demo (Tuesday, ~40 min after the WOD review)
+
+Laptops open; students can run the script alongside. The one-year-ahead
+forecast test takes about 2.5 minutes to run: start it before talking
+about it, or show the page's table.
+
+**Opening (5-10 min).** Go over *Neighbors* (key in
+`wod/answer_keys/`). Then whatever is left of Monday's sections 3-4
+(`RTMB`, covariate placement, forecast), 10 min at most.
+
+**1. Problem and data (`#demo-problem`, 4 min).** 60 leks, 15 years.
+District total 4401 in 2019, 1670 in 2025. Mean precipitation by year
+is in the lower-right panel: 2023 and 2025 were very dry. Two
+questions: how much of the drop is weather, and what to expect next.
+
+**2. Candidate models (`#demo-models`, 6 min).**
+
+- Table of M0 to M4. $\omega_s$ is last week's field; $\epsilon_{s,t}$
+  is new.
+- The link to Monday: $\rho$ is $b$; the yearly shocks are process
+  noise with a map; the negative binomial is the observation model.
+- The covariate caveat: precipitation here acts on that year only
+  (regression with AR errors), unlike Monday's state-equation
+  covariate. One sentence.
+- **Q:** "Picture the yearly maps of $\epsilon_{s,t}$ for five years
+  in a row under M2 and under M3. How would the two sets of maps
+  differ? Which model has a better chance of forecasting next year?"
+  *Land:* M2: five unrelated maps; M3: patches persist and fade. Only
+  M3 and M4 carry anything forward.
+
+**3. Fit and check (`#demo-fit`, 7 min).**
+
+- `time = "year"`, `spatiotemporal = "ar1"`. The helper `fit_st()`
+  only saves typing.
+- Estimates: precipitation 0.24 (truth 0.25), $\hat\rho = 0.72$
+  (0.52 to 0.85; truth 0.7), sagebrush 0.39 with SE 0.10; M0's SE for
+  sagebrush is 0.04 (pseudoreplication through time).
+- Residual lag-1 correlation within leks: M1 0.31, M2 0.24, M3 0.13.
+
+**4. Compare (`#demo-compare`, 8 min).**
+
+- AIC: M3 best; M4 +11.7, M2 +50.9, M1 +128.9, M0 +531.2.
+- One-year-ahead forecasts from seven origins, mean absolute error
+  (males per lek): M0 28.2, M1 21.6, M2 21.1, M3 20.1, M4 20.7. M3
+  wins on average but in only 3 of 7 years. Most of the forecast gain
+  is the permanent field. Worth saying: AIC differences of 50 can
+  correspond to small gains in forecast accuracy.
+- **Q:** "M3 and M4 differ in one assumption: whether a local
+  departure eventually fades ($\rho < 1$) or persists indefinitely
+  ($\rho = 1$). For a one-year forecast they perform about the same.
+  Would you expect that to hold for a ten-year forecast? What would
+  each model say about a lek that is far below expectation today?"
+  *Land:* no. M3: drifts back to its long-run level, forecast variance
+  levels off. M4: stays low, variance grows every year. The
+  density-dependence question again.
+
+**5. Fields and forecasts (`#demo-forecast`, 10 min).**
+
+- Field maps (blue = below expectation): mostly above expectation in
+  2019, well below across much of the district in 2022, milder by
+  2025; 2027 is 2025 faded by $\hat\rho^2 = 0.52$.
+- Decomposition, 2019 to 2025: mean log expected count fell 0.91;
+  precipitation 0.80 (88%), field 0.10 (12%). Mostly weather.
+- Forecast of the expected district total: average precipitation 2748
+  in 2026 (2208 to 3361) and 2714 in 2027 (2095 to 3483); dry 2157
+  (1712 to 2660) and 2156 (1615 to 2790).
+- **Q:** "The forecast intervals for 2027 are wider than for 2026
+  under both scenarios. Name two separate reasons, one from the AR(1)
+  field and one that would apply even if the field were known."
+  *Land:* two years of unknown shocks instead of one. The second
+  reason isn't in the interval at all: the scenario is a guess, and a
+  realized count adds negative binomial noise. Good answers notice
+  what the interval leaves out.
+
+**6. What we tell the agency (`#demo-answer`, 3 min).** Read the four
+bullets. Close on corroborated vs. rivals, and that M3 vs. M4 stays
+open.
+
+**Hand out *Filter by Hand*** (due Mon., Dec. 7). Part 1 is one
+predict/update step on paper (answers 4.62, 0.030, $K = 0.6$, 4.50,
+0.012); Part 2 fits the bighorn series with `kalman()` and `nll_ss()`
+copied from the script ($\hat b$: `lm()` 0.28, state-space 0.74).
+Key in `wod/answer_keys/`. Don't work a filter step with the WOD's
+numbers in class.
+
+**If behind:** skip the residual check and show the forecast table
+without running it.
+
+# Part 3: Dynamic occupancy (Wednesday, ~25 min after the presentation)
+
+Two sections. If the presentation runs long, do section 1 and the
+worked three-year table, and leave the fit to the page.
+
+**1. A hidden state that is 0 or 1 (`#occ-model`, 8 min).**
+
+- Pikas, 100 talus patches, 8 summers, 3 visits. Question: do hot
+  summers raise extinction probability?
+- Board: the three lines of the model next to Monday's two equations.
+  State = occupied or empty; process = extinction and colonization;
+  observation = detection with probability $p$.
+- Naive occupancy by year (0.52, 0.46, 0.44, 0.37, 0.52, 0.50, 0.46,
+  0.46) understates the truth.
+
+**2. The likelihood by matrix multiplication (`#forward`, 14 min).**
+
+- 256 possible state sequences per patch; the forward algorithm sums
+  them with predict and update steps, the Kalman filter's rhythm.
+- Walk the three-year table (detections 2, 0, 1; $\psi = 0.5$,
+  $\varepsilon = 0.2$, $\gamma = 0.1$, $p = 0.6$): start (0.5, 0.5);
+  update 1 (0.072, 0); predict 2 (0.0576, 0.0144); update 2
+  (0.00369, 0.0144); predict 3 (0.00439, 0.01370); update 3
+  (0.00042, 0).
+- **Q:** "After the year-2 update, what is the probability that the
+  patch was occupied in year 2, given the data through year 2? The
+  year-3 update sets the 'empty' entry to zero. Why?"
+  *Land:* $0.00369/(0.00369 + 0.0144) = 0.20$. In year 3 pikas were
+  detected, and an empty patch can't produce a detection.
+- Fit: `optim()` and `colext()` agree (logLik $-1116.69$).
+  Temperature on extinction 0.78 (0.34 to 1.22; truth 0.8): extinction
+  0.08, 0.17, 0.30 after a cool, average, hot summer. $\hat p = 0.58$;
+  three visits miss an occupied patch 8% of the time. Equilibrium
+  occupancy 0.46 (average summers) vs. 0.32 (hot).
+- **Q:** "A patch had detections in 2019 and in 2021, and none on
+  three visits in 2020. Either pikas were there in 2020 and were
+  missed three times, or the patch went extinct and was recolonized.
+  Using $\hat\varepsilon = 0.17$ (average summers),
+  $\hat\gamma = 0.15$, and $\hat p = 0.58$, which is more probable,
+  and by how much?"
+  *Land:* missed: $(0.83)(0.42^3)(0.83) = 0.051$; extinct and
+  recolonized: $0.17 \times 0.145 = 0.024$. About 2.1 to 1 for
+  "missed" (probability 0.68). Three visits don't settle it.
+
+**Discussion (`#occ-discussion`, 3 min).**
+
+- **D:** "Line up the grouse state-space model and the pika occupancy
+  model: what plays the part of the state, the process noise, the
+  observation noise, and the covariate in each? The grouse model
+  struggled to separate process from observation noise. The pika
+  model estimated detection probability with a small standard error.
+  What does the pika design have that the grouse series lacked?"
+  *Land:* replicate visits within a season, when the state can't
+  change, so disagreement among visits is observation error alone.
+  The same remedy as replicate lek counts.
+
+**Close the week (1 min).** Every model this week: a hidden state
+that changes by a rule with noise in it, and data that are a noisy
+view of it. That is also a fair description of most of the course.

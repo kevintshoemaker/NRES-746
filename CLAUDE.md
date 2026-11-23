@@ -588,7 +588,93 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 being built by another agent, state space models, no Lab 10; Week 1-9 pages built after the fact).
+Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 built, not yet taught or pushed; Week 1-9 pages built after the fact).
+
+- **Week 15 (Nov. 30-Dec. 2), built Nov. 23, not yet taught:** dynamic
+  models, the last content week. Monday lecture, Tuesday demo (no Lab
+  10; *Neighbors* due and reviewed; take-home WOD handed out),
+  Wednesday partial lecture (~25 min after one group's presentation).
+  Page `Week15_DynamicModels.Rmd`. Covariates are in every model at the
+  instructor's request (students' own dynamic models will have them).
+  - **H1 `#state-space` (Monday):** two kinds of noise `#two-noises`
+    (Gompertz on the log scale, $x_t = a + b x_{t-1} + c w_t +
+    \varepsilon_t$, $y_t = x_t + \delta_t$), one-noise fits
+    `#one-noise` (Bolker 11.4: one-step-ahead `lm()` and trajectory
+    matching), the state-space model `#ssm` three ways (`#ssm-mvn`
+    `dmvnorm()` with AR(1) $V$ plus $\sigma_o^2 I$; `#kalman`;
+    `#ssm-laplace` `RTMB` with `random = "x"`), `#states` (smoothed
+    states `#smoothing`, covariate in the state vs. observation
+    equation `#covariate-place`, forecasts under precipitation
+    scenarios `#forecast`), what goes wrong `#identifiability` (`#bias`,
+    `#two-variances`), discussion `#ss-discussion`, bonuses
+    `#kalman-derivation`, `#acf-pacf` (the AR vs. MA item planned for
+    this week), `#ss-counts` (negative binomial in `RTMB`),
+    `#other-dynamic`.
+  - **H1 `#demo` (Tuesday, `sdmTMB`):** `#demo-problem`, `#demo-models`
+    (M0 no fields, M1 spatial, M2 + iid yearly fields, M3 + AR(1), M4 +
+    random walk), `#demo-fit`, `#demo-compare` (AIC and one-year-ahead
+    forecasts from seven origins), `#demo-forecast` (field maps,
+    weather-vs-field decomposition, `extra_time` forecasts),
+    `#demo-answer`, `#wod`.
+  - **H1 `#occupancy` (Wednesday):** `#occ-model`, `#forward` (forward
+    algorithm by hand vs. `unmarked::colext()`), `#occ-discussion`,
+    bonus `#hmm`.
+  - **Notation:** state $x_t$, log count $y_t$, covariate $w_t$,
+    process SD $\sigma_p$, observation SD $\sigma_o$, density dependence
+    $b$ (= the AR(1) $\phi$), observation-equation covariate effect
+    $d$, Kalman gain $K$, $\hat x_{t|t-1}$ and $P_{t|t-1}$. Demo:
+    $\sigma_s$ (`sigma_O`), $\sigma_{st}$ (`sigma_E`), $\rho$
+    (`sdmTMB`'s `rho`; its `phi` is the NB size). Occupancy: $\psi$,
+    $\gamma$, $\varepsilon_t$, $p$.
+  - **Data (all simulated):** `data/SageGrouseTrend.csv` (30 years;
+    `rcode/sim_Week15_grouse.R`, seed 18; truth $b$ 0.7, $c$ 0.15,
+    $\sigma_p$ 0.15, $\sigma_o$ 0.20), `data/LekCounts.csv` (60 leks x
+    15 years; `sim_Week15_leks.R`, seed 1; sagebrush 0.4, precip 0.25,
+    $\sigma_s$ 0.5, $\sigma_{st}$ 0.4, $\rho$ 0.7, size 8),
+    `data/PikaPatches.csv` (100 patches x 8 years x 3 visits;
+    `sim_Week15_pikas.R`, seed 3). Seeds were picked for interior
+    variance estimates; the guide says so.
+  - **Numbers:** $\hat b$ 0.60 (`lm()`), 0.91 (trajectory), 0.75
+    (state-space, 0.35 to 0.94); logLik 0.2045 by `dmvnorm()`, Kalman,
+    and `RTMB` alike; equilibrium 289 males; 500 sims: `lm()` $b$
+    averages 0.39 (30 yr) and 0.46 (100 yr), state-space 0.64 and 0.68,
+    42% of 30-year fits put an SD at zero. Demo: AR(1) best by AIC (rw
+    +11.7, iid +50.9), $\hat\rho$ 0.72, forecast MAE 20.1 (M3) vs. 28.2
+    (M0), drop since 2019 is 88% precipitation. Occupancy: temperature
+    on extinction 0.78, $\hat p$ 0.58, logLik -1116.69 both ways.
+  - Widget `state_space.html` (wrapper id `ssw`; $b$, $\sigma_p$,
+    $\sigma_o$ sliders, filter toggle; cards show the regression's
+    attenuated $b$ and the Kalman gain).
+  - Script `CODE_Week15_DynamicModels.R` (run end to end with local
+    paths, numbers match), guide `NOTES_Week15_WebPageGuide.Rmd`.
+  - Take-home WOD *Filter by Hand* (`WOD_Week15_Lecture1_FilterByHand`,
+    handed out Tue., Dec. 1, due Mon., Dec. 7) + key:
+    `data/BighornCounts.csv` (25 years, seed 16,
+    `rcode/sim_Week15_bighorn.R`). Paper: one predict/update step
+    (4.62, 0.030, $K$ 0.6, 4.50, 0.012). R: `lm()` $\hat b$ 0.28 vs.
+    state-space 0.74 using `kalman()`/`nll_ss()` copied from the
+    script (check value -3.828); bonus moves the covariate to the
+    observation equation.
+  - Menus, `schedule.Rmd` links, and `CourseSchedule.csv` (Nov. 30 row:
+    demo, no Lab 10) updated; navbar copied into the current pages
+    (now including Bonus_SmoothsAndCovariance). **Not yet committed or
+    pushed**; the four CSVs must be live before Tue., Dec. 1.
+  - Found while building: `RTMB` (2.0, installed Nov. 23 with `MARSS`)
+    masks `dmvnorm`, so the page calls `mvtnorm::dmvnorm()`; `RTMB`'s
+    negative binomial is `dnbinom2(x, mu, var)`. `glmmTMB`'s `ar1()` +
+    residual reproduces the no-covariate state-space likelihood, but
+    with a covariate in the formula it is regression with AR(1) errors
+    (effect not carried forward). `MARSS` estimates $x_0$ by default, so
+    its likelihood differs slightly from the stationary-start version
+    on the page. `colext()` matches the by-hand forward algorithm only
+    when detections enter visit by visit (`dbinom()` adds a binomial
+    coefficient). `sdmTMB` with `extra_time` needs the mesh rebuilt
+    for the training rows (`make_mesh()` on the subset). A two-year
+    hold-out could not separate the spatiotemporal structures; seven
+    one-year-ahead origins could. One `render_site()` call failed once
+    inside `patch_lik()` when three pages were rendered in one R
+    session and could not be reproduced; render pages in separate
+    sessions.
 
 - **Week 14 (Nov. 23-24), built and pushed Nov. 15:**
   - **As taught (Mon., Nov. 23, from the announcement):** sections
@@ -1140,9 +1226,9 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 bei
   is replaced by the Week 9 page. `NOTES_Reference_CmdstanrQuickStart.pdf`
   (one-page Stan setup) is linked from the page and the schedule.
 - **Site menus (Oct. 27-28; counts as of Nov. 15):** navbar has `WODs`
-  (20 PDFs), `Labs` (19 Acts; Lab 4 Acts 2-3 left out), and `Data sets`
+  (21 PDFs), `Labs` (19 Acts; Lab 4 Acts 2-3 left out), and `Data sets`
   ("Lab data" for Labs 1-9, then "Other"). `schedule.Rmd` has a `links`
-  table (79 links;
+  table (83 links;
   `stopifnot` checks weeks and files). Week 1's cells (both lectures
   and the lab) link the Week 1 page (Week 2's cells, including
   the lab, link the Week 2 page; Week 3's lab and Wednesday

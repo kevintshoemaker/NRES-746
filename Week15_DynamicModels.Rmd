@@ -1,0 +1,1776 @@
+---
+title: "Week 15: Dynamic Models"
+author: "NRES 746"
+date: "Nov. 30-Dec. 2, 2026"
+output:
+  html_document:
+    includes:
+      after_body: footer.html
+    theme: flatly
+    toc: yes
+    toc_float: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 7, fig.height = 4.5, fig.align = "center")
+widget <- function(file) htmltools::includeHTML(file.path("widgets", file))
+f1 <- function(v) formatC(round(v, 1) + 0, format = "f", digits = 1)
+f2 <- function(v) formatC(round(v, 2) + 0, format = "f", digits = 2)
+f3 <- function(v) formatC(round(v, 3) + 0, format = "f", digits = 3)
+```
+
+```{r helpers, echo=FALSE}
+draw_workflow <- function(highlight = NULL, cex = 0.9) {
+  boxes <- c("PROBLEM", "THEORIES", "MODELS", "FIT", "COMPARE")
+  subs <- c("what do we\nneed to know?", "candidate\nexplanations",
+            "data-generating\n(process + noise)", "confront each\nwith data",
+            "fit, prediction,\nrelevance")
+  x <- seq(1, 9, by = 2)
+  y <- 2
+  w <- 0.8
+  h <- 0.55
+  shade <- function(lab) if (!is.null(highlight) && lab %in% highlight) "lightskyblue1" else "white"
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(0, 10), ylim = c(-0.2, 4), axes = FALSE, xlab = "", ylab = "")
+  for (i in seq_along(boxes)) {
+    rect(x[i] - w, y - h, x[i] + w, y + h, col = shade(boxes[i]), lwd = 1.5)
+    text(x[i], y + 0.18, boxes[i], font = 2, cex = cex)
+    text(x[i], y - 0.22, subs[i], cex = cex * 0.75)
+  }
+  arrows(x[-5] + w, y, x[-1] - w, y, length = 0.08, lwd = 1.5)
+  rect(6 - 0.7, 3.2 - 0.35, 6 + 0.7, 3.2 + 0.35, lty = 2, lwd = 1.5)
+  text(6, 3.28, "DATA", font = 2, cex = cex)
+  text(6, 3.0, "study design", cex = cex * 0.75)
+  arrows(x[3], y + h, 6 - 0.7, 3.2, length = 0.08, lty = 2, lwd = 1.2)
+  arrows(6 + 0.7, 3.2, x[4], y + h, length = 0.08, lty = 2, lwd = 1.2)
+  segments(x[5], y - h, x[5], 0.4, lwd = 1.5)
+  segments(x[5], 0.4, x[1], 0.4, lwd = 1.5)
+  arrows(x[c(1, 2)], 0.4, x[c(1, 2)], y - h, length = 0.08, lwd = 1.5)
+  text(6, 0.15, "REVISE the problem and theories; drop or down-weight poor models",
+       cex = cex * 0.85, font = 3)
+}
+
+# states (circles, hidden) in a row, observations (squares) below, the covariate above
+draw_state_space <- function() {
+  xs <- c(2, 5, 8)
+  labs <- c("t - 1", "t", "t + 1")
+  par(mar = c(0, 0, 0, 0))
+  plot(NA, xlim = c(-2.6, 10.6), ylim = c(0, 6.2), axes = FALSE, xlab = "", ylab = "", asp = 1)
+  for (i in 1:3) {
+    symbols(xs[i], 3.2, circles = 0.62, inches = FALSE, add = TRUE, bg = "grey90", lwd = 1.5)
+    text(xs[i], 3.2, bquote(x[.(labs[i])]), cex = 1.05)
+    rect(xs[i] - 0.6, 0.5, xs[i] + 0.6, 1.5, lwd = 1.5)
+    text(xs[i], 1, bquote(y[.(labs[i])]), cex = 1.05)
+    rect(xs[i] - 0.6, 4.9, xs[i] + 0.6, 5.9, lwd = 1.5, lty = 2)
+    text(xs[i], 5.4, bquote(w[.(labs[i])]), cex = 1.05)
+    arrows(xs[i], 2.58, xs[i], 1.5, length = 0.08, lwd = 1.5)
+    arrows(xs[i], 4.9, xs[i], 3.82, length = 0.08, lwd = 1.5)
+  }
+  arrows(c(-0.2, xs) + 0.62, 3.2, c(xs, 10.2) - 0.62, 3.2, length = 0.08, lwd = 1.5)
+  text(3.5, 3.55, "b", font = 3)
+  text(6.5, 3.55, "b", font = 3)
+  text(5.25, 4.35, "c", font = 3)
+  text(-0.5, 5.4, "covariate", adj = 1, cex = 0.8, xpd = NA)
+  text(-0.5, 3.2, "state\n(hidden)", adj = 1, cex = 0.8, xpd = NA)
+  text(-0.5, 1, "count\n(observed)", adj = 1, cex = 0.8, xpd = NA)
+  text(c(3.5, 6.5), 2.85, expression("noise " * sigma[p]), cex = 0.75)
+  text(xs + 0.15, 2.05, expression("noise " * sigma[o]), cex = 0.75, adj = 0)
+}
+
+col_state <- "#2a78d6"
+col_obs <- "#c0392b"
+band <- function(x, lo, hi, col) polygon(c(x, rev(x)), c(lo, rev(hi)), col = adjustcolor(col, 0.2), border = NA)
+```
+
+[How this page was made](#ai-use)
+
+R code from this page is also in the
+[companion script](lecture_notes/CODE_Week15_DynamicModels.R).
+Packages: `mvtnorm`, `RTMB`, `sdmTMB`, `unmarked`. Reading: Bolker
+Chapter 11 (dynamic models).^[Bolker's chapter is from 2008. Its
+framing (process error, observation error, and what happens when you
+ignore one) is still the right one, and this page follows it. The
+fitting tools have changed: SIMEX and the extended Kalman filter have
+mostly given way to software that integrates over the hidden states
+directly (`TMB`, Stan). For an up-to-date review with code, see
+Auger-Méthé et al. (2021, "A guide to state-space modeling of
+ecological time series," *Ecological Monographs* 91: e01470).] The
+data are in [SageGrouseTrend.csv](data/SageGrouseTrend.csv) (one
+population, 30 years), [LekCounts.csv](data/LekCounts.csv) (60 leks,
+15 years), and [PikaPatches.csv](data/PikaPatches.csv) (100 talus
+patches, 8 years).
+
+# State-space models {#state-space}
+
+A **dynamic model** describes how a system changes through time:
+this year's state depends on last year's state. That makes the noise
+harder to handle than in a regression, because there are two kinds.
+Real year-to-year variation in the population (**process noise**) is
+carried forward into every later year. Counting error (**observation
+noise**) is not. A **state-space model** has both: a hidden true state
+that follows the dynamics, and observations scattered around it. This
+part builds one for a single time series, with a covariate, and fits
+it three ways.
+
+## 1. Two kinds of noise {#two-noises}
+
+```{r workflow-models, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow(c("MODELS", "FIT"))
+```
+
+Male greater sage-grouse gather each spring on leks (display grounds),
+where they can be counted. A state wildlife agency has counted the
+same set of leks in one population every spring since 1996.
+
+```{r read-grouse}
+grouse <- read.csv("data/SageGrouseTrend.csv")
+head(grouse, 4)
+```
+
+`males` is the total count, and `precip_z` is spring precipitation in
+the year *before* the count, in standard deviations from its long-term
+mean.^[Wet springs mean more forbs and insects for chicks. Males
+first show up on leks the spring after they hatch, so last year's
+precipitation is the one that should matter for this year's count.
+The data are simulated, so the true parameter values are known; the
+script is [sim_Week15_grouse.R](rcode/sim_Week15_grouse.R), and
+`log_true` is the true log population size, which a real survey would
+not have.]
+
+```{r grouse-plot, echo=FALSE, fig.width=7.5, fig.height=4.6}
+layout(matrix(1:2, 2), heights = c(2.6, 1))
+par(mar = c(0.5, 4.2, 1, 1))
+plot(grouse$year, grouse$males, type = "b", pch = 16, ylim = c(0, max(grouse$males) * 1.08), xaxt = "n",
+     xlab = "", ylab = "Males counted", las = 1)
+par(mar = c(4, 4.2, 0.3, 1))
+plot(grouse$year, grouse$precip_z, type = "h", lwd = 4, col = ifelse(grouse$precip_z > 0, "#2a78d6", "#b8860b"),
+     xlab = "Year of count", ylab = "Precip. (SD)", las = 1, cex.lab = 0.8)
+abline(h = 0, col = "grey50")
+layout(1)
+```
+
+```{r grouse-numbers, echo=FALSE}
+peak_yr <- grouse$year[which.max(grouse$males)]
+last5 <- mean(tail(grouse$males, 5))
+first15 <- mean(grouse$males[1:15])
+```
+
+The count peaked at `r max(grouse$males)` males in `r peak_yr`. Over
+the last five years it has averaged `r round(last5)`, against
+`r round(first15)` for the first fifteen. The agency's questions:
+
+1. **Is this population in a decline that will continue, or a low
+   stretch it should recover from?**
+2. **What counts should we expect over the next five years, and how
+   much does that depend on precipitation?**
+
+Both questions are about the future, so we need a model of how the
+population gets from one year to the next. A standard one is the
+**Gompertz model**:
+
+$$N_t = N_{t-1}\,\exp\!\big(a + (b - 1)\log N_{t-1} + c\,w_t +
+\varepsilon_t\big)$$
+
+The exponent is the population's growth rate from year $t-1$ to year
+$t$. It has a baseline $a$, a term that lowers growth when the
+population is already large (if $b < 1$), an effect $c$ of the
+covariate $w_t$ (here, precipitation), and noise. Taking logs, with
+$x_t = \log N_t$, gives a linear model:
+
+$$x_t = a + b\,x_{t-1} + c\,w_t + \varepsilon_t, \qquad
+\varepsilon_t \sim N(0, \sigma_p^2)$$
+
+- $b$ measures **density dependence**. With $b = 1$ there is none:
+  growth doesn't depend on population size, and the population
+  wanders as a random walk with drift $a$. With $0 < b < 1$ the
+  population is pulled back toward an equilibrium at
+  $x^* = a / (1 - b)$, faster for smaller $b$.^[The Gompertz model's
+  growth rate falls with $\log N$; the Ricker model's falls with $N$
+  itself. Gompertz is the usual starting point for time-series work
+  because it is linear on the log scale, which is what makes the
+  [Kalman filter](#kalman) below available (Dennis et al. 2006,
+  *Ecological Monographs* 76: 323-341). With a different growth
+  function the model is no longer linear and needs the
+  [general-purpose method](#ssm-laplace).]
+- $\varepsilon_t$ is **process noise**: good and bad years the
+  covariate doesn't capture. It changes the real population, so it is
+  part of $x_t$ and is carried into $x_{t+1}$, $x_{t+2}$, and so on.
+
+We don't see $x_t$. We see a count, and the log of the count is
+
+$$y_t = x_t + \delta_t, \qquad \delta_t \sim N(0, \sigma_o^2)$$
+
+where $\delta_t$ is **observation noise**: birds missed, leks visited
+on a poor morning. It affects one year's count and nothing else.^[The
+[Week 5 page](Week5_SimulatingData.html#process-obs) compared the two
+kinds of noise for a population with a steady trend and no density
+dependence. Process noise there accumulated without limit. Density
+dependence changes that: with $b < 1$ the population keeps getting
+pulled back, so process noise accumulates only up to a point.]
+
+The widget simulates this model (without the covariate). Leave the
+"filter" box unchecked for now.
+
+```{r state-space-widget, echo=FALSE}
+widget("state_space.html")
+```
+
+> **Question:** Set the observation noise to 0 and raise the process
+> noise; then do the reverse. Both give a jagged series of counts.
+> What differs between them? Look at how long the counts stay on one
+> side of the equilibrium line.
+
+```{asis, echo=FALSE}
+*Land:* process noise gives runs: several years above, then several
+below, because each shock is carried forward (longer runs as b nears
+1). Observation noise alone gives independent scatter around a smooth
+line. With both, the two are hard to tell apart by eye.
+```
+
+> **Question:** A very wet spring adds 0.3 to $x_t$. With $b = 0.7$,
+> how much of that is left one year later? Two years later? What is
+> left one year after an observer overcounts by the same amount?
+
+```{asis, echo=FALSE}
+*Land:* 0.3 x 0.7 = 0.21, then 0.147. Nothing is left of the
+overcount: it never entered the population.
+```
+
+## 2. Fitting with one kind of noise {#one-noise}
+
+If only one kind of noise were present, we could fit this model with
+tools from earlier in the semester. Bolker (section 11.4) recommends
+trying both simple fits before anything fancier.
+
+**Process noise only** ($\sigma_o = 0$). The counts are then the true
+states, so each year's log count can be predicted from the previous
+year's observed log count. That is a linear regression of $y_t$ on
+$y_{t-1}$ and $w_t$, which Bolker calls **one-step-ahead fitting**:
+
+```{r fit-process-only}
+y <- log(grouse$males)
+w <- grouse$precip_z
+n <- length(y)
+fit_proc <- lm(y[-1] ~ y[-n] + w[-1])
+round(summary(fit_proc)$coefficients, 3)
+```
+
+**Observation noise only** ($\sigma_p = 0$). The population then
+follows the deterministic curve exactly, starting from some $x_1$,
+and all the scatter is counting error. We fit the whole curve at once
+(**trajectory matching**, or "shooting"):
+
+```{r fit-observation-only}
+nll_traj <- function(par) {
+  x <- numeric(n)
+  x[1] <- par[4]
+  for (t in 2:n) x[t] <- par[1] + par[2] * x[t - 1] + par[3] * w[t]
+  -sum(dnorm(y, x, exp(par[5]), log = TRUE))
+}
+fit_traj <- optim(c(coef(fit_proc), y[1], log(0.2)), nll_traj, method = "BFGS", control = list(maxit = 500))
+round(c(a = fit_traj$par[1], b = fit_traj$par[2], c = fit_traj$par[3], sigma_o = exp(fit_traj$par[5])), 3)
+```
+
+```{r one-noise-plot, echo=FALSE, fig.width=7.5, fig.height=4.2}
+cp <- coef(fit_proc)
+x_traj <- numeric(n)
+x_traj[1] <- fit_traj$par[4]
+for (t in 2:n) x_traj[t] <- fit_traj$par[1] + fit_traj$par[2] * x_traj[t - 1] + fit_traj$par[3] * w[t]
+par(mar = c(4, 4.2, 1, 1))
+plot(grouse$year, grouse$males, pch = 16, log = "y", xlab = "Year", ylab = "Males counted (log scale)", las = 1)
+lines(grouse$year[-1], exp(fitted(fit_proc)), col = col_obs, lwd = 2, lty = 2)
+lines(grouse$year, exp(x_traj), col = col_state, lwd = 2)
+legend("topright", c("count", "process noise only: one-step-ahead predictions",
+                     "observation noise only: fitted trajectory"),
+       pch = c(16, NA, NA), lty = c(NA, 2, 1), lwd = c(NA, 2, 2), col = c("black", col_obs, col_state),
+       bty = "n", cex = 0.8)
+```
+
+```{r one-noise-numbers, echo=FALSE}
+b_proc <- unname(cp[2])
+b_traj <- unname(fit_traj$par[2])
+eq_proc <- exp(unname(cp[1]) / (1 - b_proc))
+eq_traj <- exp(fit_traj$par[1] / (1 - b_traj))
+```
+
+The same equation and the same data give $\hat b =$ `r f2(b_proc)`
+(process noise only) and `r f2(b_traj)` (observation noise only). The
+first describes a population that snaps back to its equilibrium within
+a couple of years. The second describes one that barely feels its own
+density. The one-step-ahead predictions (dashed) chase last year's
+count; the fitted trajectory (solid) ignores the counts entirely and
+responds only to precipitation.
+
+> **Question:** The count in 2016 was well below the counts on either
+> side. What does each fit say happened that year? What does each
+> predict for 2017 as a result?
+
+```{asis, echo=FALSE}
+*Land:* process-only says the population really fell and is now
+recovering toward equilibrium, so it predicts 2017 from the low 2016
+count. Observation-only says the population dipped only as far as the
+dry spring explains and the rest was a bad survey; its 2017 prediction
+doesn't use the 2016 count at all.
+```
+
+Each fit blames every departure on a single cause, and the truth is
+some of each. The cost of getting this wrong is not symmetric, and
+[section 5](#identifiability) returns to it.
+
+## 3. The state-space model {#ssm}
+
+Keep both equations:
+
+$$\begin{aligned}
+\text{state:} \quad & x_t = a + b\,x_{t-1} + c\,w_t + \varepsilon_t,
+  & \varepsilon_t \sim N(0, \sigma_p^2)\\
+\text{observation:} \quad & y_t = x_t + \delta_t,
+  & \delta_t \sim N(0, \sigma_o^2)
+\end{aligned}$$
+
+```{r state-space-diagram, echo=FALSE, fig.width=6.5, fig.height=3.3, dev="png", dpi=200}
+draw_state_space()
+```
+
+The states $x_1, \dots, x_n$ are unobserved random quantities with
+their own distribution, which makes them **random effects**, one per
+year, and makes this a
+[hierarchical model](Week13_HierarchicalModelsAndGAMs.html#what-hierarchical).
+As with any random effect, the likelihood of the parameters
+$(a, b, c, \sigma_p, \sigma_o)$ comes from integrating the hidden
+states out. Because every piece of this model is Normal and linear,
+that integral can be done exactly, and there are three ways to
+organize the work.
+
+### One multivariate Normal {#ssm-mvn}
+
+The state equation is an
+[AR(1) process](Week12_MixedModels.html#ar1): the departure of
+$x_t$ from its expected value carries over to the next year with
+coefficient $b$ (the role $\phi$ played before). Adding independent
+observation noise puts an extra $\sigma_o^2$ on the diagonal. So the
+log counts are one draw from a multivariate Normal:
+
+$$\mathbf{y} \sim \text{MVN}(\boldsymbol\mu, V), \qquad
+V_{st} = \frac{\sigma_p^2}{1 - b^2}\,b^{|s - t|} + \sigma_o^2\,[s = t]$$
+
+The mean follows the deterministic part of the model,
+$\mu_t = a + b\,\mu_{t-1} + c\,w_t$.^[Something has to be assumed about
+the population before the first count. Here it is that the population
+had been fluctuating around its equilibrium, so the state before year
+1 has mean $a/(1-b)$ and variance $\sigma_p^2/(1-b^2)$ (the
+"stationary" assumption, which needs $|b| < 1$). The alternatives are
+to estimate the starting state as one more parameter, or to give it a
+very wide prior. The choice matters most for short series.]
+
+```{r ssm-mvn}
+nll_mvn <- function(par) {
+  a <- par[1]
+  b <- plogis(par[2])          # keeps 0 < b < 1
+  c <- par[3]
+  sigma_p <- exp(par[4])
+  sigma_o <- exp(par[5])
+  mu <- numeric(n)
+  m <- a / (1 - b)
+  for (t in seq_len(n)) mu[t] <- m <- a + b * m + c * w[t]
+  V <- sigma_p^2 / (1 - b^2) * b^abs(outer(1:n, 1:n, "-")) + sigma_o^2 * diag(n)
+  -mvtnorm::dmvnorm(y, mu, V, log = TRUE)
+}
+start <- c(1.7, qlogis(0.7), 0.1, log(0.15), log(0.15))
+fit_mvn <- optim(start, nll_mvn, method = "BFGS")
+fit_mvn$value
+```
+
+This is the model-the-variance approach of
+[Weeks 11](Week11_LinearModelsAndVariance.html#variance) through
+[14](Week14_SpatialRegression.html#gp-space), with a covariance matrix
+that has two parts.^[Without the covariate, `glmmTMB` fits this model
+as `glmmTMB(y ~ 1 + ar1(year_f + 0 | pop))`: an AR(1) random effect
+plus the residual. With a covariate in the formula, though,
+`y ~ w + ar1(...)` is a different model, a regression with AR(1)
+errors, in which the covariate moves that year's mean only and the
+effect is *not* carried forward. The distinction is the one between
+[AR errors and a lagged response](Week12_MixedModels.html#lagged-response).]
+It works, but it builds and inverts an $n \times n$ matrix, and it
+never tells us what the hidden states were.
+
+### The Kalman filter {#kalman}
+
+The **Kalman filter** gets the same likelihood by walking through the
+series one year at a time. At each step it holds a Normal belief about
+the current state: a best guess $\hat x$ and a variance $P$. Each year
+has three moves.
+
+**Predict.** Push last year's belief through the state equation:
+
+$$\hat x_{t|t-1} = a + b\,\hat x_{t-1|t-1} + c\,w_t, \qquad
+P_{t|t-1} = b^2 P_{t-1|t-1} + \sigma_p^2$$
+
+(Read $\hat x_{t|t-1}$ as "the estimate of $x_t$ using counts through
+year $t-1$.")
+
+**Score.** Before seeing $y_t$, the model expects it to be Normal with
+mean $\hat x_{t|t-1}$ and variance $P_{t|t-1} + \sigma_o^2$. The
+log density of the actual $y_t$ under that distribution is this year's
+contribution to the log-likelihood.
+
+**Update.** Move the guess toward the count:
+
+$$K_t = \frac{P_{t|t-1}}{P_{t|t-1} + \sigma_o^2}, \qquad
+\hat x_{t|t} = \hat x_{t|t-1} + K_t\,(y_t - \hat x_{t|t-1}), \qquad
+P_{t|t} = (1 - K_t)\,P_{t|t-1}$$
+
+$K_t$, the **Kalman gain**, is the weight given to the new count. If
+counts are exact ($\sigma_o = 0$), $K_t = 1$ and the estimate jumps to
+the count. If counts are very noisy, $K_t$ is near 0 and the estimate
+stays with the prediction. This is the precision-weighted average
+behind
+[partial pooling](Week13_HierarchicalModelsAndGAMs.html#pooling-by-hand),
+with the model's prediction playing the part of the population-level
+mean ([derivation](#kalman-derivation)).
+
+```{r kalman}
+#  d: covariate effect on the observation (0 until section 4)
+kalman <- function(a, b, c, sigma_p, sigma_o, d = 0, y = log(grouse$males), w = grouse$precip_z) {
+  n <- length(y)
+  x_pred <- P_pred <- x_filt <- P_filt <- numeric(n)
+  x_hat <- a / (1 - b)                   # belief before year 1: at equilibrium
+  P <- sigma_p^2 / (1 - b^2)
+  nll <- 0
+  for (t in seq_len(n)) {
+    x_hat <- a + b * x_hat + c * w[t]    # predict
+    P <- b^2 * P + sigma_p^2
+    x_pred[t] <- x_hat
+    P_pred[t] <- P
+    nll <- nll - dnorm(y[t], x_hat + d * w[t], sqrt(P + sigma_o^2), log = TRUE)    # score
+    K <- P / (P + sigma_o^2)             # update
+    x_hat <- x_hat + K * (y[t] - d * w[t] - x_hat)
+    P <- (1 - K) * P
+    x_filt[t] <- x_hat
+    P_filt[t] <- P
+  }
+  list(nll = nll, x_pred = x_pred, P_pred = P_pred, x_filt = x_filt, P_filt = P_filt, K = K)
+}
+nll_ss <- function(par, ...) kalman(par[1], plogis(par[2]), par[3], exp(par[4]), exp(par[5]), ...)$nll
+c(mvn = nll_mvn(start), kalman = nll_ss(start))       # same likelihood, two ways
+fit_ss <- optim(start, nll_ss, method = "BFGS", hessian = TRUE)
+```
+
+```{r kalman-table, echo=FALSE}
+se_ss <- sqrt(diag(solve(fit_ss$hessian)))
+est_ss <- c(a = fit_ss$par[1], b = plogis(fit_ss$par[2]), c = fit_ss$par[3],
+            sigma_p = exp(fit_ss$par[4]), sigma_o = exp(fit_ss$par[5]))
+back <- list(identity, plogis, identity, exp, exp)
+ci_ss <- t(sapply(1:5, function(i) back[[i]](fit_ss$par[i] + c(-1.96, 1.96) * se_ss[i])))
+truth <- c(0.3 * log(300), 0.7, 0.15, 0.15, 0.20)
+ss_tab <- data.frame(parameter = c("a", "b (density dependence)", "c (precipitation)", "sigma_p (process SD)",
+                                   "sigma_o (observation SD)"),
+                     truth = truth, estimate = est_ss, lower = ci_ss[, 1], upper = ci_ss[, 2])
+knitr::kable(ss_tab, digits = 2, row.names = FALSE,
+             col.names = c("Parameter", "Truth", "Estimate", "95% lower", "95% upper"))
+kf <- kalman(est_ss["a"], est_ss["b"], est_ss["c"], est_ss["sigma_p"], est_ss["sigma_o"])
+eq_ss <- exp(est_ss["a"] / (1 - est_ss["b"]))
+```
+
+The two functions return the same negative log-likelihood, and `optim()`
+lands on the same estimates from either. The state-space estimate of
+density dependence, $\hat b =$ `r f2(est_ss["b"])`, falls between the
+two one-noise fits (`r f2(b_proc)` and `r f2(b_traj)`), and the
+equilibrium is $\exp(\hat a / (1 - \hat b)) =$ `r round(eq_ss)` males.
+Look at the interval for $b$, though: `r f2(ci_ss[2, 1])` to
+`r f2(ci_ss[2, 2])`. Thirty years of counts say little about how
+strong the density dependence is.^[Intervals come from the Hessian on
+the scale `optim()` worked on (logit for $b$, log for the SDs),
+back-transformed. They are rough for the two SDs, whose likelihood
+surface is far from quadratic ([section 5](#identifiability)).] The
+precipitation effect is better determined.
+
+The filter's last gain is $K =$ `r f2(kf$K)`: each new count moves the
+estimate of the population a bit more than halfway from the model's
+prediction toward the count. Go back to the
+[widget](#two-noises) and check the "filter" box to see this at
+work: the filtered line follows the counts closely when observation
+noise is small and smooths through them when it is large.
+
+> **Question:** In the widget, with the filter on, raise the
+> observation noise from 0.05 to 0.4 while leaving the process noise
+> at 0.15. What happens to the Kalman gain, and to how the filtered
+> line treats a single unusually high count?
+
+```{asis, echo=FALSE}
+*Land:* the gain falls from about 0.9 to about 0.2 (the widget shows
+it). With a low gain a single high count barely moves the estimate;
+it takes several high counts in a row.
+```
+
+The Kalman filter's cost grows in proportion to $n$, where the
+multivariate Normal's grows with $n^3$. For 30 years nobody would
+notice. For daily data, or thousands of animals' tracks, the
+difference decides whether the model can be fit.
+
+### Hidden states as random effects {#ssm-laplace}
+
+The third way is the most general. Write the **joint** negative
+log-likelihood of the data *and* the hidden states, as if the states
+were known, and let software integrate the states out. The joint
+likelihood is three lines, one per arrow type in the diagram:
+
+```{r ssm-rtmb}
+library(RTMB)
+nll_joint <- function(p) {
+  b <- plogis(p$logit_b)
+  sigma_p <- exp(p$log_sigma_p)
+  sigma_o <- exp(p$log_sigma_o)
+  x <- p$x                                                                              # the hidden states
+  nll <- -dnorm(x[1], p$a / (1 - b) + p$c * w[1], sigma_p / sqrt(1 - b^2), log = TRUE)  # first state
+  nll <- nll - sum(dnorm(x[-1], p$a + b * x[-n] + p$c * w[-1], sigma_p, log = TRUE))    # state equation
+  nll - sum(dnorm(y, x, sigma_o, log = TRUE))                                           # observation equation
+}
+par_list <- list(a = 1.7, logit_b = qlogis(0.7), c = 0.1, log_sigma_p = log(0.15), log_sigma_o = log(0.15), x = y)
+obj <- MakeADFun(nll_joint, par_list, random = "x", silent = TRUE)
+fit_tmb <- nlminb(obj$par, obj$fn, obj$gr)
+sdr <- sdreport(obj)
+c(kalman = fit_ss$value, rtmb = fit_tmb$objective)
+```
+
+`random = "x"` tells `RTMB` which parameters to integrate out. It does
+so with the
+[Laplace approximation](Week12_MixedModels.html#glmm-by-hand), which
+is exact when everything is Normal, so the answer matches the Kalman
+filter to the last digit. This is also what `glmmTMB` and `sdmTMB` do
+internally: both are front ends to the same engine (`TMB`).^[`RTMB`
+(Kristensen) lets you write the function in plain R; `TMB` itself
+(Kristensen et al. 2016, *Journal of Statistical Software* 70(5))
+requires C++. Both get exact gradients by automatic differentiation,
+which is why `nlminb()` is handed `obj$gr`. The same function can be
+passed to `tmbstan` to sample the posterior with Stan instead of
+maximizing; a Bayesian fit samples the states along with the
+parameters, as in the
+[Week 13 random-slope model](Week13_HierarchicalModelsAndGAMs.html#stan-plain).
+Other routes to the same model: `MARSS` (Holmes et al. 2012,
+*R Journal* 4: 11-19), which fits linear Normal state-space models
+for many populations at once, and `mvgam` (Clark and Wells 2023,
+*Methods in Ecology and Evolution* 14: 771-784), which combines
+state-space dynamics with the [smooths of Week 13](Week13_HierarchicalModelsAndGAMs.html#gams).]
+
+The payoff is flexibility. A covariate anywhere, a different growth
+function, or counts that are Poisson instead of log-Normal each change
+one line of `nll_joint()`, and the Kalman filter no longer applies to
+most of those ([bonus](#ss-counts)). It is also how most students'
+own dynamic models will be fit.
+
+## 4. States, covariates, and forecasts {#states}
+
+### Estimating the hidden states {#smoothing}
+
+The Kalman filter's $\hat x_{t|t}$ uses the counts up to year $t$.
+With the whole series in hand we can do better, since later counts
+also say something about year $t$. Those **smoothed** estimates are
+the random-effect estimates from the `RTMB` fit, with standard errors:
+
+```{r smoothed-states}
+smooth <- as.data.frame(summary(sdr, "random"))
+names(smooth) <- c("x_hat", "se")
+head(round(smooth, 3), 3)
+```
+
+```{r states-plot, echo=FALSE, fig.width=7.5, fig.height=4.4}
+par(mar = c(4, 4.2, 1, 1))
+plot(grouse$year, grouse$males, pch = 16, log = "y", xlab = "Year", ylab = "Males (log scale)", las = 1,
+     ylim = range(grouse$males) * c(0.85, 1.15))
+band(grouse$year, exp(smooth$x_hat - 1.96 * smooth$se), exp(smooth$x_hat + 1.96 * smooth$se), col_state)
+lines(grouse$year, exp(smooth$x_hat), col = col_state, lwd = 2.5)
+lines(grouse$year, exp(grouse$log_true), lty = 3, lwd = 1.5)
+abline(h = eq_ss, col = "grey50", lty = 2)
+legend("topright", c("count", "estimated state (95% band)", "true state (known because simulated)",
+                     "estimated equilibrium"),
+       pch = c(16, NA, NA, NA), lty = c(NA, 1, 3, 2), lwd = c(NA, 2.5, 1.5, 1),
+       col = c("black", col_state, "black", "grey50"), bty = "n", cex = 0.8)
+```
+
+```{r states-numbers, echo=FALSE}
+cover <- mean(abs(grouse$log_true - smooth$x_hat) < 1.96 * smooth$se)
+rmse_count <- sqrt(mean((y - grouse$log_true)^2))
+rmse_state <- sqrt(mean((smooth$x_hat - grouse$log_true)^2))
+i16 <- which(grouse$year == 2016)
+```
+
+The estimated state is smoother than the counts: the model attributes
+part of each year's departure to counting error and discounts it. For
+2016 the count was `r grouse$males[i16]` males and the estimated state
+is `r round(exp(smooth$x_hat[i16]))` (the true value was
+`r round(exp(grouse$log_true[i16]))`). Because the data are simulated we
+can check: the band covers the true state in
+`r round(100 * cover)`% of years, and the estimated states are closer
+to the truth than the raw log counts are (root mean squared error
+`r f2(rmse_state)` against `r f2(rmse_count)`).
+
+### Where does a covariate go? {#covariate-place}
+
+A covariate can enter either equation, and the two choices say
+different things.
+
+- In the **state equation** ($c\,w_t$, as above) it changes the
+  population. Its effect is carried forward by $b$ like any other
+  change in the state.
+- In the **observation equation**, $y_t = x_t + d\,w_t + \delta_t$, it
+  changes what the surveyors see without changing how many birds
+  there are. Count date, observer experience, and weather on the
+  morning of the count are covariates of this kind.
+
+The `kalman()` function already has the argument `d`, so the
+alternative model takes one line:
+
+```{r covariate-place}
+nll_ss_obs <- function(par) kalman(par[1], plogis(par[2]), 0, exp(par[4]), exp(par[5]), d = par[3])$nll
+fit_ss_obs <- optim(start, nll_ss_obs, method = "BFGS")
+c(precip_in_state = -fit_ss$value, precip_in_observation = -fit_ss_obs$value)      # log-likelihoods
+```
+
+```{r covariate-plot, echo=FALSE, fig.width=6.5, fig.height=3.8}
+lag <- 0:8
+resp_state <- est_ss["c"] * est_ss["b"]^lag
+resp_obs <- c(fit_ss_obs$par[3], rep(0, 8))
+par(mar = c(4, 4.5, 1, 1))
+plot(lag, resp_state, type = "b", pch = 16, col = col_state, lwd = 2, ylim = c(0, max(resp_state, resp_obs) * 1.1),
+     xlab = "Years after one wet spring (+1 SD)", ylab = "Change in expected log count", las = 1)
+lines(lag, resp_obs, type = "b", pch = 1, col = col_obs, lwd = 2, lty = 2)
+legend("topright", c("precipitation in the state equation", "precipitation in the observation equation"),
+       pch = c(16, 1), lty = c(1, 2), lwd = 2, col = c(col_state, col_obs), bty = "n", cex = 0.85)
+```
+
+```{r covariate-numbers, echo=FALSE}
+dll <- fit_ss_obs$value - fit_ss$value
+long_run <- est_ss["c"] / (1 - est_ss["b"])
+```
+
+Both models have five parameters, so the log-likelihoods compare
+directly: the state-equation version is ahead by `r f1(dll)` units
+(`r f1(2 * dll)` AIC units), which is some support and far from
+decisive. The figure shows what the data have to go on. In the state
+equation, one wet spring raises the
+population for years afterward, by $c\,b^k$ after $k$ years. In the
+observation equation the effect is gone the next year. A run of wet
+springs therefore builds up: if precipitation stayed 1 SD above
+average indefinitely, the equilibrium would rise by
+$\hat c / (1 - \hat b) =$ `r f2(long_run)` on the log scale, a factor
+of `r f1(exp(long_run))`.
+
+> **Question:** For each of these covariates, which equation does it
+> belong in, and could it belong in both? (a) acres burned in the
+> population's range last summer; (b) the number of mornings each lek
+> was visited; (c) snow depth on the day of the count.
+
+```{asis, echo=FALSE}
+*Land:* (a) state; (b) observation (more visits, higher maximum
+count); (c) arguable: deep snow can keep observers from leks
+(observation) and a hard winter can kill birds (state). When both are
+plausible, fit both terms and let the data speak, or use a different
+measure for each.
+```
+
+### Forecasting {#forecast}
+
+A forecast is the Kalman filter's predict step repeated with no update
+step, since there are no new counts. Precipitation in future years is
+unknown, so we forecast under scenarios:
+
+```{r forecast}
+forecast_ss <- function(w_future) {
+  x_hat <- kf$x_filt[n]
+  P <- kf$P_filt[n]
+  out <- data.frame(year = max(grouse$year) + seq_along(w_future), x_hat = NA, sd = NA)
+  for (h in seq_along(w_future)) {
+    x_hat <- est_ss["a"] + est_ss["b"] * x_hat + est_ss["c"] * w_future[h]
+    P <- est_ss["b"]^2 * P + est_ss["sigma_p"]^2
+    out$x_hat[h] <- x_hat
+    out$sd[h] <- sqrt(P)
+  }
+  out
+}
+fc_avg <- forecast_ss(rep(0, 5))       # average precipitation
+fc_dry <- forecast_ss(rep(-1, 5))      # five dry springs in a row
+round(cbind(year = fc_avg$year, average = exp(fc_avg$x_hat), dry = exp(fc_dry$x_hat)))
+```
+
+```{r forecast-plot, echo=FALSE, fig.width=7.5, fig.height=4.4}
+yr_all <- c(grouse$year, fc_avg$year)
+par(mar = c(4, 4.2, 1, 1))
+plot(grouse$year, grouse$males, pch = 16, log = "y", xlim = range(yr_all), xlab = "Year",
+     ylab = "Males (log scale)", las = 1, ylim = c(90, max(grouse$males) * 1.1))
+lines(grouse$year, exp(smooth$x_hat), col = col_state, lwd = 2.5)
+abline(h = eq_ss, col = "grey50", lty = 2)
+abline(v = max(grouse$year) + 0.5, col = "grey70")
+band(fc_avg$year, exp(fc_avg$x_hat - 1.96 * fc_avg$sd), exp(fc_avg$x_hat + 1.96 * fc_avg$sd), col_state)
+band(fc_dry$year, exp(fc_dry$x_hat - 1.96 * fc_dry$sd), exp(fc_dry$x_hat + 1.96 * fc_dry$sd), "#b8860b")
+lines(c(max(grouse$year), fc_avg$year), exp(c(kf$x_filt[n], fc_avg$x_hat)), col = col_state, lwd = 2.5)
+lines(c(max(grouse$year), fc_dry$year), exp(c(kf$x_filt[n], fc_dry$x_hat)), col = "#b8860b", lwd = 2.5)
+legend("topright", c("count", "estimated state; forecast with average precipitation",
+                     "forecast with dry springs", "estimated equilibrium"),
+       pch = c(16, NA, NA, NA), lty = c(NA, 1, 1, 2), lwd = c(NA, 2.5, 2.5, 1),
+       col = c("black", col_state, "#b8860b", "grey50"), bty = "n", cex = 0.8)
+```
+
+```{r forecast-numbers, echo=FALSE}
+recent_w <- mean(tail(w, 8))
+x_now <- exp(kf$x_filt[n])
+eq_dry <- exp((est_ss["a"] - est_ss["c"]) / (1 - est_ss["b"]))
+```
+
+Under average precipitation the forecast climbs back toward the
+equilibrium of `r round(eq_ss)` males, a feature of any model with
+$b < 1$. Under continued dry springs it settles near
+`r round(eq_dry)` instead. The bands widen for a few years and then
+level off, because density dependence limits how far process noise
+can carry the population.^[These bands treat the estimated
+parameters as known. They leave out the uncertainty in $b$, which is
+large here and matters most for how fast the forecast returns to
+equilibrium. To include it, draw parameter sets from their estimated
+sampling distribution and forecast from each, or fit the model as a
+Bayesian one and forecast from each posterior draw.]
+
+What we can tell the agency so far:
+
+- The population is now at about `r round(x_now)` males, below an
+  estimated equilibrium of `r round(eq_ss)`.
+- The last eight springs before each count averaged
+  `r f2(recent_w)` SD in precipitation. The low stretch is what the
+  model expects from dry years plus ordinary noise, with no change in
+  the population's underlying dynamics.
+- Recovery depends on precipitation. With average springs the model
+  expects `r round(exp(fc_avg$x_hat[5]))` males in
+  `r fc_avg$year[5]` (95% band `r round(exp(fc_avg$x_hat[5] - 1.96 * fc_avg$sd[5]))`
+  to `r round(exp(fc_avg$x_hat[5] + 1.96 * fc_avg$sd[5]))`); with
+  dry springs, `r round(exp(fc_dry$x_hat[5]))`.
+
+This model is one candidate. It hasn't been compared with a rival in
+which the equilibrium itself has dropped (habitat loss, say), and that
+rival would predict no recovery.
+
+## 5. What goes wrong {#identifiability}
+
+State-space models ask a lot of a single time series. Two problems
+come up often enough to plan for.
+
+### Ignoring observation noise exaggerates density dependence {#bias}
+
+The one-step-ahead regression uses last year's *count* as its
+predictor, and the count is the state plus error. Error in a
+predictor pulls its slope toward zero. Here the slope is $b$, and a
+$b$ closer to zero means stronger density dependence. The simulation
+below draws 500 series from the true model and fits each both ways,
+for 30 years and for 100:
+
+```{r sim-bias, cache=TRUE}
+sim_gompertz <- function(n, a = 0.3 * log(300), b = 0.7, c = 0.15, sigma_p = 0.15, sigma_o = 0.20) {
+  w <- rnorm(n)
+  x <- numeric(n)
+  x_prev <- rnorm(1, a / (1 - b), sigma_p / sqrt(1 - b^2))
+  for (t in seq_len(n)) x_prev <- x[t] <- a + b * x_prev + c * w[t] + rnorm(1, 0, sigma_p)
+  list(y = x + rnorm(n, 0, sigma_o), w = w)
+}
+fit_both <- function(n) {
+  s <- sim_gompertz(n)
+  b_lm <- coef(lm(s$y[-1] ~ s$y[-n] + s$w[-1]))[2]
+  f <- try(optim(c(1.7, qlogis(0.7), 0.15, log(0.15), log(0.20)), nll_ss, y = s$y, w = s$w, method = "BFGS"),
+           silent = TRUE)
+  if (inherits(f, "try-error")) return(c(b_lm, NA, NA, NA))
+  c(b_lm, plogis(f$par[2]), exp(f$par[4]), exp(f$par[5]))
+}
+set.seed(746)
+sims30 <- t(replicate(500, fit_both(30)))
+sims100 <- t(replicate(500, fit_both(100)))
+```
+
+```{r sim-bias-plot, echo=FALSE, fig.width=8, fig.height=3.8}
+par(mfrow = c(1, 2), mar = c(4, 4, 2, 0.5))
+for (s in list(list(sims30, "30 years"), list(sims100, "100 years"))) {
+  d1 <- density(s[[1]][, 1], from = -0.3, to = 1)
+  d2 <- density(s[[1]][, 2], from = 0, to = 1, na.rm = TRUE)
+  plot(d1, col = col_obs, lwd = 2, lty = 2, main = s[[2]], xlab = "Estimate of b", ylab = "Density",
+       xlim = c(-0.2, 1), ylim = c(0, max(d1$y, d2$y)), las = 1, cex.main = 1)
+  lines(d2, col = col_state, lwd = 2)
+  abline(v = 0.7, col = "grey40")
+  if (s[[2]] == "30 years") legend("topleft", c("one-step-ahead (lm)", "state-space", "truth"),
+                                   lty = c(2, 1, 1), lwd = c(2, 2, 1), col = c(col_obs, col_state, "grey40"),
+                                   bty = "n", cex = 0.75)
+}
+```
+
+```{r sim-bias-numbers, echo=FALSE}
+m30 <- colMeans(sims30, na.rm = TRUE)
+m100 <- colMeans(sims100, na.rm = TRUE)
+edge30 <- mean(sims30[, 3] < 0.01 | sims30[, 4] < 0.01, na.rm = TRUE)
+edge100 <- mean(sims100[, 3] < 0.01 | sims100[, 4] < 0.01, na.rm = TRUE)
+```
+
+The true $b$ is 0.7. The regression averages `r f2(m30[1])` with 30
+years and `r f2(m100[1])` with 100. More data helps only a little,
+because most of the bias is built into the method: with an endless
+series the regression would still give about
+`r f2(0.7 * 0.045 / 0.51 / (0.045 / 0.51 + 0.04))`. The state-space estimate averages
+`r f2(m30[2])` and `r f2(m100[2])`. It is closer to the truth on
+average, but with 30 years its estimates are spread across most of
+the range from 0 to 1.^[The bias is the regression-dilution or
+errors-in-variables problem. For density dependence see Freckleton et
+al. (2006, *Journal of Animal Ecology* 75: 837-851) and Knape (2008,
+*Ecology* 89: 2994-3000). Bolker's section 11.5 describes SIMEX, a
+correction that works when the observation variance is known from
+other data.]
+
+### Two variances from one series {#two-variances}
+
+The second problem is in the state-space fit itself. The data have to
+divide the total variation into process and observation noise, and the
+only information for doing so is the pattern of autocorrelation.
+Below is the profile log-likelihood for the two SDs in the grouse data
+(each point maximized over $a$, $b$, and $c$):
+
+```{r profile-surface, cache=TRUE}
+sd_grid <- seq(0.01, 0.36, length.out = 30)
+profile_nll <- outer(sd_grid, sd_grid, Vectorize(function(sp, so) {
+  f <- function(p) kalman(p[1], plogis(p[2]), p[3], sp, so)$nll
+  optim(fit_ss$par[1:3], f, method = "BFGS")$value
+}))
+```
+
+```{r profile-plot, echo=FALSE, fig.width=5.6, fig.height=5}
+par(mar = c(4.2, 4.2, 1, 1))
+contour(sd_grid, sd_grid, profile_nll - fit_ss$value, levels = c(0.25, 0.5, 1, 2, 3, 5, 8), las = 1,
+        xlab = expression("Process SD, " * sigma[p]), ylab = expression("Observation SD, " * sigma[o]),
+        labcex = 0.7)
+contour(sd_grid, sd_grid, profile_nll - fit_ss$value, levels = 3, lwd = 2.5, add = TRUE, drawlabels = FALSE)
+points(est_ss["sigma_p"], est_ss["sigma_o"], pch = 16, cex = 1.4)
+points(0.15, 0.20, pch = 4, cex = 1.4, lwd = 2, col = col_obs)
+legend("topright", c("maximum likelihood", "truth", "approximate 95% region"), pch = c(16, 4, NA),
+       lty = c(NA, NA, 1), lwd = c(NA, 2, 2.5), col = c("black", col_obs, "black"), bty = "n", cex = 0.8)
+```
+
+```{r known-sigma-o, echo=FALSE}
+nll_known <- function(p) kalman(p[1], plogis(p[2]), p[3], exp(p[4]), 0.20)$nll
+fit_known <- optim(fit_ss$par[1:4], nll_known, method = "BFGS", hessian = TRUE)
+se_known <- sqrt(diag(solve(fit_known$hessian)))
+ci_known <- plogis(fit_known$par[2] + c(-1.96, 1.96) * se_known[2])
+```
+
+The surface is a curved ridge. Along it, less process noise can be
+traded for more observation noise with little loss of fit, and the
+approximate 95% region (heavy line) reaches both axes: these data
+can't rule out $\sigma_p = 0$ or $\sigma_o = 0$. In the simulations
+above, `r round(100 * edge30)`% of the 30-year fits put one of the two
+SDs at essentially zero, although both were truly present; with 100
+years it was `r round(100 * edge100)`%.^[Auger-Méthé et al. (2016,
+"State-space models' dirty little secrets," *Scientific Reports* 6:
+26677) document this for even the simplest linear Normal models. It
+is the same flat-surface problem as estimating
+[a variance among four stands](Week12_MixedModels.html#harder).] When
+a fit reports an SD of zero, read it as "can't be separated," and
+don't conclude that kind of noise is absent.
+
+What helps is information about one of the variances from outside the
+time series:
+
+- **Replicate counts.** Leks are usually counted several times each
+  spring. The spread among counts in one spring estimates $\sigma_o$
+  directly, since the population didn't change between mornings.
+- **A known or prior-informed $\sigma_o$**, from a double-observer
+  study or from other populations.
+- **Several populations** that share parameters, fit together.
+
+Fixing $\sigma_o$ at its true value of 0.20 here, as if replicate
+counts had supplied it, moves the 95% interval for $b$ from
+`r f2(ci_ss[2, 1])` to `r f2(ci_ss[2, 2])` to
+`r f2(ci_known[1])` to `r f2(ci_known[2])`.
+
+## Discussion {#ss-discussion}
+
+> **Discussion:** Three fits of the same data give density dependence
+> $\hat b$ of `r f2(b_proc)` (process noise only), `r f2(b_traj)`
+> (observation noise only), and `r f2(est_ss["b"])` (state-space, 95%
+> interval `r f2(ci_ss[2, 1])` to `r f2(ci_ss[2, 2])`). The agency
+> wants to know how fast the population would recover from a bad
+> year. What would you tell them, and which of the three numbers would
+> you put in the report?
+
+```{asis, echo=FALSE}
+*Land:* the half-life of a shock is log(0.5)/log(b): about 1.4 years
+at 0.60, 2.4 at 0.75, 7 at 0.91. Honest answer: recovery within a few
+years is the best estimate, but these data can't exclude a decade.
+Report the state-space estimate with its interval; Bolker suggests
+giving the two one-noise fits as brackets when the variances can't be
+separated. Replicate counts would narrow it.
+```
+
+> **Discussion:** A colleague fits the state-space model to 12 years
+> of counts from another population and gets $\hat\sigma_o = 0$. She
+> concludes the counts are exact and switches to the one-step-ahead
+> regression, which is simpler. What is wrong with the reasoning, and
+> what would you do with 12 years of data?
+
+```{asis, echo=FALSE}
+*Land:* zero is where the optimizer ends up on a flat ridge, not
+evidence of exact counts; the regression then exaggerates density
+dependence. With 12 years: bring in sigma_o from replicate counts or
+another study, share parameters with other populations, or use an
+informative prior; and say plainly what can't be estimated.
+```
+
+## Bonus: where the Kalman update comes from {#kalman-derivation}
+
+Before seeing this year's count, our belief about the state is
+$x_t \sim N(\hat x_{t|t-1}, P_{t|t-1})$. That is a prior. The count
+has likelihood $y_t \sim N(x_t, \sigma_o^2)$. A Normal prior times a
+Normal likelihood gives a Normal posterior
+([conjugacy](Week7_IntervalsAndBayes.html#bayes)), whose precision
+(1/variance) is the sum of the two precisions and whose mean is the
+precision-weighted average:
+
+$$\frac{1}{P_{t|t}} = \frac{1}{P_{t|t-1}} + \frac{1}{\sigma_o^2},
+\qquad
+\hat x_{t|t} = \frac{\hat x_{t|t-1}/P_{t|t-1} + y_t/\sigma_o^2}
+{1/P_{t|t-1} + 1/\sigma_o^2}$$
+
+Multiply the top and bottom of the second expression by
+$P_{t|t-1}\,\sigma_o^2$ and collect terms, and it becomes
+$\hat x_{t|t-1} + K_t (y_t - \hat x_{t|t-1})$ with
+$K_t = P_{t|t-1} / (P_{t|t-1} + \sigma_o^2)$. So the filter does
+one Bayesian update per year, with each year's posterior pushed
+through the state equation to become the next year's prior. The
+likelihood contribution in the "score" step is the prior predictive
+density of $y_t$, and multiplying those together across years is the
+chain rule of probability,
+$P(y_1, \dots, y_n) = P(y_1)\,P(y_2 \mid y_1)\cdots
+P(y_n \mid y_1, \dots, y_{n-1})$.^[Kalman published the filter in 1960
+for tracking and navigation; it was used to estimate spacecraft
+position in the Apollo program. The smoothed estimates in
+[section 4](#smoothing) come from a second pass that runs backward
+through the series (the Rauch-Tung-Striebel smoother), which the
+Laplace approximation reproduces without being asked.]
+
+## Bonus: reading ACF and PACF plots {#acf-pacf}
+
+The **autocorrelation function** (ACF) is the correlation between a
+series and itself $k$ steps earlier. The **partial** autocorrelation
+function (PACF) is the correlation at lag $k$ left over after
+accounting for lags 1 to $k - 1$. Together they distinguish two
+building blocks of time-series models. In an autoregressive process,
+AR(1), each value depends on the previous *value*:
+$\eta_t = \phi\,\eta_{t-1} + \varepsilon_t$. In a moving-average
+process, MA(1), each value depends on the previous *shock*:
+$\eta_t = \varepsilon_t + \theta\,\varepsilon_{t-1}$. Their signatures
+are mirror images, and are easy to see with long series:
+
+```{r acf-pacf, fig.width=8, fig.height=5.6}
+set.seed(746)
+ar1_series <- arima.sim(list(ar = 0.7), n = 500)
+ma1_series <- arima.sim(list(ma = 0.7), n = 500)
+par(mfrow = c(2, 2), mar = c(4, 4, 2.5, 0.5))
+acf(ar1_series, lag.max = 12, main = "AR(1): ACF decays gradually")
+pacf(ar1_series, lag.max = 12, main = "AR(1): PACF stops after lag 1")
+acf(ma1_series, lag.max = 12, main = "MA(1): ACF stops after lag 1")
+pacf(ma1_series, lag.max = 12, main = "MA(1): PACF decays gradually")
+```
+
+A shock to an AR(1) process is passed along from value to value, so
+its ACF fades as $\phi^k$, but once lag 1 is accounted for there is
+nothing more to explain. A shock to an MA(1) process is forgotten
+after one step.
+
+The Gompertz state is AR(1). Adding observation noise turns the
+*observed* series into a mixture of the two types, an ARMA(1,1): its
+ACF still decays at rate $b$ per lag, but starts lower than an AR(1)
+would, because observation noise dilutes every correlation. That
+lowered starting point is the only signal in the data for separating
+$\sigma_p$ from $\sigma_o$, which is why the
+[separation is so fragile](#two-variances). And with 30 years the
+plots themselves are barely readable:
+
+```{r acf-grouse, fig.width=8, fig.height=3.2}
+par(mfrow = c(1, 2), mar = c(4, 4, 2.5, 0.5))
+acf(y, lag.max = 10, main = "Grouse log counts: ACF")
+pacf(y, lag.max = 10, main = "Grouse log counts: PACF")
+```
+
+The dashed bounds are $\pm 1.96/\sqrt{n}$, which is
+$\pm$ `r f2(1.96 / sqrt(n))` here. Real autocorrelation hides easily
+in a series this short.
+
+## Bonus: counts instead of log counts {#ss-counts}
+
+Taking logs of counts works when counts are in the hundreds. For
+small counts, or series with zeros, model the count itself. Only the
+observation line of `nll_joint()` changes; here the count is negative
+binomial with mean $e^{x_t}$:
+
+```{r ss-counts}
+males <- grouse$males
+nll_joint_nb <- function(p) {
+  b <- plogis(p$logit_b)
+  sigma_p <- exp(p$log_sigma_p)
+  x <- p$x
+  mu <- exp(x)
+  nll <- -dnorm(x[1], p$a / (1 - b) + p$c * w[1], sigma_p / sqrt(1 - b^2), log = TRUE)
+  nll <- nll - sum(dnorm(x[-1], p$a + b * x[-n] + p$c * w[-1], sigma_p, log = TRUE))
+  nll - sum(dnbinom2(males, mu, mu + mu^2 / exp(p$log_size), log = TRUE))      # variance = mu + mu^2 / size
+}
+obj_nb <- MakeADFun(nll_joint_nb, list(a = 1.7, logit_b = qlogis(0.7), c = 0.1, log_sigma_p = log(0.15),
+                                       log_size = log(20), x = y), random = "x", silent = TRUE)
+fit_nb <- nlminb(obj_nb$par, obj_nb$fn, obj_nb$gr)
+round(c(a = unname(fit_nb$par["a"]), b = plogis(unname(fit_nb$par["logit_b"])), c = unname(fit_nb$par["c"]),
+        sigma_p = exp(unname(fit_nb$par["log_sigma_p"])), size = exp(unname(fit_nb$par["log_size"]))), 3)
+```
+
+The estimates barely move, as they should with counts this large. The
+integral over the states is no longer exact, since a negative binomial
+times a Normal has no closed form; the Laplace approximation is now
+doing real work, as it does in any
+[GLMM](Week12_MixedModels.html#glmm-by-hand). The Kalman filter
+doesn't apply at all.
+
+## Bonus: other dynamic models {#other-dynamic}
+
+The same two-equation structure covers much more than one population
+with Gompertz growth.
+
+- **Harvested populations.** A surplus production model subtracts the
+  catch in the state equation,
+  $B_{t+1} = B_t + r B_t (1 - B_t / K) - C_t$, and treats a survey or
+  catch-per-effort index as the observation. This is the simplest kind
+  of fisheries stock assessment; current versions are state-space
+  models fit with `TMB` (SPiCT; Pedersen and Berg 2017, *Fish and
+  Fisheries* 18: 226-243) or by MCMC (JABBA).
+- **Nonlinear growth.** Ricker, theta-logistic, or predator-prey
+  dynamics make the state equation nonlinear. The Laplace route above
+  still works for mild nonlinearity; strongly nonlinear or chaotic
+  models call for MCMC or simulation-based methods (particle filters,
+  in the `pomp` and `nimble` packages).
+- **Continuous time.** When the model is a differential equation
+  (Bolker's section 11.2), the state equation is solved numerically
+  between observations (`deSolve`), and observation-noise-only
+  trajectory matching is the common starting point.
+- **Many time series.** `MARSS` fits several populations at once, with
+  shared or separate parameters and correlated process noise. The
+  [spatiotemporal model below](#demo) does the same with correlation
+  that depends on distance.
+- **Age or stage structure.** Integrated population models combine
+  counts with survival and reproduction data in one state-space
+  likelihood.
+- **Discrete states.** When the hidden state is a category
+  (occupied or empty; resting, foraging, or traveling), the model is a
+  hidden Markov model. [Dynamic occupancy](#occupancy) is the example
+  on this page.
+
+# A spatiotemporal analysis from start to finish {#demo}
+
+The state-space model above follows one population. Most monitoring
+programs follow many sites, and the sites are on a map. This part
+takes a lek-by-lek data set from the agency's questions to an answer,
+using a model that has a covariate that varies in space and time, a
+[spatial random field](Week14_SpatialRegression.html#gp-space), and a
+second field that changes from year to year with AR(1) dynamics. It
+uses `sdmTMB` throughout.
+
+## 1. Problem and data {#demo-problem}
+
+```{r workflow-all, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow(c("PROBLEM", "THEORIES"))
+```
+
+A district covering 100 by 80 km has 60 leks, each counted every
+spring from 2011 to 2025.
+
+```{r demo-read}
+lk <- read.csv("data/LekCounts.csv")
+lk$sage_c <- (lk$sagebrush_pct - 20) / 10        # sagebrush cover: 10-point units above 20%
+head(lk, 3)
+```
+
+Each row is one lek in one year: its coordinates in km, sagebrush
+cover within 1 km (percent, treated as fixed over these years), the
+previous spring's precipitation at that lek (`precip_z`, in SD units),
+and the count of males.^[Simulated; the script is
+[sim_Week15_leks.R](rcode/sim_Week15_leks.R). `eps_true` is the true
+value of the year-to-year field at each lek, kept for checking.]
+Precipitation differs among years and, within a year, among leks: it
+is a **spatiotemporal covariate**.
+
+```{r demo-data-plot, echo=FALSE, fig.width=9.5, fig.height=4.3}
+lek_mean <- tapply(lk$males, lk$lek, mean)
+lek_xy <- lk[match(names(lek_mean), lk$lek), ]
+tot <- tapply(lk$males, lk$year, sum)
+pr <- tapply(lk$precip_z, lk$year, mean)
+yrs_lk <- as.numeric(names(tot))
+pal_sage <- hcl.colors(64, "Greens", rev = TRUE)
+sage_col <- pal_sage[pmax(1, pmin(64, round((lek_xy$sagebrush_pct - 5) / 40 * 64)))]
+layout(matrix(c(1, 1, 2, 3), 2), widths = c(1.15, 1), heights = c(2.2, 1))
+par(mar = c(4, 4, 2, 1))
+plot(lek_xy$x_km, lek_xy$y_km, asp = 1, pch = 21, bg = sage_col, cex = 0.6 + sqrt(lek_mean) / 3.2,
+     xlim = c(0, 100), ylim = c(0, 80), xlab = "Easting (km)", ylab = "Northing (km)",
+     main = "60 leks: symbol size = mean count", cex.main = 0.95)
+legend("bottomleft", c("10% sagebrush", "25%", "40%"), pch = 21, pt.bg = pal_sage[c(8, 32, 56)], pt.cex = 1.4,
+       bg = "white", cex = 0.75)
+par(mar = c(0.5, 4.2, 2, 1))
+plot(yrs_lk, tot, type = "b", pch = 16, xaxt = "n", xlab = "", ylab = "Total males", las = 1,
+     ylim = c(0, max(tot) * 1.08), main = "District total", cex.main = 0.95)
+par(mar = c(4, 4.2, 0.3, 1))
+plot(yrs_lk, pr, type = "h", lwd = 5, col = ifelse(pr > 0, "#2a78d6", "#b8860b"), xlab = "Year of count",
+     ylab = "Precip. (SD)", las = 1, cex.lab = 0.8)
+abline(h = 0, col = "grey50")
+layout(1)
+```
+
+```{r demo-problem-numbers, echo=FALSE}
+yr_peak <- yrs_lk[which.max(tot)]
+```
+
+The district total rose to `r max(tot)` males in `r yr_peak` and was
+`r tot[["2025"]]` in 2025. The agency's questions:
+
+1. **How much of the drop since `r yr_peak` is explained by
+   precipitation, and where in the district are counts lower than
+   precipitation and habitat can account for?**
+2. **What should we expect to count over the next two springs?**
+
+## 2. Candidate models {#demo-models}
+
+All of the candidates treat the count at lek $s$ in year $t$ as
+negative binomial, with a log link:
+
+$$\text{males}_{s,t} \sim \text{NegBin}(\mu_{s,t}, \text{size}),
+\qquad
+\log \mu_{s,t} = \beta_0 + \beta_1\,\text{sage}_s +
+\beta_2\,\text{precip}_{s,t} + \omega_s + \epsilon_{s,t}$$
+
+- $\omega_s$ is a **spatial field** that stays put: some parts of the
+  district hold more birds every year, for reasons not in the model.
+  This is the field from the
+  [Week 14 page](Week14_SpatialRegression.html#gp-space), with SD
+  $\sigma_s$.
+- $\epsilon_{s,t}$ is a **spatiotemporal field**: a new map of
+  departures every year, with SD $\sigma_{st}$. The candidates differ
+  in how one year's map relates to the next.
+
+| Model | Fields | What it says |
+|:--|:--|:--|
+| M0 | none | habitat and precipitation explain the counts; the rest is independent noise |
+| M1 | $\omega_s$ only | some places are always better |
+| M2 | $\omega_s$ + independent $\epsilon_{s,t}$ | good and bad patches appear each year, with no memory |
+| M3 | $\omega_s$ + AR(1) $\epsilon_{s,t}$ | good and bad patches persist and fade |
+| M4 | $\omega_s$ + random-walk $\epsilon_{s,t}$ | patches persist and never fade |
+
+M3 is the spatial version of the model in the
+[first part of this page](#ssm). Its field follows
+
+$$\epsilon_{s,t} = \rho\,\epsilon_{s,t-1} + \eta_{s,t}$$
+
+where each year's shocks $\eta_{s,t}$ are spatially correlated: a
+drought, fire, or disease outbreak hits neighboring leks together.
+Compare the Gompertz state equation written as departures from
+equilibrium, $x_t - x^* = b\,(x_{t-1} - x^*) + \varepsilon_t$: here
+$\rho$ plays the part of $b$, and the shocks are process noise with a
+map.^[`sdmTMB` calls the AR(1) coefficient `rho` (it is $\phi$ on the
+[Week 12 page](Week12_MixedModels.html#ar1)) and uses `phi` for the
+negative binomial's size parameter. Its `sigma_O` is $\sigma_s$ and
+`sigma_E` is $\sigma_{st}$.] M4 sets $\rho = 1$ (no density
+dependence, in the Gompertz reading). The negative binomial is the
+observation model. The hidden state is the whole surface
+$\log\mu_{s,t}$, and the Laplace approximation integrates the fields
+out, as in the [`RTMB` fit](#ssm-laplace).
+
+One difference from that model matters for interpretation.
+Precipitation here sits in the regression part, outside the AR(1)
+recursion, so $\beta_2$ is its effect on *that year's* expected count
+and is not carried forward by $\rho$. This is the
+[regression-with-AR-errors](Week12_MixedModels.html#lagged-response)
+form.^[To let a covariate's effect persist in a model of this form,
+add lagged copies of the covariate (`precip_lag1`, `precip_lag2`) as
+predictors, or fit a model with the covariate inside the state
+equation (`RTMB`, or the `tinyVAST` package's time-series terms).]
+
+> **Question:** Picture the yearly maps of $\epsilon_{s,t}$ for five
+> years in a row under M2 and under M3. How would the two sets of maps
+> differ? Which model has a better chance of forecasting next year?
+
+```{asis, echo=FALSE}
+*Land:* M2: five unrelated maps. M3: a patch that is low this year is
+probably still low (less so) next year, so the maps change gradually.
+Only M3 and M4 carry information forward; M2's forecast field is zero.
+```
+
+## 3. Fit and check {#demo-fit}
+
+`time = "year"` tells `sdmTMB` which column indexes time, and
+`spatiotemporal` picks the structure. The mesh is built as on the
+[Week 14 page](Week14_SpatialRegression.html#mesh).
+
+```{r demo-fits}
+library(sdmTMB)
+#  one call for every candidate with fields; `...` passes extra arguments to sdmTMB()
+fit_st <- function(spatiotemporal, data = lk, ...) {
+  sdmTMB(males ~ sage_c + precip_z, data = data, mesh = make_mesh(data, c("x_km", "y_km"), cutoff = 5),
+         family = nbinom2(), spatial = "on", time = "year", spatiotemporal = spatiotemporal, ...)
+}
+m0 <- sdmTMB(males ~ sage_c + precip_z, data = lk, family = nbinom2(), spatial = "off")
+m1 <- fit_st("off")
+m2 <- fit_st("iid")
+m3 <- fit_st("ar1")
+m4 <- fit_st("rw")
+```
+
+```{r demo-sanity, message=TRUE}
+sanity(m3)
+tidy(m3, conf.int = TRUE)
+tidy(m3, "ran_pars", conf.int = TRUE)
+```
+
+```{r demo-fit-numbers, echo=FALSE}
+b0 <- tidy(m0)
+b3 <- tidy(m3, conf.int = TRUE)
+rp3 <- tidy(m3, "ran_pars", conf.int = TRUE)
+rp <- function(term, col = "estimate") rp3[[col]][rp3$term == term]
+```
+
+All of `sanity()`'s checks pass. The precipitation effect is
+`r f2(b3$estimate[3])` (truth 0.25) and the AR(1) coefficient
+$\hat\rho$ is `r f2(rp("rho"))` (95% interval
+`r f2(rp("rho", "conf.low"))` to `r f2(rp("rho", "conf.high"))`; truth
+0.7). The sagebrush effect is `r f2(b3$estimate[2])` with a standard
+error of `r f2(b3$std.error[2])` (truth 0.4). Model M0, with no
+fields, reports a standard error of `r f2(b0$std.error[2])` for the
+same coefficient: sagebrush is a property of the lek, there are only
+60 leks, and M0 counts each of a lek's 15 years as a fresh piece of
+evidence about it.
+
+For a dynamic model the residual check that matters most is
+correlation through time. If the model has captured the dynamics, a
+lek's residual this year should say nothing about its residual next
+year:
+
+```{r demo-residuals}
+set.seed(746)
+resid_lag1 <- function(fit) {
+  r <- residuals(fit, type = "mle-mvn")       # randomized quantile residuals, Normal if the model is right
+  o <- order(lk$lek, lk$year)
+  same_lek <- lk$lek[o][-1] == lk$lek[o][-nrow(lk)]
+  cor(r[o][-1][same_lek], r[o][-nrow(lk)][same_lek])
+}
+lag1 <- c(M1 = resid_lag1(m1), M2 = resid_lag1(m2), M3 = resid_lag1(m3))
+round(lag1, 2)                                # lag-1 correlation of residuals within leks
+```
+
+M1 leaves a lag-1 residual correlation of `r f2(lag1["M1"])`: leks
+that were above expectation one year tend to be above it the next.
+M3 removes most of that (`r f2(lag1["M3"])`).
+
+## 4. Compare {#demo-compare}
+
+```{r workflow-compare, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
+draw_workflow("COMPARE")
+```
+
+```{r demo-aic}
+aic <- AIC(m0, m1, m2, m3, m4)
+aic$dAIC <- aic$AIC - min(aic$AIC)
+round(aic, 1)
+```
+
+M3 is best by AIC, with the random walk next.
+
+The agency's second question is a forecast, so the more direct test
+is to forecast. Fit each model to the years through 2018 and predict
+the 2019 counts; then fit through 2019 and predict 2020; and so on,
+seven forecasts in all. `extra_time` tells `sdmTMB` to carry the
+fields forward into a year with no data. This is the time-series
+counterpart of
+[holding out spatial blocks](Week14_SpatialRegression.html#demo-compare):
+cross-validation with random folds would let each model fill in a
+missing lek-year from the years on either side, which is a much
+easier job than forecasting.
+
+```{r demo-forecast-test, cache=TRUE}
+forecast_one <- function(origin) {
+  train <- lk[lk$year <= origin, ]
+  test <- lk[lk$year == origin + 1, ]
+  fits <- list(M0 = sdmTMB(males ~ sage_c + precip_z, data = train, family = nbinom2(), spatial = "off"),
+               M1 = fit_st("off", data = train, extra_time = origin + 1),
+               M2 = fit_st("iid", data = train, extra_time = origin + 1),
+               M3 = fit_st("ar1", data = train, extra_time = origin + 1),
+               M4 = fit_st("rw", data = train, extra_time = origin + 1))
+  sapply(fits, function(f) mean(abs(test$males - exp(predict(f, newdata = test)$est))))
+}
+forecast_err <- t(sapply(2018:2024, forecast_one))
+rownames(forecast_err) <- 2019:2025
+round(rbind(forecast_err, mean = colMeans(forecast_err)), 1)      # mean absolute error, males per lek
+```
+
+```{r demo-forecast-numbers, echo=FALSE}
+fc_mean <- colMeans(forecast_err)
+fc_wins <- table(factor(colnames(forecast_err)[apply(forecast_err, 1, which.min)], levels = colnames(forecast_err)))
+```
+
+Averaged over the seven forecasts, M3 has the smallest error
+(`r f1(fc_mean["M3"])` males per lek, against `r f1(fc_mean["M0"])`
+for M0), in agreement with AIC. The margins among M1 to M4 are much
+smaller than AIC's, though, and M3 has the smallest error in only
+`r fc_wins[["M3"]]` of the seven years. Most of the gain over M0
+comes from the permanent field $\omega_s$: knowing which leks are
+always large is worth more to a forecast than knowing which were
+above expectation last year.^[This scheme is sometimes called
+leave-future-out cross-validation; `sdmTMB_cv()` can do it when given
+fold ids that follow time. The held-out years use their observed
+precipitation, which is fair, since `precip_z` is the previous
+spring's value and is known before the count.]
+
+> **Question:** M3 and M4 differ in one assumption: whether a local
+> departure eventually fades ($\rho < 1$) or persists indefinitely
+> ($\rho = 1$). For a one-year forecast they perform about the same.
+> Would you expect that to hold for a ten-year forecast? What would
+> each model say about a lek that is far below expectation today?
+
+```{asis, echo=FALSE}
+*Land:* no. M3 forecasts the lek drifting back to its long-run level
+(set by habitat and omega), with forecast variance that levels off.
+M4 forecasts it staying low, with variance growing every year. Short
+horizons can't separate them; the choice matters for long ones, and
+is the density-dependence question again.
+```
+
+## 5. Fields and forecasts {#demo-forecast}
+
+Refit M3 with the two forecast years included, and predict the
+spatiotemporal field on a 2-km grid for a few years:
+
+```{r demo-fields}
+m3f <- fit_st("ar1", extra_time = 2026:2027)
+grid <- expand.grid(x_km = seq(1, 99, 2), y_km = seq(1, 79, 2), year = c(2019, 2022, 2025, 2027),
+                    sage_c = 0, precip_z = 0)
+pred_grid <- predict(m3f, newdata = grid)
+```
+
+```{r demo-fields-plot, echo=FALSE, fig.width=9.5, fig.height=7.6}
+gx <- sort(unique(grid$x_km))
+gy <- sort(unique(grid$y_km))
+pal_div <- hcl.colors(65, "Blue-Red 3")
+zl <- c(-1, 1) * max(abs(pred_grid$epsilon_st))
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 0.5))
+for (yr in c(2019, 2022, 2025, 2027)) {
+  z <- pred_grid$epsilon_st[pred_grid$year == yr]
+  plot(NA, xlim = c(0, 100), ylim = c(0, 80), asp = 1, xaxs = "i", yaxs = "i", xlab = "Easting (km)",
+       ylab = "Northing (km)", main = if (yr > 2025) paste(yr, "(forecast)") else yr, cex.main = 1)
+  image(gx, gy, matrix(z, length(gx)), zlim = zl, col = pal_div, add = TRUE)
+  points(lek_xy$x_km, lek_xy$y_km, pch = 20, cex = 0.5)
+  box()
+  if (yr == 2019) {
+    at <- round(seq(zl[1], zl[2], length.out = 5), 1)
+    legend("topright", legend = formatC(at, format = "f", digits = 1), pch = 22, pt.cex = 1.5,
+           pt.bg = pal_div[c(1, 17, 33, 49, 65)], bg = "white", cex = 0.7, title = "field (log scale)")
+  }
+}
+```
+
+Blue is fewer birds than habitat and precipitation predict, red is
+more. Patches persist for several years and move slowly, which is
+what $\hat\rho =$ `r f2(rp("rho"))` means on a map. The 2027 forecast
+is the 2025 map faded by $\hat\rho^2 =$ `r f2(rp("rho")^2)`: with no
+new counts, the best guess for each departure is that it shrinks
+toward zero.
+
+Now the first question. The fitted model splits each lek's expected
+log count into a precipitation part, $\hat\beta_2\,\text{precip}_{s,t}$,
+and the field. Averaged over leks, by year:
+
+```{r demo-decompose}
+p_obs <- predict(m3)
+p_obs$precip_part <- tidy(m3)$estimate[3] * p_obs$precip_z
+parts <- aggregate(cbind(precip_part, epsilon_st) ~ year, data = p_obs, FUN = mean)
+round(parts[parts$year %in% c(yr_peak, 2025), ], 2)
+```
+
+```{r demo-decompose-numbers, echo=FALSE}
+chg <- unlist(parts[parts$year == 2025, -1] - parts[parts$year == yr_peak, -1])
+low25 <- mean(pred_grid$epsilon_st[pred_grid$year == 2025] < -0.2)
+```
+
+Between `r yr_peak` and 2025 the mean log expected count fell by
+`r f2(-sum(chg))`. Precipitation accounts for `r f2(-chg[1])` of that
+and the spatiotemporal field for `r f2(-chg[2])`:
+`r round(100 * chg[1] / sum(chg))`% weather,
+`r round(100 * chg[2] / sum(chg))`% something else. District-wide,
+the drop is mostly weather. The 2025 map shows the few places where
+it isn't.
+
+For the forecast, future precipitation is unknown, so we use two
+scenarios again.^[The 2026 count depends on spring 2025
+precipitation, which the agency would already have. It isn't in this
+data set, so both forecast years use scenarios.] `predict()` with
+`nsim` draws from the joint uncertainty in the coefficients and
+fields:
+
+```{r demo-forecast}
+leks <- unique(lk[, c("lek", "x_km", "y_km", "sage_c")])
+new_avg <- merge(leks, data.frame(year = 2026:2027, precip_z = 0))      # every lek in both years
+new_dry <- transform(new_avg, precip_z = -1)
+set.seed(746)
+sim_avg <- predict(m3f, newdata = new_avg, nsim = 500)                  # rows = lek-years, columns = draws
+sim_dry <- predict(m3f, newdata = new_dry, nsim = 500)
+total_by_year <- function(sims) {
+  sapply(2026:2027, function(yr) quantile(colSums(exp(sims[new_avg$year == yr, ])), c(0.025, 0.5, 0.975)))
+}
+fc_tab <- rbind(average = as.vector(total_by_year(sim_avg)), dry = as.vector(total_by_year(sim_dry)))
+colnames(fc_tab) <- c("2026 low", "2026 median", "2026 high", "2027 low", "2027 median", "2027 high")
+round(fc_tab)                                                           # expected district total, males
+```
+
+```{r demo-forecast-plot, echo=FALSE, fig.width=7.5, fig.height=4.2}
+fit_tot <- tapply(exp(p_obs$est), p_obs$year, sum)
+par(mar = c(4, 4.5, 1, 1))
+plot(yrs_lk, tot, pch = 16, xlim = c(2011, 2027.3), ylim = c(0, max(tot) * 1.08), xlab = "Year",
+     ylab = "District total, males", las = 1)
+lines(yrs_lk, fit_tot, col = col_state, lwd = 2)
+abline(v = 2025.5, col = "grey70")
+arrows(2026:2027 - 0.12, fc_tab["average", c(1, 4)], 2026:2027 - 0.12, fc_tab["average", c(3, 6)], angle = 90,
+       code = 3, length = 0.04, col = col_state, lwd = 2)
+points(2026:2027 - 0.12, fc_tab["average", c(2, 5)], pch = 21, bg = col_state, cex = 1.3)
+arrows(2026:2027 + 0.12, fc_tab["dry", c(1, 4)], 2026:2027 + 0.12, fc_tab["dry", c(3, 6)], angle = 90,
+       code = 3, length = 0.04, col = "#b8860b", lwd = 2)
+points(2026:2027 + 0.12, fc_tab["dry", c(2, 5)], pch = 24, bg = "#b8860b", cex = 1.2)
+legend("topleft", c("count", "fitted expected total (M3)", "forecast, average precipitation",
+                    "forecast, dry springs"),
+       pch = c(16, NA, 21, 24), lty = c(NA, 1, NA, NA), lwd = c(NA, 2, NA, NA),
+       pt.bg = c(NA, NA, col_state, "#b8860b"), col = c("black", col_state, "black", "black"), bty = "n",
+       cex = 0.8)
+```
+
+The intervals are for the *expected* total. A realized count adds
+negative binomial scatter on top, lek by lek.
+
+> **Question:** The forecast intervals for 2027 are wider than for
+> 2026 under both scenarios. Name two separate reasons, one from the
+> AR(1) field and one that would apply even if the field were known.
+
+```{asis, echo=FALSE}
+*Land:* (1) two years of new, unknown shocks have entered the field
+instead of one (the predict step's variance grows, as in the Kalman
+forecast); (2) nothing from the field: coefficient uncertainty is the
+same in both years, so the honest second reason is outside the model
+as fitted: the scenario itself (2027's precipitation is a guess) and
+that a count adds NB noise. Good answers notice that the scenario
+uncertainty isn't in the interval at all.
+```
+
+## 6. What we tell the agency {#demo-answer}
+
+- **Precipitation.** A spring 1 SD wetter than average raises the next
+  year's expected count at a lek by a factor of
+  `r f2(exp(b3$estimate[3]))` (95% interval
+  `r f2(exp(b3$conf.low[3]))` to `r f2(exp(b3$conf.high[3]))`).
+- **The drop since `r yr_peak`.** About
+  `r round(100 * chg[1] / sum(chg))`% of the drop in expected counts
+  follows from drier springs. The rest is in the spatiotemporal
+  field, and it is local: `r round(100 * low25)`% of the district is
+  more than 0.2 below expectation on the log scale in 2025 (the
+  darkest blue on the map). Those are the places to look for a cause
+  other than weather.
+- **Persistence.** Local departures carry over from year to year
+  ($\hat\rho =$ `r f2(rp("rho"))`), so the low areas are likely to
+  stay low for the next few years unless something changes.
+- **Forecast.** With average precipitation, expect a district total
+  around `r round(fc_tab["average", 2])` in 2026 (95% interval for the
+  expected total `r round(fc_tab["average", 1])` to
+  `r round(fc_tab["average", 3])`); with another dry spring, around
+  `r round(fc_tab["dry", 2])`.
+
+The AR(1) model is corroborated against rivals with no memory and, less
+firmly, against one with permanent memory. Whether the low areas
+reflect something lasting (habitat loss) or something that fades (a
+local drought the covariate missed) is the M3-versus-M4 question, and
+15 years of counts leave it open.
+
+## A take-home exercise {#wod}
+
+The WOD (workout of the day, a short exercise) that goes with this
+page is
+[*Filter by Hand*](wod/WOD_Week15_Lecture1_FilterByHand.pdf). It works
+one step of the Kalman filter on paper and then fits a state-space
+model to a different data set, counts of desert bighorn sheep.
+
+# Dynamic occupancy {#occupancy}
+
+The hidden state doesn't have to be a number. For many species the
+question is whether a site is occupied at all, and the state is 1 or
+0. A **dynamic occupancy model** has the same two layers as the
+state-space model above: a state equation (sites go extinct and get
+recolonized) and an observation equation (an occupied site can be
+missed). The Kalman filter doesn't apply to a 0/1 state, but an
+algorithm with the same predict-and-update rhythm does.
+
+## 1. A hidden state that is 0 or 1 {#occ-model}
+
+American pikas live in talus (rock piles) and tolerate heat poorly.
+A monitoring program visits 100 talus patches three times each summer
+for eight years and records whether pikas were detected on each visit
+(seen, heard, or fresh hay piles found).
+
+```{r read-pikas}
+pikas <- read.csv("data/PikaPatches.csv")
+head(pikas, 3)
+```
+
+`temp_z` is that summer's mean temperature in SD units, the same for
+every patch in a year: a covariate that varies in time.^[Simulated;
+the script is [sim_Week15_pikas.R](rcode/sim_Week15_pikas.R), and
+`occupied_true` is the true state. The model is from MacKenzie et al.
+(2003, *Ecology* 84: 2200-2207).] The program's question: **do hot
+summers raise the chance that a patch loses its pikas?**
+
+The model, for patch $i$ in year $t$ with true state $z_{i,t}$:
+
+$$\begin{aligned}
+\text{first year:} \quad & z_{i,1} \sim \text{Bernoulli}(\psi_i),
+  & \text{logit}\,\psi_i = \alpha_0 + \alpha_1\,\text{elev}_i\\
+\text{state:} \quad & z_{i,t+1} \sim
+  \begin{cases}\text{Bernoulli}(1 - \varepsilon_t) & \text{if } z_{i,t} = 1\\
+  \text{Bernoulli}(\gamma) & \text{if } z_{i,t} = 0\end{cases},
+  & \text{logit}\,\varepsilon_t = e_0 + e_1\,\text{temp}_t\\
+\text{observation:} \quad & y_{i,t,k} \sim \text{Bernoulli}(p\,z_{i,t})
+\end{aligned}$$
+
+An occupied patch goes extinct with probability $\varepsilon_t$,
+which depends on that summer's temperature; an empty one is colonized
+with probability $\gamma$; and each visit to an occupied patch
+detects pikas with probability $p$. An empty patch never produces a
+detection.^[So the model assumes no false positives, and that a
+patch's state doesn't change between visits within a summer (the
+"closure" assumption). Old hay piles mistaken for fresh ones would
+violate the first.] The temperature covariate is in the state
+equation, like precipitation in the [grouse model](#covariate-place).
+
+```{r pika-arrays}
+years <- sort(unique(pikas$year))
+n_yr <- length(years)
+n_patch <- length(unique(pikas$patch))
+pikas <- pikas[order(pikas$year, pikas$patch), ]
+det <- matrix(pikas$visit1 + pikas$visit2 + pikas$visit3, n_patch, n_yr)     # detections (0 to 3): patch by year
+elev_c <- (pikas$elev_m[pikas$year == years[1]] - 2800) / 500                # 500-m units above 2800 m
+temp <- pikas$temp_z[match(years, pikas$year)]
+rbind(temp = temp, detected = colMeans(det > 0))                             # share of patches with a detection
+```
+
+The share of patches with at least one detection is the "naive"
+occupancy. It tends to understate the truth, because a patch with
+three misses looks the same as an empty one.
+
+## 2. The likelihood by matrix multiplication {#forward}
+
+For the grouse, integrating out the hidden states meant an integral.
+Here it means a sum over every sequence of 0s and 1s the patch could
+have followed: $2^8 = 256$ sequences per patch. The **forward
+algorithm** gets that sum without listing them. It carries a pair of
+numbers through time,
+
+$$\boldsymbol\alpha_t = \big(P(\text{occupied in year } t \text{ and
+the data so far}),\ \ P(\text{empty in year } t \text{ and the data so
+far})\big)$$
+
+and alternates two moves:
+
+- **Predict:** multiply by the transition matrix,
+  $\Gamma_t = \begin{pmatrix} 1 - \varepsilon_t & \varepsilon_t \\
+  \gamma & 1 - \gamma \end{pmatrix}$ (rows: state this year; columns:
+  state next year).
+- **Update:** multiply each entry by the probability of that year's
+  visits given the state. With $d$ detections in 3 visits that is
+  $p^d (1 - p)^{3 - d}$ for an occupied patch; for an empty patch it
+  is 1 if $d = 0$ and 0 otherwise.
+
+At the end, the two entries of $\boldsymbol\alpha$ sum to the
+likelihood of the patch's whole history.
+
+Here is a three-year history with 2, 0, and 1 detections, using
+$\psi = 0.5$, $\varepsilon = 0.2$, $\gamma = 0.1$, $p = 0.6$:
+
+```{r forward-trace, echo=FALSE}
+trace_forward <- function(d, psi, gam, eps, p) {
+  alpha <- c(psi, 1 - psi)
+  out <- data.frame(step = "start", occupied = alpha[1], empty = alpha[2])
+  for (t in seq_along(d)) {
+    if (t > 1) {
+      alpha <- as.vector(alpha %*% matrix(c(1 - eps, eps, gam, 1 - gam), 2, byrow = TRUE))
+      out <- rbind(out, data.frame(step = paste0("predict year ", t), occupied = alpha[1], empty = alpha[2]))
+    }
+    alpha <- alpha * c(p^d[t] * (1 - p)^(3 - d[t]), d[t] == 0)
+    out <- rbind(out, data.frame(step = paste0("update year ", t, " (", d[t], " detections)"),
+                                 occupied = alpha[1], empty = alpha[2]))
+  }
+  out
+}
+tr <- trace_forward(c(2, 0, 1), 0.5, 0.1, 0.2, 0.6)
+knitr::kable(tr, digits = 5, col.names = c("Step", "P(occupied and data so far)", "P(empty and data so far)"))
+```
+
+> **Question:** After the year-2 update, what is the probability that
+> the patch was occupied in year 2, given the data through year 2?
+> The year-3 update sets the "empty" entry to zero. Why?
+
+```{asis, echo=FALSE}
+*Land:* 0.00369 / (0.00369 + 0.0144) = 0.20: three misses make
+extinction the likelier story, but not by much. In year 3 pikas were
+detected, and an empty patch can't produce a detection.
+```
+
+The full likelihood runs this for every patch, with $\psi$ depending
+on elevation and $\varepsilon$ on temperature:
+
+```{r occupancy-fit}
+patch_lik <- function(d, psi, gam, eps, p) {
+  alpha <- c(psi, 1 - psi)
+  for (t in seq_along(d)) {
+    if (t > 1) alpha <- alpha %*% matrix(c(1 - eps[t - 1], eps[t - 1], gam, 1 - gam), 2, byrow = TRUE)   # predict
+    alpha <- alpha * c(p^d[t] * (1 - p)^(3 - d[t]), d[t] == 0)                                        # update
+  }
+  sum(alpha)
+}
+nll_occ <- function(par) {
+  psi <- plogis(par[1] + par[2] * elev_c)
+  gam <- plogis(par[3])
+  eps <- plogis(par[4] + par[5] * temp)        # temp[t] acts on the transition from year t to t + 1
+  p <- plogis(par[6])
+  -sum(sapply(seq_len(n_patch), function(i) log(patch_lik(det[i, ], psi[i], gam, eps, p))))
+}
+fit_occ <- optim(c(0, 0, -2, -1, 0, 0), nll_occ, method = "BFGS", hessian = TRUE)
+```
+
+The `unmarked` package's `colext()` fits the same model. It wants the
+detections as one wide matrix, with a column per visit:
+
+```{r occupancy-colext}
+library(unmarked)
+y_wide <- matrix(NA, n_patch, 3 * n_yr)
+for (t in seq_len(n_yr)) {
+  y_wide[, 3 * (t - 1) + 1:3] <- as.matrix(pikas[pikas$year == years[t], c("visit1", "visit2", "visit3")])
+}
+umf <- unmarkedMultFrame(y = y_wide, siteCovs = data.frame(elev_c = elev_c),
+                         yearlySiteCovs = list(temp = matrix(temp, n_patch, n_yr, byrow = TRUE)),
+                         numPrimary = n_yr)
+fit_colext <- colext(psiformula = ~ elev_c, gammaformula = ~ 1, epsilonformula = ~ temp, pformula = ~ 1,
+                     data = umf)
+c(by_hand = -fit_occ$value, colext = as.numeric(logLik(fit_colext)))        # log-likelihoods
+```
+
+```{r occupancy-table, echo=FALSE}
+se_occ <- sqrt(diag(solve(fit_occ$hessian)))
+occ_tab <- data.frame(
+  parameter = c("first-year occupancy: intercept (logit)", "first-year occupancy: elevation",
+                "colonization: intercept (logit)", "extinction: intercept (logit)", "extinction: temperature",
+                "detection: intercept (logit)"),
+  truth = c(0.5, 1.0, qlogis(0.12), -1.6, 0.8, qlogis(0.6)), estimate = fit_occ$par, se = se_occ)
+knitr::kable(occ_tab, digits = 2, col.names = c("Parameter", "Truth", "Estimate", "SE"))
+eps_hat <- function(tz) plogis(fit_occ$par[4] + fit_occ$par[5] * tz)
+gam_hat <- plogis(fit_occ$par[3])
+p_hat <- plogis(fit_occ$par[6])
+ci_temp <- fit_occ$par[5] + c(-1.96, 1.96) * se_occ[5]
+```
+
+The two log-likelihoods agree. The temperature coefficient is
+`r f2(fit_occ$par[5])` (95% interval `r f2(ci_temp[1])` to
+`r f2(ci_temp[2])`): the estimated extinction probability is
+`r f2(eps_hat(-1))` after a summer 1 SD cooler than average,
+`r f2(eps_hat(0))` after an average one, and `r f2(eps_hat(1))` after
+one 1 SD hotter. Detection probability per visit is
+`r f2(p_hat)`, so three visits miss an occupied patch with
+probability $(1 - \hat p)^3 =$ `r f2((1 - p_hat)^3)`.
+
+The fitted model also gives the occupancy trajectory. Each year's
+expected occupancy follows from the last:
+$\psi_{t+1} = \psi_t (1 - \varepsilon_t) + (1 - \psi_t)\,\gamma$.
+
+```{r occupancy-trajectory}
+psi_hat <- matrix(NA, n_patch, n_yr)
+psi_hat[, 1] <- plogis(fit_occ$par[1] + fit_occ$par[2] * elev_c)
+for (t in 2:n_yr) psi_hat[, t] <- psi_hat[, t - 1] * (1 - eps_hat(temp[t - 1])) + (1 - psi_hat[, t - 1]) * gam_hat
+```
+
+```{r occupancy-plot, echo=FALSE, fig.width=7, fig.height=4.2}
+occ_true <- tapply(pikas$occupied_true, pikas$year, mean)
+par(mar = c(4, 4.2, 1, 1))
+plot(years, colMeans(psi_hat), type = "b", pch = 16, col = col_state, lwd = 2, ylim = c(0.2, 0.8),
+     xlab = "Year", ylab = "Share of patches occupied", las = 1)
+lines(years, colMeans(det > 0), type = "b", pch = 1, col = col_obs, lty = 2, lwd = 2)
+lines(years, occ_true, type = "b", pch = 4, lty = 3, lwd = 1.5)
+legend("topright", c("model estimate", "naive (at least one detection)", "truth (known because simulated)"),
+       pch = c(16, 1, 4), lty = c(1, 2, 3), lwd = c(2, 2, 1.5), col = c(col_state, col_obs, "black"),
+       bty = "n", cex = 0.85)
+```
+
+```{r occupancy-numbers, echo=FALSE}
+e0 <- eps_hat(0)
+both_missed <- (1 - e0) * (1 - p_hat)^3 * (1 - e0)
+recolonized <- e0 * gam_hat
+eq_occ <- function(tz) gam_hat / (gam_hat + eps_hat(tz))
+```
+
+If every summer were average, occupancy would settle at
+$\hat\gamma / (\hat\gamma + \hat\varepsilon) =$ `r f2(eq_occ(0))`. If
+every summer were 1 SD hotter it would settle at `r f2(eq_occ(1))`.
+
+> **Question:** A patch had detections in 2019 and in 2021, and none
+> on three visits in 2020. Either pikas were there in 2020 and were
+> missed three times, or the patch went extinct and was recolonized.
+> Using $\hat\varepsilon =$ `r f2(e0)` (average summers),
+> $\hat\gamma =$ `r f2(gam_hat)`, and $\hat p =$ `r f2(p_hat)`, which
+> is more probable, and by how much?
+
+```{asis, echo=FALSE}
+*Land:* survived and missed: (1 - eps) x (1 - p)^3 x (1 - eps), about
+0.051; extinct and recolonized: eps x gamma, about 0.024. "Missed" is
+about twice as probable (2.1 to 1, probability about 0.68). Three visits
+don't settle it.
+```
+
+## Discussion {#occ-discussion}
+
+> **Discussion:** Line up the grouse state-space model and the pika
+> occupancy model: what plays the part of the state, the process
+> noise, the observation noise, and the covariate in each? The grouse
+> model struggled to separate process from observation noise. The
+> pika model estimated detection probability with a small standard
+> error. What does the pika design have that the grouse series
+> lacked?
+
+```{asis, echo=FALSE}
+*Land:* state: log abundance vs. occupied/empty; process: Normal
+shocks vs. extinction and colonization events; observation: counting
+error vs. missed detections; covariate in the state equation in both.
+The pika design has replicate visits within a season, during which the
+state doesn't change, so disagreement among visits is observation
+error and nothing else. That is the replicate-counts remedy.
+```
+
+## Bonus: more hidden-state models {#hmm}
+
+A model with a hidden state that moves among a few categories is a
+**hidden Markov model** (HMM), and the forward algorithm fits all of
+them. Some relatives of the model above:
+
+- **More states.** Unoccupied, occupied without breeding, occupied
+  with breeding; or for one tagged animal, resting, foraging, and
+  traveling, with step lengths and turning angles as the
+  observations (McClintock et al. 2020, *Ecology Letters* 23:
+  1878-1903; the `momentuHMM` and `hmmTMB` packages).
+- **Counts instead of presence.** The open-population N-mixture model
+  (Dail and Madsen 2011, *Biometrics* 67: 577-587; `pcountOpen()` in
+  `unmarked`) has abundance as the hidden state and repeated counts as
+  the observations, a bridge between this section and the grouse
+  model.
+- **Space.** Colonization that depends on occupied neighbors, or a
+  spatial random field on occupancy (the `spOccupancy` package).
+- **Marked animals.** Capture-recapture survival models are HMMs with
+  states alive and dead, and "detected or not" as the observation.
+
+Every model on this page has the same skeleton: a hidden state that
+changes by a rule with noise in it, and data that are a noisy view of
+the state. Choosing a model means writing down those two pieces for
+your system, and fitting it means integrating or summing the hidden
+state out.

@@ -1,0 +1,82 @@
+<div class="w746ss" id="ssw">
+<style>
+.w746ss{--ink:#222;--ink2:#555;--card:#f4f4f2;font-family:inherit;margin:1em 0 1.5em;max-width:760px}
+.w746ss .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.w746ss .row label{color:var(--ink2);font-size:15px;margin:0;font-weight:400;min-width:230px}
+.w746ss .row input[type=range]{flex:1;min-width:160px}
+.w746ss .row output{font-weight:600;min-width:52px;text-align:right}
+.w746ss .row label.chk{min-width:0;color:var(--ink);cursor:pointer}
+.w746ss button{font-size:14px;padding:4px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.w746ss button:hover{background:#eee}
+.w746ss .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0}
+.w746ss .card{background:var(--card);border-radius:8px;padding:8px 12px}
+.w746ss .card .k{font-size:13px;color:var(--ink2)}
+.w746ss .card .v{font-size:16px;font-weight:600;color:var(--ink)}
+.w746ss canvas{width:100%;height:auto;display:block}
+@media (max-width:600px){.w746ss .cards{grid-template-columns:1fr}}
+</style>
+<div class="row"><label for="ssw-b">Density dependence, b</label><input type="range" id="ssw-b" min="0.3" max="0.98" step="0.01" value="0.7"><output id="ssw-b-o"></output></div>
+<div class="row"><label for="ssw-sp">Process noise SD, &sigma;<sub>p</sub></label><input type="range" id="ssw-sp" min="0" max="0.4" step="0.01" value="0.15"><output id="ssw-sp-o"></output></div>
+<div class="row"><label for="ssw-so">Observation noise SD, &sigma;<sub>o</sub></label><input type="range" id="ssw-so" min="0" max="0.4" step="0.01" value="0.2"><output id="ssw-so-o"></output></div>
+<div class="row"><button id="ssw-new">New series</button>
+  <label class="chk"><input type="checkbox" id="ssw-filt"> Show the filter's estimate of the state</label></div>
+<canvas id="ssw-cv" width="760" height="360" role="img" aria-label="A simulated population over 40 years: the true state as a line, the counts as points, and optionally the Kalman filter's estimate with a band."></canvas>
+<div class="cards">
+  <div class="card"><div class="k">Regression of log count on last year's log count (the one-step-ahead estimate of b)</div><div class="v" id="ssw-s1"></div></div>
+  <div class="card"><div class="k">Kalman gain: weight the filter gives each new count</div><div class="v" id="ssw-s2"></div></div>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById('ssw-'+id);
+const T=40,XEQ=Math.log(300);
+let ZP=[],ZO=[],Z0=0;
+function rnorm(){let u=0;while(u===0)u=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*Math.random());}
+function sim(){ZP=[];ZO=[];for(let t=0;t<T;t++){ZP.push(rnorm());ZO.push(rnorm());}Z0=rnorm();}
+function draw(){
+  const b=+$('b').value,sp=+$('sp').value,so=+$('so').value,a=(1-b)*XEQ;
+  $('b-o').textContent=b.toFixed(2);$('sp-o').textContent=sp.toFixed(2);$('so-o').textContent=so.toFixed(2);
+  // simulate: the same random draws are rescaled as the sliders move
+  const x=[],y=[];let xp=XEQ+sp/Math.sqrt(1-b*b)*Z0;
+  for(let t=0;t<T;t++){xp=a+b*xp+sp*ZP[t];x.push(xp);y.push(xp+so*ZO[t]);}
+  // Kalman filter with the true parameter values
+  const mf=[],sf=[];let m=XEQ,P=sp*sp/(1-b*b),K=0;
+  for(let t=0;t<T;t++){m=a+b*m;P=b*b*P+sp*sp;K=(P+so*so)>0?P/(P+so*so):0;m=m+K*(y[t]-m);P=(1-K)*P;mf.push(m);sf.push(Math.sqrt(P));}
+  // regression slope of y[t] on y[t-1]
+  let sx=0,sy=0;for(let t=1;t<T;t++){sx+=y[t-1];sy+=y[t];}
+  const mx=sx/(T-1),my=sy/(T-1);let sxy=0,sxx=0;
+  for(let t=1;t<T;t++){sxy+=(y[t-1]-mx)*(y[t]-my);sxx+=(y[t-1]-mx)*(y[t-1]-mx);}
+  const slope=sxx>0?sxy/sxx:NaN,vx=sp*sp/(1-b*b),expect=(vx+so*so)>0?b*vx/(vx+so*so):NaN;
+  $('s1').textContent=(isNaN(slope)?'n/a':slope.toFixed(2))+' in this series; '+(isNaN(expect)?'n/a':expect.toFixed(2))+' on average; true b = '+b.toFixed(2);
+  $('s2').textContent=K.toFixed(2)+(K>0.995?'  (counts taken at face value)':K<0.005?'  (counts ignored)':'');
+  // plot
+  const cv=$('cv'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height,pad={l:54,r:10,t:12,b:38};
+  const lo=Math.log(90),hi=Math.log(1000);
+  const X=t=>pad.l+(t+0.5)/T*(W-pad.l-pad.r),Y=v=>H-pad.b-(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo)*(H-pad.t-pad.b);
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.strokeStyle='#999';ctx.lineWidth=1;ctx.strokeRect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);
+  ctx.fillStyle='#666';ctx.font='12px sans-serif';ctx.textAlign='center';
+  [0,10,20,30,40].forEach(t=>ctx.fillText(t,pad.l+t/T*(W-pad.l-pad.r),H-pad.b+15));ctx.fillText('Year',(pad.l+W-pad.r)/2,H-6);
+  ctx.textAlign='right';[100,200,300,500,800].forEach(v=>{ctx.fillText(v,pad.l-6,Y(Math.log(v))+4);ctx.strokeStyle='#eee';ctx.beginPath();ctx.moveTo(pad.l,Y(Math.log(v)));ctx.lineTo(W-pad.r,Y(Math.log(v)));ctx.stroke();});
+  ctx.save();ctx.translate(14,(pad.t+H-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText('Males (log scale)',0,0);ctx.restore();
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b);ctx.clip();
+  ctx.strokeStyle='#888';ctx.setLineDash([6,4]);ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(pad.l,Y(XEQ));ctx.lineTo(W-pad.r,Y(XEQ));ctx.stroke();ctx.setLineDash([]);
+  if($('filt').checked){
+    ctx.fillStyle='rgba(42,120,214,0.18)';ctx.beginPath();
+    for(let t=0;t<T;t++){const px=X(t),py=Y(mf[t]+1.96*sf[t]);t?ctx.lineTo(px,py):ctx.moveTo(px,py);}
+    for(let t=T-1;t>=0;t--)ctx.lineTo(X(t),Y(mf[t]-1.96*sf[t]));ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#2a78d6';ctx.lineWidth=2.4;ctx.beginPath();for(let t=0;t<T;t++){t?ctx.lineTo(X(t),Y(mf[t])):ctx.moveTo(X(t),Y(mf[t]));}ctx.stroke();
+  }
+  ctx.strokeStyle='#222';ctx.lineWidth=1.6;ctx.beginPath();for(let t=0;t<T;t++){t?ctx.lineTo(X(t),Y(x[t])):ctx.moveTo(X(t),Y(x[t]));}ctx.stroke();
+  ctx.fillStyle='#c0392b';for(let t=0;t<T;t++){ctx.beginPath();ctx.arc(X(t),Y(y[t]),3.6,0,2*Math.PI);ctx.fill();}
+  ctx.restore();
+  // legend
+  ctx.font='12px sans-serif';ctx.textAlign='left';let lx=pad.l+10,ly=pad.t+16;
+  ctx.strokeStyle='#222';ctx.lineWidth=1.6;ctx.beginPath();ctx.moveTo(lx,ly-4);ctx.lineTo(lx+22,ly-4);ctx.stroke();ctx.fillStyle='#222';ctx.fillText('true state',lx+28,ly);
+  lx+=100;ctx.fillStyle='#c0392b';ctx.beginPath();ctx.arc(lx+6,ly-4,3.6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#222';ctx.fillText('count',lx+16,ly);
+  lx+=62;ctx.strokeStyle='#888';ctx.setLineDash([6,4]);ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(lx,ly-4);ctx.lineTo(lx+22,ly-4);ctx.stroke();ctx.setLineDash([]);ctx.fillText('equilibrium',lx+28,ly);
+  if($('filt').checked){lx+=104;ctx.strokeStyle='#2a78d6';ctx.lineWidth=2.4;ctx.beginPath();ctx.moveTo(lx,ly-4);ctx.lineTo(lx+22,ly-4);ctx.stroke();ctx.fillText('filter estimate (95% band)',lx+28,ly);}
+}
+['b','sp','so'].forEach(id=>{$(id).oninput=draw;});$('filt').onchange=draw;$('new').onclick=()=>{sim();draw();};
+sim();draw();
+})();
+</script>
+</div>

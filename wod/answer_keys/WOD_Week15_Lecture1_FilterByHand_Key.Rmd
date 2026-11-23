@@ -1,0 +1,283 @@
+---
+output:
+  pdf_document: default
+  # word_document: default   # uncomment (and comment out pdf_document) to knit to Word instead
+header-includes:
+  - \usepackage{needspace}
+  - \usepackage{xcolor}
+  - \usepackage{sansmath}
+  - \usepackage{framed}
+  - \definecolor{ans}{RGB}{200,0,130}
+  - \newcommand{\ans}[1]{\textcolor{ans}{\sffamily\sansmath{}#1}}
+  - \newcommand{\ansbegin}{\begin{leftbar}\begingroup\color{ans}\sffamily\sansmath}
+  - \newcommand{\ansend}{\endgroup\end{leftbar}}
+geometry: margin=0.9in
+knit: (function(input, encoding) { rmarkdown::render(input, encoding = encoding, output_dir = dirname(input)) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 6.5, fig.height = 0.3, message = FALSE, warning = FALSE)
+ans_col <- rgb(200, 0, 130, maxColorValue = 255)
+
+# fill-in table drawn as a plot; cells in fill_cols (and fill_rows) are drawn in the answer color, italic
+blank_table <- function(headers, body, col_widths = NULL,
+                        header_height = 0.35, row_height = 0.5,
+                        cex = 0.95, family = "serif", fill_cols = integer(0), fill_rows = seq_along(body)) {
+  nc <- length(headers); nr <- length(body)
+  if (is.null(col_widths)) col_widths <- rep(1, nc)
+  col_widths <- col_widths / sum(col_widths)
+  cx <- c(0, cumsum(col_widths))
+  h_total <- header_height + nr * row_height
+  par(mar = c(0, 0, 0, 0), family = family)
+  plot(NA, xlim = c(0, 1), ylim = c(0, h_total), axes = FALSE, xlab = "", ylab = "",
+       xaxs = "i", yaxs = "i")
+  y <- h_total
+  segments(0, y, 1, y, lwd = 1.5)
+  y <- y - header_height
+  segments(0, y, 1, y, lwd = 1.5)
+  for (i in seq_len(nr)) {
+    y <- y - row_height
+    segments(0, y, 1, y, lwd = if (i == nr) 1.5 else 0.5,
+             col = if (i == nr) "black" else "grey70")
+  }
+  for (v in cx) segments(v, 0, v, h_total, lwd = 1)
+  yh <- h_total - header_height / 2
+  for (j in seq_len(nc)) text((cx[j] + cx[j + 1]) / 2, yh, labels = headers[[j]], font = 2, cex = cex)
+  y <- h_total - header_height
+  for (i in seq_len(nr)) {
+    yc <- y - row_height / 2
+    for (j in seq_len(nc)) {
+      val <- body[[i]][[j]]
+      ans <- j %in% fill_cols && i %in% fill_rows && !identical(val, "(none)")
+      if (!identical(val, "")) text((cx[j] + cx[j + 1]) / 2, yc, labels = val, cex = cex,
+                                    col = if (ans) ans_col else "black", font = if (ans) 3 else 1)
+    }
+    y <- y - row_height
+  }
+}
+
+bighorn <- read.csv("../../data/BighornCounts.csv")
+y <- log(bighorn$ewes)
+w <- bighorn$precip_z
+n <- length(y)
+kalman <- function(a, b, c, sigma_p, sigma_o, d = 0, y, w) {
+  n <- length(y)
+  x_hat <- a / (1 - b)
+  P <- sigma_p^2 / (1 - b^2)
+  nll <- 0
+  for (t in seq_len(n)) {
+    x_hat <- a + b * x_hat + c * w[t]
+    P <- b^2 * P + sigma_p^2
+    nll <- nll - dnorm(y[t], x_hat + d * w[t], sqrt(P + sigma_o^2), log = TRUE)
+    K <- P / (P + sigma_o^2)
+    x_hat <- x_hat + K * (y[t] - d * w[t] - x_hat)
+    P <- (1 - K) * P
+  }
+  list(nll = nll)
+}
+nll_ss <- function(par, ...) kalman(par[1], plogis(par[2]), par[3], exp(par[4]), exp(par[5]), ...)$nll
+check_par <- c(1, qlogis(0.8), 0.1, log(0.1), log(0.15))
+check_val <- nll_ss(check_par, y = y, w = w)
+
+# Part 1
+x_pred <- 0.96 + 0.8 * 4.70 + 0.1 * (-1)
+P_pred <- 0.8^2 * 0.025 + 0.014
+K1 <- P_pred / (P_pred + 0.02)
+x_new <- x_pred + K1 * (4.42 - x_pred)
+P_new <- (1 - K1) * P_pred
+K_poor <- P_pred / (P_pred + 0.12)
+x_poor <- x_pred + K_poor * (4.42 - x_pred)
+
+# Part 2
+fit_lm <- summary(lm(y[-1] ~ y[-n] + w[-1]))$coefficients
+fit <- optim(check_par, nll_ss, y = y, w = w, method = "BFGS")
+stopifnot(fit$convergence == 0)
+est <- c(b = plogis(fit$par[2]), c = fit$par[3], sigma_p = exp(fit$par[4]), sigma_o = exp(fit$par[5]),
+         eq = exp(fit$par[1] / (1 - plogis(fit$par[2]))))
+nll_obs <- function(par) kalman(par[1], plogis(par[2]), 0, exp(par[4]), exp(par[5]), d = par[3], y = y, w = w)$nll
+fit_obs <- optim(check_par, nll_obs, method = "BFGS")
+```
+
+**NRES 746, Week 15, Lecture 1: Filter by Hand (take-home)**
+
+\ans{\textbf{Answer key.} Answers are in magenta sans-serif type; longer answers have a bar in the margin.}
+
+**Due Monday, Dec. 7.** Work on your own or in small groups. Part 1 is
+on paper; Part 2 involves R. Turn in this sheet only: you'll write
+code along the way, but no need to submit it. The last question asks
+how you used AI.
+
+A wildlife agency counts desert bighorn ewes in one mountain range
+from a helicopter each fall. Wet winters grow more forage, so the
+agency also records the previous winter's precipitation. It wants to
+know how strongly the herd regulates itself, and the counts are
+noisy: a group of ewes behind a ridge is easy to miss.
+
+## Notation and key equations
+
+- $x_t$: the true log number of ewes in year $t$ (hidden). $y_t$: the
+  log of the count. $w_t$: winter precipitation, in SDs from its mean.
+- **State equation:** $x_t = a + b\,x_{t-1} + c\,w_t + \varepsilon_t$,
+  with process noise $\varepsilon_t \sim N(0, \sigma_p^2)$. $b$
+  measures density dependence ($b = 1$: none; smaller $b$: stronger).
+- **Observation equation:** $y_t = x_t + \delta_t$, with observation
+  noise $\delta_t \sim N(0, \sigma_o^2)$.
+- The **Kalman filter** carries a best guess $\hat x$ of the state and
+  its variance $P$ from year to year. Each year it predicts,
+
+    $$\hat x_{\text{pred}} = a + b\,\hat x_{\text{last}} + c\,w_t,
+    \qquad P_{\text{pred}} = b^2 P_{\text{last}} + \sigma_p^2$$
+
+    and then updates with the new count,
+
+    $$K = \frac{P_{\text{pred}}}{P_{\text{pred}} + \sigma_o^2}, \qquad
+    \hat x_{\text{new}} = \hat x_{\text{pred}} + K\,(y_t - \hat x_{\text{pred}}),
+    \qquad P_{\text{new}} = (1 - K)\,P_{\text{pred}}$$
+
+## Part 1: One year of the filter (on paper)
+
+Suppose the parameters are known: $a = 0.96$, $b = 0.8$, $c = 0.1$,
+$\sigma_p^2 = 0.014$, $\sigma_o^2 = 0.02$. After the 2024 survey the
+filter's belief about the herd is $\hat x = 4.70$ (about 110 ewes)
+with variance $P = 0.025$. The winter before the 2025 survey was dry,
+$w_{2025} = -1$, and the 2025 count was 83 ewes ($y_{2025} = 4.42$).
+
+**1a.** Work through the predict step and then the update step for
+2025, and fill in the table.
+
+\ansbegin
+
+Predict: $\hat x_{\text{pred}} = 0.96 + 0.8(4.70) + 0.1(-1) =$ `r sprintf("%.2f", x_pred)`;
+$\ P_{\text{pred}} = 0.8^2(0.025) + 0.014 =$ `r sprintf("%.3f", P_pred)`
+
+Update: $K = 0.030 / (0.030 + 0.02) =$ `r sprintf("%.1f", K1)`;
+$\ \hat x_{\text{new}} = 4.62 + 0.6\,(4.42 - 4.62) =$ `r sprintf("%.2f", x_new)`;
+$\ P_{\text{new}} = 0.4\,(0.030) =$ `r sprintf("%.3f", P_new)`
+
+\ansend
+
+```{r step-table, fig.height=1.85}
+blank_table(
+  headers = list("", expression(hat(x)), "P", "K"),
+  body = list(list("after the 2024 survey", "4.70", "0.025", ""),
+              list("2025, predicted (before the count)", sprintf("%.2f", x_pred), sprintf("%.3f", P_pred), "(none)"),
+              list("2025, updated (after the count)", sprintf("%.2f", x_new), sprintf("%.3f", P_new),
+                   sprintf("%.1f", K1))),
+  col_widths = c(2.6, 1, 1, 1), fill_cols = 2:4, fill_rows = 2:3)
+```
+
+**1b.** The count (83 ewes) was below the prediction. Did the
+filter's estimate move all the way to the count, most of the way, or
+only a little? What in the numbers above decided that?
+
+\ansbegin
+
+A bit more than halfway ($K =$ `r sprintf("%.1f", K1)`): from `r sprintf("%.2f", x_pred)`
+(about `r round(exp(x_pred))` ewes) to `r sprintf("%.2f", x_new)` (about `r round(exp(x_new))`).
+The prediction's variance (0.030) is larger than the count's (0.02), so the count gets more weight.
+
+\ansend
+
+**1c.** Suppose the 2025 survey had been flown in poor conditions, so
+that $\sigma_o^2 = 0.12$ for that year. What would $K$ and the updated
+$\hat x$ be? What would $K$ be if counts were exact?
+
+\ansbegin
+
+$K = 0.030 / (0.030 + 0.12) =$ `r sprintf("%.1f", K_poor)`;
+$\ \hat x_{\text{new}} = 4.62 + 0.2\,(4.42 - 4.62) =$ `r sprintf("%.2f", x_poor)`.
+With exact counts ($\sigma_o^2 = 0$), $K = 1$.
+
+\ansend
+
+## Part 2: Fitting the model (R)
+
+Each coding question has a label:
+
+- *Recommended: no AI*: this week's core skill. R's help pages, web
+  search, the Week 15 page, and classmates are fine.
+- *AI optional/encouraged*: the results matter, but the code isn't the
+  point.
+
+Read the data with
+
+```{r read-data, echo=TRUE, eval=FALSE}
+bighorn <- read.csv(
+  "https://kevintshoemaker.github.io/NRES-746/data/BighornCounts.csv")
+y <- log(bighorn$ewes)
+w <- bighorn$precip_z
+```
+
+The columns are the year, the count of ewes, and the previous
+winter's precipitation (`precip_z`, in SD units).
+
+**2a.** *(AI optional/encouraged.)* Fit the model as if there were no
+observation noise: regress each year's log count on the previous
+year's log count and that year's precipitation.
+
+$\hat b =$ \ans{`r sprintf("%.2f", fit_lm[2, 1])`} (SE \ans{`r sprintf("%.2f", fit_lm[2, 2])`})
+
+**2b.** *(Recommended: no AI.)* Fit the state-space model. Copy the
+functions `kalman()` and `nll_ss()` from section 3 of the Week 15
+companion script; both take the data as arguments, so
+`nll_ss(par, y = y, w = w)` gives the negative log-likelihood, with
+`par` holding $a$, $\text{logit}\,b$, $c$, $\log\sigma_p$, and
+$\log\sigma_o$. Check:
+`nll_ss(c(1, qlogis(0.8), 0.1, log(0.1), log(0.15)), y = y, w = w)`
+should return `r sprintf("%.3f", check_val)`. Then minimize it with
+`optim()` (`method = "BFGS"`), starting from the values in the check,
+and fill in the table.
+
+```{r fit-table, fig.height=1.45, dev=if (knitr::is_latex_output()) "cairo_pdf" else "png"}
+blank_table(
+  headers = expression(hat(b), hat(c), hat(sigma)[p], hat(sigma)[o], "equilibrium, ewes"),
+  header_height = 0.45,
+  body = list(list(sprintf("%.2f", est["b"]), sprintf("%.2f", est["c"]), sprintf("%.2f", est["sigma_p"]),
+                   sprintf("%.2f", est["sigma_o"]), sprintf("%.0f", est["eq"]))),
+  col_widths = c(1, 1, 1, 1, 1.6), row_height = 0.6, fill_cols = 1:5)
+```
+
+(The equilibrium is $\exp\big(\hat a / (1 - \hat b)\big)$.)
+
+**2c.** Which fit, 2a or 2b, says density dependence is stronger?
+Explain why ignoring observation noise would push the estimate in
+that direction.
+
+\ansbegin
+
+2a (`r sprintf("%.2f", fit_lm[2, 1])` against `r sprintf("%.2f", est["b"])`; smaller $b$ is stronger
+density dependence). The regression's predictor is last year's count, which is the true state plus
+counting error. Error in a predictor pulls its slope toward zero. Put another way, a count that is
+too high is usually followed by a lower one, which looks like the herd being pulled back.
+
+\ansend
+
+**2d.** Final question: where did you use AI, if anywhere, and what
+did you have to check or fix? If you didn't use it, what was hardest
+to get working?
+
+\ansbegin
+
+Any specific account. (Sample: "No AI. Passing `y` and `w` through `optim()` to `nll_ss()` took a few tries.")
+
+\ansend
+
+## Bonus (optional)
+
+**3.** Precipitation might instead affect how many ewes the
+helicopter crew sees (animals bunch up near water in dry years)
+without changing how many there are. `kalman()` has an argument `d`
+for a covariate in the observation equation. Fit that model (set
+$c = 0$ and estimate $d$) and compare its log-likelihood with the
+model in 2b. Which does the data favor, and by how much?
+
+\ansbegin
+
+Log-likelihoods: precipitation in the state equation `r sprintf("%.2f", -fit$value)`, in the
+observation equation `r sprintf("%.2f", -fit_obs$value)`. Both have five parameters, so the
+difference of `r sprintf("%.2f", abs(fit$value - fit_obs$value))` log-likelihood units
+(`r sprintf("%.1f", 2 * abs(fit$value - fit_obs$value))` AIC units) leans toward the
+`r if (fit$value < fit_obs$value) "state" else "observation"` equation, but is too small to
+separate the two with 25 years of counts.
+
+\ansend
