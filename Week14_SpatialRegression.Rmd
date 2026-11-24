@@ -1288,10 +1288,52 @@ abline(v = seq(10, 30, 10), h = c(10, 20), col = "grey60", lty = 2)
 points(cg$x_km, cg$y_km, pch = 21, bg = hcl.colors(12, "Set 3")[fold_block], cex = 1.1)
 ```
 
+```{r demo-cv-logscore, echo=FALSE, cache=TRUE}
+# block-CV log scores: sdmTMB_cv()'s plug-in score vs. a full predictive score
+cv_score <- function(spatial) {
+  cv <- sdmTMB_cv(log_biomass ~ burned + elev_km, data = cg, mesh = mesh,
+                  spatial = spatial, fold_ids = fold_block)
+  ls <- sig_e <- sd_pred <- numeric(nrow(cg))
+  for (k in unique(fold_block)) {
+    tr <- cg[fold_block != k, ]
+    te <- fold_block == k
+    mk <- make_mesh(tr, c("x_km", "y_km"), mesh = mesh$mesh)
+    m <- sdmTMB(log_biomass ~ burned + elev_km, data = tr, mesh = mk, spatial = spatial)
+    set.seed(746)
+    sims <- predict(m, newdata = cg[te, ], nsim = 500)
+    s_e <- exp(m$model$par[["ln_phi"]])                   # residual SD
+    s_p <- sqrt(apply(sims, 1, var) + s_e^2)
+    ls[te] <- dnorm(cg$log_biomass[te], rowMeans(sims), s_p, log = TRUE)
+    sig_e[te] <- s_e
+    sd_pred[te] <- s_p
+  }
+  c(plugin = cv$sum_loglik, predictive = sum(ls), sigma_e = mean(sig_e), sd_pred = mean(sd_pred))
+}
+ls_tab <- cbind(M0 = cv_score("off"), M1 = cv_score("on"))
+```
+
 With random folds the spatial model's prediction error is
 `r round(100 * (1 - cv_tab[1, 2] / cv_tab[1, 1]))`% lower than M0's.
 With whole 10-km blocks held out, the two models predict about equally
-well (`r f2(cv_tab[2, 1])` and `r f2(cv_tab[2, 2])`): a block's
+well (`r f2(cv_tab[2, 1])` and `r f2(cv_tab[2, 2])`).^[These are
+prediction errors, not the held-out log-likelihood `sdmTMB_cv()` also
+reports (`sum_loglik`). That score treats the field's value at a
+held-out plot as known: it scores each plot with a Normal density of SD
+$\hat\sigma_e$ around the prediction, leaving out the uncertainty in
+the predicted field. M0 has no field, so it loses almost nothing. M1's
+field takes up most of the variation, so its $\hat\sigma_e$ is small
+(`r f2(ls_tab["sigma_e", "M1"])`, vs. `r f2(ls_tab["sigma_e", "M0"])`
+for M0), and in the middle of a held-out block its predictions miss by
+far more than that. Under block folds the score is
+`r f1(ls_tab["plugin", "M1"])` for M1 and
+`r f1(ls_tab["plugin", "M0"])` for M0, which makes the spatial model
+look far worse although its RMSE is no higher. Adding the prediction
+variance from `predict(..., nsim = 500)` on each fold widens M1's
+predictive SD to about `r f2(ls_tab["sd_pred", "M1"])`, and the scores
+become `r f1(ls_tab["predictive", "M1"])` and
+`r f1(ls_tab["predictive", "M0"])`, in line with the RMSEs. Use
+`sum_loglik` to compare models without random fields; with them, use
+RMSE or compute the predictive density yourself.] A block's
 center is farther from the remaining plots than the field's
 correlation reaches, so the field has little to offer there and
 prediction falls back on fire and elevation.^[Roberts et al. (2017,
