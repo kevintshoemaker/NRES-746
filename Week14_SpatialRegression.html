@@ -1444,22 +1444,23 @@ round(c(sigma_s = total_sd * sqrt(1 - gls_cor[[&quot;nugget&quot;]]), ell = gls_
 </div>
 <div id="demo" class="section level1">
 <h1>A spatial analysis from start to finish</h1>
-<p>This part takes the cheatgrass survey from the district's two questions to an answer: candidate models, a mesh, checks on the fit, comparison by AIC and by two kinds of cross-validation, and maps of predicted biomass with their uncertainty. It uses <code>sdmTMB</code> throughout.</p>
+<p>Back to the cheatgrass survey example. Recall that the district had two questions: one about the role of fire in driving cheatgrass biomass, and another about where to apply treatments.</p>
+<p>To answer them, we will set up some candidate models, build a spatial mesh, check the model fit, compare models using AIC and cross-validation, and make predictive maps of cheatgrass biomass with their uncertainty. We use the <code>sdmTMB</code> package throughout.</p>
 <div id="demo-problem" class="section level2">
 <h2>1. Problem and candidate models</h2>
-<p><img src="Week14_SpatialRegression_files/figure-html/workflow-all-1.png" width="1750" style="display: block; margin: auto;" /></p>
-<p>The district's questions again: how much does a past fire raise cheatgrass biomass, and where is biomass above its treatment threshold of 60 g per square meter (log biomass above 4.09)?</p>
+<p>The district's questions: how much does a past fire raise cheatgrass biomass, and where is biomass above its treatment threshold of 60 g per square meter (log biomass above 4.09)?</p>
 <p>Three candidate models:</p>
 <ul>
 <li><strong>M0, no spatial term.</strong> Fire and elevation explain what there is to explain; the rest is plot-level noise.</li>
 <li><strong>M1, spatial.</strong> Fire and elevation, plus a random field for unmeasured conditions shared by neighbors.</li>
 <li><strong>M2, spatial with an interaction.</strong> As M1, with a fire effect that changes with elevation (cheatgrass does poorly at high, cold sites whether or not they burned).</li>
 </ul>
-<p>Two practical points before fitting. Coordinates should be projected, in units that make distances meaningful, and scaled so the range is a moderate number: kilometers here, not meters and not degrees of longitude and latitude.<a href="#fn25" class="footnoteRef" id="fnref25"><sup>25</sup></a> And center covariates so the intercept means something (elevation is in km above 1800 m).</p>
+<p>Two practical points before fitting. Coordinates should be projected (not geographic coordinates like longitude and latitude),<a href="#fn25" class="footnoteRef" id="fnref25"><sup>25</sup></a> in units that make distances meaningful, and scaled so the range is a moderate number (for example, by putting the origin at a corner of the study area). Projections usually come in meters, but kilometers generally work better, as here.</p>
+<p>Second, center the other covariates so the intercept means something (here elevation is in km above 1800 m, so the intercept is for a central elevation within the study area) and so the intercept isn't strongly correlated with the slopes.</p>
 </div>
 <div id="demo-mesh" class="section level2">
 <h2>2. The mesh</h2>
-<p><code>make_mesh()</code> needs one decision, the resolution. <code>cutoff</code> is the shortest edge allowed, in the units of the coordinates. A common starting point is an edge length of a third to a fifth of the range you expect, and the residual <a href="#variogram">variogram</a> suggested the range is around 10 km. Then check that the answers don't depend on the choice:</p>
+<p><code>make_mesh()</code> needs just one major decision, the resolution. <code>cutoff</code> is the shortest edge allowed, in the units of the coordinates (here, km). A common starting point is an edge length of a third to a fifth of the range you expect, and the residual <a href="#variogram">variogram</a> suggested the range is around 10 km. Then check that the answers don't depend on the choice:</p>
 <pre class="r"><code>mesh_check &lt;- t(sapply(c(1, 2, 3, 5, 8), function(co) {
   m &lt;- make_mesh(cg, c(&quot;x_km&quot;, &quot;y_km&quot;), cutoff = co)
   f &lt;- sdmTMB(log_biomass ~ burned + elev_km, data = cg, mesh = m, spatial = &quot;on&quot;)
@@ -1496,7 +1497,7 @@ m2 &lt;- sdmTMB(log_biomass ~ burned * elev_km, data = cg, mesh = mesh, spatial 
 <pre><code>## ✔ No sigma parameters are &gt; 100</code></pre>
 <pre><code>## ✔ Range parameter doesn&#39;t look unreasonably large</code></pre>
 <p><code>sanity()</code> runs the checks you would otherwise do by hand after <code>optim()</code>: did the optimizer converge, is the Hessian usable, are any standard errors or variance parameters suspicious.</p>
-<p>Then the residuals, the goodness-of-fit part of COMPARE. If the field has done its job, what's left should look like independent noise. The <code>DHARMa</code> package checks this by simulation: it simulates many new data sets from the fitted model and asks where each observation falls among its own simulated values. If the model is right, those positions (scaled residuals between 0 and 1) are uniform, whatever the response distribution.<a href="#fn26" class="footnoteRef" id="fnref26"><sup>26</sup></a> <code>sdmTMB</code> supplies the simulations, and <code>dharma_residuals()</code> hands them to <code>DHARMa</code>:</p>
+<p>Then the more formal goodness-of-fit checks. If the spatial field has done its job, what's left should look like independent noise. The <code>DHARMa</code> package checks this by simulation: it simulates many new data sets from the fitted model and asks where each observation falls among its own simulated values. If the model is right, those positions (scaled residuals between 0 and 1) are uniform, whatever the response distribution.<a href="#fn26" class="footnoteRef" id="fnref26"><sup>26</sup></a> <code>sdmTMB</code> supplies the simulations, and <code>dharma_residuals()</code> hands them to <code>DHARMa</code>:</p>
 <pre class="r"><code>library(DHARMa)
 set.seed(746)
 dh_m1 &lt;- dharma_residuals(simulate(m1, nsim = 250, type = &quot;mle-mvn&quot;), m1, return_DHARMa = TRUE, plot = FALSE)
@@ -1524,7 +1525,6 @@ vg_m1 &lt;- variogram(resid_m1 ~ 1, cg_sp, cutoff = 20, width = 2)</code></pre>
 </div>
 <div id="demo-compare" class="section level2">
 <h2>4. Compare</h2>
-<p><img src="Week14_SpatialRegression_files/figure-html/workflow-compare-1.png" width="1750" style="display: block; margin: auto;" /></p>
 <pre class="r"><code>aic &lt;- AIC(m0, m1, m2)
 aic$dAIC &lt;- aic$AIC - min(aic$AIC)
 aic</code></pre>
@@ -1540,8 +1540,8 @@ aic</code></pre>
 ## 2 burned           0.562      0.157    0.255     0.868
 ## 3 elev_km         -1.48       0.634   -2.72     -0.239
 ## 4 burned:elev_km  -0.0791     0.494   -1.05      0.890</code></pre>
-<p>M1 is best. The interaction costs a parameter and buys nothing, so M2 is an example of an <a href="Week10_ModelComparison.html#frequentist">uninformative parameter</a>: within 2 AIC units of the best model only because it contains it. M0 is far behind.</p>
-<p>AIC asks how well each model would predict new data like the data in hand. The district's second question is about prediction at places without plots, so it is worth asking directly with <a href="Week10_ModelComparison.html#cross-validation">cross-validation</a>, and here spatial data set a trap. If plots are held out at random, each held-out plot has neighbors still in the training set, and the random field can predict it from them. That is a fair test of filling gaps inside the survey, and a poor test of predicting a new area. For the second, hold out whole blocks:</p>
+<p>M1 is best. The interaction costs a parameter and adds little, so M2 is an example of an <a href="Week10_ModelComparison.html#frequentist">uninformative parameter</a>: within 2 AIC units of the best model only because it contains it. M0 is far behind.</p>
+<p>The district's second question is about prediction at places without plots, which calls for testing directly with <a href="Week10_ModelComparison.html#cross-validation">cross-validation</a>. Here spatial data set a trap. If plots are held out at random, each held-out plot has neighbors still in the training set, and the random field can predict it from them. That is a poor test of predicting a new area. Holding out whole blocks keeps the test data independent of the training data:</p>
 <pre class="r"><code>set.seed(746)
 fold_random &lt;- sample(rep(1:10, length.out = nrow(cg)))                           # 10 random folds
 fold_block &lt;- as.integer(factor(paste(floor(cg$x_km / 10), floor(cg$y_km / 10))))  # 10-km blocks
@@ -1566,7 +1566,7 @@ round(cv_tab, 3)                  # root mean squared prediction error, log biom
 </div>
 <div id="demo-predict" class="section level2">
 <h2>5. Predict</h2>
-<p>Prediction at a new location uses everything the model knows: the regression part, from that location's fire history and elevation, plus the field's value there, inferred from nearby plots. For the model of <a href="#gp-space">section 3</a> this is the conditional mean of a multivariate Normal, the same formula that drew last week's <a href="Week13_HierarchicalModelsAndGAMs.html#gp">Gaussian process curve</a> between cultures. Geostatistics calls it <strong>kriging</strong>.</p>
+<p>Prediction at a new location uses everything the model knows: the regression part (based on fire history and elevation) plus the spatial field (inferred from nearby plots). Geostatistics calls this <strong>kriging</strong>.</p>
 <p>The prediction grid has a row for each half-kilometer cell, with the same covariates as the plots:</p>
 <pre class="r"><code>pred &lt;- predict(m1, newdata = grid)
 head(pred[, c(&quot;x_km&quot;, &quot;y_km&quot;, &quot;est&quot;, &quot;est_non_rf&quot;, &quot;omega_s&quot;)], 3)</code></pre>
@@ -1578,9 +1578,12 @@ head(pred[, c(&quot;x_km&quot;, &quot;y_km&quot;, &quot;est&quot;, &quot;est_non
 sims &lt;- predict(m1, newdata = grid, nsim = 500)      # 500 draws of the predicted surface
 pred$se &lt;- apply(sims, 1, sd)
 pred$p_exceed &lt;- rowMeans(sims &gt; log(60))            # P(expected log biomass is above the threshold)</code></pre>
-<p><code>est</code> is the prediction, <code>est_non_rf</code> its regression part, and <code>omega_s</code> the field. Calling <code>predict()</code> with <code>nsim</code> returns draws from the joint uncertainty in the coefficients and the field, one column per draw, which turns any question about the map into a calculation on the columns.<a href="#fn30" class="footnoteRef" id="fnref30"><sup>30</sup></a></p>
+<p><code>est</code> is the prediction, <code>est_non_rf</code> its regression part, and <code>omega_s</code> the field.</p>
+<p>Calling <code>predict()</code> with <code>nsim</code> returns draws from the joint uncertainty in the coefficients and the field.<a href="#fn30" class="footnoteRef" id="fnref30"><sup>30</sup></a></p>
 <p><img src="Week14_SpatialRegression_files/figure-html/demo-maps-1.png" width="960" style="display: block; margin: auto;" /></p>
-<p>The regression part alone (top left) is a map of fire perimeters shaded by elevation. The field adds the patches the covariates miss. The standard error is lowest next to plots and highest in the roadless block and at the corners (mean 0.31 in the block, 0.23 elsewhere). The last map is the one that answers the district's question: the probability that each cell is above the threshold, with a contour at 0.5.</p>
+<p>The regression part alone (top left) shows the joint effects of fire and elevation. The top right map adds the spatial field (the effects of unmeasured, spatially correlated covariates).</p>
+<p>The standard error (bottom left) is lowest next to plots and highest in the roadless block and at the corners (mean 0.31 in the block, 0.23 elsewhere).</p>
+<p>The last map is the one that answers the district's question: the probability that each cell is above the threshold, with a contour at 0.5.</p>
 <p>Since the data are simulated, the true surface is known. Across the grid, M1's predictions miss the true log biomass by 0.37 (root mean squared error), against 0.64 for M0. Of the cells flagged with probability above 0.5, 81% are truly above the threshold, and the flagged cells include 67% of all cells that are.</p>
 <blockquote>
 <p><strong>Question:</strong> The district can treat only a quarter of the area the map flags. Would you send crews to the cells with the highest predicted biomass, or the highest probability of exceeding the threshold? Where do the two rankings disagree?</p>
@@ -1589,12 +1592,12 @@ pred$p_exceed &lt;- rowMeans(sims &gt; log(60))            # P(expected log biom
 <div id="demo-answer" class="section level2">
 <h2>6. What we tell the district</h2>
 <ul>
-<li><strong>Fire.</strong> Burned plots carry about 1.7 times the cheatgrass biomass of comparable unburned plots (95% interval 1.3 to 2.3). A regression that ignored the spatial pattern put this at 2.7 times, with a standard error less than half of what it should have been.</li>
+<li><strong>Fire.</strong> Burned plots tend to harbor about 1.7 times the cheatgrass biomass of comparable unburned plots (95% interval 1.3 to 2.3). A regression that ignored the spatial pattern put this at 2.7 times, with a standard error less than half of what it should have been.</li>
 <li><strong>Elevation.</strong> Biomass falls with elevation, but this survey can't say how steeply (95% interval for the slope -2.7 to -0.3 per km).</li>
-<li><strong>Unmeasured conditions.</strong> Something not in the model varies over distances of about 9 km and moves log biomass about as much as fire does (<span class="math inline">\(\hat\sigma_s =\)</span> 0.64). The field map shows where; that is where to look for the next covariate.</li>
+<li><strong>Unmeasured conditions.</strong> Something not in the model varies over distances of about 9 km and moves log biomass about as much as fire does (<span class="math inline">\(\hat\sigma_s =\)</span> 0.64). The field map shows where, which may hint at what the unmeasured covariates are.</li>
 <li><strong>The map.</strong> Predictions are good near plots and no better than the covariates far from them. The roadless block needs plots before anyone should act on its predictions.</li>
 </ul>
-<p>The spatial model is corroborated against two rivals, one without a field and one with an interaction. It hasn't been tested against a model with the missing covariate in it, because nobody has measured that covariate yet.</p>
+<p>The spatial model is corroborated against two other plausible candidates, one without a field and one with an interaction.</p>
 </div>
 <div id="demo-counts" class="section level2">
 <h2>Bonus: counts and other responses</h2>

@@ -1062,18 +1062,18 @@ presence/absence, use `glmmTMB` or `sdmTMB`.
 
 # A spatial analysis from start to finish {#demo}
 
-This part takes the cheatgrass survey from the district's two questions
-to an answer: candidate models, a mesh, checks on the fit, comparison
-by AIC and by two kinds of cross-validation, and maps of predicted
-biomass with their uncertainty. It uses `sdmTMB` throughout.
+Back to the cheatgrass survey example. Recall that the district had two
+questions: one about the role of fire in driving cheatgrass biomass, and
+another about where to apply treatments.
+
+To answer them, we will set up some candidate models, build a spatial
+mesh, check the model fit, compare models using AIC and
+cross-validation, and make predictive maps of cheatgrass biomass with
+their uncertainty. We use the `sdmTMB` package throughout.
 
 ## 1. Problem and candidate models {#demo-problem}
 
-```{r workflow-all, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
-draw_workflow(c("PROBLEM", "THEORIES"))
-```
-
-The district's questions again: how much does a past fire raise
+The district's questions: how much does a past fire raise
 cheatgrass biomass, and where is biomass above its treatment threshold
 of 60 g per square meter (log biomass above `r f2(log(60))`)?
 
@@ -1087,21 +1087,26 @@ Three candidate models:
   changes with elevation (cheatgrass does poorly at high, cold sites
   whether or not they burned).
 
-Two practical points before fitting. Coordinates should be projected,
-in units that make distances meaningful, and scaled so the range is a
-moderate number: kilometers here, not meters and not degrees of
-longitude and latitude.^[A degree of longitude is about 85 km at Reno's
+Two practical points before fitting. Coordinates should be projected
+(not geographic coordinates like longitude and latitude),^[A degree of longitude is about 85 km at Reno's
 latitude and a degree of latitude about 111 km, so distances computed
 from raw degrees are wrong in a direction-dependent way. With
 longitude/latitude data, project first: `sdmTMB::add_utm_columns()`
-does it in one step, or use `sf::st_transform()`.] And center
-covariates so the intercept means something (elevation is in km above
-1800 m).
+does it in one step, or use `sf::st_transform()`.] in units that make
+distances meaningful, and scaled so the range is a moderate number (for
+example, by putting the origin at a corner of the study area).
+Projections usually come in meters, but kilometers generally work
+better, as here.
+
+Second, center the other covariates so the intercept means something
+(here elevation is in km above 1800 m, so the intercept is for a
+central elevation within the study area) and so the intercept isn't
+strongly correlated with the slopes.
 
 ## 2. The mesh {#demo-mesh}
 
-`make_mesh()` needs one decision, the resolution. `cutoff` is the
-shortest edge allowed, in the units of the coordinates. A common
+`make_mesh()` needs just one major decision, the resolution. `cutoff`
+is the shortest edge allowed, in the units of the coordinates (here, km). A common
 starting point is an edge length of a third to a fifth of the range you
 expect, and the residual [variogram](#variogram) suggested the range is
 around 10 km. Then check that the answers don't depend on the choice:
@@ -1149,7 +1154,7 @@ sanity(m1)
 `optim()`: did the optimizer converge, is the Hessian usable, are any
 standard errors or variance parameters suspicious.
 
-Then the residuals, the goodness-of-fit part of COMPARE. If the field
+Then the more formal goodness-of-fit checks. If the spatial field
 has done its job, what's left should look like independent noise. The
 `DHARMa` package checks this by simulation: it simulates many new data
 sets from the fitted model and asks where each observation falls among
@@ -1238,10 +1243,6 @@ version of `DHARMa`'s scaled residuals.]
 
 ## 4. Compare {#demo-compare}
 
-```{r workflow-compare, echo=FALSE, fig.height=2.8, dev="png", dpi=250}
-draw_workflow("COMPARE")
-```
-
 ```{r demo-aic}
 aic <- AIC(m0, m1, m2)
 aic$dAIC <- aic$AIC - min(aic$AIC)
@@ -1249,21 +1250,20 @@ aic
 tidy(m2)
 ```
 
-M1 is best. The interaction costs a parameter and buys nothing, so M2
+M1 is best. The interaction costs a parameter and adds little, so M2
 is an example of an
 [uninformative parameter](Week10_ModelComparison.html#frequentist):
 within 2 AIC units of the best model only because it contains it. M0
 is far behind.
 
-AIC asks how well each model would predict new data like the data in
-hand. The district's second question is about prediction at places
-without plots, so it is worth asking directly with
-[cross-validation](Week10_ModelComparison.html#cross-validation), and
-here spatial data set a trap. If plots are held out at random, each
+The district's second question is about prediction at places
+without plots, which calls for testing directly with
+[cross-validation](Week10_ModelComparison.html#cross-validation). Here
+spatial data set a trap. If plots are held out at random, each
 held-out plot has neighbors still in the training set, and the random
-field can predict it from them. That is a fair test of filling gaps
-inside the survey, and a poor test of predicting a new area. For the
-second, hold out whole blocks:
+field can predict it from them. That is a poor test of predicting a
+new area. Holding out whole blocks keeps the test data independent of
+the training data:
 
 ```{r demo-cv, cache=TRUE}
 set.seed(746)
@@ -1312,12 +1312,9 @@ anywhere beyond the survey edge.
 ## 5. Predict {#demo-predict}
 
 Prediction at a new location uses everything the model knows: the
-regression part, from that location's fire history and elevation, plus
-the field's value there, inferred from nearby plots. For the model of
-[section 3](#gp-space) this is the conditional mean of a multivariate
-Normal, the same formula that drew last week's
-[Gaussian process curve](Week13_HierarchicalModelsAndGAMs.html#gp)
-between cultures. Geostatistics calls it **kriging**.
+regression part (based on fire history and elevation) plus
+the spatial field (inferred from nearby plots). Geostatistics calls
+this **kriging**.
 
 The prediction grid has a row for each half-kilometer cell, with the
 same covariates as the plots:
@@ -1332,10 +1329,10 @@ pred$p_exceed <- rowMeans(sims > log(60))            # P(expected log biomass is
 ```
 
 `est` is the prediction, `est_non_rf` its regression part, and
-`omega_s` the field. Calling `predict()` with `nsim` returns draws
-from the joint uncertainty in the coefficients and the field, one
-column per draw, which turns any question about the map into a
-calculation on the columns.^[The draws are of the expected log biomass
+`omega_s` the field.
+
+Calling `predict()` with `nsim` returns draws from the joint
+uncertainty in the coefficients and the field.^[The draws are of the expected log biomass
 in each cell. They leave out the plot-level noise $\sigma_e$, so they
 answer "what is typical here?" and not "what would one clipped quadrat
 weigh?" To report biomass on its original scale, note that
@@ -1367,12 +1364,16 @@ above <- grid$log_biomass_true > log(60)
 flag <- pred$p_exceed > 0.5
 ```
 
-The regression part alone (top left) is a map of fire perimeters
-shaded by elevation. The field adds the patches the covariates miss.
-The standard error is lowest next to plots and highest in the roadless
-block and at the corners (mean `r f2(mean(pred$se[roadless]))` in the
-block, `r f2(mean(pred$se[!roadless]))` elsewhere). The last map is
-the one that answers the district's question: the probability that
+The regression part alone (top left) shows the joint effects of fire
+and elevation. The top right map adds the spatial field (the effects of
+unmeasured, spatially correlated covariates).
+
+The standard error (bottom left) is lowest next to plots and highest in
+the roadless block and at the corners (mean
+`r f2(mean(pred$se[roadless]))` in the block,
+`r f2(mean(pred$se[!roadless]))` elsewhere).
+
+The last map is the one that answers the district's question: the probability that
 each cell is above the threshold, with a contour at 0.5.
 
 Since the data are simulated, the true surface is known. Across the
@@ -1402,7 +1403,8 @@ b1 <- tidy(m1, conf.int = TRUE)
 rp1 <- tidy(m1, "ran_pars", conf.int = TRUE)
 ```
 
-- **Fire.** Burned plots carry about `r f1(exp(b1$estimate[2]))` times
+- **Fire.** Burned plots tend to harbor about
+  `r f1(exp(b1$estimate[2]))` times
   the cheatgrass biomass of comparable unburned plots (95% interval
   `r f1(exp(b1$conf.low[2]))` to `r f1(exp(b1$conf.high[2]))`). A
   regression that ignored the spatial pattern put this at
@@ -1415,15 +1417,14 @@ rp1 <- tidy(m1, "ran_pars", conf.int = TRUE)
   distances of about `r round(rp1$estimate[rp1$term == "range"])` km
   and moves log biomass about as much as fire does ($\hat\sigma_s =$
   `r f2(rp1$estimate[rp1$term == "sigma_O"])`). The
-  field map shows where; that is where to look for the next covariate.
+  field map shows where, which may hint at what the unmeasured
+  covariates are.
 - **The map.** Predictions are good near plots and no better than the
   covariates far from them. The roadless block needs plots before
   anyone should act on its predictions.
 
-The spatial model is corroborated against two rivals, one without a
-field and one with an interaction. It hasn't been tested against a
-model with the missing covariate in it, because nobody has measured
-that covariate yet.
+The spatial model is corroborated against two other plausible
+candidates, one without a field and one with an interaction.
 
 ## Bonus: counts and other responses {#demo-counts}
 
