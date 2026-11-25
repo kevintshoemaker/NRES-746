@@ -590,7 +590,29 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Tue., Nov. 24, 2026 (Weeks 1-14 taught; Week 15 built, not yet taught or pushed; Week 1-9 pages built after the fact).
+Snapshot: Wed., Nov. 25, 2026 (Weeks 1-14 taught; Week 15 built and pushed, not yet taught; Week 16 built, not committed; Week 1-9 pages built after the fact).
+
+- **Week 16 (Mon., Dec. 7 only), built Nov. 25, not yet taught, not
+  committed:** course wrap-up. Tuesday is project presentations, no
+  class Wednesday. Page `Week16_WhereToGoNext.Rmd`, one H1 `#next`:
+  what the course covered `#review` (workflow figure, week-by-box
+  table), from coursework to a real analysis `#practice` (explain /
+  predict / decide table), math tools `#math`, causal inference
+  `#causal` (methods table; plug for NRES 701A, Spring 2027, with Todd
+  Steury, https://kevintshoemaker.github.io/Causal-Inference/),
+  hierarchical Bayesian models `#bayes` (when worth it, software
+  table, plug for NRES 779 with Perry Williams), machine learning
+  `#ml` (last, at the instructor's request; methods table),
+  `#discussion`, bonus `#other`. No code, script, widget, or new WOD
+  (*Filter by Hand* is reviewed first). Guide
+  `NOTES_Week16_WebPageGuide.Rmd`. Every DOI checked against Crossref
+  and every link loaded (Nov. 25); free books link their free site,
+  others their DOI. The Schaub and Kéry IPM book is cited without a
+  link (no DOI found). **To confirm with the instructor:** the NRES
+  779 title (*Bayesian Hierarchical Modeling*, from a student's
+  GitHub repo, not the catalog). The figure in
+  `Week16_WhereToGoNext_files/` needs `git add -f` at commit. Navbar
+  entry inserted into the current pages; schedule links the page.
 
 - **Week 15 (Nov. 30-Dec. 2), built Nov. 23, not yet taught:** dynamic
   models, the last content week. Monday lecture, Tuesday demo (no Lab
@@ -660,8 +682,28 @@ Snapshot: Tue., Nov. 24, 2026 (Weeks 1-14 taught; Week 15 built, not yet taught 
     observation equation.
   - Menus, `schedule.Rmd` links, and `CourseSchedule.csv` (Nov. 30 row:
     demo, no Lab 10) updated; navbar copied into the current pages
-    (now including Bonus_SmoothsAndCovariance). **Not yet committed or
-    pushed**; the four CSVs must be live before Tue., Dec. 1.
+    (now including Bonus_SmoothsAndCovariance). Committed and pushed
+    Nov. 23 (583d73af; the 17 page figures by `git add -f`). After the
+    Pages deploy the four CSVs, the page, widget, script, and WOD PDF
+    all loaded from the live site. `pdf/` (readings) and
+    `.claude/launch.json` are untracked on purpose.
+  - **ACF bonus trimmed Nov. 23** (177476c7), since Week 12 already had
+    the AR vs. MA section and widget: `#acf-pacf` is now "what
+    observation noise does to the ACF". It links Week 12 for the
+    basics, gives $\text{Cor}(y_t, y_{t-k}) = b^k\,\text{Var}(x) /
+    (\text{Var}(x) + \sigma_o^2)$, and the grouse values (fraction
+    0.63, so lag-1 0.47 rather than 0.75, leaving precipitation aside;
+    bounds $\pm 0.36$). The duplicated seed-746 AR(1)/MA(1) simulation
+    is gone from the page and script (the script was not re-run after
+    the deletion), and its figure file was removed. The guide's bonus
+    line matches.
+  - **Build choices (reported to the instructor, no objection so
+    far):** `RTMB` is featured as the third
+    likelihood route (students need it installed); `MARSS` is a
+    footnote only. In the `sdmTMB` demo, precipitation acts on that
+    year's count only (regression with AR(1) fields), unlike the state
+    equation on the first H1; the page says so. The guide runs 7 pages
+    (longer than usual; trim offered, not requested).
   - Found while building: `RTMB` (2.0, installed Nov. 23 with `MARSS`)
     masks `dmvnorm`, so the page calls `mvtnorm::dmvnorm()`; `RTMB`'s
     negative binomial is `dnbinom2(x, mu, var)`. `glmmTMB`'s `ar1()` +
@@ -801,7 +843,8 @@ Snapshot: Tue., Nov. 24, 2026 (Weeks 1-14 taught; Week 15 built, not yet taught 
     renumbered Lab 10 (dynamic models), and the Nov. 23 reading changed
     from Bolker Ch. 11 to 10.3. **Superseded Nov. 23:** the instructor
     decided there is no Lab 10; the Nov. 30 lab period is for final
-    presentation work (the Week 15 agent is updating the schedule).
+    presentation work (`CourseSchedule.csv` and `schedule.Rmd` were
+    updated with the Week 15 build).
 
 - **Week 1 page (built Nov. 1, after the week):**
   `Week1_IntroAndAlgorithms.Rmd` (Bolker ch. 1, esp. 1.3.2 p. 9;
@@ -931,7 +974,7 @@ Snapshot: Tue., Nov. 24, 2026 (Weeks 1-14 taught; Week 15 built, not yet taught 
   No Monday WOD; required take-home WOD *Formula to Model*
   (`WOD_Week12_Lecture1_FormulaToModel`, due Nov. 16) + key. Tuesday
   ("Lab period, Week 12", not a numbered lab) = lecture + final-project
-  work session, no Act; the next formal lab is Lab 10 (now Nov. 30; see Week 14). Legacy
+  work session, no Act; there was no later formal lab (Lab 10 was dropped Nov. 23). Legacy
   `stan_demo2.stan` / `rcode/stan_demo.R` (Oct. 2025 random slope with
   LKJ) has a bug: `rmvnorm()` never gets `sigma = vcv`; not used.
   - **Revised Nov. 8:** the first H1's overview section was removed
@@ -1244,9 +1287,10 @@ Snapshot: Tue., Nov. 24, 2026 (Weeks 1-14 taught; Week 15 built, not yet taught 
   are archived; LECTURE7 (MCMC) is in `archive/` and its navbar entry
   is replaced by the Week 9 page. `NOTES_Reference_CmdstanrQuickStart.pdf`
   (one-page Stan setup) is linked from the page and the schedule.
-- **Site menus (Oct. 27-28; counts as of Nov. 15):** navbar has `WODs`
+- **Site menus (Oct. 27-28; counts as of Nov. 23):** navbar has `WODs`
   (21 PDFs), `Labs` (19 Acts; Lab 4 Acts 2-3 left out), and `Data sets`
-  ("Lab data" for Labs 1-9, then "Other"). `schedule.Rmd` has a `links`
+  ("Lab data" for Labs 1-9, then "Other", which holds the Week 13-15
+  page and WOD data). `schedule.Rmd` has a `links`
   table (83 links;
   `stopifnot` checks weeks and files). Week 1's cells (both lectures
   and the lab) link the Week 1 page (Week 2's cells, including
@@ -1256,7 +1300,7 @@ Snapshot: Tue., Nov. 24, 2026 (Weeks 1-14 taught; Week 15 built, not yet taught 
   `index.Rmd`, then copy its `<ul class="nav navbar-nav">` block (through
   the line before the `navbar-right` list) into the current-navbar
   pages (FINALPROJ, LAB3, LAB4, Links, Bonus_ModelPerformance,
-  Bonus_RandomForest, Week1-Week14; schedule and the newest week page
+  Bonus_RandomForest, Bonus_SmoothsAndCovariance, Week1-Week15; schedule and the newest week page
   get it by re-rendering); GIT-tutorial, GIT_tutorial, MAIN, and LAB1,
   2, 5 carry older navbars
   and are left alone (their links to archived pages were repointed by
