@@ -194,7 +194,9 @@ Monday covered all 6 sections (brms briefly) but not the discussion;
 Week 13 Wednesday covered the thermal intro, basis functions, the
 penalty, and `gam()`, with only a few minutes on GPs and no discussion.
 Week 14 Monday covered 5 of 6 sections (problem, variogram, GP by
-`optim()`, mesh, packages), not the GAM alternative or the discussion.
+`optim()`, mesh, packages), not the GAM alternative or the discussion;
+the Tuesday lab-period lecture then covered a GP recap, the GAM
+alternative, and the whole six-section demo (no discussion).
 Plan **3-4 sub-topics**
 (counting the big-picture opening) with one example carried through;
 about one algorithm plus its example per ~15 min. Put extras in a
@@ -588,7 +590,7 @@ $$\text{PROBLEM} \to \text{THEORIES} \to \text{MODELS} \to \text{FIT}
 
 # Development status (update at the end of each thread)
 
-Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 built, not yet taught or pushed; Week 1-9 pages built after the fact).
+Snapshot: Tue., Nov. 24, 2026 (Weeks 1-14 taught; Week 15 built, not yet taught or pushed; Week 1-9 pages built after the fact).
 
 - **Week 15 (Nov. 30-Dec. 2), built Nov. 23, not yet taught:** dynamic
   models, the last content week. Monday lecture, Tuesday demo (no Lab
@@ -692,6 +694,20 @@ Snapshot: Mon., Nov. 23, 2026 (Weeks 1-13 and Week 14 Monday taught; Week 15 bui
     paragraph, with a footnote on zeros (Tweedie or delta families in
     `sdmTMB`). `gstat` is used only for empirical variograms
     (`variogram()`); no `fit.variogram()` or `krige()`.
+  - **As taught (Tue., Nov. 24, from the announcement):** GP recap and
+    why it is impractical at large $n$; SPDE and GAM as the practical
+    alternatives, with the elevation-SE difference (field penalizes
+    broad slopes, `mgcv` defaults only wiggliness; wording folded into
+    `#mesh` and `#gam-space`); the whole demo. Monday's discussion and
+    the Poisson bonus not mentioned. Rough drafts due Wed., Nov. 25.
+    Also Nov. 23-24: the instructor's own edits to the demo text (the
+    two workflow figures were dropped), and a `#demo-compare` footnote
+    (hidden cached chunk `demo-cv-logscore`) on why `sdmTMB_cv()`'s
+    `sum_loglik` penalizes the spatial model under block CV: it scores
+    held-out plots with $\hat\sigma_e$ only, the field at its mode (M1
+    -358.3 vs. M0 -243.9; with the prediction variance, -240.9 vs.
+    -243.3). Not a bug in `sdmTMB` 0.8.1 (TMB's `jnll_obs` at the
+    random-effect modes), but undocumented; no issue filed.
   Monday lecture + Tuesday demo (no Lab 10 on
   spatial; Thanksgiving Wed.). Page `Week14_SpatialRegression.Rmd`.
   H1 `#spatial` (Monday): nearby plots are alike `#problem`, the
