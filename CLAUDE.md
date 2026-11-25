@@ -613,6 +613,9 @@ Snapshot: Wed., Nov. 25, 2026 (Weeks 1-14 taught; Week 15 built and pushed, not 
   GitHub repo, not the catalog). The figure in
   `Week16_WhereToGoNext_files/` needs `git add -f` at commit. Navbar
   entry inserted into the current pages; schedule links the page.
+  Committed and pushed Nov. 25 (99ccd2f7). Same day: `Syllabus.docx`
+  schedule table synced to `CourseSchedule.csv` (Nov. 9, 23, 30 rows)
+  and `Syllabus.pdf` re-exported through Word as the final version.
 
 - **Week 15 (Nov. 30-Dec. 2), built Nov. 23, not yet taught:** dynamic
   models, the last content week. Monday lecture, Tuesday demo (no Lab
